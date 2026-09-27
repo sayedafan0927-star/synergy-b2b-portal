@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { fetchCatalogFromErp } from '@/lib/erpApi';
 import type { Product, ProductVariant, Warehouse, CollectionPrice } from '@/types';
 
 interface DbProduct {
@@ -72,6 +73,19 @@ export function useProducts() {
 
     async function load() {
       try {
+        // 1. Приоритетный источник: реальные ковры и остатки складов из Synergy ERP
+        try {
+          const erpData = await fetchCatalogFromErp();
+          if (!cancelled && erpData && erpData.success && Array.isArray(erpData.products) && erpData.products.length > 0) {
+            setProducts(erpData.products);
+            setLoading(false);
+            return;
+          }
+        } catch (erpErr) {
+          console.warn('[useProducts] ERP catalog fetch fallback:', erpErr);
+        }
+
+        // 2. Резервный источник: локальная база Supabase
         const [prodRes, varRes, stockRes] = await Promise.all([
           supabase.from('products').select('*'),
           supabase.from('product_variants').select('*'),
@@ -115,34 +129,55 @@ export function useProduct(id: string | undefined) {
     let cancelled = false;
 
     async function load() {
-      const [prodRes, varRes] = await Promise.all([
-        supabase.from('products').select('*').eq('id', id).maybeSingle(),
-        supabase.from('product_variants').select('*').eq('product_id', id),
-      ]);
+      try {
+        // 1. Ищем товар в каталоге ERP
+        try {
+          const erpData = await fetchCatalogFromErp();
+          if (!cancelled && erpData && erpData.success && Array.isArray(erpData.products)) {
+            const found = erpData.products.find((p: Product) => String(p.id) === String(id));
+            if (found) {
+              setProduct(found);
+              setLoading(false);
+              return;
+            }
+          }
+        } catch (erpErr) {
+          console.warn('[useProduct] ERP single product fallback:', erpErr);
+        }
 
-      if (cancelled) return;
+        // 2. Резервный поиск в Supabase
+        const [prodRes, varRes] = await Promise.all([
+          supabase.from('products').select('*').eq('id', id).maybeSingle(),
+          supabase.from('product_variants').select('*').eq('product_id', id),
+        ]);
 
-      if (prodRes.error || !prodRes.data) {
-        setError(prodRes.error?.message ?? 'Product not found');
-        setLoading(false);
-        return;
+        if (cancelled) return;
+
+        if (prodRes.error || !prodRes.data) {
+          setError(prodRes.error?.message ?? 'Product not found');
+          setLoading(false);
+          return;
+        }
+
+        const variantIds = (varRes.data ?? []).map(v => v.id);
+        let stockData: DbStock[] = [];
+        if (variantIds.length > 0) {
+          const stockRes = await supabase
+            .from('warehouse_stock')
+            .select('variant_id, city, stock')
+            .in('variant_id', variantIds);
+          if (!cancelled && stockRes.data) stockData = stockRes.data;
+        }
+
+        if (cancelled) return;
+
+        const assembled = assembleProducts([prodRes.data], varRes.data ?? [], stockData);
+        setProduct(assembled[0] ?? null);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Network error');
+      } finally {
+        if (!cancelled) setLoading(false);
       }
-
-      const variantIds = (varRes.data ?? []).map(v => v.id);
-      let stockData: DbStock[] = [];
-      if (variantIds.length > 0) {
-        const stockRes = await supabase
-          .from('warehouse_stock')
-          .select('variant_id, city, stock')
-          .in('variant_id', variantIds);
-        if (!cancelled && stockRes.data) stockData = stockRes.data;
-      }
-
-      if (cancelled) return;
-
-      const assembled = assembleProducts([prodRes.data], varRes.data ?? [], stockData);
-      setProduct(assembled[0] ?? null);
-      setLoading(false);
     }
 
     load();
