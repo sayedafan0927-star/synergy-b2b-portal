@@ -1,6 +1,8 @@
 export interface Warehouse {
   city: string;
   stock: number;
+  warehouse_name?: string;
+  warehouse_id?: number;
 }
 
 export interface DealerStock {

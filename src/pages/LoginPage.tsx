@@ -4,7 +4,7 @@ import type { PageId } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function LoginPage({ onNavigate }: { onNavigate: (page: PageId) => void }) {
-  const { signIn, signUp, signInAsDemo } = useAuth();
+  const { signIn, signUp, signInAsDemo, signInAsClient } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
   const [showPass, setShowPass] = useState(false);
   const [form, setForm] = useState({ email: '', password: '', name: '', company: '' });
@@ -175,6 +175,47 @@ export default function LoginPage({ onNavigate }: { onNavigate: (page: PageId) =
               >
                 <span>🏢 Демо-Клиент</span>
               </button>
+            </div>
+
+            <div className="mt-3">
+              <p className="text-[11px] font-semibold text-slate-500 mb-1.5 text-center">
+                Или войти под реальным клиентом из базы ERP:
+              </p>
+              <div className="grid grid-cols-1 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    signInAsClient({ id: 2833, name: 'Aya Home Store (Шымкент)' });
+                    onNavigate('catalog');
+                  }}
+                  className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50/70 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 transition-colors"
+                >
+                  <span>🏬 Aya Home Store (Шымкент)</span>
+                  <span className="text-[10px] text-emerald-600 font-normal">ID: 2833</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    signInAsClient({ id: 2832, name: 'TarazKilem ИП (Тараз)' });
+                    onNavigate('catalog');
+                  }}
+                  className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+                >
+                  <span>🏪 TarazKilem ИП (Тараз)</span>
+                  <span className="text-[10px] text-slate-500 font-normal">ID: 2832</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    signInAsClient({ id: 2830, name: 'BIG CARPET ТОО (Алматы)' });
+                    onNavigate('catalog');
+                  }}
+                  className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+                >
+                  <span>🏢 BIG CARPET ТОО (Алматы)</span>
+                  <span className="text-[10px] text-slate-500 font-normal">ID: 2830</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

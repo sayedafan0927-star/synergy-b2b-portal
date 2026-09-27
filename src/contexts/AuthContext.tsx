@@ -23,6 +23,7 @@ interface AuthContextValue {
   signIn: (email: string, password: string) => Promise<string | null>;
   signUp: (email: string, password: string, meta: { full_name: string; company_name: string }) => Promise<string | null>;
   signInAsDemo: (role?: UserRole) => void;
+  signInAsClient: (client: { id: number | string; name: string; phone?: string; price_type?: string }) => void;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   isAdmin: boolean;
@@ -164,6 +165,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const signInAsClient = useCallback((client: { id: number | string; name: string; phone?: string; price_type?: string }) => {
+    const clientProfile: Profile = {
+      id: `erp-client-${client.id}`,
+      role: 'client',
+      partner_id: String(client.id),
+      full_name: client.name,
+      company_name: client.name,
+      phone: client.phone || '',
+      manager_id: '1',
+      price_type: client.price_type || 'wholesale',
+      impersonation_enabled: true,
+    };
+    const mockUser: unknown = {
+      id: clientProfile.id,
+      email: `client-${client.id}@kilem-khan.kz`,
+      app_metadata: {},
+      user_metadata: { full_name: clientProfile.full_name },
+      aud: 'authenticated',
+      created_at: new Date().toISOString(),
+    };
+    setUser(mockUser as User);
+    setProfile(clientProfile);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('synergy:demo_auth', JSON.stringify({ user: mockUser, profile: clientProfile }));
+    }
+  }, []);
+
   const [impersonatedProfile, setImpersonatedProfile] = useState<Profile | null>(() => {
     if (typeof window !== 'undefined') {
       const stored = sessionStorage.getItem('synergy:impersonated_profile');
@@ -220,6 +248,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signIn,
         signUp,
         signInAsDemo,
+        signInAsClient,
         signOut: signOutFn,
         refreshProfile,
         isAdmin: realRole === 'admin',

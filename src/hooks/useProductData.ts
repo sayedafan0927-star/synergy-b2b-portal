@@ -168,6 +168,28 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
         variants: [...itemVariants],
       });
     } else {
+      // Обогащаем медиа и характеристики, если они появились у следующего элемента того же дизайна
+      if ((!existing.images || existing.images.length === 0) && raw.images && raw.images.length > 0) {
+        const photos = getValidImages(raw.images);
+        if (photos.length > 0) {
+          existing.images = photos;
+          existing.image_thumb = photos[0];
+        }
+      }
+      if (!existing.image_thumb && raw.image_thumb && !raw.image_thumb.includes('unsplash.com')) {
+        existing.image_thumb = raw.image_thumb;
+      }
+      if ((!existing.characteristics || existing.characteristics.length === 0) && raw.characteristics && raw.characteristics.length > 0) {
+        existing.characteristics = raw.characteristics;
+      }
+      if (!existing.density && raw.density) existing.density = raw.density;
+      if (!existing.pile_height && raw.pile_height) existing.pile_height = raw.pile_height;
+      if (!existing.material && raw.material) existing.material = raw.material;
+      if (!existing.shape_label && raw.shape_label) existing.shape_label = raw.shape_label;
+      if (!existing.country && raw.country) existing.country = raw.country;
+      if (!existing.manufacturer && raw.manufacturer) existing.manufacturer = raw.manufacturer;
+      if (!existing.style && raw.style) existing.style = raw.style;
+
       // Сливаем размеры в один товар
       const existingSizes = new Set(existing.variants.map(v => v.size));
       for (const v of itemVariants) {
@@ -218,6 +240,35 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
   }
 
   return result;
+}
+
+/**
+ * Фильтрация складов для отображения клиенту:
+ * Клиенты видят только склады с реальным наличием (> 0), либо центральный хаб (Основной Склад Астана).
+ * 50+ пустых партнерских шоурумов скрываются, чтобы не создавать бардак.
+ */
+export function filterClientWarehouses(warehouses: Warehouse[] = []): Warehouse[] {
+  if (!warehouses || warehouses.length === 0) {
+    return [{ city: 'Алматы', warehouse_name: 'Основной Склад Астана', stock: 0 }];
+  }
+
+  // 1. Склады с реальным остатком
+  const withStock = warehouses.filter(w => w.stock > 0);
+  if (withStock.length > 0) {
+    return withStock;
+  }
+
+  // 2. Если остатка нет нигде, отдаем только одну строку центрального склада с 0 шт. (под заказ)
+  const mainHub = warehouses.find(w =>
+    (w.warehouse_name && (w.warehouse_name.toLowerCase().includes('основной') || w.warehouse_name.toLowerCase().includes('астана'))) ||
+    (w.city && w.city.toLowerCase().includes('астана'))
+  );
+
+  if (mainHub) {
+    return [{ ...mainHub, stock: 0 }];
+  }
+
+  return [{ city: 'Алматы', warehouse_name: 'Основной Склад Астана', stock: 0 }];
 }
 
 export function triggerCatalogReload() {

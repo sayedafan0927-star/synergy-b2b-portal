@@ -17,10 +17,11 @@ import {
 } from 'lucide-react';
 import type { PageId, ProductVariant, Warehouse } from '@/types';
 import { parseSizeDimensions } from '@/types';
-import { useProduct } from '@/hooks/useProductData';
+import { useProduct, filterClientWarehouses } from '@/hooks/useProductData';
 import { useUserPricing } from '@/hooks/usePricing';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { CarpetPlaceholderIcon } from '@/components/ProductImage';
 
 
 function rowKey(sku: string, city: string) {
@@ -133,7 +134,8 @@ export default function ProductPage({
   const handleAdd = useCallback(
     (variant: ProductVariant, wh: Warehouse) => {
       if (!product) return;
-      const key = rowKey(variant.sku, wh.city);
+      const whLabel = wh.warehouse_name || wh.city;
+      const key = rowKey(variant.sku, whLabel);
       const qty = quantities[key] ?? 0;
       if (qty < 1 || wh.stock < 1) return;
 
@@ -143,10 +145,10 @@ export default function ProductPage({
           productId: product.id,
           productName: product.name,
           collection: product.collection,
-          image: product.images[0],
+          image: product.images[0] || product.image_thumb,
           size: variant.size,
           sku: variant.sku,
-          warehouse: wh.city,
+          warehouse: whLabel,
           price,
         },
         qty,
@@ -237,20 +239,41 @@ export default function ProductPage({
   const [selectedSize, setSelectedSize] = useState<string>('');
   const activeVariant = product.variants.find(v => v.size === selectedSize) || product.variants[0];
 
-  const specs = (product.characteristics && product.characteristics.length > 0)
-    ? product.characteristics.map(c => ({ label: c.name, value: c.value }))
-    : [
-        { label: 'Коллекция', value: product.collection },
-        { label: 'Артикул / Дизайн', value: product.article },
-        { label: 'Цвет', value: product.color },
-        { label: 'Форма', value: product.shape_label || product.shape },
-        { label: 'Производитель', value: product.manufacturer },
-        { label: 'Страна', value: product.country },
-        { label: 'Материал', value: product.material },
-        { label: 'Стиль', value: product.style },
-        { label: 'Плотность', value: product.density },
-        { label: 'Высота ворса', value: product.pile_height },
-      ].filter(s => Boolean(s.value));
+  const specs = useMemo(() => {
+    const list: Array<{ label: string; value: string }> = [];
+    const seen = new Set<string>();
+
+    if (product.characteristics && product.characteristics.length > 0) {
+      for (const c of product.characteristics) {
+        if (c.name && c.value && !seen.has(c.name.trim().toLowerCase())) {
+          list.push({ label: c.name.trim(), value: c.value.trim() });
+          seen.add(c.name.trim().toLowerCase());
+        }
+      }
+    }
+
+    const fallbacks = [
+      { label: 'Коллекция', value: product.collection },
+      { label: 'Артикул / Дизайн', value: product.article },
+      { label: 'Цвет', value: product.color },
+      { label: 'Форма', value: product.shape_label || product.shape },
+      { label: 'Производитель', value: product.manufacturer },
+      { label: 'Страна производства', value: product.country },
+      { label: 'Материал', value: product.material },
+      { label: 'Стиль', value: product.style },
+      { label: 'Плотность', value: product.density },
+      { label: 'Высота ворса', value: product.pile_height },
+    ];
+
+    for (const f of fallbacks) {
+      if (f.value && !seen.has(f.label.trim().toLowerCase())) {
+        list.push({ label: f.label, value: f.value });
+        seen.add(f.label.trim().toLowerCase());
+      }
+    }
+
+    return list;
+  }, [product]);
 
   const totalStock = product.variants.reduce((s, v) => s + v.warehouses.reduce((a, w) => a + w.stock, 0), 0);
   const sizeRange = product.variants.length > 1
@@ -266,7 +289,8 @@ export default function ProductPage({
   const totalHubQty = product.variants.reduce((sum, v) => sum + (v.dealer_stock?.available_hub_qty || 0), 0);
 
   function CartButton({ variant, wh }: { variant: ProductVariant; wh: Warehouse }) {
-    const key = rowKey(variant.sku, wh.city);
+    const whLabel = wh.warehouse_name || wh.city;
+    const key = rowKey(variant.sku, whLabel);
     const qty = quantities[key] ?? 0;
     const added = addedKeys[key];
     const inStock = wh.stock > 0;
@@ -293,7 +317,8 @@ export default function ProductPage({
   }
 
   function MobileCartButton({ variant, wh }: { variant: ProductVariant; wh: Warehouse }) {
-    const key = rowKey(variant.sku, wh.city);
+    const whLabel = wh.warehouse_name || wh.city;
+    const key = rowKey(variant.sku, whLabel);
     const qty = quantities[key] ?? 0;
     const added = addedKeys[key];
     const inStock = wh.stock > 0;
@@ -336,18 +361,24 @@ export default function ProductPage({
           {/* LEFT: Gallery */}
           <div className="flex flex-row-reverse items-start gap-3">
             <div
-              className="relative aspect-square min-w-0 flex-1 rounded-xl overflow-hidden bg-slate-100 cursor-zoom-in group"
-              onClick={() => setLightboxOpen(true)}
+              className={`relative aspect-square min-w-0 flex-1 rounded-xl overflow-hidden bg-slate-100 ${imageCount > 0 ? 'cursor-zoom-in group' : ''}`}
+              onClick={() => imageCount > 0 && setLightboxOpen(true)}
             >
-              <img
-                src={product.images[selectedImage]}
-                alt={`${product.name} — фото ${selectedImage + 1}`}
-                className="h-full w-full object-contain p-6 transition-transform duration-300 group-hover:scale-105"
-                draggable={false}
-              />
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors flex items-center justify-center">
-                <ZoomIn className="h-8 w-8 text-white opacity-0 group-hover:opacity-70 transition-opacity drop-shadow-lg" />
-              </div>
+              {imageCount > 0 ? (
+                <>
+                  <img
+                    src={product.images[selectedImage]}
+                    alt={`${product.name} — фото ${selectedImage + 1}`}
+                    className="h-full w-full object-contain p-6 transition-transform duration-300 group-hover:scale-105"
+                    draggable={false}
+                  />
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors flex items-center justify-center">
+                    <ZoomIn className="h-8 w-8 text-white opacity-0 group-hover:opacity-70 transition-opacity drop-shadow-lg" />
+                  </div>
+                </>
+              ) : (
+                <CarpetPlaceholderIcon className="h-full w-full" />
+              )}
               {imageCount > 1 && (
                 <>
                   <button onClick={e => { e.stopPropagation(); prevImage(); }} className="absolute left-4 top-1/2 z-10 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full border border-slate-400 bg-white/95 text-slate-700 shadow-md hover:scale-105 hover:bg-white transition-all">
@@ -558,9 +589,10 @@ export default function ProductPage({
                     const variantPrice = pricing.getVariantPrice(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
                     const pricePerSqm = pricing.getPricePerSqm(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
 
-                    const rows = variant.warehouses.length > 0 ? variant.warehouses : [{ city: 'Все склады', stock: 0 }];
+                    const rows = filterClientWarehouses(variant.warehouses);
                     return rows.map((wh, whIdx) => {
-                      const key = rowKey(variant.sku, wh.city);
+                      const whLabel = wh.warehouse_name || wh.city;
+                      const key = rowKey(variant.sku, whLabel);
                       const qty = quantities[key] ?? 0;
                       const isFirstRow = whIdx === 0;
 
@@ -581,18 +613,18 @@ export default function ProductPage({
                                       </span>
                                     )}
                                     <span className="inline-flex items-center gap-1 text-slate-500">
-                                      🏢 База Алматы: {variant.dealer_stock.available_hub_qty} шт
+                                      🏢 База: {variant.dealer_stock.available_hub_qty} шт
                                     </span>
                                   </div>
                                 )}
                               </div>
                             ) : ''}
                           </td>
-                          <td className="py-3 pr-3 text-sm text-slate-600 whitespace-nowrap">{wh.city}</td>
+                          <td className="py-3 pr-3 text-sm text-slate-600 whitespace-nowrap">{whLabel}</td>
                           <td className="py-3 pr-3">
                             <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${wh.stock > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
                               <span className={`inline-block h-1.5 w-1.5 rounded-full ${wh.stock > 0 ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-                              {wh.stock} шт.
+                              {wh.stock > 0 ? `${wh.stock} шт.` : '0 шт. (под заказ)'}
                             </span>
                           </td>
                           {user && (
@@ -651,16 +683,20 @@ export default function ProductPage({
         <div className="lg:hidden">
           <div
             className="relative aspect-[4/3] rounded-xl overflow-hidden bg-slate-100 select-none mb-4"
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
+            onTouchStart={imageCount > 1 ? handleTouchStart : undefined}
+            onTouchMove={imageCount > 1 ? handleTouchMove : undefined}
+            onTouchEnd={imageCount > 1 ? handleTouchEnd : undefined}
           >
-            <img
-              src={product.images[selectedImage]}
-              alt={`${product.name} — фото ${selectedImage + 1}`}
-              className="h-full w-full object-cover pointer-events-none"
-              draggable={false}
-            />
+            {imageCount > 0 ? (
+              <img
+                src={product.images[selectedImage]}
+                alt={`${product.name} — фото ${selectedImage + 1}`}
+                className="h-full w-full object-cover pointer-events-none"
+                draggable={false}
+              />
+            ) : (
+              <CarpetPlaceholderIcon className="h-full w-full" />
+            )}
             {imageCount > 1 && (
               <>
                 <button onClick={prevImage} className="absolute left-2 top-1/2 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-full bg-white/80 backdrop-blur text-slate-700 shadow hover:bg-white transition-colors">
@@ -768,21 +804,22 @@ export default function ProductPage({
                   )}
 
                   <div className="flex flex-col gap-3">
-                    {(variant.warehouses.length > 0 ? variant.warehouses : [{ city: 'Все склады', stock: 0 }]).map(wh => {
-                      const key = rowKey(variant.sku, wh.city);
+                    {filterClientWarehouses(variant.warehouses).map(wh => {
+                      const whLabel = wh.warehouse_name || wh.city;
+                      const key = rowKey(variant.sku, whLabel);
                       const qty = quantities[key] ?? 0;
 
                       return (
                         <div key={key} className="border-t border-slate-100 pt-3 first:border-0 first:pt-0">
                           <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm text-slate-700 font-medium">{wh.city}</span>
+                            <span className="text-sm text-slate-700 font-medium">{whLabel}</span>
                             <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${wh.stock > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
                               {wh.stock > 0 ? (
                                 <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
                               ) : (
                                 <span className="inline-block h-1.5 w-1.5 rounded-full bg-slate-300" />
                               )}
-                              {wh.stock} шт.
+                              {wh.stock > 0 ? `${wh.stock} шт.` : '0 шт. (под заказ)'}
                             </span>
                           </div>
                           <div className="flex items-center gap-3">

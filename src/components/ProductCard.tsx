@@ -16,7 +16,11 @@ function getTotalStock(variant: ProductVariant) {
 }
 
 function getAvailableWarehouse(variant: ProductVariant) {
-  return variant.warehouses.find(warehouse => warehouse.stock > 0);
+  return (
+    variant.warehouses.find(w => w.stock > 0) ||
+    variant.warehouses.find(w => (w.warehouse_name && w.warehouse_name.toLowerCase().includes('основной')) || (w.city && w.city.toLowerCase().includes('астана'))) ||
+    variant.warehouses[0]
+  );
 }
 
 function sizeLabel(count: number) {
@@ -53,7 +57,7 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
       image: imageSource,
       size: variant.size,
       sku: variant.sku,
-      warehouse: warehouse.city,
+      warehouse: warehouse.warehouse_name || warehouse.city,
       price: getVariantPrice(product.collection, variant.size, variant.base_price, variant.price_per_sqm),
     }, quantity);
     setAddedSku(variant.sku);
