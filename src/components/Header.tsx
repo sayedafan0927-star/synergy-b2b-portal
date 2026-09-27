@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Menu, X, ShoppingCart, Search, User, ChevronDown, Shield } from 'lucide-react';
+import { Menu, X, ShoppingCart, Search, User, Shield } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import type { PageId } from '@/types';
@@ -46,7 +46,11 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
             onClick={() => onNavigate('home')}
             className="flex items-center gap-2.5 transition-opacity hover:opacity-80"
           >
-            <img src="/Вектор_Синэнергия.png" alt="Synergiya Group" className="h-9 w-auto" />
+            <img
+              src="/Вектор_Синэнергия.png"
+              alt="Synergiya Group"
+              className="h-12 sm:h-14 w-auto"
+            />
           </button>
 
           {/* Desktop nav */}

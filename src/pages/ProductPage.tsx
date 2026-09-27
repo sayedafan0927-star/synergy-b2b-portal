@@ -175,33 +175,8 @@ export default function ProductPage({
     };
   }, [lightboxOpen, prevImage, nextImage]);
 
-  if (loading) {
-    return (
-      <div className="pt-20 pb-24 lg:pb-8 min-h-screen flex items-center justify-center bg-slate-50">
-        <Loader2 className="h-8 w-8 animate-spin text-brand-700" />
-      </div>
-    );
-  }
-
-  if (!product) {
-    return (
-      <div className="pt-20 pb-24 lg:pb-8 min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="text-center max-w-md mx-auto px-4">
-          <PackageSearch className="mx-auto h-16 w-16 text-slate-300 mb-4" />
-          <h1 className="font-display text-2xl font-bold text-slate-900 mb-2">Товар не найден</h1>
-          <p className="text-slate-500 mb-6">Запрашиваемый товар не существует или был удалён из каталога.</p>
-          <button onClick={() => onNavigate('catalog')} className="btn-primary inline-flex items-center gap-2">
-            <ArrowLeft className="h-4 w-4" />
-            Вернуться в каталог
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  const mainPricePerSqm = pricing.getMinPricePerSqm(product);
-
   useEffect(() => {
+    if (!product) return;
     const minPrice = product.variants.reduce((min, v) => Math.min(min, v.base_price), Infinity);
     const maxPrice = product.variants.reduce((max, v) => Math.max(max, v.base_price), 0);
     const inStock = product.variants.some(v => v.warehouses.some(w => w.stock > 0));
@@ -234,6 +209,32 @@ export default function ProductPage({
     document.head.appendChild(script);
     return () => { document.getElementById('product-jsonld')?.remove(); };
   }, [product]);
+
+  if (loading) {
+    return (
+      <div className="pt-20 pb-24 lg:pb-8 min-h-screen flex items-center justify-center bg-slate-50">
+        <Loader2 className="h-8 w-8 animate-spin text-brand-700" />
+      </div>
+    );
+  }
+
+  if (!product) {
+    return (
+      <div className="pt-20 pb-24 lg:pb-8 min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center max-w-md mx-auto px-4">
+          <PackageSearch className="mx-auto h-16 w-16 text-slate-300 mb-4" />
+          <h1 className="font-display text-2xl font-bold text-slate-900 mb-2">Товар не найден</h1>
+          <p className="text-slate-500 mb-6">Запрашиваемый товар не существует или был удалён из каталога.</p>
+          <button onClick={() => onNavigate('catalog')} className="btn-primary inline-flex items-center gap-2">
+            <ArrowLeft className="h-4 w-4" />
+            Вернуться в каталог
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const mainPricePerSqm = pricing.getMinPricePerSqm(product);
 
   const specs = [
     { label: 'Материал', value: product.material },
