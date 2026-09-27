@@ -18,6 +18,8 @@ export interface Product {
   name: string;
   category: string;
   collection: string;
+  article?: string;
+  color?: string;
   manufacturer: string;
   material: string;
   style: string;

@@ -37,7 +37,7 @@ import type { PageId } from '@/types';
 import { calcSqm, parseSizeDimensions } from '@/types';
 import { useAuth, type UserRole } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { syncAllErpData, type ErpSyncReport, ERP_API_URL, fetchClientDebtFromErp, type ClientDebtReport, fetchClientOrdersFromErp } from '@/lib/erpApi';
+import { syncAllErpData, type ErpSyncReport, ERP_API_URL, fetchClientDebtFromErp, type ClientDebtReport, fetchClientOrdersFromErp, fetchCounterpartiesFromErp } from '@/lib/erpApi';
 import { triggerCatalogReload } from '@/hooks/useProductData';
 import { triggerDisplaySettingsReload } from '@/hooks/useDisplaySettings';
 
@@ -462,14 +462,47 @@ function AdminUsersTab({ onNavigate }: { onNavigate: (page: PageId) => void }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
-    supabase
-      .from('profiles')
-      .select('id, full_name, company_name, phone, role, partner_id, price_type, manager_id, impersonation_enabled')
-      .order('created_at', { ascending: false })
-      .then(({ data }) => {
-        if (data) setUsers(data as typeof users);
-        setLoading(false);
-      });
+    let cancelled = false;
+    async function loadUsers() {
+      setLoading(true);
+      // 1. Приоритет: реальные контрагенты из Synergy ERP
+      try {
+        const cpData = await fetchCounterpartiesFromErp({ limit: 300 });
+        if (!cancelled && cpData && cpData.success && Array.isArray(cpData.counterparties) && cpData.counterparties.length > 0) {
+          const mappedUsers = cpData.counterparties.map((cp) => ({
+            id: String(cp.id),
+            full_name: cp.name,
+            company_name: cp.name,
+            phone: cp.phone || '',
+            role: 'client' as UserRole,
+            partner_id: String(cp.id),
+            price_type: cp.cooperation_type === 'комиссия' ? 'commission' : 'wholesale',
+            manager_id: String(cp.manager_id || ''),
+            impersonation_enabled: true,
+          }));
+          setUsers(mappedUsers);
+          setLoading(false);
+          return;
+        }
+      } catch (cpErr) {
+        console.warn('[AdminUsersTab] ERP counterparties fallback:', cpErr);
+      }
+
+      // 2. Резервный источник: Supabase
+      try {
+        const { data } = await supabase
+          .from('profiles')
+          .select('id, full_name, company_name, phone, role, partner_id, price_type, manager_id, impersonation_enabled')
+          .order('created_at', { ascending: false });
+        if (!cancelled && data) setUsers(data as typeof users);
+      } catch (err) {
+        console.warn('[AdminUsersTab] Supabase error:', err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    loadUsers();
+    return () => { cancelled = true; };
   }, []);
 
   const handleToggleImpersonation = async (userId: string, enabled: boolean) => {
@@ -607,16 +640,64 @@ function ClientDemoPanel({ client }: { client: { id: string; full_name: string; 
   useEffect(() => {
     let cancelled = false;
     setLoadingOrders(true);
-    supabase
-      .from('orders')
-      .select(`
-        id, order_number, user_id, status, warehouse, notes,
-        total_amount, total_sqm, total_items, created_at,
-        order_items (id, product_name, collection, size, sku, warehouse, price, quantity)
-      `)
-      .eq('user_id', client.id)
-      .order('created_at', { ascending: false })
-      .then(({ data, error }) => {
+
+    async function loadClientOrders() {
+      // 1. Приоритет: заказы клиента из ERP
+      try {
+        const erpData = await fetchClientOrdersFromErp({ phone: client.phone, clientId: Number(client.partner_id) || undefined });
+        if (!cancelled && erpData && erpData.success && Array.isArray(erpData.orders)) {
+          const mapped: Order[] = erpData.orders.map((o) => {
+            const st = o.status_code || 'pending';
+            const meta = ORDER_STATUS_MAP[st] || { label: o.status || st, color: 'bg-amber-50 text-amber-700 border-amber-200' };
+            const d = o.date ? new Date(o.date) : new Date();
+            return {
+              id: String(o.id),
+              orderNumber: o.doc_number || `ORD-${o.id}`,
+              userId: String(o.client_id || client.id),
+              date: d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
+              status: o.status || meta.label,
+              statusRaw: st,
+              statusColor: meta.color,
+              warehouse: o.warehouse_name || 'Основной склад',
+              notes: o.comment || '',
+              clientName: client.full_name,
+              clientCompany: client.company_name,
+              clientPhone: client.phone,
+              totalAmount: Number(o.total_amount) || 0,
+              totalSqm: Number(o.total_sqm) || 0,
+              totalItems: o.items_count || (o.items || []).reduce((s, it) => s + (it.quantity || 1), 0),
+              items: (o.items || []).map((it) => ({
+                id: String(it.id),
+                productName: it.name || 'Ковер',
+                collection: it.name.split(' ')[0] || 'Коллекция',
+                size: it.size || 'Стандарт',
+                sku: it.sku || '',
+                warehouse: o.warehouse_name || 'Основной склад',
+                price: Number(it.price) || 0,
+                quantity: Number(it.quantity) || 1,
+              })),
+            };
+          });
+          setOrders(mapped);
+          setLoadingOrders(false);
+          return;
+        }
+      } catch (erpErr) {
+        console.warn('[ClientDemoPanel] ERP orders fallback:', erpErr);
+      }
+
+      // 2. Резервный источник: Supabase
+      try {
+        const { data, error } = await supabase
+          .from('orders')
+          .select(`
+            id, order_number, user_id, status, warehouse, notes,
+            total_amount, total_sqm, total_items, created_at,
+            order_items (id, product_name, collection, size, sku, warehouse, price, quantity)
+          `)
+          .eq('user_id', client.id)
+          .order('created_at', { ascending: false });
+
         if (cancelled) return;
         if (!error && data) {
           const mapped: Order[] = data.map((o: any) => {
@@ -653,8 +734,16 @@ function ClientDemoPanel({ client }: { client: { id: string; full_name: string; 
           });
           setOrders(mapped);
         }
-        setLoadingOrders(false);
-      });
+      } catch (sbErr) {
+        console.warn('[ClientDemoPanel] Supabase orders error:', sbErr);
+      } finally {
+        if (!cancelled) setLoadingOrders(false);
+      }
+    }
+
+    loadClientOrders();
+    return () => { cancelled = true; };
+  }, [client]);
 
     setLoadingDebt(true);
     fetchClientDebtFromErp({
@@ -1510,6 +1599,60 @@ function OrdersTab({
   const fetchOrders = useCallback(async () => {
     setLoading(true);
     try {
+      // 1. Приоритет: реальные 30 заказов из Synergy ERP (1C)
+      try {
+        const erpData = await fetchClientOrdersFromErp({ limit: 100 });
+        if (erpData && erpData.success && Array.isArray(erpData.orders) && erpData.orders.length > 0) {
+          const mappedErp: Order[] = erpData.orders.map((o) => {
+            const st = o.status_code || 'pending';
+            const meta = ORDER_STATUS_MAP[st] || { label: o.status || st, color: 'bg-amber-50 text-amber-700 border-amber-200' };
+            const d = o.date ? new Date(o.date) : new Date();
+            const dateStr = d.toLocaleDateString('ru-RU', {
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric',
+            }) + ' ' + d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+
+            const items: OrderItem[] = (o.items || []).map((it) => ({
+              id: String(it.id),
+              productName: it.name || 'Ковер',
+              collection: it.name.split(' ')[0] || 'Коллекция',
+              size: it.size || 'Стандарт',
+              sku: it.sku || '',
+              warehouse: o.warehouse_name || 'Основной склад',
+              price: Number(it.price) || 0,
+              quantity: Number(it.quantity) || 1,
+            }));
+
+            return {
+              id: String(o.id),
+              orderNumber: o.doc_number || `ORD-${o.id}`,
+              userId: String(o.client_id || ''),
+              date: dateStr,
+              status: o.status || meta.label,
+              statusRaw: st,
+              statusColor: meta.color,
+              warehouse: o.warehouse_name || 'Основной склад',
+              notes: o.comment || '',
+              clientName: o.client_name || 'Клиент',
+              clientCompany: o.client_name || '',
+              clientPhone: o.client_phone || '',
+              totalAmount: Number(o.total_amount) || 0,
+              totalSqm: Number(o.total_sqm) || 0,
+              totalItems: o.items_count || items.reduce((s, it) => s + it.quantity, 0),
+              items,
+            };
+          });
+
+          setOrders(mappedErp);
+          setLoading(false);
+          return;
+        }
+      } catch (erpErr) {
+        console.warn('[OrdersTab] ERP orders fallback:', erpErr);
+      }
+
+      // 2. Резервный источник: Supabase
       let query = supabase
         .from('orders')
         .select(`
@@ -1545,8 +1688,8 @@ function OrdersTab({
 
       const { data, error } = await query;
       if (error) {
-        console.error('[OrdersTab] Error fetching orders:', error);
         setOrders([]);
+        setLoading(false);
         return;
       }
 

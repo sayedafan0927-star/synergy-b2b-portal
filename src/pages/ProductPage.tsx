@@ -429,7 +429,8 @@ export default function ProductPage({
                     const variantPrice = pricing.getVariantPrice(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
                     const pricePerSqm = pricing.getPricePerSqm(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
 
-                    return variant.warehouses.map((wh, whIdx) => {
+                    const rows = variant.warehouses.length > 0 ? variant.warehouses : [{ city: 'Все склады', stock: 0 }];
+                    return rows.map((wh, whIdx) => {
                       const key = rowKey(variant.sku, wh.city);
                       const qty = quantities[key] ?? 0;
                       const isFirstRow = whIdx === 0;
@@ -573,7 +574,7 @@ export default function ProductPage({
                   )}
 
                   <div className="flex flex-col gap-3">
-                    {variant.warehouses.map(wh => {
+                    {(variant.warehouses.length > 0 ? variant.warehouses : [{ city: 'Все склады', stock: 0 }]).map(wh => {
                       const key = rowKey(variant.sku, wh.city);
                       const qty = quantities[key] ?? 0;
 
