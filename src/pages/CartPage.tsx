@@ -9,10 +9,17 @@ import {
   Send,
   Filter,
   ArrowUpDown,
+  Loader2,
+  AlertCircle,
+  CheckCircle2,
 } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
+import { useAuth } from '@/contexts/AuthContext';
 import type { PageId, CartItem } from '@/types';
 import { calcSqm, parseSizeDimensions } from '@/types';
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 function sizeArea(size: string): number {
   const { w, h } = parseSizeDimensions(size);
@@ -57,12 +64,23 @@ function calcSizeSubtotals(list: CartItem[]): SizeSubtotal[] {
   return Array.from(map.values()).sort((a, b) => a.area - b.area);
 }
 
+const CITIES = ['Астана', 'Алматы', 'Шымкент'];
+
 export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, productId?: string) => void }) {
   const { items, removeItem, updateQuantity, clearCart, totalItems, totalPrice, totalSqm } = useCart();
+  const { user, profile } = useAuth();
 
-  const [orderSent, setOrderSent] = useState(false);
+  const [orderDocNumber, setOrderDocNumber] = useState<string | null>(null);
   const [activeCollection, setActiveCollection] = useState<string | null>(null);
   const [sizeAsc, setSizeAsc] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const [clientName, setClientName] = useState(profile?.full_name ?? '');
+  const [clientPhone, setClientPhone] = useState(profile?.phone ?? '');
+  const [clientCompany, setClientCompany] = useState(profile?.company_name ?? '');
+  const [selectedCity, setSelectedCity] = useState(CITIES[0]);
+  const [orderComment, setOrderComment] = useState('');
 
   const collections = useMemo(() => Array.from(new Set(items.map(i => i.collection))).sort(), [items]);
 
@@ -87,16 +105,22 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
 
   const globalSizeSubtotals = useMemo(() => calcSizeSubtotals(filteredItems), [filteredItems]);
 
-  if (orderSent) {
+  if (orderDocNumber) {
     return (
       <div className="min-h-screen pt-20 pb-24 lg:pb-8">
         <div className="container-w flex flex-col items-center justify-center py-24 text-center">
           <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-50">
-            <Send className="h-8 w-8 text-emerald-600" />
+            <CheckCircle2 className="h-8 w-8 text-emerald-600" />
           </div>
-          <h1 className="font-display text-2xl font-bold text-slate-900 sm:text-3xl">Заявка отправлена</h1>
-          <p className="mt-3 max-w-md text-slate-500">Наш менеджер свяжется с вами для подтверждения заказа.</p>
-          <button onClick={() => { setOrderSent(false); onNavigate('catalog'); }} className="btn-primary mt-8">Продолжить покупки</button>
+          <h1 className="font-display text-2xl font-bold text-slate-900 sm:text-3xl">Заказ оформлен!</h1>
+          <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-6 py-4">
+            <p className="text-sm text-emerald-700 mb-1">Номер заказа</p>
+            <p className="text-2xl font-bold text-emerald-800 font-mono">{orderDocNumber}</p>
+          </div>
+          <p className="mt-4 max-w-md text-slate-500">Наш менеджер свяжется с вами для подтверждения заказа.</p>
+          <button onClick={() => { setOrderDocNumber(null); onNavigate('catalog'); }} className="btn-primary mt-8">
+            Продолжить покупки
+          </button>
         </div>
       </div>
     );
@@ -117,10 +141,57 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
     );
   }
 
-  const handleSubmit = () => {
-    clearCart();
-    setOrderSent(true);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+  const handleSubmit = async () => {
+    if (!clientName.trim() || !clientPhone.trim()) {
+      setSubmitError('Укажите имя и телефон для оформления заказа');
+      return;
+    }
+
+    setSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/create-order`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({
+          client_name: clientName.trim(),
+          client_phone: clientPhone.trim(),
+          client_company: clientCompany.trim(),
+          city: selectedCity,
+          comment: orderComment.trim(),
+          items: items.map(item => ({
+            productId: item.productId,
+            size: item.size,
+            sku: item.sku,
+            warehouse: item.warehouse,
+            price: item.price,
+            quantity: item.quantity,
+          })),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Ошибка сервера (${response.status})`);
+      }
+
+      const data = await response.json();
+
+      if (data.success === true && data.order?.doc_number) {
+        clearCart();
+        setOrderDocNumber(data.order.doc_number);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        throw new Error(data.error || data.message || 'Не удалось создать заказ');
+      }
+    } catch (err) {
+      setSubmitError((err as Error).message);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   function renderItemCard(item: CartItem) {
@@ -265,7 +336,70 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
           </div>
 
           {/* Order summary sidebar */}
-          <div className="lg:sticky lg:top-24 self-start">
+          <div className="lg:sticky lg:top-24 self-start space-y-4">
+            {/* Checkout form */}
+            <div className="card p-6">
+              <h2 className="text-lg font-bold text-slate-900 mb-4">Данные заказа</h2>
+              <div className="space-y-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-600">Имя *</label>
+                  <input
+                    type="text"
+                    value={clientName}
+                    onChange={e => setClientName(e.target.value)}
+                    placeholder="Ваше имя"
+                    className="input-field"
+                    disabled={submitting}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-600">Телефон *</label>
+                  <input
+                    type="tel"
+                    value={clientPhone}
+                    onChange={e => setClientPhone(e.target.value)}
+                    placeholder="+7 (___) ___-__-__"
+                    className="input-field"
+                    disabled={submitting}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-600">Компания</label>
+                  <input
+                    type="text"
+                    value={clientCompany}
+                    onChange={e => setClientCompany(e.target.value)}
+                    placeholder="ООО / ИП"
+                    className="input-field"
+                    disabled={submitting}
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-600">Город доставки</label>
+                  <select
+                    value={selectedCity}
+                    onChange={e => setSelectedCity(e.target.value)}
+                    className="input-field"
+                    disabled={submitting}
+                  >
+                    {CITIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-600">Комментарий</label>
+                  <textarea
+                    value={orderComment}
+                    onChange={e => setOrderComment(e.target.value)}
+                    placeholder="Дополнительные пожелания..."
+                    rows={2}
+                    className="input-field resize-none"
+                    disabled={submitting}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Totals & submit */}
             <div className="card p-6">
               <h2 className="text-lg font-bold text-slate-900 mb-4">Итого</h2>
               <div className="space-y-3 text-sm">
@@ -282,9 +416,25 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
                   <span className="text-lg font-bold text-brand-700">{fmtPrice(totalPrice)}</span>
                 </div>
               </div>
-              <button onClick={handleSubmit} className="btn-primary w-full mt-6">
-                <Send className="h-4 w-4" />
-                Оформить заказ
+
+              {submitError && (
+                <div className="mt-4 flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2.5 text-xs text-red-700">
+                  <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                  <span>{submitError}</span>
+                </div>
+              )}
+
+              <button
+                onClick={handleSubmit}
+                disabled={submitting}
+                className="btn-primary w-full mt-6 relative"
+              >
+                {submitting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
+                {submitting ? 'Отправка...' : 'Оформить заказ'}
               </button>
               <p className="mt-3 text-center text-xs text-slate-400">Менеджер свяжется для подтверждения</p>
             </div>
