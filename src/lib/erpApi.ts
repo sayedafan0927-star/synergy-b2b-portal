@@ -10,21 +10,29 @@ export const ERP_API_KEY = import.meta.env.VITE_ERP_API_KEY || '138d1bdaf9402600
 export const ERP_PORTAL_SECRET = 'SynergySecretKey2025';
 
 export interface CreateOrderPayload {
-  client_name: string;
-  client_phone: string;
+  client_id?: number | string;
+  warehouse_id?: number;
+  buyer?: {
+    name: string;
+    phone: string;
+  };
+  client_name?: string;
+  client_phone?: string;
   client_company?: string;
-  city: string;
+  city?: string;
   comment?: string;
   contract_id?: number;
   manager_id?: number;
   price_type?: string;
   currency?: string;
   items: Array<{
-    productId: string;
-    size: string;
-    sku: string;
-    warehouse: string;
+    item_id?: number;
+    productId?: string;
+    size?: string;
+    sku?: string;
+    warehouse?: string;
     price: number;
+    price_per_sqm?: number;
     quantity: number;
     width?: number;
     length?: number;
@@ -58,6 +66,33 @@ export async function submitOrderToErp(payload: CreateOrderPayload): Promise<Erp
     ? crypto.randomUUID() 
     : `order-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
+  const rawClientId = payload.client_id;
+  const numClientId = rawClientId ? (Number(String(rawClientId).replace(/\D+/g, '')) || Number(rawClientId)) : undefined;
+
+  const normalizedPayload = {
+    client_id: numClientId || payload.client_id,
+    warehouse_id: payload.warehouse_id || 81,
+    buyer: payload.buyer || {
+      name: payload.client_company || payload.client_name || '',
+      phone: payload.client_phone || '',
+    },
+    client_name: payload.client_name || payload.buyer?.name,
+    client_phone: payload.client_phone || payload.buyer?.phone,
+    client_company: payload.client_company,
+    city: payload.city || 'Астана',
+    comment: payload.comment || '',
+    items: payload.items.map(item => ({
+      item_id: item.item_id || (Number(item.productId) > 0 ? Number(item.productId) : undefined),
+      sku: item.sku,
+      size: item.size,
+      warehouse: item.warehouse || 'Основной Склад Астана',
+      quantity: item.quantity,
+      price: item.price,
+      price_per_sqm: item.price_per_sqm,
+    })),
+    idempotency_key: idempotencyKey,
+  };
+
   const response = await fetch(`${ERP_API_URL}?action=create_order&portal_key=${encodeURIComponent(ERP_API_KEY)}`, {
     method: 'POST',
     headers: {
@@ -65,10 +100,7 @@ export async function submitOrderToErp(payload: CreateOrderPayload): Promise<Erp
       'X-Portal-Key': ERP_API_KEY,
       'Idempotency-Key': idempotencyKey,
     },
-    body: JSON.stringify({
-      ...payload,
-      idempotency_key: idempotencyKey,
-    }),
+    body: JSON.stringify(normalizedPayload),
   });
 
   const text = await response.text();

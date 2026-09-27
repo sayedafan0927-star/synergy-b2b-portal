@@ -147,13 +147,17 @@ export interface Product {
 
 export interface CartItem {
   productId: string;
+  item_id?: number;
   productName: string;
   collection: string;
   image: string;
   size: string;
   sku: string;
   warehouse: string;
+  warehouse_id?: number;
   price: number;
+  price_per_sqm?: number;
+  area_sqm?: number;
   quantity: number;
 }
 

@@ -153,19 +153,32 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
     setSubmitting(true);
     setSubmitError(null);
 
+    const effectiveProfile = (isImpersonating && impersonatedProfile) ? impersonatedProfile : profile;
+    const clientId = effectiveProfile?.partner_id
+      ? (Number(effectiveProfile.partner_id) || effectiveProfile.partner_id)
+      : undefined;
+
     try {
       const data = await submitOrderToErp({
+        client_id: clientId,
+        warehouse_id: 81,
+        buyer: {
+          name: clientCompany.trim() || clientName.trim(),
+          phone: clientPhone.trim(),
+        },
         client_name: clientName.trim(),
         client_phone: clientPhone.trim(),
         client_company: clientCompany.trim(),
         city: selectedCity,
         comment: orderComment.trim(),
         items: items.map(item => ({
+          item_id: item.item_id || (Number(item.productId) > 0 ? Number(item.productId) : undefined),
           productId: item.productId,
           size: item.size,
           sku: item.sku,
-          warehouse: item.warehouse,
+          warehouse: item.warehouse || 'Основной Склад Астана',
           price: item.price,
+          price_per_sqm: item.price_per_sqm,
           quantity: item.quantity,
         })),
       });

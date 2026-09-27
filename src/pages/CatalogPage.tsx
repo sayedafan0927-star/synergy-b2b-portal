@@ -214,15 +214,20 @@ function StockGridView({ filteredProducts, selectedWarehouse, onNavigate }: { fi
     const qty = quantities[key] ?? 0;
     if (qty < 1 || wh.stock < 1) return;
     const price = pricing.getVariantPrice(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
+    const pricePerSqm = pricing.getPricePerSqm(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
     addItem({
       productId: product.id,
+      item_id: (variant as any).item_id || (Number(variant.id) > 0 ? Number(variant.id) : (Number(product.id) > 0 ? Number(product.id) : undefined)),
       productName: product.name,
       collection: product.collection,
       image: product.images[0],
       size: variant.size,
       sku: variant.sku,
       warehouse: whLabel,
+      warehouse_id: wh.warehouse_id || 81,
       price,
+      price_per_sqm: pricePerSqm,
+      area_sqm: variant.area_sqm,
     }, qty);
     setAddedKeys(prev => ({ ...prev, [key]: true }));
     setTimeout(() => setAddedKeys(prev => ({ ...prev, [key]: false })), 1500);

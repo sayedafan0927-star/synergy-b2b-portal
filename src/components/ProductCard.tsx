@@ -41,7 +41,7 @@ function sizeLabel(count: number) {
 export default function ProductCard({ product, onNavigate }: ProductCardProps) {
   const { user, profile } = useAuth();
   const { addItem } = useCart();
-  const { getMinPricePerSqm, getVariantPrice } = useUserPricing();
+  const { getMinPricePerSqm, getVariantPrice, getPricePerSqm } = useUserPricing();
   const [sizesOpen, setSizesOpen] = useState(false);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [addedSku, setAddedSku] = useState<string | null>(null);
@@ -59,15 +59,22 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
     if (!warehouse) return;
 
     const quantity = Math.min(quantities[variant.sku] ?? 1, getTotalStock(variant));
+    const price = getVariantPrice(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
+    const itemSqmPrice = getPricePerSqm(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
+
     addItem({
       productId: product.id,
+      item_id: (variant as any).item_id || (Number(variant.id) > 0 ? Number(variant.id) : (Number(product.id) > 0 ? Number(product.id) : undefined)),
       productName: product.name,
       collection: product.collection,
       image: imageSource,
       size: variant.size,
       sku: variant.sku,
       warehouse: warehouse.warehouse_name || warehouse.city,
-      price: getVariantPrice(product.collection, variant.size, variant.base_price, variant.price_per_sqm),
+      warehouse_id: warehouse.warehouse_id || 81,
+      price,
+      price_per_sqm: itemSqmPrice,
+      area_sqm: variant.area_sqm,
     }, quantity);
     setAddedSku(variant.sku);
     window.setTimeout(() => setAddedSku(current => current === variant.sku ? null : current), 1400);
