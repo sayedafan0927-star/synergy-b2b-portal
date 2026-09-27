@@ -248,6 +248,18 @@ export default function ProductPage({
   const sizeRange = product.variants.length > 1
     ? `${product.variants[0].size} — ${product.variants[product.variants.length - 1].size}`
     : product.variants[0]?.size ?? '';
+  const availableForms = useMemo(() => {
+    const shapes = new Set<string>();
+    for (const v of product.variants) {
+      const { w, h } = parseSizeDimensions(v.size);
+      if (w === 0 || h === 0) continue;
+      const ratio = Math.max(w, h) / Math.min(w, h);
+      if (Math.abs(w - h) < 0.01) shapes.add('Квадрат');
+      else if (ratio >= 4) shapes.add('Дорожка');
+      else shapes.add('Прямоугольник');
+    }
+    return Array.from(shapes);
+  }, [product.variants]);
 
   function CartButton({ variant, wh }: { variant: ProductVariant; wh: Warehouse }) {
     const key = rowKey(variant.sku, wh.city);
@@ -318,9 +330,9 @@ export default function ProductPage({
         {/* DESKTOP LAYOUT */}
         <div className="hidden lg:grid lg:grid-cols-[420px,1fr] gap-10 mb-10">
           {/* LEFT: Gallery */}
-          <div className="space-y-3">
+          <div className="flex flex-row-reverse items-start gap-3">
             <div
-              className="relative aspect-square rounded-xl overflow-hidden bg-slate-100 cursor-zoom-in group"
+              className="relative aspect-square min-w-0 flex-1 rounded-xl overflow-hidden bg-slate-100 cursor-zoom-in group"
               onClick={() => setLightboxOpen(true)}
             >
               <img
@@ -345,7 +357,7 @@ export default function ProductPage({
             </div>
 
             {imageCount > 1 && (
-              <div className="flex gap-2">
+              <div className="flex w-16 shrink-0 flex-col gap-3 max-h-[420px] overflow-y-auto pr-1">
                 {product.images.map((img, idx) => (
                   <button
                     key={idx}
@@ -362,7 +374,8 @@ export default function ProductPage({
           </div>
 
           {/* RIGHT: Product info card */}
-          <div className="flex flex-col">
+          <div className="contents">
+            <div className="flex flex-col">
             <h1 className="font-display text-2xl xl:text-3xl font-bold text-slate-900 mb-3">{product.name}</h1>
 
             <div className="flex flex-wrap gap-2 mb-5">
@@ -390,18 +403,24 @@ export default function ProductPage({
                   <p className="text-sm font-semibold text-slate-800">{sizeRange}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] uppercase tracking-wide text-slate-400 mb-0.5">На складе</p>
-                  <p className="text-sm font-semibold text-slate-800">{totalStock} шт.</p>
+                  <p className="text-[10px] uppercase tracking-wide text-slate-400 mb-0.5">Форма</p>
+                  <div className="flex flex-wrap gap-1">
+                    {availableForms.length > 0 ? availableForms.map(f => (
+                      <span key={f} className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">{f}</span>
+                    )) : <span className="text-sm font-semibold text-slate-800">—</span>}
+                  </div>
                 </div>
                 <div>
-                  <p className="text-[10px] uppercase tracking-wide text-slate-400 mb-0.5">Вариантов</p>
-                  <p className="text-sm font-semibold text-slate-800">{product.variants.length}</p>
+                  <p className="text-[10px] uppercase tracking-wide text-slate-400 mb-0.5">Материал</p>
+                  <p className="text-sm font-semibold text-slate-800">{product.material || '—'}</p>
                 </div>
               </div>
             </div>
 
+            </div>
+
         {/* DESKTOP VARIANT TABLE */}
-        <div className="hidden lg:block mb-10">
+        <div className="hidden lg:block mb-10 col-span-2">
           <h2 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
             <Ruler className="h-5 w-5 text-slate-400" />
             Размеры и наличие
