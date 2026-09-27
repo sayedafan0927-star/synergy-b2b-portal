@@ -3,7 +3,7 @@
  * API-клиент для защищенной связки B2B-портала с бэкендом Synergy ERP.
  */
 
-export const ERP_API_URL = import.meta.env.VITE_ERP_API_URL || 'https://kilem-khan.kz/api/sin/api_portal.php';
+export const ERP_API_URL = import.meta.env.VITE_ERP_API_URL || 'https://kilem-khan.kz/api/sin/public/api_portal.php';
 export const ERP_API_KEY = import.meta.env.VITE_ERP_API_KEY || '138d1bdaf9402600c8f5d5763e2e1573c1e45d32401e62e4981cd7e898bf0544';
 
 export interface CreateOrderPayload {
