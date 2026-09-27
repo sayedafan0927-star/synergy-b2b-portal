@@ -33,7 +33,7 @@ import type { PageId } from '@/types';
 import { calcSqm, parseSizeDimensions } from '@/types';
 import { useAuth, type UserRole } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { syncAllErpData, type ErpSyncReport, ERP_API_URL } from '@/lib/erpApi';
+import { syncAllErpData, type ErpSyncReport, ERP_API_URL, fetchClientDebtFromErp, type ClientDebtReport } from '@/lib/erpApi';
 import { triggerCatalogReload } from '@/hooks/useProductData';
 
 /* ─── Types ─── */
@@ -828,11 +828,33 @@ function AdminErpSyncTab() {
   );
 }
 
-/* ─── Main ProfilePage ─── */
 export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId) => void }) {
   const { user, profile, loading, signOut, isAdmin, isManager } = useAuth();
   const [activeTab, setActiveTab] = useState<TabId>('orders');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [clientDebt, setClientDebt] = useState<ClientDebtReport | null>(null);
+  const [loadingDebt, setLoadingDebt] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!profile) return;
+    let cancelled = false;
+    setLoadingDebt(true);
+    fetchClientDebtFromErp({
+      phone: profile.phone,
+      counterpartyId: (profile as any).erp_id ? Number((profile as any).erp_id) : undefined,
+      search: profile.company_name || profile.full_name
+    })
+      .then(res => {
+        if (!cancelled && res.success && res.found) {
+          setClientDebt(res);
+        }
+      })
+      .catch(err => console.warn('[ProfilePage] Debt load error:', err))
+      .finally(() => {
+        if (!cancelled) setLoadingDebt(false);
+      });
+    return () => { cancelled = true; };
+  }, [profile]);
 
   if (loading) {
     return (
@@ -933,8 +955,24 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
             {/* Balance & Debt card */}
             <div className="card overflow-hidden">
               <div className="bg-gradient-to-br from-slate-800 to-slate-900 px-5 py-4">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1">Баланс</p>
-                <p className="text-2xl font-bold text-white tracking-tight">$0<span className="text-base text-slate-400">.00</span></p>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+                    {clientDebt?.financials?.balance_usd && clientDebt.financials.balance_usd < 0 ? 'К оплате (долг)' : 'Баланс'}
+                  </p>
+                  {clientDebt?.financials?.is_overdue && (
+                    <span className="badge bg-red-500/20 text-red-300 text-[10px] border border-red-500/30">
+                      Просрочка {clientDebt.financials.max_overdue_days} дн.
+                    </span>
+                  )}
+                </div>
+                <p className="text-2xl font-bold text-white tracking-tight">
+                  ${clientDebt?.financials ? Math.abs(clientDebt.financials.total_debt_usd).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'}
+                </p>
+                {clientDebt?.client?.credit_limit_usd ? (
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Лимит: ${clientDebt.client.credit_limit_usd.toLocaleString('en-US')} • Отсрочка: {clientDebt.client.payment_delay_days} дн.
+                  </p>
+                ) : null}
               </div>
               <div className="p-4 space-y-3">
                 <div className="flex items-center justify-between">
@@ -944,7 +982,9 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
                     </div>
                     <span className="text-xs text-slate-500">Задолженность</span>
                   </div>
-                  <span className="text-sm font-bold text-red-600">$0.00</span>
+                  <span className="text-sm font-bold text-red-600">
+                    ${clientDebt?.financials ? clientDebt.financials.total_debt_usd.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -953,7 +993,9 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
                     </div>
                     <span className="text-xs text-slate-500">Оплачено</span>
                   </div>
-                  <span className="text-sm font-bold text-emerald-600">$0.00</span>
+                  <span className="text-sm font-bold text-emerald-600">
+                    ${clientDebt?.financials ? clientDebt.financials.total_paid_usd.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -962,12 +1004,36 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
                     </div>
                     <span className="text-xs text-slate-500">Просрочено</span>
                   </div>
-                  <span className="text-sm font-bold text-amber-600">$0.00</span>
+                  <span className="text-sm font-bold text-amber-600">
+                    ${clientDebt?.financials ? clientDebt.financials.overdue_usd.toLocaleString('en-US', { minimumFractionDigits: 2 }) : '0.00'}
+                  </span>
                 </div>
+                {clientDebt?.regional_manager?.name && (
+                  <div className="rounded-lg bg-slate-50 p-2.5 text-xs text-slate-600 border border-slate-100 flex items-center justify-between">
+                    <div>
+                      <p className="text-[10px] text-slate-400 font-medium">Куратор РМ:</p>
+                      <p className="font-semibold text-slate-800">{clientDebt.regional_manager.name}</p>
+                    </div>
+                    {clientDebt.regional_manager.phone && (
+                      <a href={`tel:${clientDebt.regional_manager.phone}`} className="text-brand-700 font-medium hover:underline text-[11px]">
+                        {clientDebt.regional_manager.phone}
+                      </a>
+                    )}
+                  </div>
+                )}
                 <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
-                  <div className="h-full w-0 rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-500" />
+                  <div 
+                    className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-500" 
+                    style={{
+                      width: clientDebt?.financials && (clientDebt.financials.total_debt_usd + clientDebt.financials.total_paid_usd) > 0
+                        ? `${Math.min(100, Math.round((clientDebt.financials.total_paid_usd / (clientDebt.financials.total_debt_usd + clientDebt.financials.total_paid_usd)) * 100))}%`
+                        : '0%'
+                    }}
+                  />
                 </div>
-                <p className="text-[10px] text-slate-400 text-center">Данные из ERP будут подключены</p>
+                <p className="text-[10px] text-slate-400 text-center">
+                  {loadingDebt ? 'Загрузка данных из ERP...' : clientDebt?.found ? `Синхронизировано: ${clientDebt.client?.name}` : 'Данные из ERP подключены'}
+                </p>
               </div>
             </div>
           </div>

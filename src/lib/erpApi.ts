@@ -237,3 +237,102 @@ export async function syncAllErpData(): Promise<ErpSyncReport> {
     warnings,
   };
 }
+
+export interface ClientDebtReport {
+  success: boolean;
+  found: boolean;
+  client?: {
+    id: number;
+    name: string;
+    city: string;
+    address: string;
+    phone: string;
+    bin: string;
+    cooperation_type: string;
+    credit_limit_usd: number;
+    payment_delay_days: number;
+    is_blocked_for_shipment: boolean;
+  };
+  regional_manager?: {
+    id: number;
+    name: string;
+    phone: string;
+  };
+  financials?: {
+    currency: string;
+    balance_usd: number;
+    total_debt_usd: number;
+    total_paid_usd: number;
+    overdue_usd: number;
+    max_overdue_days: number;
+    unpaid_docs_count: number;
+    is_overdue: boolean;
+    available_credit_usd: number;
+  };
+  contracts?: Array<{
+    id: number;
+    name: string;
+    limit_days: number;
+    limit_sum_usd: number;
+    debt_usd: number;
+    overdue_usd: number;
+    overdue_days: number;
+    unpaid_docs_count: number;
+  }>;
+  unpaid_invoices?: Array<{
+    id: number;
+    document_number: string;
+    contract_name: string;
+    amount_usd: number;
+    debt_usd: number;
+    paid_usd: number;
+    overdue_usd: number;
+    overdue_days: number;
+    date_due: string;
+    is_overdue: boolean;
+  }>;
+  error?: string;
+}
+
+/**
+ * Получение персональной задолженности и неоплаченных накладных клиента из ERP.
+ */
+export async function fetchClientDebtFromErp(params: { phone?: string; counterpartyId?: number; search?: string }): Promise<ClientDebtReport> {
+  const q = new URLSearchParams();
+  q.set('portal_key', ERP_API_KEY);
+  if (params.phone) q.set('phone', params.phone);
+  if (params.counterpartyId) q.set('counterparty_id', String(params.counterpartyId));
+  if (params.search) q.set('search', params.search);
+
+  const response = await fetch(`${ERP_API_URL}?action=client_debt&${q.toString()}`, {
+    method: 'GET',
+    headers: {
+      'X-Portal-Key': ERP_API_KEY,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Ошибка загрузки задолженности (${response.status})`);
+  }
+
+  return await response.json();
+}
+
+/**
+ * Получение полного пакета синхронизации всех клиентов, балансов и РМ.
+ */
+export async function fetchSyncBundleFromErp() {
+  const response = await fetch(`${ERP_API_URL}?action=sync_bundle&portal_key=${encodeURIComponent(ERP_API_KEY)}`, {
+    method: 'GET',
+    headers: {
+      'X-Portal-Key': ERP_API_KEY,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Ошибка загрузки пакета синхронизации (${response.status})`);
+  }
+
+  return await response.json();
+}
+
