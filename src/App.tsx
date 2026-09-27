@@ -64,11 +64,20 @@ function Preloader({ onFinished }: { onFinished: () => void }) {
 export default function App() {
   const [page, setPage] = useState<PageId>('home');
   const [productId, setProductId] = useState<string>('');
+  const [catalogCollection, setCatalogCollection] = useState<string | undefined>(undefined);
   const [preloaderDone, setPreloaderDone] = useState(false);
 
   const navigate = useCallback((target: PageId, id?: string) => {
     setPage(target);
-    if (id) setProductId(id);
+    if (target === 'catalog' && id) {
+      setCatalogCollection(id);
+    } else if (target === 'catalog') {
+      setCatalogCollection(undefined);
+    }
+    if (target !== 'product') {
+      // keep productId for product page
+    }
+    if (id && target === 'product') setProductId(id);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
@@ -90,7 +99,7 @@ export default function App() {
   const renderPage = () => {
     switch (page) {
       case 'home': return <HomePage onNavigate={navigate} />;
-      case 'catalog': return <CatalogPage onNavigate={navigate} />;
+      case 'catalog': return <CatalogPage key={catalogCollection ?? 'all'} onNavigate={navigate} initialCollection={catalogCollection} />;
       case 'product': return <ProductPage productId={productId} onNavigate={navigate} />;
       case 'cart': return <CartPage onNavigate={navigate} />;
       case 'contacts': return <ContactsPage onNavigate={navigate} />;

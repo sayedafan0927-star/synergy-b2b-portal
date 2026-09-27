@@ -383,7 +383,7 @@ function StockGridView({ filteredProducts, selectedWarehouse, onNavigate }: { fi
 
 /* ── Main CatalogPage ── */
 
-export default function CatalogPage({ onNavigate, initialCategory }: { onNavigate: (page: PageId, productId?: string) => void; initialCategory?: string }) {
+export default function CatalogPage({ onNavigate, initialCollection }: { onNavigate: (page: PageId, productId?: string) => void; initialCollection?: string }) {
   const { products, loading, error: loadError } = useProducts();
   const pricing = useUserPricing();
 
@@ -393,7 +393,7 @@ export default function CatalogPage({ onNavigate, initialCategory }: { onNavigat
   const [sortBy, setSortBy] = useState<SortOption>('popular');
   const [stockWarehouse, setStockWarehouse] = useState('');
 
-  const [selectedCollections, setSelectedCollections] = useState<Set<string>>(() => initialCategory ? new Set([initialCategory]) : new Set());
+  const [selectedCollections, setSelectedCollections] = useState<Set<string>>(() => initialCollection ? new Set([initialCollection]) : new Set());
   const [selectedManufacturers, setSelectedManufacturers] = useState<Set<string>>(new Set());
   const [selectedCountries, setSelectedCountries] = useState<Set<string>>(new Set());
   const [selectedWarehouses, setSelectedWarehouses] = useState<Set<string>>(new Set());
@@ -496,6 +496,14 @@ export default function CatalogPage({ onNavigate, initialCategory }: { onNavigat
         <div className="mb-8">
           <h1 className="section-heading">Каталог продукции</h1>
           <p className="section-subheading">Широкий ассортимент ковров и дорожек оптом от ведущих производителей</p>
+          {selectedCollections.size === 1 && (
+            <div className="mt-3 inline-flex items-center gap-2 rounded-lg bg-brand-50 px-3 py-1.5">
+              <span className="text-sm font-medium text-brand-700">Коллекция: {[...selectedCollections][0]}</span>
+              <button onClick={() => setSelectedCollections(new Set())} className="text-brand-400 hover:text-brand-600">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Toolbar */}

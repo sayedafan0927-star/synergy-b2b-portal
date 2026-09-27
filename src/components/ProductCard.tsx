@@ -1,7 +1,7 @@
 import type { Product, PageId } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserPricing } from '@/hooks/usePricing';
-import { Lock, CheckCircle2, XCircle } from 'lucide-react';
+import { Lock } from 'lucide-react';
 
 interface ProductCardProps {
   product: Product;
@@ -17,7 +17,8 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
     (sum, v) => sum + v.warehouses.reduce((s, w) => s + w.stock, 0),
     0,
   );
-  const inStock = totalStock > 0;
+  const sizes = [...new Set(product.variants.map(v => v.size))].slice(0, 3);
+  const sizesLabel = sizes.join(', ') + (product.variants.length > 3 ? '…' : '');
 
   return (
     <button
@@ -31,20 +32,6 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
           loading="lazy"
           className="h-full w-full object-cover transition-transform duration-500 ease-apple group-hover:scale-105"
         />
-        {/* Stock badge */}
-        <div className="absolute top-2 left-2">
-          {inStock ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50/95 px-2 py-0.5 text-[10px] font-medium text-emerald-700 backdrop-blur-sm">
-              <CheckCircle2 className="h-2.5 w-2.5" />
-              В наличии
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100/95 px-2 py-0.5 text-[10px] font-medium text-slate-500 backdrop-blur-sm">
-              <XCircle className="h-2.5 w-2.5" />
-              Под заказ
-            </span>
-          )}
-        </div>
       </div>
 
       <div className="flex flex-col p-3 sm:p-4">
@@ -53,6 +40,16 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
         </h3>
         <p className="mt-1 text-xs text-slate-400">{product.manufacturer}</p>
 
+        {/* Size + stock -- priority info on mobile */}
+        <div className="mt-2 flex items-center gap-2 text-xs">
+          <span className="font-medium text-slate-700">{sizesLabel}</span>
+          <span className="text-slate-300">·</span>
+          <span className={`font-semibold ${totalStock > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+            {totalStock} шт.
+          </span>
+        </div>
+
+        {/* Price -- only once, at the bottom */}
         <div className="mt-2 pt-2 border-t border-slate-50">
           {user ? (
             <p className="text-sm font-bold text-slate-900">

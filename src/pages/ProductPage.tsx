@@ -310,7 +310,7 @@ export default function ProductPage({
         <nav className="flex items-center gap-1.5 text-sm text-slate-400 mb-6 flex-wrap">
           <button onClick={() => onNavigate('catalog')} className="hover:text-brand-600 transition-colors">Каталог</button>
           <ChevronRight className="h-3.5 w-3.5 shrink-0" />
-          <span className="text-slate-500">{product.collection}</span>
+          <button onClick={() => onNavigate('catalog', product.collection)} className="hover:text-brand-600 transition-colors">{product.collection}</button>
           <ChevronRight className="h-3.5 w-3.5 shrink-0" />
           <span className="text-slate-600 font-medium truncate">{product.name}</span>
         </nav>
@@ -366,7 +366,7 @@ export default function ProductPage({
             <h1 className="font-display text-2xl xl:text-3xl font-bold text-slate-900 mb-3">{product.name}</h1>
 
             <div className="flex flex-wrap gap-2 mb-5">
-              <span className="badge bg-brand-50 text-brand-700">{product.collection}</span>
+              <button onClick={() => onNavigate('catalog', product.collection)} className="badge bg-brand-50 text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer">{product.collection}</button>
               <span className="badge bg-slate-100 text-slate-600">{product.manufacturer}</span>
             </div>
 
@@ -537,7 +537,7 @@ export default function ProductPage({
           </div>
 
           <div className="flex flex-wrap gap-2 mb-5">
-            <span className="badge bg-brand-50 text-brand-700">{product.collection}</span>
+            <button onClick={() => onNavigate('catalog', product.collection)} className="badge bg-brand-50 text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer">{product.collection}</button>
             <span className="badge bg-slate-100 text-slate-600">{product.manufacturer}</span>
           </div>
 
@@ -617,30 +617,40 @@ export default function ProductPage({
 
       {/* LIGHTBOX */}
       {lightboxOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm" onClick={() => setLightboxOpen(false)}>
-          <button className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors z-10">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Просмотр изображения ${selectedImage + 1} из ${imageCount}`}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm"
+          onClick={() => setLightboxOpen(false)}
+        >
+          <button
+            aria-label="Закрыть"
+            autoFocus
+            className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors z-10"
+          >
             <X className="h-6 w-6" />
           </button>
           {imageCount > 1 && (
             <>
-              <button onClick={e => { e.stopPropagation(); prevImage(); }} className="absolute left-4 top-1/2 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors z-10">
+              <button onClick={e => { e.stopPropagation(); prevImage(); }} aria-label="Предыдущее изображение" className="absolute left-4 top-1/2 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors z-10">
                 <ChevronLeft className="h-7 w-7" />
               </button>
-              <button onClick={e => { e.stopPropagation(); nextImage(); }} className="absolute right-4 top-1/2 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors z-10">
+              <button onClick={e => { e.stopPropagation(); nextImage(); }} aria-label="Следующее изображение" className="absolute right-4 top-1/2 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors z-10">
                 <ChevronRight className="h-7 w-7" />
               </button>
             </>
           )}
           <img
             src={product.images[selectedImage]}
-            alt={product.name}
+            alt={`${product.name} — фото ${selectedImage + 1}`}
             className="max-h-[85vh] max-w-[90vw] object-contain rounded-lg shadow-2xl"
             onClick={e => e.stopPropagation()}
           />
           {imageCount > 1 && (
             <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2">
               {product.images.map((_, idx) => (
-                <button key={idx} onClick={e => { e.stopPropagation(); setSelectedImage(idx); }} className={`h-2.5 w-2.5 rounded-full transition-all ${idx === selectedImage ? 'bg-white scale-125' : 'bg-white/40 hover:bg-white/60'}`} />
+                <button key={idx} onClick={e => { e.stopPropagation(); setSelectedImage(idx); }} aria-label={`Изображение ${idx + 1}`} aria-current={idx === selectedImage} className={`h-2.5 w-2.5 rounded-full transition-all ${idx === selectedImage ? 'bg-white scale-125' : 'bg-white/40 hover:bg-white/60'}`} />
               ))}
             </div>
           )}

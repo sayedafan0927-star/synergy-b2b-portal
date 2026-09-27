@@ -26,19 +26,12 @@ export default function MobileNav({ currentPage, onNavigate }: MobileNavProps) {
             <button
               key={page}
               onClick={() => onNavigate(page)}
-              aria-current={active ? 'page' : undefined}
               className={`relative flex flex-1 flex-col items-center justify-center gap-0.5 transition-colors ${
                 active ? 'text-brand-700' : 'text-slate-400'
               }`}
             >
-              {/* Active indicator bar */}
-              {active && (
-                <span className="absolute top-0 h-0.5 w-8 rounded-full bg-brand-700" />
-              )}
               <div className="relative">
-                <div className={`flex h-8 w-8 items-center justify-center rounded-full transition-colors ${active ? 'bg-brand-50' : ''}`}>
-                  <Icon className="h-5 w-5" strokeWidth={active ? 2.2 : 1.8} />
-                </div>
+                <Icon className="h-5 w-5" strokeWidth={active ? 2.2 : 1.8} />
                 {page === 'cart' && totalItems > 0 && (
                   <span className="absolute -right-2.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-700 px-1 text-[10px] font-bold text-white">
                     {totalItems}
