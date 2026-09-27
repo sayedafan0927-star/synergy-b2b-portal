@@ -617,12 +617,46 @@ export default function CatalogPage({ onNavigate, initialCollection, initialCoun
           )}
         </div>
 
+        {/* Category switcher: Ковры vs Дорожки */}
+        <div className="mb-5 flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setSelectedCategory('all')}
+            className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
+              selectedCategory === 'all'
+                ? 'bg-brand-700 text-white shadow-sm ring-2 ring-brand-700/20'
+                : 'bg-white border border-slate-200 text-slate-700 hover:border-brand-500 hover:bg-slate-50'
+            }`}
+          >
+            Все категории ({products.length})
+          </button>
+          <button
+            onClick={() => setSelectedCategory('Ковры')}
+            className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
+              selectedCategory === 'Ковры'
+                ? 'bg-brand-700 text-white shadow-sm ring-2 ring-brand-700/20'
+                : 'bg-white border border-slate-200 text-slate-700 hover:border-brand-500 hover:bg-slate-50'
+            }`}
+          >
+            Ковры ({products.filter(p => p.category === 'Ковры' || !p.name.toLowerCase().includes('дорожк')).length})
+          </button>
+          <button
+            onClick={() => setSelectedCategory('Дорожки')}
+            className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all ${
+              selectedCategory === 'Дорожки'
+                ? 'bg-brand-700 text-white shadow-sm ring-2 ring-brand-700/20'
+                : 'bg-white border border-slate-200 text-slate-700 hover:border-brand-500 hover:bg-slate-50'
+            }`}
+          >
+            Дорожки ({products.filter(p => p.category === 'Дорожки' || p.name.toLowerCase().includes('дорожк')).length})
+          </button>
+        </div>
+
         {/* Toolbar */}
         <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3 flex-1">
             <div className="relative flex-1 max-w-md">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-              <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Поиск по каталогу..." className="input-field pl-10 text-sm" />
+              <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Поиск по названию, артикулу, штрихкоду..." className="input-field pl-10 text-sm" />
             </div>
             <button onClick={() => setDrawerOpen(true)} className="relative flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 hover:border-slate-300 shrink-0">
               <SlidersHorizontal className="h-4 w-4" />
