@@ -53,6 +53,7 @@ export default function ProductPage({
   const isHorizontalSwipe = useRef(false);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [addedKeys, setAddedKeys] = useState<Record<string, boolean>>({});
+  const [selectedSize, setSelectedSize] = useState<string>('');
 
   useEffect(() => {
     setImageError(false);
@@ -252,7 +253,6 @@ export default function ProductPage({
     );
   }
 
-  const [selectedSize, setSelectedSize] = useState<string>('');
   const activeVariant = product.variants.find(v => v.size === selectedSize) || product.variants[0];
 
   const mainPricePerSqm = activeVariant
