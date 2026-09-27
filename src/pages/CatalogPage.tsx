@@ -266,7 +266,7 @@ function StockGridView({ filteredProducts, selectedWarehouse, onNavigate }: { fi
         return cells;
       });
       const rowParts = [product.name, product.manufacturer];
-      if (settings.show_price) rowParts.push(`${Math.round(pricePerSqm)}`);
+      if (settings.show_price) rowParts.push(`${pricePerSqm % 1 === 0 ? pricePerSqm.toFixed(0) : pricePerSqm.toFixed(2)}`);
       rowParts.push(...sizeCells);
       if (settings.show_total_pcs) rowParts.push(String(totalPcs));
       if (settings.show_sqm) rowParts.push(totalSqm.toFixed(2));
@@ -368,7 +368,7 @@ function StockGridView({ filteredProducts, selectedWarehouse, onNavigate }: { fi
 
                         {settings.show_price && (
                           <td className="py-2 px-2 text-center font-bold text-slate-700 whitespace-nowrap">
-                            ${Math.round(pricePerSqm)}
+                            ${pricePerSqm % 1 === 0 ? pricePerSqm.toFixed(0) : pricePerSqm.toFixed(2)}
                           </td>
                         )}
 
