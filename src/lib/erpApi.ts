@@ -3,8 +3,11 @@
  * API-клиент для защищенной связки B2B-портала с бэкендом Synergy ERP.
  */
 
+import type { SupplierNetworkStockResponse, SupplierReleasesReport } from '@/types';
+
 export const ERP_API_URL = import.meta.env.VITE_ERP_API_URL || 'https://kilem-khan.kz/api/sin/public/api_portal.php';
 export const ERP_API_KEY = import.meta.env.VITE_ERP_API_KEY || '138d1bdaf9402600c8f5d5763e2e1573c1e45d32401e62e4981cd7e898bf0544';
+export const ERP_PORTAL_SECRET = 'SynergySecretKey2025';
 
 export interface CreateOrderPayload {
   client_name: string;
@@ -85,9 +88,16 @@ export async function submitOrderToErp(payload: CreateOrderPayload): Promise<Erp
 
 /**
  * Получение актуального каталога и остатков по складам из ERP.
+ * Для авторизованного дилера передает dealer_id для получения персональных остатков (dealer_stock).
  */
-export async function fetchCatalogFromErp(priceType = 'price_commission') {
-  const response = await fetch(`${ERP_API_URL}?action=catalog&price_type=${encodeURIComponent(priceType)}&portal_key=${encodeURIComponent(ERP_API_KEY)}`, {
+export async function fetchCatalogFromErp(priceType = 'price_commission', dealerId?: string | number) {
+  const q = new URLSearchParams();
+  q.set('action', 'catalog');
+  q.set('price_type', priceType);
+  if (dealerId) q.set('dealer_id', String(dealerId));
+  q.set('portal_key', ERP_API_KEY);
+
+  const response = await fetch(`${ERP_API_URL}?${q.toString()}`, {
     method: 'GET',
     headers: {
       'X-Portal-Key': ERP_API_KEY,
@@ -96,6 +106,38 @@ export async function fetchCatalogFromErp(priceType = 'price_commission') {
 
   if (!response.ok) {
     throw new Error(`Ошибка загрузки каталога (${response.status})`);
+  }
+
+  return await response.json();
+}
+
+/**
+ * Запрос данных личного кабинета фабрики / поставщика (Merinos и др.)
+ * subAction = 'stock' (география распределения остатков)
+ * subAction = 'releases' (отчет о проданных и выпущенных в оплату объемах ковров за период)
+ */
+export async function fetchSupplierNetworkStock(
+  supplierId: number | string,
+  subAction: 'stock' | 'releases' = 'stock',
+  params: { startDate?: string; endDate?: string } = {}
+): Promise<SupplierNetworkStockResponse & SupplierReleasesReport> {
+  const q = new URLSearchParams();
+  q.set('action', 'supplier_network_stock');
+  q.set('supplier_id', String(supplierId));
+  q.set('sub_action', subAction);
+  if (params.startDate) q.set('start_date', params.startDate);
+  if (params.endDate) q.set('end_date', params.endDate);
+  q.set('portal_key', ERP_API_KEY);
+
+  const response = await fetch(`${ERP_API_URL}?${q.toString()}`, {
+    method: 'GET',
+    headers: {
+      'X-Portal-Key': ERP_API_KEY,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Ошибка загрузки данных поставщика (${response.status})`);
   }
 
   return await response.json();

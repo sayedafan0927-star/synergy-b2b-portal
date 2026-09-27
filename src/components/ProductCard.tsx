@@ -60,6 +60,13 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
     window.setTimeout(() => setAddedSku(current => current === variant.sku ? null : current), 1400);
   };
 
+  const hasDealerStock = Boolean(user && product.variants.some(v => v.dealer_stock));
+  const totalShowroomQty = product.variants.reduce((sum, v) => sum + (v.dealer_stock?.in_showroom_qty || 0), 0);
+  const totalShowroomSqm = Math.round(product.variants.reduce((sum, v) => sum + (v.dealer_stock?.in_showroom_sqm || 0), 0) * 10) / 10;
+  const totalInTransitQty = product.variants.reduce((sum, v) => sum + (v.dealer_stock?.in_transit_qty || 0), 0);
+  const totalInTransitSqm = Math.round(product.variants.reduce((sum, v) => sum + (v.dealer_stock?.in_transit_sqm || 0), 0) * 10) / 10;
+  const totalHubQty = product.variants.reduce((sum, v) => sum + (v.dealer_stock?.available_hub_qty || 0), 0);
+
   return (
     <div
       onClick={() => onNavigate('product', product.id)}
@@ -74,6 +81,13 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
           width={400}
           className="h-full w-full object-cover transition-transform duration-500 ease-apple group-hover:scale-105"
         />
+        {hasDealerStock && totalShowroomQty > 0 && (
+          <div className="absolute top-2.5 left-2.5 z-10">
+            <span className="inline-flex items-center gap-1 rounded-md bg-emerald-600/90 backdrop-blur-sm px-2 py-0.5 text-[11px] font-bold text-white shadow-sm">
+              🏪 В наличии: {totalShowroomQty} шт
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="flex flex-col p-3 sm:p-4">
@@ -91,6 +105,37 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
         </button>
 
         <p className="mt-2 text-xs text-slate-400">{product.manufacturer}</p>
+
+        {hasDealerStock && (
+          <div className="mt-2.5 flex flex-col gap-1 border-t border-slate-100 pt-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="inline-flex items-center gap-1 font-semibold text-emerald-700">
+                🏪 В наличии:
+              </span>
+              <span className="font-bold text-emerald-800">
+                {totalShowroomQty} шт <span className="font-normal text-emerald-600">({totalShowroomSqm} м²)</span>
+              </span>
+            </div>
+            {totalInTransitQty > 0 && (
+              <div className="flex items-center justify-between text-xs">
+                <span className="inline-flex items-center gap-1 font-medium text-indigo-700">
+                  🚚 В пути:
+                </span>
+                <span className="font-semibold text-indigo-800">
+                  {totalInTransitQty} шт <span className="font-normal text-indigo-500">({totalInTransitSqm} м²)</span>
+                </span>
+              </div>
+            )}
+            <div className="flex items-center justify-between text-xs">
+              <span className="inline-flex items-center gap-1 text-slate-500">
+                🏢 База Алматы:
+              </span>
+              <span className="font-medium text-slate-700">
+                {totalHubQty} шт
+              </span>
+            </div>
+          </div>
+        )}
 
         <div className="mt-2 border-t border-slate-100 pt-2">
           {user ? (
@@ -120,38 +165,57 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
           className="absolute left-3 right-3 top-full z-40 -mt-1 rounded-lg bg-white p-3 shadow-xl ring-1 ring-slate-200"
           onClick={event => event.stopPropagation()}
         >
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             {product.variants.map(variant => {
               const stock = getTotalStock(variant);
               const available = stock > 0;
               const quantity = quantities[variant.sku] ?? 1;
               const isAdded = addedSku === variant.sku;
+              const ds = variant.dealer_stock;
+
               return (
-                <div key={variant.sku} className="grid grid-cols-[1fr_auto_44px_38px] items-center gap-2 text-sm">
-                  <span className="font-medium text-slate-700 whitespace-nowrap">{variant.size}</span>
-                  <span className={`text-right text-xs font-medium ${available ? 'text-slate-600' : 'text-slate-300'}`}>
-                    {available ? stock : '—'}
-                  </span>
-                  <input
-                    type="number"
-                    min="1"
-                    max={stock || undefined}
-                    value={quantity}
-                    disabled={!available}
-                    onChange={event => setQuantity(variant.sku, Number(event.target.value))}
-                    onClick={event => event.stopPropagation()}
-                    className="h-8 w-11 rounded border border-slate-300 bg-white px-1 text-center text-sm text-slate-800 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 disabled:bg-slate-50 disabled:text-slate-300"
-                  />
-                  <button
-                    onClick={() => handleAdd(variant)}
-                    disabled={!available}
-                    aria-label={`Добавить размер ${variant.size} в корзину`}
-                    className={`flex h-8 w-9 items-center justify-center rounded text-white transition-colors ${
-                      isAdded ? 'bg-emerald-600' : available ? 'bg-brand-700 hover:bg-brand-800' : 'cursor-not-allowed bg-slate-200'
-                    }`}
-                  >
-                    {isAdded ? <Check className="h-4 w-4" /> : <ShoppingCart className="h-4 w-4" />}
-                  </button>
+                <div key={variant.sku} className="border-b border-slate-100 pb-2 last:border-b-0 last:pb-0">
+                  <div className="grid grid-cols-[1fr_auto_44px_38px] items-center gap-2 text-sm">
+                    <span className="font-medium text-slate-700 whitespace-nowrap">{variant.size}</span>
+                    <span className={`text-right text-xs font-medium ${available ? 'text-slate-600' : 'text-slate-300'}`}>
+                      {available ? stock : '—'}
+                    </span>
+                    <input
+                      type="number"
+                      min="1"
+                      max={stock || undefined}
+                      value={quantity}
+                      disabled={!available}
+                      onChange={event => setQuantity(variant.sku, Number(event.target.value))}
+                      onClick={event => event.stopPropagation()}
+                      className="h-8 w-11 rounded border border-slate-300 bg-white px-1 text-center text-sm text-slate-800 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 disabled:bg-slate-50 disabled:text-slate-300"
+                    />
+                    <button
+                      onClick={() => handleAdd(variant)}
+                      disabled={!available}
+                      aria-label={`Добавить размер ${variant.size} в корзину`}
+                      className={`flex h-8 w-9 items-center justify-center rounded text-white transition-colors ${
+                        isAdded ? 'bg-emerald-600' : available ? 'bg-brand-700 hover:bg-brand-800' : 'cursor-not-allowed bg-slate-200'
+                      }`}
+                    >
+                      {isAdded ? <Check className="h-4 w-4" /> : <ShoppingCart className="h-4 w-4" />}
+                    </button>
+                  </div>
+                  {ds && (
+                    <div className="mt-1 flex flex-wrap gap-1 text-[10px]">
+                      <span className="inline-flex items-center gap-0.5 rounded bg-emerald-50 px-1.5 py-0.5 font-medium text-emerald-700">
+                        🏪 В наличии: {ds.in_showroom_qty} шт ({ds.in_showroom_sqm} м²)
+                      </span>
+                      {ds.in_transit_qty > 0 && (
+                        <span className="inline-flex items-center gap-0.5 rounded bg-indigo-50 px-1.5 py-0.5 font-medium text-indigo-700">
+                          🚚 В пути: {ds.in_transit_qty} шт
+                        </span>
+                      )}
+                      <span className="inline-flex items-center gap-0.5 rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-600">
+                        🏢 База: {ds.available_hub_qty} шт
+                      </span>
+                    </div>
+                  )}
                 </div>
               );
             })}

@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useContext } from 'react';
 import { supabase } from '@/lib/supabase';
 import { fetchCatalogFromErp } from '@/lib/erpApi';
+import { AuthContext } from '@/contexts/AuthContext';
 import type { Product, ProductVariant, Warehouse, CollectionPrice } from '@/types';
 
 export const STANDARD_SIZES = ['0.8 × 1.5', '1.6 × 2.3', '2 × 3', '2.5 × 3.5', '3 × 4'];
@@ -96,65 +97,9 @@ export function parse1CNomenclature(rawName: string, fallbackCollection = ''): {
   };
 }
 
-const COLLECTION_PHOTOS: Record<string, string[]> = {
-  'CELESTE': [
-    'https://images.unsplash.com/photo-1600121848594-d8644e57abab?auto=format&fit=crop&q=80&w=800',
-    'https://images.unsplash.com/photo-1579656381226-5fc0f0100c3b?auto=format&fit=crop&q=80&w=800',
-  ],
-  'FLORA': [
-    'https://images.unsplash.com/photo-1594040226829-7f251ab46d80?auto=format&fit=crop&q=80&w=800',
-    'https://images.unsplash.com/photo-1584100936595-c0654b55a2e2?auto=format&fit=crop&q=80&w=800',
-  ],
-  'OCTAVIA': [
-    'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&q=80&w=800',
-    'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&q=80&w=800',
-  ],
-  'OSLO': [
-    'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&q=80&w=800',
-    'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?auto=format&fit=crop&q=80&w=800',
-  ],
-  'SALOON': [
-    'https://images.unsplash.com/photo-1616046229478-9901c5536a45?auto=format&fit=crop&q=80&w=800',
-    'https://images.unsplash.com/photo-1618219908412-a29a1bb7b86e?auto=format&fit=crop&q=80&w=800',
-  ],
-  'HYPNOSE': [
-    'https://images.unsplash.com/photo-1615873968403-89e068629265?auto=format&fit=crop&q=80&w=800',
-  ],
-  'HYPNOSE DOTLU': [
-    'https://images.unsplash.com/photo-1615873968403-89e068629265?auto=format&fit=crop&q=80&w=800',
-  ],
-  'AFGAN': [
-    'https://images.unsplash.com/photo-1579656381226-5fc0f0100c3b?auto=format&fit=crop&q=80&w=800',
-  ],
-  'BOBO': [
-    'https://images.unsplash.com/photo-1617806118233-18e1de247200?auto=format&fit=crop&q=80&w=800',
-  ],
-  'ROYAL': [
-    'https://images.unsplash.com/photo-1600121848594-d8644e57abab?auto=format&fit=crop&q=80&w=800',
-  ],
-  'TABRIZ': [
-    'https://images.unsplash.com/photo-1594040226829-7f251ab46d80?auto=format&fit=crop&q=80&w=800',
-  ],
-  'PERSIA': [
-    'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&q=80&w=800',
-  ],
-  'SAMARKAND': [
-    'https://images.unsplash.com/photo-1586023492125-27b2c045efd7?auto=format&fit=crop&q=80&w=800',
-  ],
-};
-
-function getCollectionPhotos(collection: string, rawImages: string[]): string[] {
-  if (rawImages && rawImages.length > 0 && rawImages[0].startsWith('http')) {
-    return rawImages;
-  }
-  const upper = (collection || '').toUpperCase();
-  for (const [key, photos] of Object.entries(COLLECTION_PHOTOS)) {
-    if (upper.includes(key)) return photos;
-  }
-  return [
-    'https://images.unsplash.com/photo-1600121848594-d8644e57abab?auto=format&fit=crop&q=80&w=800',
-    'https://images.unsplash.com/photo-1579656381226-5fc0f0100c3b?auto=format&fit=crop&q=80&w=800'
-  ];
+function getValidImages(rawImages?: string[] | null): string[] {
+  if (!rawImages || !Array.isArray(rawImages)) return [];
+  return rawImages.filter(img => typeof img === 'string' && img.trim().length > 0 && !img.includes('unsplash.com'));
 }
 
 /**
@@ -185,6 +130,7 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
             sku: v.sku || sku,
             price_per_sqm: vPricePerSqm,
             base_price: v.base_price > 0 ? v.base_price : Math.round(vPricePerSqm * area * 100) / 100,
+            dealer_stock: v.dealer_stock,
           };
         })
       : [{
@@ -194,11 +140,12 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
           price_per_sqm: baseSqmPrice,
           base_price: Math.round(baseSqmPrice * calculateArea(itemSize) * 100) / 100,
           warehouses: [],
+          dealer_stock: (raw as any).dealer_stock,
         }];
 
     const existing = map.get(groupKey);
     if (!existing) {
-      const photos = getCollectionPhotos(collection, raw.images);
+      const photos = getValidImages(raw.images);
       map.set(groupKey, {
         ...raw,
         id: `carpet-${groupKey.toLowerCase().replace(/[^a-z0-9_-]/g, '-')}`,
@@ -210,7 +157,7 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
         country: parsed.country || raw.country || 'Турция',
         price_per_sqm: baseSqmPrice,
         images: photos,
-        image_thumb: photos[0],
+        image_thumb: photos.length > 0 ? photos[0] : undefined,
         variants: [...itemVariants],
       });
     } else {
@@ -221,7 +168,7 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
           existing.variants.push(v);
           existingSizes.add(v.size);
         } else {
-          // Если размер уже есть — объединяем остатки складов
+          // Если размер уже есть — объединяем остатки складов и дилерские остатки
           const targetVariant = existing.variants.find(ev => ev.size === v.size);
           if (targetVariant) {
             const whMap = new Map(targetVariant.warehouses.map(w => [w.city, w]));
@@ -231,6 +178,19 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
                 exWh.stock += w.stock;
               } else {
                 targetVariant.warehouses.push({ ...w });
+              }
+            }
+            if (v.dealer_stock) {
+              if (!targetVariant.dealer_stock) {
+                targetVariant.dealer_stock = { ...v.dealer_stock };
+              } else {
+                targetVariant.dealer_stock = {
+                  in_showroom_qty: targetVariant.dealer_stock.in_showroom_qty + v.dealer_stock.in_showroom_qty,
+                  in_showroom_sqm: Math.round((targetVariant.dealer_stock.in_showroom_sqm + v.dealer_stock.in_showroom_sqm) * 100) / 100,
+                  in_transit_qty: targetVariant.dealer_stock.in_transit_qty + v.dealer_stock.in_transit_qty,
+                  in_transit_sqm: Math.round((targetVariant.dealer_stock.in_transit_sqm + v.dealer_stock.in_transit_sqm) * 100) / 100,
+                  available_hub_qty: Math.max(targetVariant.dealer_stock.available_hub_qty, v.dealer_stock.available_hub_qty),
+                };
               }
             }
           }
@@ -276,7 +236,10 @@ export function triggerCatalogReload() {
   }
 }
 
-export function useProducts() {
+export function useProducts(customDealerId?: string | number) {
+  const authContext = useContext(AuthContext);
+  const effectiveDealerId = customDealerId ?? authContext?.profile?.partner_id ?? undefined;
+
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -291,6 +254,59 @@ export function useProducts() {
     return () => window.removeEventListener('synergy:reload-catalog', handler);
   }, []);
 
+  // Слушатель событий реального времени по вебхуку (списание остатка дилера)
+  useEffect(() => {
+    const handleStockEvent = (e: CustomEvent<{ partner_id?: number | string; sku?: string; released_qty?: number }>) => {
+      const data = e.detail;
+      if (!data || !data.sku || !data.released_qty) return;
+      if (data.partner_id && effectiveDealerId && String(data.partner_id) !== String(effectiveDealerId)) {
+        return; // Событие для другого партнёра
+      }
+
+      setProducts(prev => prev.map(prod => {
+        let changed = false;
+        const newVariants = prod.variants.map(v => {
+          if ((v.sku === data.sku || v.id.includes(data.sku!)) && v.dealer_stock) {
+            changed = true;
+            const newQty = Math.max(0, v.dealer_stock.in_showroom_qty - Number(data.released_qty));
+            const area = calculateArea(v.size);
+            return {
+              ...v,
+              dealer_stock: {
+                ...v.dealer_stock,
+                in_showroom_qty: newQty,
+                in_showroom_sqm: Math.round(newQty * area * 10) / 10,
+              }
+            };
+          }
+          return v;
+        });
+        return changed ? { ...prod, variants: newVariants } : prod;
+      }));
+    };
+
+    window.addEventListener('synergy:stock-event', handleStockEvent as EventListener);
+
+    let bc: BroadcastChannel | null = null;
+    if (typeof BroadcastChannel !== 'undefined') {
+      try {
+        bc = new BroadcastChannel('synergy_stock_channel');
+        bc.onmessage = (event) => {
+          if (event.data?.event === 'partner_stock_released') {
+            window.dispatchEvent(new CustomEvent('synergy:stock-event', { detail: event.data }));
+          }
+        };
+      } catch {
+        // fallback
+      }
+    }
+
+    return () => {
+      window.removeEventListener('synergy:stock-event', handleStockEvent as EventListener);
+      if (bc) bc.close();
+    };
+  }, [effectiveDealerId]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -298,7 +314,7 @@ export function useProducts() {
       try {
         // 1. Приоритетный источник: реальные ковры и остатки складов из Synergy ERP
         try {
-          const erpData = await fetchCatalogFromErp();
+          const erpData = await fetchCatalogFromErp(undefined, effectiveDealerId);
           if (!cancelled && erpData && erpData.success && Array.isArray(erpData.products) && erpData.products.length > 0) {
             const merged = mergeProducts(erpData.products as Product[]);
             setProducts(merged);
@@ -365,12 +381,15 @@ export function useProducts() {
 
     load();
     return () => { cancelled = true; };
-  }, [reloadCounter]);
+  }, [reloadCounter, effectiveDealerId]);
 
   return { products, loading, error };
 }
 
-export function useProduct(id: string | undefined) {
+export function useProduct(id: string | undefined, customDealerId?: string | number) {
+  const authContext = useContext(AuthContext);
+  const effectiveDealerId = customDealerId ?? authContext?.profile?.partner_id ?? undefined;
+
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -387,7 +406,7 @@ export function useProduct(id: string | undefined) {
       try {
         // 1. Поиск в каталоге ERP
         try {
-          const erpData = await fetchCatalogFromErp();
+          const erpData = await fetchCatalogFromErp(undefined, effectiveDealerId);
           if (!cancelled && erpData && erpData.success && Array.isArray(erpData.products)) {
             const merged = mergeProducts(erpData.products as Product[]);
             const found = merged.find(p => p.id === id || p.variants.some(v => v.id === id || v.sku === id));
@@ -440,7 +459,7 @@ export function useProduct(id: string | undefined) {
 
     load();
     return () => { cancelled = true; };
-  }, [id]);
+  }, [id, effectiveDealerId]);
 
   return { product, loading, error };
 }

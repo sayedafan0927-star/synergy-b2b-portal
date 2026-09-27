@@ -38,6 +38,7 @@ import { calcSqm, parseSizeDimensions } from '@/types';
 import { useAuth, type UserRole } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { syncAllErpData, type ErpSyncReport, ERP_API_URL, fetchClientDebtFromErp, type ClientDebtReport, fetchClientOrdersFromErp, fetchCounterpartiesFromErp } from '@/lib/erpApi';
+import SupplierCabinet from '@/components/SupplierCabinet';
 import { triggerCatalogReload } from '@/hooks/useProductData';
 import { triggerDisplaySettingsReload } from '@/hooks/useDisplaySettings';
 
@@ -122,7 +123,7 @@ function orderTotals(items: OrderItem[]) {
   return { qty, sqm, sum };
 }
 
-type TabId = 'orders' | 'admin-erp' | 'admin-users' | 'admin-display' | 'settings';
+type TabId = 'orders' | 'supplier-portal' | 'admin-erp' | 'admin-users' | 'admin-display' | 'settings';
 
 /* ─── Order Detail View ─── */
 function OrderDetail({
@@ -1316,16 +1317,16 @@ function AdminErpSyncTab() {
 }
 
 export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId) => void }) {
-  const { user, profile, loading, signOut, isAdmin, realIsAdmin, isManager } = useAuth();
+  const { user, profile, loading, signOut, isAdmin, realIsAdmin, isManager, isSupplier } = useAuth();
   const adminAccess = realIsAdmin;
   const clientsAccess = realIsAdmin || isManager;
-  const [activeTab, setActiveTab] = useState<TabId>('orders');
+  const [activeTab, setActiveTab] = useState<TabId>(isSupplier ? 'supplier-portal' : 'orders');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [clientDebt, setClientDebt] = useState<ClientDebtReport | null>(null);
   const [loadingDebt, setLoadingDebt] = useState<boolean>(false);
 
   useEffect(() => {
-    if (!profile) return;
+    if (!profile || profile.role === 'supplier') return;
     let cancelled = false;
     setLoadingDebt(true);
     fetchClientDebtFromErp({
@@ -1367,7 +1368,8 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
   }
 
   const tabs: { id: TabId; label: string; icon: typeof Package; show: boolean }[] = [
-    { id: 'orders', label: 'Мои заказы', icon: Package, show: true },
+    { id: 'orders', label: 'Мои заказы', icon: Package, show: !isSupplier },
+    { id: 'supplier-portal', label: 'Кабинет фабрики', icon: Building2, show: isSupplier || adminAccess },
     { id: 'admin-erp', label: 'Обмен с ERP', icon: RefreshCw, show: adminAccess },
     { id: 'admin-users', label: 'Мои клиенты', icon: Users, show: clientsAccess },
     { id: 'admin-display', label: 'Видимость', icon: Eye, show: adminAccess },
@@ -1562,6 +1564,9 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
               ) : (
                 <OrdersTab onSelectOrder={setSelectedOrder} isAdmin={adminAccess || isAdmin} isManager={isManager || clientsAccess} />
               )
+            )}
+            {activeTab === 'supplier-portal' && (isSupplier || adminAccess) && (
+              <SupplierCabinet profile={profile} />
             )}
             {activeTab === 'admin-erp' && adminAccess && <AdminErpSyncTab />}
             {activeTab === 'admin-users' && clientsAccess && <AdminUsersTab onNavigate={onNavigate} />}

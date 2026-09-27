@@ -250,6 +250,13 @@ export default function ProductPage({
     : product.variants[0]?.size ?? '';
   const availableForms = [product.style, product.category].filter(Boolean).join(', ');
 
+  const hasDealerStock = Boolean(user && product.variants.some(v => v.dealer_stock));
+  const totalShowroomQty = product.variants.reduce((sum, v) => sum + (v.dealer_stock?.in_showroom_qty || 0), 0);
+  const totalShowroomSqm = Math.round(product.variants.reduce((sum, v) => sum + (v.dealer_stock?.in_showroom_sqm || 0), 0) * 10) / 10;
+  const totalInTransitQty = product.variants.reduce((sum, v) => sum + (v.dealer_stock?.in_transit_qty || 0), 0);
+  const totalInTransitSqm = Math.round(product.variants.reduce((sum, v) => sum + (v.dealer_stock?.in_transit_sqm || 0), 0) * 10) / 10;
+  const totalHubQty = product.variants.reduce((sum, v) => sum + (v.dealer_stock?.available_hub_qty || 0), 0);
+
   function CartButton({ variant, wh }: { variant: ProductVariant; wh: Warehouse }) {
     const key = rowKey(variant.sku, wh.city);
     const qty = quantities[key] ?? 0;
@@ -402,6 +409,43 @@ export default function ProductPage({
               </div>
             </div>
 
+            {hasDealerStock && (
+              <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50/50 p-4">
+                <p className="text-xs font-bold uppercase tracking-wider text-emerald-900 mb-2.5 flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                  Персональные остатки дилера
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div className="rounded-lg bg-white p-3 border border-emerald-200/80 shadow-xs">
+                    <p className="text-[11px] font-semibold text-emerald-800">
+                      🏪 В наличии в магазине
+                    </p>
+                    <p className="text-lg font-bold text-emerald-950 mt-0.5">
+                      {totalShowroomQty} <span className="text-xs font-normal text-emerald-700">шт ({totalShowroomSqm} м²)</span>
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg bg-white p-3 border border-indigo-200/80 shadow-xs">
+                    <p className="text-[11px] font-semibold text-indigo-800">
+                      🚚 В пути ко мне
+                    </p>
+                    <p className="text-lg font-bold text-indigo-950 mt-0.5">
+                      {totalInTransitQty} <span className="text-xs font-normal text-indigo-700">шт ({totalInTransitSqm} м²)</span>
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg bg-white p-3 border border-slate-200/80 shadow-xs">
+                    <p className="text-[11px] font-semibold text-slate-700">
+                      🏢 База Алматы
+                    </p>
+                    <p className="text-lg font-bold text-slate-900 mt-0.5">
+                      {totalHubQty} <span className="text-xs font-normal text-slate-500">шт</span>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             </div>
 
         {/* DESKTOP VARIANT TABLE */}
@@ -438,7 +482,26 @@ export default function ProductPage({
                       return (
                         <tr key={key} className="group hover:bg-slate-25 transition-colors">
                           <td className={`py-3 pl-5 pr-3 text-sm font-medium text-slate-900 whitespace-nowrap ${!isFirstRow ? 'pt-1' : ''}`}>
-                            {isFirstRow ? variant.size : ''}
+                            {isFirstRow ? (
+                              <div>
+                                <span className="font-semibold text-slate-900">{variant.size}</span>
+                                {variant.dealer_stock && (
+                                  <div className="mt-1 flex flex-col gap-0.5 text-[11px]">
+                                    <span className="inline-flex items-center gap-1 font-medium text-emerald-700">
+                                      🏪 В магазине: {variant.dealer_stock.in_showroom_qty} шт ({variant.dealer_stock.in_showroom_sqm} м²)
+                                    </span>
+                                    {variant.dealer_stock.in_transit_qty > 0 && (
+                                      <span className="inline-flex items-center gap-1 font-medium text-indigo-700">
+                                        🚚 В пути: {variant.dealer_stock.in_transit_qty} шт
+                                      </span>
+                                    )}
+                                    <span className="inline-flex items-center gap-1 text-slate-500">
+                                      🏢 База Алматы: {variant.dealer_stock.available_hub_qty} шт
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            ) : ''}
                           </td>
                           <td className="py-3 pr-3 text-sm text-slate-600 whitespace-nowrap">{wh.city}</td>
                           <td className="py-3 pr-3">
@@ -554,6 +617,31 @@ export default function ProductPage({
           </div>
 
           <div className="flex flex-col gap-3 mb-6">
+            {hasDealerStock && (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3.5 mb-1">
+                <p className="text-xs font-bold uppercase tracking-wider text-emerald-900 mb-2 flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                  Ваши персональные остатки
+                </p>
+                <div className="space-y-1.5 text-xs">
+                  <div className="flex items-center justify-between font-semibold text-emerald-800">
+                    <span>🏪 В наличии в магазине:</span>
+                    <span>{totalShowroomQty} шт ({totalShowroomSqm} м²)</span>
+                  </div>
+                  {totalInTransitQty > 0 && (
+                    <div className="flex items-center justify-between font-medium text-indigo-800">
+                      <span>🚚 В пути:</span>
+                      <span>{totalInTransitQty} шт ({totalInTransitSqm} м²)</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between text-slate-600">
+                    <span>🏢 База Алматы:</span>
+                    <span className="font-medium">{totalHubQty} шт</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 flex items-center gap-1.5">
               <Ruler className="h-3.5 w-3.5" />
               Размеры и наличие
@@ -570,7 +658,26 @@ export default function ProductPage({
                     {user && <span className="text-base font-bold text-slate-900">{fmtPrice(Math.round(variantPrice))}</span>}
                   </div>
                   {user && pricePerSqm > 0 && (
-                    <p className="text-xs text-slate-400 mb-3 text-right">${Math.round(pricePerSqm)} / м²</p>
+                    <p className="text-xs text-slate-400 mb-2 text-right">${Math.round(pricePerSqm)} / м²</p>
+                  )}
+
+                  {variant.dealer_stock && (
+                    <div className="mb-3 rounded-lg bg-slate-50 p-2 border border-slate-200/60 text-[11px] space-y-1">
+                      <div className="flex items-center justify-between text-emerald-800 font-medium">
+                        <span>🏪 В магазине:</span>
+                        <span className="font-bold">{variant.dealer_stock.in_showroom_qty} шт ({variant.dealer_stock.in_showroom_sqm} м²)</span>
+                      </div>
+                      {variant.dealer_stock.in_transit_qty > 0 && (
+                        <div className="flex items-center justify-between text-indigo-800 font-medium">
+                          <span>🚚 В пути:</span>
+                          <span className="font-bold">{variant.dealer_stock.in_transit_qty} шт</span>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between text-slate-600">
+                        <span>🏢 База:</span>
+                        <span>{variant.dealer_stock.available_hub_qty} шт</span>
+                      </div>
+                    </div>
                   )}
 
                   <div className="flex flex-col gap-3">
