@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import {
   Search,
   SlidersHorizontal,
@@ -14,6 +14,7 @@ import {
   Plus,
   Download,
   Loader2,
+  Globe,
 } from 'lucide-react';
 import type { PageId, Product, ProductVariant, Warehouse } from '@/types';
 import { parseSizeDimensions } from '@/types';
@@ -420,6 +421,7 @@ export default function CatalogPage({ onNavigate, initialCollection }: { onNavig
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('popular');
   const [stockWarehouse, setStockWarehouse] = useState('');
+  const [visibleCount, setVisibleCount] = useState(12);
 
   const [selectedCollections, setSelectedCollections] = useState<Set<string>>(() => initialCollection ? new Set([initialCollection]) : new Set());
   const [selectedManufacturers, setSelectedManufacturers] = useState<Set<string>>(new Set());
@@ -473,6 +475,24 @@ export default function CatalogPage({ onNavigate, initialCollection }: { onNavig
     }
     return result;
   }, [products, selectedCollections, selectedManufacturers, selectedCountries, selectedWarehouses, selectedSizes, searchQuery, sortBy, pricing]);
+
+  // Reset visible count when filters/search/sort change
+  useEffect(() => { setVisibleCount(12); }, [selectedCollections, selectedManufacturers, selectedCountries, selectedWarehouses, selectedSizes, searchQuery, sortBy, viewMode]);
+
+  const visibleProducts = useMemo(() => filteredProducts.slice(0, visibleCount), [filteredProducts, visibleCount]);
+  const hasMore = filteredProducts.length > visibleCount;
+
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!hasMore) return;
+    const el = sentinelRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) setVisibleCount(c => c + 12);
+    }, { rootMargin: '300px' });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [hasMore]);
 
   if (loading) {
     return (
@@ -535,17 +555,13 @@ export default function CatalogPage({ onNavigate, initialCollection }: { onNavig
         </div>
 
         {/* Toolbar */}
-        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3 flex-1">
             <button onClick={() => setDrawerOpen(true)} className="relative flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 hover:border-slate-300 shrink-0">
               <SlidersHorizontal className="h-4 w-4" />
               <span>Фильтр</span>
               {activeFilterCount > 0 && <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-700 px-1 text-[10px] font-bold text-white">{activeFilterCount}</span>}
             </button>
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-              <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Поиск..." className="input-field pl-10 text-sm" />
-            </div>
           </div>
 
           <div className="flex items-center gap-3">
@@ -590,15 +606,46 @@ export default function CatalogPage({ onNavigate, initialCollection }: { onNavig
           </div>
         </div>
 
+        {/* Country filter pills */}
+        {allCountries.length > 1 && (
+          <div className="mb-4 flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+            <Globe className="h-4 w-4 text-slate-400 shrink-0" />
+            {allCountries.map(c => (
+              <button
+                key={c}
+                onClick={() => setSelectedCountries(s => toggle(s, c))}
+                className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-all whitespace-nowrap ${
+                  selectedCountries.has(c)
+                    ? 'bg-brand-700 text-white shadow-sm'
+                    : 'bg-white border border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                }`
+                }
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+        )}
+
         <p className="mb-4 text-sm text-slate-500">
           Найдено <span className="font-semibold text-slate-800">{pluralProducts(filteredProducts.length)}</span>
         </p>
 
         {filteredProducts.length > 0 ? (
           viewMode === 'grid' ? (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 lg:gap-6">
-              {filteredProducts.map(p => <ProductCard key={p.id} product={p} onNavigate={onNavigate} />)}
-            </div>
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 lg:gap-6">
+                {visibleProducts.map(p => <ProductCard key={p.id} product={p} onNavigate={onNavigate} />)}
+              </div>
+              {hasMore && (
+                <div className="mt-8 flex flex-col items-center gap-3">
+                  <div ref={sentinelRef} className="h-1" />
+                  <button onClick={() => setVisibleCount(c => c + 12)} className="btn-secondary">
+                    Показать ещё ({filteredProducts.length - visibleCount})
+                  </button>
+                </div>
+              )}
+            </>
           ) : (
             <StockGridView filteredProducts={filteredProducts} selectedWarehouse={stockWarehouse} onNavigate={onNavigate} />
           )
