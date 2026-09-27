@@ -400,14 +400,6 @@ export default function ProductPage({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-x-6 gap-y-2.5">
-              {specs.map(spec => (
-                <div key={spec.label} className="flex items-baseline justify-between gap-3 border-b border-dashed border-slate-100 pb-2">
-                  <span className="text-xs text-slate-400">{spec.label}</span>
-                  <span className="text-sm font-medium text-slate-700 text-right">{spec.value}</span>
-                </div>
-              ))}
-            </div>
           </div>
         </div>
 
@@ -484,6 +476,22 @@ export default function ProductPage({
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+
+        {/* DESKTOP SPECIFICATIONS */}
+        <div className="hidden lg:block mb-10 border-t border-slate-200 pt-8">
+          <h2 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+            <ListChecks className="h-5 w-5 text-slate-400" />
+            Характеристики
+          </h2>
+          <div className="grid grid-cols-2 gap-x-10 gap-y-3 rounded-xl border border-slate-200 bg-slate-50/50 p-5">
+            {specs.map(spec => (
+              <div key={spec.label} className="flex items-baseline justify-between gap-3 border-b border-dashed border-slate-200 pb-2">
+                <span className="text-xs text-slate-400">{spec.label}</span>
+                <span className="text-sm font-medium text-slate-700 text-right">{spec.value}</span>
+              </div>
+            ))}
           </div>
         </div>
 
