@@ -448,9 +448,9 @@ export default function ProductPage({
                           </td>
                           <td className="py-3 pr-3 text-sm text-slate-600 whitespace-nowrap">{wh.city}</td>
                           <td className="py-3 pr-3">
-                            <span className="flex items-center gap-1.5 text-xs text-slate-500">
+                            <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${wh.stock > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
                               <span className={`inline-block h-1.5 w-1.5 rounded-full ${wh.stock > 0 ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-                              {wh.stock}&nbsp;шт.
+                              {wh.stock} шт.
                             </span>
                           </td>
                           {user && (
@@ -570,9 +570,13 @@ export default function ProductPage({
                         <div key={key} className="border-t border-slate-100 pt-3 first:border-0 first:pt-0">
                           <div className="flex items-center justify-between mb-2">
                             <span className="text-sm text-slate-700 font-medium">{wh.city}</span>
-                            <span className="flex items-center gap-1.5 text-xs text-slate-500">
-                              <span className={`inline-block h-1.5 w-1.5 rounded-full ${wh.stock > 0 ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-                              {wh.stock}&nbsp;шт.
+                            <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${wh.stock > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
+                              {wh.stock > 0 ? (
+                                <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                              ) : (
+                                <span className="inline-block h-1.5 w-1.5 rounded-full bg-slate-300" />
+                              )}
+                              {wh.stock} шт.
                             </span>
                           </div>
                           <div className="flex items-center gap-3">

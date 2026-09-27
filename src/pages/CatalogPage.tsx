@@ -101,6 +101,15 @@ function FilterDrawer(props: FilterDrawerProps) {
     allCollections, allManufacturers, allCountries, allWarehouses, allSizes,
   } = props;
 
+  const rugSizes = useMemo(() => allSizes.filter(s => {
+    const { w, h } = parseSizeDimensions(s);
+    return Math.max(w, h) / Math.min(w, h) < 2.5;
+  }), [allSizes]);
+  const runnerSizes = useMemo(() => allSizes.filter(s => {
+    const { w, h } = parseSizeDimensions(s);
+    return Math.max(w, h) / Math.min(w, h) >= 2.5;
+  }), [allSizes]);
+
   useEffect(() => {
     document.body.style.overflow = open ? 'hidden' : '';
     return () => { document.body.style.overflow = ''; };
@@ -128,10 +137,23 @@ function FilterDrawer(props: FilterDrawerProps) {
             </div>
           </div>
           <FilterSection title="КОЛЛЕКЦИЯ">{allCollections.map(c => <CheckItem key={c} label={c} checked={selectedCollections.has(c)} onToggle={() => toggleCollection(c)} />)}</FilterSection>
+          <FilterSection title="РАЗМЕР" defaultOpen={false}>
+            {rugSizes.length > 0 && (
+              <div className="mb-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">Ковры</p>
+                {rugSizes.map(s => <CheckItem key={s} label={s} checked={selectedSizes.has(s)} onToggle={() => toggleSize(s)} />)}
+              </div>
+            )}
+            {runnerSizes.length > 0 && (
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">Дорожки</p>
+                {runnerSizes.map(s => <CheckItem key={s} label={s} checked={selectedSizes.has(s)} onToggle={() => toggleSize(s)} />)}
+              </div>
+            )}
+          </FilterSection>
           <FilterSection title="ПРОИЗВОДИТЕЛЬ">{allManufacturers.map(m => <CheckItem key={m} label={m} checked={selectedManufacturers.has(m)} onToggle={() => toggleManufacturer(m)} />)}</FilterSection>
           <FilterSection title="СТРАНА">{allCountries.map(c => <CheckItem key={c} label={c} checked={selectedCountries.has(c)} onToggle={() => toggleCountry(c)} />)}</FilterSection>
           <FilterSection title="СКЛАД">{allWarehouses.map(w => <CheckItem key={w} label={w} checked={selectedWarehouses.has(w)} onToggle={() => toggleWarehouse(w)} />)}</FilterSection>
-          <FilterSection title="РАЗМЕР" defaultOpen={false}>{allSizes.map(s => <CheckItem key={s} label={s} checked={selectedSizes.has(s)} onToggle={() => toggleSize(s)} />)}</FilterSection>
         </div>
         <div className="border-t border-slate-100 px-5 py-4 space-y-2">
           <button onClick={onClose} className="btn-primary w-full">Показать результаты</button>
