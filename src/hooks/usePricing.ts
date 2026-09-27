@@ -21,7 +21,10 @@ export function useUserPricing() {
   }, [allPrices, priceType]);
 
   function getVariantPrice(collection: string, size: string, baseFallback: number, variantPerSqm?: number): number {
-    const perSqm = priceMap.get(collection) ?? (variantPerSqm && variantPerSqm > 0 ? variantPerSqm : undefined);
+    if (baseFallback && baseFallback > 0) {
+      return baseFallback;
+    }
+    const perSqm = (variantPerSqm && variantPerSqm > 0 ? variantPerSqm : undefined) ?? priceMap.get(collection);
     if (perSqm !== undefined) {
       const { w, h } = parseSizeDimensions(size);
       const area = w * h;
@@ -31,7 +34,8 @@ export function useUserPricing() {
   }
 
   function getPricePerSqm(collection: string, size: string, baseFallback: number, variantPerSqm?: number): number {
-    const perSqm = priceMap.get(collection) ?? (variantPerSqm && variantPerSqm > 0 ? variantPerSqm : undefined);
+    if (variantPerSqm && variantPerSqm > 0) return variantPerSqm;
+    const perSqm = priceMap.get(collection);
     if (perSqm !== undefined) return perSqm;
     const { w, h } = parseSizeDimensions(size);
     const area = w * h;
@@ -40,7 +44,10 @@ export function useUserPricing() {
   }
 
   function getMinPricePerSqm(product: Product): number {
-    const perSqm = priceMap.get(product.collection) ?? (product.price_per_sqm && product.price_per_sqm > 0 ? product.price_per_sqm : undefined) ?? product.variants.find(v => (v.price_per_sqm ?? 0) > 0)?.price_per_sqm;
+    if (product.price_per_sqm && product.price_per_sqm > 0) return product.price_per_sqm;
+    const variantPerSqm = product.variants.find(v => (v.price_per_sqm ?? 0) > 0)?.price_per_sqm;
+    if (variantPerSqm && variantPerSqm > 0) return variantPerSqm;
+    const perSqm = priceMap.get(product.collection);
     if (perSqm !== undefined && perSqm > 0) return perSqm;
     if (product.variants.length === 0) return 0;
     const first = product.variants[0];

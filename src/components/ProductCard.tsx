@@ -139,7 +139,9 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
 
         <div className="mt-2 border-t border-slate-100 pt-2">
           {user ? (
-            <p className="text-sm font-bold text-slate-900">${pricePerSqm.toFixed(0)} / м²</p>
+            <p className="text-sm font-bold text-slate-900">
+              ${pricePerSqm % 1 === 0 ? pricePerSqm.toFixed(0) : pricePerSqm.toFixed(2)} / м²
+            </p>
           ) : (
             <p className="flex items-center gap-1 text-xs text-slate-400">
               <Lock className="h-3 w-3" />

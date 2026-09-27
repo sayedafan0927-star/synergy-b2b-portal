@@ -112,33 +112,40 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
 
   for (const raw of rawProducts) {
     const parsed = parse1CNomenclature(raw.name, raw.collection);
-    const sku = parsed.sku || raw.variants?.[0]?.sku || raw.id;
-    const collection = parsed.collection || raw.collection || 'Ковры';
-    const groupKey = `${collection.toUpperCase()}__${sku.toUpperCase()}`;
+    const collection = (raw.collection || parsed.collection || 'Ковры').trim();
+    const article = (raw.article || parsed.sku || raw.id).trim();
+    const color = (raw.color || parsed.color || '').trim();
+    const normalizedColor = color.toUpperCase().replace(/[\s/\\-]+/g, '');
+    const groupKey = `${collection.toUpperCase()}__${article.toUpperCase()}${normalizedColor ? `__${normalizedColor}` : ''}`;
 
-    const baseSqmPrice = raw.price_per_sqm || raw.variants?.[0]?.price_per_sqm || 15;
+    const baseSqmPrice = Number(raw.price_per_sqm) || Number(raw.variants?.[0]?.price_per_sqm) || 15;
     const itemSize = parsed.size || raw.variants?.[0]?.size || '1.6 × 2.3';
 
     const itemVariants: ProductVariant[] = (raw.variants && raw.variants.length > 0)
       ? raw.variants.map(v => {
-          const s = v.size && v.size !== 'Стандарт' ? v.size : itemSize;
-          const area = calculateArea(s);
-          const vPricePerSqm = v.price_per_sqm || baseSqmPrice;
+          const s = v.size && v.size !== 'Стандарт' ? v.size.replace(/[*xXхХ]/g, ' × ') : itemSize;
+          const area = v.area_sqm && v.area_sqm > 0 ? v.area_sqm : calculateArea(s);
+          const vPricePerSqm = Number(v.price_per_sqm) || baseSqmPrice;
+          const vBasePrice = Number(v.base_price) > 0 ? Number(v.base_price) : Math.round(vPricePerSqm * area * 100) / 100;
           return {
             ...v,
             size: s,
-            sku: v.sku || sku,
+            area_sqm: area,
+            sku: v.sku || `${article}-${s.replace(/\s+/g, '')}`,
             price_per_sqm: vPricePerSqm,
-            base_price: v.base_price > 0 ? v.base_price : Math.round(vPricePerSqm * area * 100) / 100,
+            base_price: vBasePrice,
+            currency: v.currency || raw.currency || 'USD',
             dealer_stock: v.dealer_stock,
           };
         })
       : [{
-          id: `var-${sku}-${itemSize}`,
+          id: `var-${article}-${itemSize}`,
           size: itemSize,
-          sku: sku,
+          sku: `${article}-${itemSize.replace(/\s+/g, '')}`,
+          area_sqm: calculateArea(itemSize),
           price_per_sqm: baseSqmPrice,
           base_price: Math.round(baseSqmPrice * calculateArea(itemSize) * 100) / 100,
+          currency: raw.currency || 'USD',
           warehouses: [],
           dealer_stock: (raw as any).dealer_stock,
         }];
@@ -148,20 +155,20 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
       const photos = getValidImages(raw.images);
       map.set(groupKey, {
         ...raw,
-        id: `carpet-${groupKey.toLowerCase().replace(/[^a-z0-9_-]/g, '-')}`,
-        name: parsed.cleanName,
+        id: String(raw.id || `carpet-${groupKey.toLowerCase().replace(/[^a-z0-9_-]/g, '-')}`),
+        name: raw.name || parsed.cleanName || `${collection} ${article}${color ? ` (${color})` : ''}`,
         collection: collection,
-        article: sku,
-        color: parsed.color,
-        manufacturer: parsed.manufacturer || raw.manufacturer || 'Karmen Hali',
-        country: parsed.country || raw.country || 'Турция',
+        article: article,
+        color: color,
+        currency: raw.currency || 'USD',
         price_per_sqm: baseSqmPrice,
         images: photos,
-        image_thumb: photos.length > 0 ? photos[0] : undefined,
+        image_thumb: photos.length > 0 ? photos[0] : (raw.image_thumb && !raw.image_thumb.includes('unsplash.com') ? raw.image_thumb : undefined),
+        characteristics: raw.characteristics,
         variants: [...itemVariants],
       });
     } else {
-      // Сливаем размеры в один артикул
+      // Сливаем размеры в один товар
       const existingSizes = new Set(existing.variants.map(v => v.size));
       for (const v of itemVariants) {
         if (!existingSizes.has(v.size)) {
@@ -199,31 +206,14 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
     }
   }
 
-  // Для каждого артикула гарантируем наличие стандартной размерной сетки
+  // Сортируем размеры каждого товара по возрастанию площади (без добавления фиктивных нулей)
   const result: Product[] = [];
   for (const prod of map.values()) {
-    const existingSizes = new Set(prod.variants.map(v => v.size));
-    const baseSqm = prod.price_per_sqm || 15;
-    for (const stdSize of STANDARD_SIZES) {
-      if (!existingSizes.has(stdSize)) {
-        const area = calculateArea(stdSize);
-        prod.variants.push({
-          id: `var-${prod.id}-${stdSize}`,
-          size: stdSize,
-          sku: `${prod.variants[0]?.sku || 'SKU'}-${stdSize.replace(/\s+/g, '')}`,
-          price_per_sqm: baseSqm,
-          base_price: Math.round(baseSqm * area * 100) / 100,
-          warehouses: [
-            { city: 'Алматы', stock: 0 },
-            { city: 'Астана', stock: 0 },
-            { city: 'Шымкент', stock: 0 },
-          ],
-        });
-      }
-    }
-
-    // Сортируем размеры по возрастанию площади
-    prod.variants.sort((a, b) => calculateArea(a.size) - calculateArea(b.size));
+    prod.variants.sort((a, b) => {
+      const areaA = a.area_sqm || calculateArea(a.size);
+      const areaB = b.area_sqm || calculateArea(b.size);
+      return areaA - areaB;
+    });
     result.push(prod);
   }
 
@@ -464,40 +454,7 @@ export function useProduct(id: string | undefined, customDealerId?: string | num
   return { product, loading, error };
 }
 
-let cachedPrices: CollectionPrice[] | null = null;
-let fetchingPrices = false;
-
 export function useCollectionPrices() {
-  const [prices, setPrices] = useState<CollectionPrice[]>(cachedPrices ?? []);
-
-  useEffect(() => {
-    if (cachedPrices) {
-      setPrices(cachedPrices);
-      return;
-    }
-    if (fetchingPrices) return;
-    fetchingPrices = true;
-
-    let cancelled = false;
-    supabase
-      .from('collection_prices')
-      .select('collection, price_type_id, price_per_sqm')
-      .then(({ data, error }) => {
-        if (!cancelled && !error && data) {
-          const parsed = data.map(d => ({ ...d, price_per_sqm: Number(d.price_per_sqm) }));
-          cachedPrices = parsed;
-          setPrices(parsed);
-        }
-      })
-      .catch(() => {
-        // Silently catch network or DNS errors if Supabase is offline
-      })
-      .finally(() => {
-        fetchingPrices = false;
-      });
-
-    return () => { cancelled = true; };
-  }, []);
-
+  const [prices] = useState<CollectionPrice[]>([]);
   return prices;
 }

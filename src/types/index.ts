@@ -11,13 +11,26 @@ export interface DealerStock {
   available_hub_qty: number;
 }
 
+export interface ProductCharacteristic {
+  name: string;
+  value: string;
+}
+
 export interface ProductVariant {
   id: string;
-  size: string;
+  item_id?: number;
   sku: string;
-  base_price: number;
-  price_per_sqm?: number;
+  article?: string;
+  design_article?: string;
+  size: string;
+  width?: number;
+  length?: number;
   area_sqm?: number;
+  shape?: string;
+  shape_label?: string;
+  price_per_sqm?: number;
+  base_price: number;
+  currency?: string;
   warehouses: Warehouse[];
   dealer_stock?: DealerStock;
 }
@@ -108,6 +121,8 @@ export interface Product {
   collection: string;
   article?: string;
   color?: string;
+  shape?: string;
+  shape_label?: string;
   manufacturer: string;
   material: string;
   style: string;
@@ -115,9 +130,11 @@ export interface Product {
   density: string;
   pile_height: string;
   price_per_sqm?: number;
+  currency?: string;
   images: string[];
   image_thumb?: string;
-  supplier_id: number | null;
+  supplier_id?: number | null;
+  characteristics?: ProductCharacteristic[];
   variants: ProductVariant[];
 }
 

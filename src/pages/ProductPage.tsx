@@ -28,7 +28,7 @@ function rowKey(sku: string, city: string) {
 }
 
 function fmtPrice(n: number) {
-  return `$${n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+  return `$${n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }
 
 export default function ProductPage({
@@ -234,21 +234,29 @@ export default function ProductPage({
     );
   }
 
-  const mainPricePerSqm = pricing.getMinPricePerSqm(product);
+  const [selectedSize, setSelectedSize] = useState<string>('');
+  const activeVariant = product.variants.find(v => v.size === selectedSize) || product.variants[0];
 
-  const specs = [
-    { label: 'Материал', value: product.material },
-    { label: 'Стиль', value: product.style },
-    { label: 'Страна', value: product.country },
-    { label: 'Плотность', value: product.density },
-    { label: 'Высота ворса', value: product.pile_height },
-  ];
+  const specs = (product.characteristics && product.characteristics.length > 0)
+    ? product.characteristics.map(c => ({ label: c.name, value: c.value }))
+    : [
+        { label: 'Коллекция', value: product.collection },
+        { label: 'Артикул / Дизайн', value: product.article },
+        { label: 'Цвет', value: product.color },
+        { label: 'Форма', value: product.shape_label || product.shape },
+        { label: 'Производитель', value: product.manufacturer },
+        { label: 'Страна', value: product.country },
+        { label: 'Материал', value: product.material },
+        { label: 'Стиль', value: product.style },
+        { label: 'Плотность', value: product.density },
+        { label: 'Высота ворса', value: product.pile_height },
+      ].filter(s => Boolean(s.value));
 
   const totalStock = product.variants.reduce((s, v) => s + v.warehouses.reduce((a, w) => a + w.stock, 0), 0);
   const sizeRange = product.variants.length > 1
     ? `${product.variants[0].size} — ${product.variants[product.variants.length - 1].size}`
     : product.variants[0]?.size ?? '';
-  const availableForms = [product.style, product.category].filter(Boolean).join(', ');
+  const availableForms = [product.shape_label, product.style, product.category].filter(Boolean).join(', ');
 
   const hasDealerStock = Boolean(user && product.variants.some(v => v.dealer_stock));
   const totalShowroomQty = product.variants.reduce((sum, v) => sum + (v.dealer_stock?.in_showroom_qty || 0), 0);
@@ -383,7 +391,7 @@ export default function ProductPage({
               <div className="flex items-baseline gap-3 mb-4">
                 {user ? (
                   <>
-                    <span className="text-3xl font-bold text-brand-700">{fmtPrice(Math.round(mainPricePerSqm))}</span>
+                    <span className="text-3xl font-bold text-brand-700">{fmtPrice(mainPricePerSqm)}</span>
                     <span className="text-sm text-slate-400 font-medium">/ м²</span>
                   </>
                 ) : (
@@ -408,6 +416,83 @@ export default function ProductPage({
                 </div>
               </div>
             </div>
+
+            {/* ПЕРЕКЛЮЧАТЕЛЬ РАЗМЕРОВ (SIZE SWITCHER) */}
+            {product.variants.length > 0 && (
+              <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
+                <div className="flex items-center justify-between mb-3">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                    <Ruler className="h-4 w-4 text-brand-600" />
+                    Размер изделия ({product.variants.length})
+                  </label>
+                  {activeVariant && (
+                    <span className="text-xs font-medium text-slate-500">
+                      {activeVariant.area_sqm ? `${activeVariant.area_sqm} м²` : ''}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {product.variants.map(v => {
+                    const isSelected = v.size === activeVariant?.size;
+                    const vStock = v.warehouses.reduce((sum, w) => sum + w.stock, 0);
+                    return (
+                      <button
+                        key={v.sku || v.size}
+                        onClick={() => setSelectedSize(v.size)}
+                        className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-all ${
+                          isSelected
+                            ? 'bg-brand-700 text-white shadow-sm ring-2 ring-brand-700/20'
+                            : 'bg-slate-50 border border-slate-200 text-slate-700 hover:border-brand-500 hover:bg-white'
+                        }`}
+                      >
+                        <span>{v.size}</span>
+                        {vStock > 0 && (
+                          <span
+                            className={`rounded-full px-1.5 py-0.2 text-[10px] font-bold ${
+                              isSelected ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800'
+                            }`}
+                          >
+                            {vStock} шт
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Выбранный размер: штучная цена */}
+                {activeVariant && (
+                  <div className="mt-3.5 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs">
+                    <div>
+                      <span className="text-slate-500 font-medium">Штучная цена ({activeVariant.size}):</span>
+                      {user ? (
+                        <>
+                          <span className="ml-1.5 font-bold text-slate-900 text-base">
+                            {fmtPrice(pricing.getVariantPrice(product.collection, activeVariant.size, activeVariant.base_price, activeVariant.price_per_sqm))}
+                          </span>
+                          <span className="ml-1 text-slate-400">
+                            (${pricing.getPricePerSqm(product.collection, activeVariant.size, activeVariant.base_price, activeVariant.price_per_sqm)} / м²)
+                          </span>
+                        </>
+                      ) : (
+                        <span className="ml-1 text-slate-400">Войдите для цен</span>
+                      )}
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        const el = document.getElementById('variant-table');
+                        el?.scrollIntoView({ behavior: 'smooth' });
+                      }}
+                      className="text-brand-700 hover:text-brand-800 font-semibold inline-flex items-center gap-1 hover:underline"
+                    >
+                      Наличие на складах ↓
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {hasDealerStock && (
               <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50/50 p-4">
@@ -512,12 +597,12 @@ export default function ProductPage({
                           </td>
                           {user && (
                             <td className="py-3 pr-3 text-sm text-slate-500 whitespace-nowrap">
-                              {pricePerSqm > 0 ? `${Math.round(pricePerSqm)}` : '—'}
+                              {pricePerSqm > 0 ? `$${pricePerSqm % 1 === 0 ? pricePerSqm.toFixed(0) : pricePerSqm.toFixed(2)}` : '—'}
                             </td>
                           )}
                           {user && (
                             <td className="py-3 pr-3 font-bold text-slate-900 whitespace-nowrap">
-                              {isFirstRow ? fmtPrice(Math.round(variantPrice)) : ''}
+                              {isFirstRow ? fmtPrice(variantPrice) : ''}
                             </td>
                           )}
                           <td className="py-3 pr-3">
@@ -600,7 +685,7 @@ export default function ProductPage({
             <h1 className="font-display text-xl font-bold text-slate-900">{product.name}</h1>
             {user ? (
               <div className="flex items-baseline gap-1 shrink-0 ml-3">
-                <span className="text-xl font-bold text-brand-700">{fmtPrice(Math.round(mainPricePerSqm))}</span>
+                <span className="text-xl font-bold text-brand-700">{fmtPrice(mainPricePerSqm)}</span>
                 <span className="text-xs text-slate-400">/ м²</span>
               </div>
             ) : (
@@ -655,10 +740,12 @@ export default function ProductPage({
                 <div key={variant.sku} className="card p-4">
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-sm font-bold text-slate-900">{variant.size}</span>
-                    {user && <span className="text-base font-bold text-slate-900">{fmtPrice(Math.round(variantPrice))}</span>}
+                    {user && <span className="text-base font-bold text-slate-900">{fmtPrice(variantPrice)}</span>}
                   </div>
                   {user && pricePerSqm > 0 && (
-                    <p className="text-xs text-slate-400 mb-2 text-right">${Math.round(pricePerSqm)} / м²</p>
+                    <p className="text-xs text-slate-400 mb-2 text-right">
+                      ${pricePerSqm % 1 === 0 ? pricePerSqm.toFixed(0) : pricePerSqm.toFixed(2)} / м²
+                    </p>
                   )}
 
                   {variant.dealer_stock && (
