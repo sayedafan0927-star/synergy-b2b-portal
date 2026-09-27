@@ -29,7 +29,8 @@ function rowKey(sku: string, city: string) {
 }
 
 function fmtPrice(n: number) {
-  return `$${n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+  if (typeof n !== 'number' || isNaN(n)) return '$0.00';
+  return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 export default function ProductPage({
@@ -534,7 +535,7 @@ export default function ProductPage({
                             {fmtPrice(pricing.getVariantPrice(product.collection, activeVariant.size, activeVariant.base_price, activeVariant.price_per_sqm))}
                           </span>
                           <span className="ml-1 text-slate-400">
-                            (${pricing.getPricePerSqm(product.collection, activeVariant.size, activeVariant.base_price, activeVariant.price_per_sqm)} / м²)
+                            (${pricing.getPricePerSqm(product.collection, activeVariant.size, activeVariant.base_price, activeVariant.price_per_sqm).toFixed(2)} / м²)
                           </span>
                         </>
                       ) : (
@@ -644,7 +645,7 @@ export default function ProductPage({
                                       </span>
                                     )}
                                     <span className="inline-flex items-center gap-1 text-slate-500">
-                                      🏢 База: {variant.dealer_stock.available_hub_qty} шт
+                                      🏢 Основной Склад Астана: {wh.stock} шт
                                     </span>
                                   </div>
                                 )}
@@ -660,7 +661,7 @@ export default function ProductPage({
                           </td>
                           {user && (
                             <td className="py-3 pr-3 text-sm text-slate-500 whitespace-nowrap">
-                              {pricePerSqm > 0 ? `$${pricePerSqm % 1 === 0 ? pricePerSqm.toFixed(0) : pricePerSqm.toFixed(2)}` : '—'}
+                              {pricePerSqm > 0 ? `$${pricePerSqm.toFixed(2)}` : '—'}
                             </td>
                           )}
                           {user && (
@@ -812,7 +813,7 @@ export default function ProductPage({
                   </div>
                   {user && pricePerSqm > 0 && (
                     <p className="text-xs text-slate-400 mb-2 text-right">
-                      ${pricePerSqm % 1 === 0 ? pricePerSqm.toFixed(0) : pricePerSqm.toFixed(2)} / м²
+                      ${pricePerSqm.toFixed(2)} / м²
                     </p>
                   )}
 

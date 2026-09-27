@@ -124,17 +124,53 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
     const itemVariants: ProductVariant[] = (raw.variants && raw.variants.length > 0)
       ? raw.variants.map(v => {
           const s = v.size && v.size !== 'Стандарт' ? v.size.replace(/[*xXхХ]/g, ' × ') : itemSize;
-          const area = v.area_sqm && v.area_sqm > 0 ? v.area_sqm : calculateArea(s);
-          const vPricePerSqm = Number(v.price_per_sqm) || baseSqmPrice;
-          const vBasePrice = Number(v.base_price) > 0 ? Number(v.base_price) : Math.round(vPricePerSqm * area * 100) / 100;
+          const area = v.area_sqm && v.area_sqm > 0 ? Number(v.area_sqm) : calculateArea(s);
+          const vPricePerSqm = Number(v.price_per_sqm) > 0 ? Number(v.price_per_sqm) : baseSqmPrice;
+          const rawVariantPrice = Number((v as any).price) > 0
+            ? Number((v as any).price)
+            : (Number(v.base_price) > 0 ? Number(v.base_price) : Math.round(vPricePerSqm * area * 100) / 100);
+
+          // Ищем центральный хаб (ID 81 / Основной Склад Астана)
+          const hubWh = (v.warehouses || []).find(w => w.warehouse_id === 81)
+            || (v.warehouses || []).find(w => (w.warehouse_name && w.warehouse_name.includes('Астана')) || (w.city && w.city.includes('Астана')))
+            || (v.warehouses || []).find(w => w.is_hub && w.stock > 0);
+
+          const hubStock = hubWh ? Number(hubWh.stock) || 0 : 0;
+
+          // Партнерские шоурумы сохраняем только с реальным ненулевым остатком
+          const otherWarehouses = (v.warehouses || []).filter(w =>
+            w.warehouse_id !== 81 &&
+            w.warehouse_id !== 33 &&
+            w.warehouse_id !== 46 &&
+            !(w.warehouse_name && w.warehouse_name.includes('Астана')) &&
+            !(w.city && w.city.includes('Астана')) &&
+            Number(w.stock) > 0
+          );
+
+          const cleanedWarehouses: Warehouse[] = [
+            {
+              warehouse_id: 81,
+              warehouse_name: 'Основной Склад Астана',
+              city: 'Основной Склад Астана',
+              is_hub: true,
+              stock: hubStock,
+            },
+            ...otherWarehouses.map(w => ({
+              ...w,
+              is_hub: false,
+            })),
+          ];
+
           return {
             ...v,
             size: s,
             area_sqm: area,
             sku: v.sku || `${article}-${s.replace(/\s+/g, '')}`,
             price_per_sqm: vPricePerSqm,
-            base_price: vBasePrice,
+            price: rawVariantPrice,
+            base_price: rawVariantPrice,
             currency: v.currency || raw.currency || 'USD',
+            warehouses: cleanedWarehouses,
             dealer_stock: v.dealer_stock,
           };
         })
@@ -144,15 +180,28 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
           sku: `${article}-${itemSize.replace(/\s+/g, '')}`,
           area_sqm: calculateArea(itemSize),
           price_per_sqm: baseSqmPrice,
+          price: Math.round(baseSqmPrice * calculateArea(itemSize) * 100) / 100,
           base_price: Math.round(baseSqmPrice * calculateArea(itemSize) * 100) / 100,
           currency: raw.currency || 'USD',
-          warehouses: filterClientWarehouses([]),
+          warehouses: [
+            {
+              warehouse_id: 81,
+              warehouse_name: 'Основной Склад Астана',
+              city: 'Основной Склад Астана',
+              is_hub: true,
+              stock: 0,
+            },
+          ],
           dealer_stock: (raw as any).dealer_stock,
         }];
 
     const existing = map.get(groupKey);
     if (!existing) {
       const photos = getValidImages(raw.images);
+      const rawPrice = Number((raw as any).price) > 0 ? Number((raw as any).price) : undefined;
+      const rawMinPrice = Number((raw as any).min_price) > 0 ? Number((raw as any).min_price) : undefined;
+      const rawMaxPrice = Number((raw as any).max_price) > 0 ? Number((raw as any).max_price) : undefined;
+
       map.set(groupKey, {
         ...raw,
         id: String(raw.id || `carpet-${groupKey.toLowerCase().replace(/[^a-z0-9_-]/g, '-')}`),
@@ -162,6 +211,9 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
         color: color,
         currency: raw.currency || 'USD',
         price_per_sqm: baseSqmPrice,
+        price: rawPrice,
+        min_price: rawMinPrice,
+        max_price: rawMaxPrice,
         images: photos,
         image_thumb: photos.length > 0 ? photos[0] : (raw.image_thumb && !raw.image_thumb.includes('unsplash.com') ? raw.image_thumb : undefined),
         characteristics: raw.characteristics,
@@ -197,16 +249,22 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
           existing.variants.push(v);
           existingSizes.add(v.size);
         } else {
-          // Если размер уже есть — объединяем остатки складов и дилерские остатки
+          // Если размер уже есть — обновляем остатки хаба и дилерские остатки
           const targetVariant = existing.variants.find(ev => ev.size === v.size);
           if (targetVariant) {
-            const whMap = new Map(targetVariant.warehouses.map(w => [w.warehouse_name || w.city, w]));
+            const existingHub = targetVariant.warehouses.find(w => w.warehouse_id === 81 || w.is_hub);
+            const incomingHub = v.warehouses.find(w => w.warehouse_id === 81 || w.is_hub);
+            if (existingHub && incomingHub) {
+              existingHub.stock = Math.max(existingHub.stock, incomingHub.stock);
+            }
             for (const w of v.warehouses) {
-              const exWh = whMap.get(w.warehouse_name || w.city);
-              if (exWh) {
-                exWh.stock += w.stock;
-              } else {
-                targetVariant.warehouses.push({ ...w });
+              if (w.warehouse_id !== 81 && !w.is_hub && w.stock > 0) {
+                const exWh = targetVariant.warehouses.find(tw => tw.warehouse_id === w.warehouse_id);
+                if (exWh) {
+                  exWh.stock = Math.max(exWh.stock, w.stock);
+                } else {
+                  targetVariant.warehouses.push({ ...w });
+                }
               }
             }
             if (v.dealer_stock) {
@@ -236,20 +294,22 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
       const areaB = b.area_sqm || calculateArea(b.size);
       return areaA - areaB;
     });
-    // Нормализуем склад хаба: имя и город строго «Основной Склад Астана»
+    // Финальная нормализация склада хаба: имя и город строго «Основной Склад Астана»
     for (const v of prod.variants) {
-      v.warehouses = v.warehouses.map(w => {
-        if (w.warehouse_id === 81 || w.is_hub || (w.warehouse_name && (w.warehouse_name.includes('Астана') || w.warehouse_name.toLowerCase().includes('основной')))) {
-          return {
-            ...w,
-            warehouse_id: 81,
-            warehouse_name: 'Основной Склад Астана',
-            city: 'Основной Склад Астана',
-            is_hub: true,
-          };
-        }
-        return w;
-      });
+      v.warehouses = v.warehouses
+        .filter(w => w.warehouse_id === 81 || w.is_hub || w.stock > 0)
+        .map(w => {
+          if (w.warehouse_id === 81 || w.is_hub || (w.warehouse_name && w.warehouse_name.includes('Астана'))) {
+            return {
+              ...w,
+              warehouse_id: 81,
+              warehouse_name: 'Основной Склад Астана',
+              city: 'Основной Склад Астана',
+              is_hub: true,
+            };
+          }
+          return w;
+        });
     }
     result.push(prod);
   }
@@ -271,20 +331,17 @@ export function filterClientWarehouses(
 ): Warehouse[] {
   const result: Warehouse[] = [];
 
-  // 1. Центральный склад компании — «Основной Склад Астана» (всегда первый)
-  const mainHub = (warehouses || []).find(w =>
-    w.warehouse_id === 81 ||
-    w.is_hub === true ||
-    (w.warehouse_name && (w.warehouse_name.includes('Астана') || w.warehouse_name.toLowerCase().includes('основной'))) ||
-    (w.city && (w.city.includes('Астана') || w.city.toLowerCase().includes('основной')))
-  );
+  // 1. Центральный склад компании — СТРОГО ID 81 («Основной Склад Астана»)
+  const mainHub = (warehouses || []).find(w => w.warehouse_id === 81)
+    || (warehouses || []).find(w => (w.warehouse_name && w.warehouse_name.includes('Астана')) || (w.city && w.city.includes('Астана')))
+    || (warehouses || []).find(w => w.is_hub && w.stock > 0);
 
   result.push({
     warehouse_id: 81,
     warehouse_name: 'Основной Склад Астана',
     city: 'Основной Склад Астана',
     is_hub: true,
-    stock: mainHub ? mainHub.stock : 0,
+    stock: mainHub ? Number(mainHub.stock) || 0 : 0,
   });
 
   // 2. Персональный склад шоурума авторизованного дилера
@@ -296,7 +353,7 @@ export function filterClientWarehouses(
         warehouse_name: showroomWarehouseName || showroom.warehouse_name || 'В моем магазине',
         city: showroomWarehouseName || showroom.warehouse_name || 'В моем магазине',
         is_hub: false,
-        stock: showroom.stock || 0,
+        stock: Number(showroom.stock) || 0,
       });
     }
   }
@@ -312,7 +369,7 @@ export function triggerCatalogReload() {
 
 export function useProducts(customDealerId?: string | number) {
   const authContext = useContext(AuthContext);
-  const effectiveDealerId = customDealerId ?? authContext?.profile?.partner_id ?? undefined;
+  const effectiveDealerId = customDealerId ?? authContext?.impersonatedProfile?.partner_id ?? authContext?.profile?.partner_id ?? undefined;
 
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -388,7 +445,7 @@ export function useProducts(customDealerId?: string | number) {
       try {
         // 1. Приоритетный источник: реальные ковры и остатки складов из Synergy ERP
         try {
-          const erpData = await fetchCatalogFromErp(undefined, effectiveDealerId);
+          const erpData = await fetchCatalogFromErp(effectiveDealerId);
           if (!cancelled && erpData && erpData.success && Array.isArray(erpData.products) && erpData.products.length > 0) {
             const merged = mergeProducts(erpData.products as Product[]);
             setProducts(merged);
@@ -462,7 +519,7 @@ export function useProducts(customDealerId?: string | number) {
 
 export function useProduct(id: string | undefined, customDealerId?: string | number) {
   const authContext = useContext(AuthContext);
-  const effectiveDealerId = customDealerId ?? authContext?.profile?.partner_id ?? undefined;
+  const effectiveDealerId = customDealerId ?? authContext?.impersonatedProfile?.partner_id ?? authContext?.profile?.partner_id ?? undefined;
 
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
@@ -480,7 +537,7 @@ export function useProduct(id: string | undefined, customDealerId?: string | num
       try {
         // 1. Поиск в каталоге ERP
         try {
-          const erpData = await fetchCatalogFromErp(undefined, effectiveDealerId);
+          const erpData = await fetchCatalogFromErp(effectiveDealerId);
           if (!cancelled && erpData && erpData.success && Array.isArray(erpData.products)) {
             const merged = mergeProducts(erpData.products as Product[]);
             const found = merged.find(p => p.id === id || p.variants.some(v => v.id === id || v.sku === id));

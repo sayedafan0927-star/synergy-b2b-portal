@@ -90,11 +90,11 @@ export async function submitOrderToErp(payload: CreateOrderPayload): Promise<Erp
  * Получение актуального каталога и остатков по складам из ERP.
  * Для авторизованного дилера передает dealer_id для получения персональных остатков (dealer_stock).
  */
-export async function fetchCatalogFromErp(priceType = 'price_commission', dealerId?: string | number) {
+export async function fetchCatalogFromErp(dealerId?: string | number, priceType?: string) {
   const q = new URLSearchParams();
   q.set('action', 'catalog');
-  q.set('price_type', priceType);
   if (dealerId) q.set('dealer_id', String(dealerId));
+  if (priceType) q.set('price_type', priceType);
   q.set('portal_key', ERP_API_KEY);
 
   const response = await fetch(`${ERP_API_URL}?${q.toString()}`, {

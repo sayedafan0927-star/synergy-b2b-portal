@@ -32,6 +32,7 @@ export interface ProductVariant {
   shape?: string;
   shape_label?: string;
   price_per_sqm?: number;
+  price?: number;
   base_price: number;
   currency?: string;
   warehouses: Warehouse[];
@@ -133,6 +134,9 @@ export interface Product {
   density: string;
   pile_height: string;
   price_per_sqm?: number;
+  price?: number;
+  min_price?: number;
+  max_price?: number;
   currency?: string;
   images: string[];
   image_thumb?: string;
