@@ -63,10 +63,26 @@ function assembleProducts(
   }));
 }
 
+export function triggerCatalogReload() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('synergy:reload-catalog'));
+  }
+}
+
 export function useProducts() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reloadCounter, setReloadCounter] = useState(0);
+
+  useEffect(() => {
+    const handler = () => {
+      setLoading(true);
+      setReloadCounter(c => c + 1);
+    };
+    window.addEventListener('synergy:reload-catalog', handler);
+    return () => window.removeEventListener('synergy:reload-catalog', handler);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -110,7 +126,7 @@ export function useProducts() {
 
     load();
     return () => { cancelled = true; };
-  }, []);
+  }, [reloadCounter]);
 
   return { products, loading, error };
 }

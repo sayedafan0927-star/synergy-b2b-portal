@@ -55,7 +55,7 @@ export async function submitOrderToErp(payload: CreateOrderPayload): Promise<Erp
     ? crypto.randomUUID() 
     : `order-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
-  const response = await fetch(`${ERP_API_URL}?action=create_order`, {
+  const response = await fetch(`${ERP_API_URL}?action=create_order&portal_key=${encodeURIComponent(ERP_API_KEY)}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -87,7 +87,7 @@ export async function submitOrderToErp(payload: CreateOrderPayload): Promise<Erp
  * Получение актуального каталога и остатков по складам из ERP.
  */
 export async function fetchCatalogFromErp(priceType = 'price_commission') {
-  const response = await fetch(`${ERP_API_URL}?action=catalog&price_type=${encodeURIComponent(priceType)}`, {
+  const response = await fetch(`${ERP_API_URL}?action=catalog&price_type=${encodeURIComponent(priceType)}&portal_key=${encodeURIComponent(ERP_API_KEY)}`, {
     method: 'GET',
     headers: {
       'X-Portal-Key': ERP_API_KEY,
@@ -105,7 +105,7 @@ export async function fetchCatalogFromErp(priceType = 'price_commission') {
  * Получение списка активных региональных менеджеров (РМ) и логистов (ЛМ).
  */
 export async function fetchRegionalManagersFromErp() {
-  const response = await fetch(`${ERP_API_URL}?action=regional_managers`, {
+  const response = await fetch(`${ERP_API_URL}?action=regional_managers&portal_key=${encodeURIComponent(ERP_API_KEY)}`, {
     method: 'GET',
     headers: {
       'X-Portal-Key': ERP_API_KEY,
@@ -124,6 +124,7 @@ export async function fetchRegionalManagersFromErp() {
  */
 export async function fetchCounterpartiesFromErp(params: { search?: string; phone?: string; managerId?: number; limit?: number } = {}) {
   const q = new URLSearchParams();
+  q.set('portal_key', ERP_API_KEY);
   if (params.search) q.set('search', params.search);
   if (params.phone) q.set('phone', params.phone);
   if (params.managerId) q.set('manager_id', String(params.managerId));
@@ -141,4 +142,98 @@ export async function fetchCounterpartiesFromErp(params: { search?: string; phon
   }
 
   return await response.json();
+}
+
+export interface PingResult {
+  success: boolean;
+  message: string;
+  server_time: string;
+  version: string;
+  latencyMs: number;
+}
+
+/**
+ * Проверка соединения с ERP (health check) и измерение задержки.
+ */
+export async function pingErp(): Promise<PingResult> {
+  const start = performance.now();
+  const response = await fetch(`${ERP_API_URL}?action=ping&portal_key=${encodeURIComponent(ERP_API_KEY)}`, {
+    method: 'GET',
+    headers: {
+      'X-Portal-Key': ERP_API_KEY,
+    },
+  });
+
+  const latencyMs = Math.round(performance.now() - start);
+
+  if (!response.ok) {
+    throw new Error(`Ошибка пинга ERP (${response.status})`);
+  }
+
+  const data = await response.json();
+  return {
+    success: !!data.success,
+    message: data.message || '',
+    server_time: data.server_time || '',
+    version: data.version || '1.0.0',
+    latencyMs,
+  };
+}
+
+export interface ErpSyncReport {
+  timestamp: string;
+  ping: PingResult;
+  catalog: any;
+  counterparties: any;
+  regionalManagers: any;
+  totalProducts: number;
+  totalStockPcs: number;
+  cities: string[];
+  totalCounterparties: number;
+  totalManagers: number;
+  warnings: string[];
+}
+
+/**
+ * Полная синхронизация и диагностический опрос всех узлов ERP.
+ */
+export async function syncAllErpData(): Promise<ErpSyncReport> {
+  const [pingRes, catalogRes, counterpartiesRes, managersRes] = await Promise.all([
+    pingErp(),
+    fetchCatalogFromErp(),
+    fetchCounterpartiesFromErp({ limit: 100 }).catch(err => ({ success: false, error: err.message, counterparties: [] })),
+    fetchRegionalManagersFromErp().catch(err => ({ success: false, error: err.message, managers: [] })),
+  ]);
+
+  const products = catalogRes?.products || [];
+  const cities = catalogRes?.cities || [];
+  let totalStockPcs = 0;
+  const warnings: string[] = [];
+
+  for (const p of products) {
+    let pStock = 0;
+    for (const v of p.variants || []) {
+      for (const w of v.warehouses || []) {
+        totalStockPcs += (w.stock || 0);
+        pStock += (w.stock || 0);
+      }
+    }
+    if (pStock === 0) {
+      warnings.push(`Коллекция "${p.collection || p.name}" (ID ${p.id}): нулевой остаток на всех складах.`);
+    }
+  }
+
+  return {
+    timestamp: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    ping: pingRes,
+    catalog: catalogRes,
+    counterparties: counterpartiesRes,
+    regionalManagers: managersRes,
+    totalProducts: products.length,
+    totalStockPcs,
+    cities,
+    totalCounterparties: counterpartiesRes?.counterparties?.length || counterpartiesRes?.count || 0,
+    totalManagers: managersRes?.managers?.length || managersRes?.count || 0,
+    warnings,
+  };
 }

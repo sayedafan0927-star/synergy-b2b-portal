@@ -17,11 +17,24 @@ import {
   Clock,
   Eye,
   UserCog,
+  RefreshCw,
+  CheckCircle2,
+  AlertTriangle,
+  Server,
+  Copy,
+  Check,
+  Database,
+  Building2,
+  Boxes,
+  Activity,
+  FileJson,
 } from 'lucide-react';
 import type { PageId } from '@/types';
 import { calcSqm, parseSizeDimensions } from '@/types';
 import { useAuth, type UserRole } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { syncAllErpData, type ErpSyncReport, ERP_API_URL } from '@/lib/erpApi';
+import { triggerCatalogReload } from '@/hooks/useProductData';
 
 /* ─── Types ─── */
 interface OrderItem {
@@ -113,7 +126,7 @@ const MOCK_ORDERS: Order[] = [
   },
 ];
 
-type TabId = 'orders' | 'admin-users' | 'admin-display' | 'settings';
+type TabId = 'orders' | 'admin-erp' | 'admin-users' | 'admin-display' | 'settings';
 
 /* ─── Order Detail View ─── */
 function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
@@ -416,6 +429,405 @@ function AdminUsersTab() {
   );
 }
 
+/* ─── Admin: ERP Sync & Diagnostics Tab ─── */
+function AdminErpSyncTab() {
+  const [report, setReport] = useState<ErpSyncReport | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [activeSubTab, setActiveSubTab] = useState<'catalog' | 'counterparties' | 'managers' | 'raw'>('catalog');
+
+  const runSync = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const rep = await syncAllErpData();
+      setReport(rep);
+      triggerCatalogReload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Неизвестная ошибка синхронизации');
+    } finally {
+      setLoading(false);
+      setInitialLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    runSync();
+  }, []);
+
+  const handleCopyJson = () => {
+    if (!report) return;
+    navigator.clipboard.writeText(JSON.stringify(report, null, 2));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const products = report?.catalog?.products || [];
+  const counterparties = report?.counterparties?.counterparties || [];
+  const managers = report?.regionalManagers?.managers || [];
+
+  return (
+    <div className="space-y-6">
+      {/* Header & Force Sync button */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-50 text-brand-700">
+            <RefreshCw className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">Обмен данными с ERP</h2>
+            <p className="text-xs text-slate-500">Диагностика шлюза, остатки и принудительная синхронизация</p>
+          </div>
+        </div>
+
+        <button
+          onClick={runSync}
+          disabled={loading}
+          className="btn-primary flex items-center justify-center gap-2 text-xs py-2 px-4 shadow-sm"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+          {loading ? 'Синхронизация...' : 'Принудительно обновить'}
+        </button>
+      </div>
+
+      {/* Gateway Health & Status Banner */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Status card */}
+        <div className="card p-4 flex items-center gap-3">
+          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${report?.ping?.success ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
+            <Activity className="h-4 w-4" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[10px] uppercase font-semibold text-slate-400">Статус шлюза</p>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className={`inline-block h-2 w-2 rounded-full ${report?.ping?.success ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
+              <p className="text-xs font-bold text-slate-800">
+                {report?.ping?.success ? 'В сети (Online)' : error ? 'Ошибка связи' : 'Проверка...'}
+              </p>
+            </div>
+            {report?.ping?.latencyMs !== undefined && (
+              <p className="text-[10px] text-slate-400 mt-0.5">Задержка: {report.ping.latencyMs} мс</p>
+            )}
+          </div>
+        </div>
+
+        {/* Server Time card */}
+        <div className="card p-4 flex items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600">
+            <Clock className="h-4 w-4" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[10px] uppercase font-semibold text-slate-400">Время на ERP</p>
+            <p className="text-xs font-bold text-slate-800 truncate mt-0.5">
+              {report?.ping?.server_time || '—'}
+            </p>
+            <p className="text-[10px] text-slate-400 mt-0.5">Версия API: {report?.ping?.version || '1.0.0'}</p>
+          </div>
+        </div>
+
+        {/* Last Sync card */}
+        <div className="card p-4 flex items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+            <CheckCircle2 className="h-4 w-4" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[10px] uppercase font-semibold text-slate-400">Последний обмен</p>
+            <p className="text-xs font-bold text-slate-800 mt-0.5">
+              {report?.timestamp ? `${report.timestamp}` : '—'}
+            </p>
+            <p className="text-[10px] text-emerald-600 mt-0.5 font-medium">Кэш каталога обновлён</p>
+          </div>
+        </div>
+
+        {/* API Endpoint card */}
+        <div className="card p-4 flex items-center gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-purple-50 text-purple-600">
+            <Server className="h-4 w-4" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-[10px] uppercase font-semibold text-slate-400">Адрес шлюза</p>
+            <p className="text-[11px] font-mono font-medium text-slate-700 truncate mt-0.5" title={ERP_API_URL}>
+              kilem-khan.kz/.../api_portal
+            </p>
+            <span className="badge bg-purple-50 text-purple-700 text-[9px] mt-0.5">X-Portal-Key активен</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Error alert if any */}
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+          <div>
+            <h4 className="text-sm font-bold text-red-800">Ошибка обмена с сервером ERP</h4>
+            <p className="text-xs text-red-700 mt-1">{error}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Summary KPI Badges */}
+      {report && (
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          <div className="card px-3 py-2.5 text-center">
+            <p className="text-[10px] uppercase font-semibold text-slate-400">Товары (ERP)</p>
+            <p className="text-lg font-bold text-slate-900 mt-0.5">{report.totalProducts} поз.</p>
+          </div>
+          <div className="card px-3 py-2.5 text-center">
+            <p className="text-[10px] uppercase font-semibold text-slate-400">В наличии</p>
+            <p className="text-lg font-bold text-emerald-600 mt-0.5">{report.totalStockPcs} шт.</p>
+          </div>
+          <div className="card px-3 py-2.5 text-center">
+            <p className="text-[10px] uppercase font-semibold text-slate-400">Склады в ERP</p>
+            <p className="text-lg font-bold text-slate-900 mt-0.5">{report.cities.length}</p>
+          </div>
+          <div className="card px-3 py-2.5 text-center">
+            <p className="text-[10px] uppercase font-semibold text-slate-400">Контрагенты</p>
+            <p className="text-lg font-bold text-slate-900 mt-0.5">{report.totalCounterparties}</p>
+          </div>
+          <div className="card px-3 py-2.5 text-center">
+            <p className="text-[10px] uppercase font-semibold text-slate-400">Менеджеры</p>
+            <p className="text-lg font-bold text-slate-900 mt-0.5">{report.totalManagers}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Warnings Banner if any */}
+      {report && report.warnings.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <AlertTriangle className="h-4 w-4 text-amber-600" />
+            <h4 className="text-xs font-bold text-amber-900">Замечания по данным ({report.warnings.length}):</h4>
+          </div>
+          <ul className="space-y-1 text-xs text-amber-800 list-disc list-inside">
+            {report.warnings.map((w, idx) => (
+              <li key={idx}>{w}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Sub-tabs navigation */}
+      <div className="border-b border-slate-200 flex items-center justify-between gap-2 overflow-x-auto">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setActiveSubTab('catalog')}
+            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors whitespace-nowrap ${
+              activeSubTab === 'catalog'
+                ? 'border-brand-600 text-brand-700'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Boxes className="h-3.5 w-3.5" />
+            Каталог и остатки ({products.length})
+          </button>
+          <button
+            onClick={() => setActiveSubTab('counterparties')}
+            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors whitespace-nowrap ${
+              activeSubTab === 'counterparties'
+                ? 'border-brand-600 text-brand-700'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Building2 className="h-3.5 w-3.5" />
+            Контрагенты ({counterparties.length})
+          </button>
+          <button
+            onClick={() => setActiveSubTab('managers')}
+            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors whitespace-nowrap ${
+              activeSubTab === 'managers'
+                ? 'border-brand-600 text-brand-700'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Users className="h-3.5 w-3.5" />
+            Менеджеры ({managers.length})
+          </button>
+          <button
+            onClick={() => setActiveSubTab('raw')}
+            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors whitespace-nowrap ${
+              activeSubTab === 'raw'
+                ? 'border-brand-600 text-brand-700'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <FileJson className="h-3.5 w-3.5" />
+            Сырой JSON
+          </button>
+        </div>
+
+        {activeSubTab === 'raw' && (
+          <button
+            onClick={handleCopyJson}
+            className="flex items-center gap-1 text-xs text-brand-700 hover:text-brand-800 font-medium px-2 py-1 rounded bg-brand-50"
+          >
+            {copied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+            {copied ? 'Скопировано!' : 'Копировать JSON'}
+          </button>
+        )}
+      </div>
+
+      {/* Subtab Contents */}
+      {initialLoading ? (
+        <div className="py-16 text-center">
+          <RefreshCw className="h-8 w-8 animate-spin text-brand-600 mx-auto mb-3" />
+          <p className="text-sm font-medium text-slate-600">Опрос шлюза Synergy ERP...</p>
+        </div>
+      ) : (
+        <div>
+          {/* CATALOG SUBTAB */}
+          {activeSubTab === 'catalog' && (
+            <div className="space-y-3">
+              {products.map((p: any) => {
+                const totalStock = (p.variants || []).reduce((acc: number, v: any) => {
+                  return acc + (v.warehouses || []).reduce((s: number, w: any) => s + (w.stock || 0), 0);
+                }, 0);
+
+                return (
+                  <div key={p.id} className="card p-4 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="badge font-mono text-[10px]">ID {p.id}</span>
+                        <h4 className="text-sm font-bold text-slate-900">{p.name}</h4>
+                        <span className="badge bg-slate-100 text-slate-600 text-[10px]">{p.collection}</span>
+                        <span className="text-xs text-slate-400">({p.manufacturer})</span>
+                      </div>
+                      <span className={`badge ${totalStock > 0 ? 'bg-emerald-50 text-emerald-700 font-semibold' : 'bg-slate-100 text-slate-400'}`}>
+                        Остаток: {totalStock} шт.
+                      </span>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-slate-50 text-slate-500 font-semibold">
+                            <th className="py-1.5 px-3 text-left">Размер</th>
+                            <th className="py-1.5 px-3 text-left">SKU</th>
+                            <th className="py-1.5 px-3 text-left">Базовая цена</th>
+                            <th className="py-1.5 px-3 text-left">Склады с наличием</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {(p.variants || []).map((v: any) => {
+                            const inStockWh = (v.warehouses || []).filter((w: any) => (w.stock || 0) > 0);
+                            const vStock = inStockWh.reduce((s: number, w: any) => s + w.stock, 0);
+
+                            return (
+                              <tr key={v.sku} className="hover:bg-slate-25">
+                                <td className="py-1.5 px-3 font-semibold text-slate-800">{v.size}</td>
+                                <td className="py-1.5 px-3 font-mono text-slate-500">{v.sku}</td>
+                                <td className="py-1.5 px-3 text-slate-700">${v.base_price}</td>
+                                <td className="py-1.5 px-3">
+                                  {vStock > 0 ? (
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {inStockWh.map((w: any) => (
+                                        <span key={w.city} className="badge bg-emerald-50 text-emerald-700 text-[10px]">
+                                          {w.city}: {w.stock} шт.
+                                        </span>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <span className="text-slate-300">Нет на складах</span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              })}
+              {products.length === 0 && (
+                <p className="py-8 text-center text-xs text-slate-400">Товары в ERP не найдены</p>
+              )}
+            </div>
+          )}
+
+          {/* COUNTERPARTIES SUBTAB */}
+          {activeSubTab === 'counterparties' && (
+            <div className="card overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                      <th className="py-2.5 px-3 text-left">ID</th>
+                      <th className="py-2.5 px-3 text-left">Контрагент</th>
+                      <th className="py-2.5 px-3 text-left">Город</th>
+                      <th className="py-2.5 px-3 text-left">Телефон</th>
+                      <th className="py-2.5 px-3 text-left">Региональный менеджер (РМ)</th>
+                      <th className="py-2.5 px-3 text-left">Тип цены по договору</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {counterparties.map((c: any) => {
+                      const contract = (c.contracts || [])[0];
+                      return (
+                        <tr key={c.id} className="hover:bg-slate-25">
+                          <td className="py-2 px-3 font-mono text-slate-400">#{c.id}</td>
+                          <td className="py-2 px-3 font-semibold text-slate-800">{c.name}</td>
+                          <td className="py-2 px-3 text-slate-600">{c.city || '—'}</td>
+                          <td className="py-2 px-3 text-slate-600 font-mono">{c.phone || '—'}</td>
+                          <td className="py-2 px-3">
+                            {c.regional_manager ? (
+                              <div>
+                                <span className="font-medium text-slate-800">{c.regional_manager.name}</span>
+                                {c.regional_manager.phone && (
+                                  <span className="text-[10px] text-slate-400 block">{c.regional_manager.phone}</span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-slate-300">Не привязан</span>
+                            )}
+                          </td>
+                          <td className="py-2 px-3">
+                            <span className="badge bg-brand-50 text-brand-700 font-mono text-[10px]">
+                              {contract?.price_type || 'standard'}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* MANAGERS SUBTAB */}
+          {activeSubTab === 'managers' && (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {managers.map((m: any) => (
+                <div key={m.id} className="card p-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="badge font-mono text-[10px]">ID {m.id}</span>
+                    <span className={`badge ${m.role === 'admin' ? 'bg-red-50 text-red-700' : m.role === 'rm' ? 'bg-blue-50 text-blue-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                      {m.role_title}
+                    </span>
+                  </div>
+                  <h4 className="text-sm font-bold text-slate-900">{m.name}</h4>
+                  <p className="text-xs text-slate-500 font-mono">Тел: {m.phone || 'Не указан'}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* RAW JSON SUBTAB */}
+          {activeSubTab === 'raw' && (
+            <div className="card p-4 bg-slate-900 text-slate-100 rounded-xl overflow-x-auto max-h-[500px]">
+              <pre className="text-[11px] font-mono leading-relaxed">
+                {JSON.stringify(report, null, 2)}
+              </pre>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── Main ProfilePage ─── */
 export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId) => void }) {
   const { user, profile, loading, signOut, isAdmin, isManager } = useAuth();
@@ -445,6 +857,7 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
 
   const tabs: { id: TabId; label: string; icon: typeof Package; show: boolean }[] = [
     { id: 'orders', label: 'Мои заказы', icon: Package, show: true },
+    { id: 'admin-erp', label: 'Обмен с ERP', icon: RefreshCw, show: isAdmin },
     { id: 'admin-users', label: 'Пользователи', icon: Users, show: isAdmin },
     { id: 'admin-display', label: 'Видимость', icon: Eye, show: isAdmin },
     { id: 'settings', label: 'Настройки', icon: Settings, show: true },
@@ -590,6 +1003,7 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
                 <OrdersTab onSelectOrder={setSelectedOrder} isAdmin={isAdmin} isManager={isManager} />
               )
             )}
+            {activeTab === 'admin-erp' && isAdmin && <AdminErpSyncTab />}
             {activeTab === 'admin-users' && isAdmin && <AdminUsersTab />}
             {activeTab === 'admin-display' && isAdmin && <AdminDisplaySettings />}
             {activeTab === 'settings' && (
