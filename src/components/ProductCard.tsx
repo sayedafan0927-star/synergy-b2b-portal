@@ -13,11 +13,6 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
   const { getMinPricePerSqm } = useUserPricing();
   const pricePerSqm = getMinPricePerSqm(product);
 
-  const totalStock = product.variants.reduce(
-    (sum, v) => sum + v.warehouses.reduce((s, w) => s + w.stock, 0),
-    0,
-  );
-
   return (
     <button
       onClick={() => onNavigate('product', product.id)}
@@ -38,13 +33,7 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
         </h3>
         <p className="mt-1 text-xs text-slate-400">{product.collection}</p>
 
-        <div className="mt-2 flex items-center gap-2 text-xs">
-          <span className="text-slate-400">{product.manufacturer}</span>
-          <span className="text-slate-300">·</span>
-          <span className={`font-semibold ${totalStock > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
-            {totalStock} шт.
-          </span>
-        </div>
+        <p className="mt-2 text-xs text-slate-400">{product.manufacturer}</p>
 
         <div className="mt-2 pt-2 border-t border-slate-50">
           {user ? (

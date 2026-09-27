@@ -560,13 +560,13 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
           </div>
 
           {/* Mobile tab bar */}
-          <div className="lg:hidden -mx-4 px-4 overflow-x-auto no-scrollbar">
-            <div className="flex gap-2 min-w-max pb-2">
+          <div className="lg:hidden">
+            <div className="grid grid-cols-2 gap-2">
               {tabs.filter(t => t.show).map(({ id, label, icon: Icon }) => (
                 <button
                   key={id}
                   onClick={() => { setActiveTab(id); setSelectedOrder(null); }}
-                  className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors ${
+                  className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors ${
                     activeTab === id ? 'bg-brand-700 text-white' : 'bg-white border border-slate-200 text-slate-600'
                   }`}
                 >
@@ -574,7 +574,7 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
                   {label}
                 </button>
               ))}
-              <button onClick={handleSignOut} className="flex items-center gap-2 rounded-lg border border-red-200 px-4 py-2.5 text-sm font-medium text-red-500 whitespace-nowrap">
+              <button onClick={handleSignOut} className="flex items-center gap-2 rounded-lg border border-red-200 px-4 py-2.5 text-sm font-medium text-red-500 transition-colors">
                 <LogOut className="h-4 w-4" />
                 Выйти
               </button>
