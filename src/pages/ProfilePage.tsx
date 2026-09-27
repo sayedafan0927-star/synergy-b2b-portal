@@ -1657,108 +1657,112 @@ function OrdersTab({
         console.warn('[OrdersTab] ERP orders fallback:', erpErr);
       }
 
-      // 2. Резервный источник: Supabase
-      let query = supabase
-        .from('orders')
-        .select(`
-          id,
-          order_number,
-          user_id,
-          placed_by_id,
-          status,
-          warehouse,
-          notes,
-          total_amount,
-          total_sqm,
-          total_items,
-          created_at,
-          updated_at,
-          order_items (
+      // 2. Резервный источник: Supabase (если база данных доступна)
+      try {
+        let query = supabase
+          .from('orders')
+          .select(`
             id,
-            product_id,
-            product_name,
-            collection,
-            size,
-            sku,
+            order_number,
+            user_id,
+            placed_by_id,
+            status,
             warehouse,
-            price,
-            quantity
-          )
-        `)
-        .order('created_at', { ascending: false });
+            notes,
+            total_amount,
+            total_sqm,
+            total_items,
+            created_at,
+            updated_at,
+            order_items (
+              id,
+              product_id,
+              product_name,
+              collection,
+              size,
+              sku,
+              warehouse,
+              price,
+              quantity
+            )
+          `)
+          .order('created_at', { ascending: false });
 
-      if (!isAdmin && !isManager && user) {
-        query = query.eq('user_id', user.id);
-      }
-
-      const { data, error } = await query;
-      if (error) {
-        setOrders([]);
-        setLoading(false);
-        return;
-      }
-
-      if (data) {
-        const uids = Array.from(new Set(data.map((o: any) => o.user_id).filter(Boolean)));
-        let profileMap: Record<string, { full_name: string; company_name: string; phone: string }> = {};
-
-        if (uids.length > 0) {
-          const { data: profs } = await supabase
-            .from('profiles')
-            .select('id, full_name, company_name, phone')
-            .in('id', uids);
-
-          if (profs) {
-            for (const p of profs) {
-              profileMap[p.id] = p;
-            }
-          }
+        if (!isAdmin && !isManager && user) {
+          query = query.eq('user_id', user.id);
         }
 
-        const mapped: Order[] = data.map((o: any) => {
-          const prof = profileMap[o.user_id];
-          const st = o.status || 'pending';
-          const meta = ORDER_STATUS_MAP[st] || { label: st, color: 'bg-slate-100 text-slate-600 border-slate-200' };
+        const { data, error } = await query;
+        if (error) {
+          setOrders([]);
+          setLoading(false);
+          return;
+        }
 
-          const items: OrderItem[] = (o.order_items || []).map((it: any) => ({
-            id: it.id,
-            productName: it.product_name || 'Товар',
-            collection: it.collection || 'Коллекция',
-            size: it.size || '',
-            warehouse: it.warehouse || o.warehouse || '',
-            price: Number(it.price) || 0,
-            quantity: Number(it.quantity) || 1,
-          }));
+        if (data) {
+          const uids = Array.from(new Set(data.map((o: any) => o.user_id).filter(Boolean)));
+          let profileMap: Record<string, { full_name: string; company_name: string; phone: string }> = {};
 
-          const d = o.created_at ? new Date(o.created_at) : new Date();
-          const dateStr = d.toLocaleDateString('ru-RU', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-          }) + ' ' + d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+          if (uids.length > 0) {
+            const { data: profs } = await supabase
+              .from('profiles')
+              .select('id, full_name, company_name, phone')
+              .in('id', uids);
 
-          return {
-            id: o.id,
-            orderNumber: o.order_number || o.id.slice(0, 8),
-            userId: o.user_id,
-            placedById: o.placed_by_id,
-            date: dateStr,
-            status: meta.label,
-            statusRaw: st,
-            statusColor: meta.color,
-            warehouse: o.warehouse || 'Главный склад',
-            notes: o.notes || '',
-            clientName: prof?.full_name || '',
-            clientCompany: prof?.company_name || '',
-            clientPhone: prof?.phone || '',
-            totalAmount: Number(o.total_amount) || 0,
-            totalSqm: Number(o.total_sqm) || 0,
-            totalItems: Number(o.total_items) || items.reduce((s, it) => s + it.quantity, 0),
-            items,
-          };
-        });
+            if (profs) {
+              for (const p of profs) {
+                profileMap[p.id] = p;
+              }
+            }
+          }
 
-        setOrders(mapped);
+          const mapped: Order[] = data.map((o: any) => {
+            const prof = profileMap[o.user_id];
+            const st = o.status || 'pending';
+            const meta = ORDER_STATUS_MAP[st] || { label: st, color: 'bg-slate-100 text-slate-600 border-slate-200' };
+
+            const items: OrderItem[] = (o.order_items || []).map((it: any) => ({
+              id: it.id,
+              productName: it.product_name || 'Товар',
+              collection: it.collection || 'Коллекция',
+              size: it.size || '',
+              warehouse: it.warehouse || o.warehouse || '',
+              price: Number(it.price) || 0,
+              quantity: Number(it.quantity) || 1,
+            }));
+
+            const d = o.created_at ? new Date(o.created_at) : new Date();
+            const dateStr = d.toLocaleDateString('ru-RU', {
+              day: '2-digit',
+              month: '2-digit',
+              year: 'numeric',
+            }) + ' ' + d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+
+            return {
+              id: o.id,
+              orderNumber: o.order_number || o.id.slice(0, 8),
+              userId: o.user_id,
+              placedById: o.placed_by_id,
+              date: dateStr,
+              status: meta.label,
+              statusRaw: st,
+              statusColor: meta.color,
+              warehouse: o.warehouse || 'Главный склад',
+              notes: o.notes || '',
+              clientName: prof?.full_name || '',
+              clientCompany: prof?.company_name || '',
+              clientPhone: prof?.phone || '',
+              totalAmount: Number(o.total_amount) || 0,
+              totalSqm: Number(o.total_sqm) || 0,
+              totalItems: Number(o.total_items) || items.reduce((s, it) => s + it.quantity, 0),
+              items,
+            };
+          });
+
+          setOrders(mapped);
+        }
+      } catch (sbErr) {
+        console.warn('[OrdersTab] Supabase fallback bypassed (offline or paused):', sbErr);
       }
 
       // 2. Загрузка живых заказов напрямую из Synergy ERP (1C / WMS)
