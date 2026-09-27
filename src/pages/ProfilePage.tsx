@@ -34,7 +34,7 @@ import type { PageId } from '@/types';
 import { calcSqm, parseSizeDimensions } from '@/types';
 import { useAuth, type UserRole } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { syncAllErpData, type ErpSyncReport, ERP_API_URL, fetchClientDebtFromErp, type ClientDebtReport } from '@/lib/erpApi';
+import { syncAllErpData, type ErpSyncReport, ERP_API_URL, fetchClientDebtFromErp, type ClientDebtReport, fetchClientOrdersFromErp } from '@/lib/erpApi';
 import { triggerCatalogReload } from '@/hooks/useProductData';
 import { triggerDisplaySettingsReload } from '@/hooks/useDisplaySettings';
 
@@ -1345,6 +1345,55 @@ function OrdersTab({
         });
 
         setOrders(mapped);
+      }
+
+      // 2. Загрузка живых заказов напрямую из Synergy ERP (1C / WMS)
+      try {
+        const erpPhone = user?.phone || user?.user_metadata?.phone || '';
+        const erpRes = await fetchClientOrdersFromErp({ phone: erpPhone, limit: 100 });
+        if (erpRes?.success && Array.isArray(erpRes.orders) && erpRes.orders.length > 0) {
+          const erpOrdersMapped: Order[] = erpRes.orders.map(eo => {
+            const st = eo.status_code || 'pending';
+            const meta = ORDER_STATUS_MAP[st] || { label: eo.status || st, color: 'bg-slate-100 text-slate-600 border-slate-200' };
+            const items: OrderItem[] = (eo.items || []).map((it, idx) => ({
+              id: String(it.id || idx),
+              productName: it.name || 'Ковер',
+              collection: it.name.split(' ')[0] || 'Коллекция',
+              size: it.size || '',
+              warehouse: eo.warehouse_name || '',
+              price: Number(it.price) || 0,
+              quantity: Number(it.quantity) || 1,
+            }));
+
+            return {
+              id: String(eo.id),
+              orderNumber: eo.doc_number || `ORD-${eo.id}`,
+              userId: user?.id || '',
+              date: eo.date || '',
+              status: eo.status || meta.label,
+              statusRaw: st,
+              statusColor: meta.color,
+              warehouse: eo.warehouse_name || 'Центральный склад',
+              notes: eo.comment || '',
+              clientName: eo.client_name || user?.name || '',
+              clientCompany: eo.client_name || user?.company_name || '',
+              clientPhone: eo.client_phone || erpPhone,
+              totalAmount: Number(eo.total_amount) || 0,
+              totalSqm: Number(eo.total_sqm) || 0,
+              totalItems: Number(eo.items_count) || items.length,
+              items
+            };
+          });
+
+          setOrders(prev => {
+            // Объединяем, исключая дубликаты по номеру заказа
+            const existingNums = new Set(prev.map(p => p.orderNumber));
+            const newFromErp = erpOrdersMapped.filter(eo => !existingNums.has(eo.orderNumber));
+            return [...newFromErp, ...prev];
+          });
+        }
+      } catch (erpErr) {
+        console.warn('[OrdersTab] ERP orders fetch warning:', erpErr);
       }
     } catch (e) {
       console.error('[OrdersTab] Unexpected error:', e);

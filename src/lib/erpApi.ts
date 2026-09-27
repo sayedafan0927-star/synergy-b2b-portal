@@ -336,3 +336,73 @@ export async function fetchSyncBundleFromErp() {
   return await response.json();
 }
 
+export interface ErpOrderItem {
+  id: number;
+  item_id: number;
+  name: string;
+  sku: string;
+  size: string;
+  width: number;
+  length: number;
+  area_sqm: number;
+  total_sqm: number;
+  quantity: number;
+  price: number;
+  price_per_sqm: number;
+  total: number;
+  image: string;
+}
+
+export interface ErpClientOrder {
+  id: number;
+  doc_number: string;
+  date: string;
+  client_id: number;
+  client_name: string;
+  client_phone: string;
+  warehouse_id: number;
+  warehouse_name: string;
+  total_amount: number;
+  total_sqm: number;
+  currency: string;
+  is_posted: boolean;
+  status_code: 'pending' | 'reserved' | 'picking' | 'shipped' | 'delivered' | 'cancelled';
+  status: string;
+  comment: string;
+  items_count: number;
+  items: ErpOrderItem[];
+}
+
+export interface ErpOrdersResponse {
+  success: boolean;
+  count: number;
+  orders: ErpClientOrder[];
+  error?: string;
+}
+
+/**
+ * Получение истории заказов клиента из Synergy ERP (1C / WMS).
+ */
+export async function fetchClientOrdersFromErp(params: { phone?: string; clientId?: number; status?: string; limit?: number } = {}): Promise<ErpOrdersResponse> {
+  const q = new URLSearchParams();
+  q.set('portal_key', ERP_API_KEY);
+  if (params.phone) q.set('phone', params.phone);
+  if (params.clientId) q.set('client_id', String(params.clientId));
+  if (params.status) q.set('status', params.status);
+  if (params.limit) q.set('limit', String(params.limit));
+
+  const response = await fetch(`${ERP_API_URL}?action=orders&${q.toString()}`, {
+    method: 'GET',
+    headers: {
+      'X-Portal-Key': ERP_API_KEY,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Ошибка загрузки заказов (${response.status})`);
+  }
+
+  return await response.json();
+}
+
+
