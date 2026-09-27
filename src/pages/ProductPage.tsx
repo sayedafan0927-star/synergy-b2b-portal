@@ -175,33 +175,8 @@ export default function ProductPage({
     };
   }, [lightboxOpen, prevImage, nextImage]);
 
-  if (loading) {
-    return (
-      <div className="pt-20 pb-24 lg:pb-8 min-h-screen flex items-center justify-center bg-slate-50">
-        <Loader2 className="h-8 w-8 animate-spin text-brand-700" />
-      </div>
-    );
-  }
-
-  if (!product) {
-    return (
-      <div className="pt-20 pb-24 lg:pb-8 min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="text-center max-w-md mx-auto px-4">
-          <PackageSearch className="mx-auto h-16 w-16 text-slate-300 mb-4" />
-          <h1 className="font-display text-2xl font-bold text-slate-900 mb-2">Товар не найден</h1>
-          <p className="text-slate-500 mb-6">Запрашиваемый товар не существует или был удалён из каталога.</p>
-          <button onClick={() => onNavigate('catalog')} className="btn-primary inline-flex items-center gap-2">
-            <ArrowLeft className="h-4 w-4" />
-            Вернуться в каталог
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  const mainPricePerSqm = pricing.getMinPricePerSqm(product);
-
   useEffect(() => {
+    if (!product) return;
     const minPrice = product.variants.reduce((min, v) => Math.min(min, v.base_price), Infinity);
     const maxPrice = product.variants.reduce((max, v) => Math.max(max, v.base_price), 0);
     const inStock = product.variants.some(v => v.warehouses.some(w => w.stock > 0));
@@ -234,6 +209,32 @@ export default function ProductPage({
     document.head.appendChild(script);
     return () => { document.getElementById('product-jsonld')?.remove(); };
   }, [product]);
+
+  if (loading) {
+    return (
+      <div className="pt-20 pb-24 lg:pb-8 min-h-screen flex items-center justify-center bg-slate-50">
+        <Loader2 className="h-8 w-8 animate-spin text-brand-700" />
+      </div>
+    );
+  }
+
+  if (!product) {
+    return (
+      <div className="pt-20 pb-24 lg:pb-8 min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center max-w-md mx-auto px-4">
+          <PackageSearch className="mx-auto h-16 w-16 text-slate-300 mb-4" />
+          <h1 className="font-display text-2xl font-bold text-slate-900 mb-2">Товар не найден</h1>
+          <p className="text-slate-500 mb-6">Запрашиваемый товар не существует или был удалён из каталога.</p>
+          <button onClick={() => onNavigate('catalog')} className="btn-primary inline-flex items-center gap-2">
+            <ArrowLeft className="h-4 w-4" />
+            Вернуться в каталог
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const mainPricePerSqm = pricing.getMinPricePerSqm(product);
 
   const specs = [
     { label: 'Материал', value: product.material },
@@ -309,7 +310,7 @@ export default function ProductPage({
         <nav className="flex items-center gap-1.5 text-sm text-slate-400 mb-6 flex-wrap">
           <button onClick={() => onNavigate('catalog')} className="hover:text-brand-600 transition-colors">Каталог</button>
           <ChevronRight className="h-3.5 w-3.5 shrink-0" />
-          <span className="text-slate-500">{product.collection}</span>
+          <button onClick={() => onNavigate('catalog', product.collection)} className="hover:text-brand-600 transition-colors">{product.collection}</button>
           <ChevronRight className="h-3.5 w-3.5 shrink-0" />
           <span className="text-slate-600 font-medium truncate">{product.name}</span>
         </nav>
@@ -365,7 +366,7 @@ export default function ProductPage({
             <h1 className="font-display text-2xl xl:text-3xl font-bold text-slate-900 mb-3">{product.name}</h1>
 
             <div className="flex flex-wrap gap-2 mb-5">
-              <span className="badge bg-brand-50 text-brand-700">{product.collection}</span>
+              <button onClick={() => onNavigate('catalog', product.collection)} className="badge bg-brand-50 text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer">{product.collection}</button>
               <span className="badge bg-slate-100 text-slate-600">{product.manufacturer}</span>
             </div>
 
@@ -447,9 +448,9 @@ export default function ProductPage({
                           </td>
                           <td className="py-3 pr-3 text-sm text-slate-600 whitespace-nowrap">{wh.city}</td>
                           <td className="py-3 pr-3">
-                            <span className="flex items-center gap-1.5 text-xs text-slate-500">
+                            <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${wh.stock > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
                               <span className={`inline-block h-1.5 w-1.5 rounded-full ${wh.stock > 0 ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-                              {wh.stock}&nbsp;шт.
+                              {wh.stock} шт.
                             </span>
                           </td>
                           {user && (
@@ -536,7 +537,7 @@ export default function ProductPage({
           </div>
 
           <div className="flex flex-wrap gap-2 mb-5">
-            <span className="badge bg-brand-50 text-brand-700">{product.collection}</span>
+            <button onClick={() => onNavigate('catalog', product.collection)} className="badge bg-brand-50 text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer">{product.collection}</button>
             <span className="badge bg-slate-100 text-slate-600">{product.manufacturer}</span>
           </div>
 
@@ -569,9 +570,13 @@ export default function ProductPage({
                         <div key={key} className="border-t border-slate-100 pt-3 first:border-0 first:pt-0">
                           <div className="flex items-center justify-between mb-2">
                             <span className="text-sm text-slate-700 font-medium">{wh.city}</span>
-                            <span className="flex items-center gap-1.5 text-xs text-slate-500">
-                              <span className={`inline-block h-1.5 w-1.5 rounded-full ${wh.stock > 0 ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-                              {wh.stock}&nbsp;шт.
+                            <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${wh.stock > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
+                              {wh.stock > 0 ? (
+                                <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                              ) : (
+                                <span className="inline-block h-1.5 w-1.5 rounded-full bg-slate-300" />
+                              )}
+                              {wh.stock} шт.
                             </span>
                           </div>
                           <div className="flex items-center gap-3">
@@ -616,30 +621,40 @@ export default function ProductPage({
 
       {/* LIGHTBOX */}
       {lightboxOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm" onClick={() => setLightboxOpen(false)}>
-          <button className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors z-10">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Просмотр изображения ${selectedImage + 1} из ${imageCount}`}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm"
+          onClick={() => setLightboxOpen(false)}
+        >
+          <button
+            aria-label="Закрыть"
+            autoFocus
+            className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors z-10"
+          >
             <X className="h-6 w-6" />
           </button>
           {imageCount > 1 && (
             <>
-              <button onClick={e => { e.stopPropagation(); prevImage(); }} className="absolute left-4 top-1/2 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors z-10">
+              <button onClick={e => { e.stopPropagation(); prevImage(); }} aria-label="Предыдущее изображение" className="absolute left-4 top-1/2 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors z-10">
                 <ChevronLeft className="h-7 w-7" />
               </button>
-              <button onClick={e => { e.stopPropagation(); nextImage(); }} className="absolute right-4 top-1/2 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors z-10">
+              <button onClick={e => { e.stopPropagation(); nextImage(); }} aria-label="Следующее изображение" className="absolute right-4 top-1/2 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors z-10">
                 <ChevronRight className="h-7 w-7" />
               </button>
             </>
           )}
           <img
             src={product.images[selectedImage]}
-            alt={product.name}
+            alt={`${product.name} — фото ${selectedImage + 1}`}
             className="max-h-[85vh] max-w-[90vw] object-contain rounded-lg shadow-2xl"
             onClick={e => e.stopPropagation()}
           />
           {imageCount > 1 && (
             <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2">
               {product.images.map((_, idx) => (
-                <button key={idx} onClick={e => { e.stopPropagation(); setSelectedImage(idx); }} className={`h-2.5 w-2.5 rounded-full transition-all ${idx === selectedImage ? 'bg-white scale-125' : 'bg-white/40 hover:bg-white/60'}`} />
+                <button key={idx} onClick={e => { e.stopPropagation(); setSelectedImage(idx); }} aria-label={`Изображение ${idx + 1}`} aria-current={idx === selectedImage} className={`h-2.5 w-2.5 rounded-full transition-all ${idx === selectedImage ? 'bg-white scale-125' : 'bg-white/40 hover:bg-white/60'}`} />
               ))}
             </div>
           )}

@@ -26,7 +26,7 @@ export default function MobileNav({ currentPage, onNavigate }: MobileNavProps) {
             <button
               key={page}
               onClick={() => onNavigate(page)}
-              className={`flex flex-1 flex-col items-center justify-center gap-0.5 transition-colors ${
+              className={`relative flex flex-1 flex-col items-center justify-center gap-0.5 transition-colors ${
                 active ? 'text-brand-700' : 'text-slate-400'
               }`}
             >

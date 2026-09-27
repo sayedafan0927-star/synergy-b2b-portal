@@ -58,7 +58,13 @@ function FilterSection({ title, defaultOpen = true, children }: { title: string;
 
 function CheckItem({ label, checked, onToggle }: { label: string; checked: boolean; onToggle: () => void }) {
   return (
-    <label className="flex items-center gap-2.5 cursor-pointer py-1 group">
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
+      onClick={onToggle}
+      className="flex w-full items-center gap-2.5 cursor-pointer py-1.5 text-left group"
+    >
       <span className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded border transition-colors ${checked ? 'border-brand-600 bg-brand-600' : 'border-slate-300 bg-white group-hover:border-slate-400'}`}>
         {checked && (
           <svg className="h-3 w-3 text-white" viewBox="0 0 12 12" fill="none">
@@ -67,7 +73,7 @@ function CheckItem({ label, checked, onToggle }: { label: string; checked: boole
         )}
       </span>
       <span className="text-sm text-slate-600">{label}</span>
-    </label>
+    </button>
   );
 }
 
@@ -95,6 +101,15 @@ function FilterDrawer(props: FilterDrawerProps) {
     allCollections, allManufacturers, allCountries, allWarehouses, allSizes,
   } = props;
 
+  const rugSizes = useMemo(() => allSizes.filter(s => {
+    const { w, h } = parseSizeDimensions(s);
+    return Math.max(w, h) / Math.min(w, h) < 2.5;
+  }), [allSizes]);
+  const runnerSizes = useMemo(() => allSizes.filter(s => {
+    const { w, h } = parseSizeDimensions(s);
+    return Math.max(w, h) / Math.min(w, h) >= 2.5;
+  }), [allSizes]);
+
   useEffect(() => {
     document.body.style.overflow = open ? 'hidden' : '';
     return () => { document.body.style.overflow = ''; };
@@ -114,7 +129,7 @@ function FilterDrawer(props: FilterDrawerProps) {
             <X className="h-5 w-5" />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto px-5 no-scrollbar">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 no-scrollbar">
           <div className="py-4 border-b border-slate-100">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
@@ -122,10 +137,23 @@ function FilterDrawer(props: FilterDrawerProps) {
             </div>
           </div>
           <FilterSection title="КОЛЛЕКЦИЯ">{allCollections.map(c => <CheckItem key={c} label={c} checked={selectedCollections.has(c)} onToggle={() => toggleCollection(c)} />)}</FilterSection>
+          <FilterSection title="РАЗМЕР" defaultOpen={false}>
+            {rugSizes.length > 0 && (
+              <div className="mb-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">Ковры</p>
+                {rugSizes.map(s => <CheckItem key={s} label={s} checked={selectedSizes.has(s)} onToggle={() => toggleSize(s)} />)}
+              </div>
+            )}
+            {runnerSizes.length > 0 && (
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">Дорожки</p>
+                {runnerSizes.map(s => <CheckItem key={s} label={s} checked={selectedSizes.has(s)} onToggle={() => toggleSize(s)} />)}
+              </div>
+            )}
+          </FilterSection>
           <FilterSection title="ПРОИЗВОДИТЕЛЬ">{allManufacturers.map(m => <CheckItem key={m} label={m} checked={selectedManufacturers.has(m)} onToggle={() => toggleManufacturer(m)} />)}</FilterSection>
           <FilterSection title="СТРАНА">{allCountries.map(c => <CheckItem key={c} label={c} checked={selectedCountries.has(c)} onToggle={() => toggleCountry(c)} />)}</FilterSection>
           <FilterSection title="СКЛАД">{allWarehouses.map(w => <CheckItem key={w} label={w} checked={selectedWarehouses.has(w)} onToggle={() => toggleWarehouse(w)} />)}</FilterSection>
-          <FilterSection title="РАЗМЕР" defaultOpen={false}>{allSizes.map(s => <CheckItem key={s} label={s} checked={selectedSizes.has(s)} onToggle={() => toggleSize(s)} />)}</FilterSection>
         </div>
         <div className="border-t border-slate-100 px-5 py-4 space-y-2">
           <button onClick={onClose} className="btn-primary w-full">Показать результаты</button>
@@ -339,29 +367,29 @@ function StockGridView({ filteredProducts, selectedWarehouse, onNavigate }: { fi
                               <div className="flex flex-col items-center gap-1">
                                 <span className="text-[10px] text-emerald-600 font-medium">{wh.stock}</span>
                                 <div className="flex items-center">
-                                  <button onClick={() => setQty(key, Math.max(0, qty - 1))} className="flex h-6 w-5 items-center justify-center rounded-l border border-slate-200 bg-slate-50 text-slate-400 hover:bg-slate-100">
-                                    <Minus className="h-2.5 w-2.5" />
+                                  <button onClick={() => setQty(key, Math.max(0, qty - 1))} className="flex h-8 w-7 items-center justify-center rounded-l border border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors">
+                                    <Minus className="h-3.5 w-3.5" />
                                   </button>
                                   <input
                                     type="number"
                                     value={qty}
                                     onChange={e => setQty(key, parseInt(e.target.value, 10) || 0)}
-                                    className="h-6 w-8 border-y border-slate-200 bg-white text-center text-[11px] text-slate-900 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                    className="h-8 w-10 border-y border-slate-200 bg-white text-center text-xs text-slate-900 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                   />
-                                  <button onClick={() => setQty(key, qty + 1)} className="flex h-6 w-5 items-center justify-center rounded-r border border-slate-200 bg-slate-50 text-slate-400 hover:bg-slate-100">
-                                    <Plus className="h-2.5 w-2.5" />
+                                  <button onClick={() => setQty(key, qty + 1)} className="flex h-8 w-7 items-center justify-center rounded-r border border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors">
+                                    <Plus className="h-3.5 w-3.5" />
                                   </button>
                                 </div>
                                 <button
                                   onClick={() => handleAdd(product, variant, wh)}
                                   disabled={qty < 1}
-                                  className={`flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-medium transition-all ${
+                                  className={`flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-all ${
                                     added ? 'bg-emerald-600 text-white' : qty < 1 ? 'bg-slate-100 text-slate-300 cursor-not-allowed' : 'bg-brand-700 text-white hover:bg-brand-800'
                                   }`}
                                 >
-                                  {added ? <Check className="h-2.5 w-2.5" /> : <ShoppingCart className="h-2.5 w-2.5" />}
+                                  {added ? <Check className="h-3.5 w-3.5" /> : <ShoppingCart className="h-3.5 w-3.5" />}
                                   {inCart > 0 && !added && (
-                                    <span className="bg-white/30 rounded-full px-1 text-[8px]">{inCart}</span>
+                                    <span className="bg-white/30 rounded-full px-1 text-[10px]">{inCart}</span>
                                   )}
                                 </button>
                               </div>
@@ -383,7 +411,7 @@ function StockGridView({ filteredProducts, selectedWarehouse, onNavigate }: { fi
 
 /* ── Main CatalogPage ── */
 
-export default function CatalogPage({ onNavigate, initialCategory }: { onNavigate: (page: PageId, productId?: string) => void; initialCategory?: string }) {
+export default function CatalogPage({ onNavigate, initialCollection }: { onNavigate: (page: PageId, productId?: string) => void; initialCollection?: string }) {
   const { products, loading, error: loadError } = useProducts();
   const pricing = useUserPricing();
 
@@ -393,7 +421,7 @@ export default function CatalogPage({ onNavigate, initialCategory }: { onNavigat
   const [sortBy, setSortBy] = useState<SortOption>('popular');
   const [stockWarehouse, setStockWarehouse] = useState('');
 
-  const [selectedCollections, setSelectedCollections] = useState<Set<string>>(() => initialCategory ? new Set([initialCategory]) : new Set());
+  const [selectedCollections, setSelectedCollections] = useState<Set<string>>(() => initialCollection ? new Set([initialCollection]) : new Set());
   const [selectedManufacturers, setSelectedManufacturers] = useState<Set<string>>(new Set());
   const [selectedCountries, setSelectedCountries] = useState<Set<string>>(new Set());
   const [selectedWarehouses, setSelectedWarehouses] = useState<Set<string>>(new Set());
@@ -448,8 +476,29 @@ export default function CatalogPage({ onNavigate, initialCategory }: { onNavigat
 
   if (loading) {
     return (
-      <section className="min-h-screen bg-slate-50 pt-20 pb-24 lg:pb-8 flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-brand-700" />
+      <section className="min-h-screen bg-slate-50 pt-20 pb-24 lg:pb-8">
+        <div className="container-w">
+          <div className="mb-8">
+            <div className="skeleton h-8 w-64 mb-3" />
+            <div className="skeleton h-4 w-96 max-w-full" />
+          </div>
+          <div className="mb-6 flex gap-3">
+            <div className="skeleton h-11 w-28" />
+            <div className="skeleton h-11 w-40" />
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 lg:gap-6">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="card overflow-hidden">
+                <div className="skeleton aspect-[4/3] rounded-none" />
+                <div className="p-3 sm:p-4 space-y-2">
+                  <div className="skeleton h-3 w-full" />
+                  <div className="skeleton h-3 w-2/3" />
+                  <div className="skeleton h-4 w-20 mt-2" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </section>
     );
   }
@@ -461,8 +510,9 @@ export default function CatalogPage({ onNavigate, initialCategory }: { onNavigat
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50 mb-5 mx-auto">
             <X className="h-7 w-7 text-red-500" />
           </div>
-          <h3 className="text-lg font-semibold text-slate-800 mb-2">Ошибка загрузки каталога</h3>
-          <p className="text-sm text-slate-500">{loadError}</p>
+          <h3 className="text-lg font-semibold text-slate-800 mb-2">Не удалось загрузить каталог</h3>
+          <p className="text-sm text-slate-500 mb-5">Проверьте подключение к интернету и попробуйте снова</p>
+          <button onClick={() => window.location.reload()} className="btn-primary">Повторить</button>
         </div>
       </section>
     );
@@ -474,6 +524,14 @@ export default function CatalogPage({ onNavigate, initialCategory }: { onNavigat
         <div className="mb-8">
           <h1 className="section-heading">Каталог продукции</h1>
           <p className="section-subheading">Широкий ассортимент ковров и дорожек оптом от ведущих производителей</p>
+          {selectedCollections.size === 1 && (
+            <div className="mt-3 inline-flex items-center gap-2 rounded-lg bg-brand-50 px-3 py-1.5">
+              <span className="text-sm font-medium text-brand-700">Коллекция: {[...selectedCollections][0]}</span>
+              <button onClick={() => setSelectedCollections(new Set())} className="text-brand-400 hover:text-brand-600">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Toolbar */}
@@ -484,9 +542,9 @@ export default function CatalogPage({ onNavigate, initialCategory }: { onNavigat
               <span>Фильтр</span>
               {activeFilterCount > 0 && <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-700 px-1 text-[10px] font-bold text-white">{activeFilterCount}</span>}
             </button>
-            <div className="relative hidden sm:block flex-1 max-w-md">
+            <div className="relative flex-1 max-w-md">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-              <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Поиск по каталогу..." className="input-field pl-10 text-sm" />
+              <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Поиск..." className="input-field pl-10 text-sm" />
             </div>
           </div>
 

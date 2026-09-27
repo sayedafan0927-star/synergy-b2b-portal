@@ -466,7 +466,7 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
         </div>
 
         <div className="grid gap-8 lg:grid-cols-[280px,1fr]">
-          {/* Sidebar */}
+          {/* Sidebar (desktop) / compact profile (mobile) */}
           <div className="space-y-4">
             <div className="card p-6">
               <div className="flex items-center gap-3 mb-2">
@@ -492,7 +492,8 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
                 </div>
               )}
 
-              <nav className="space-y-1">
+              {/* Desktop nav */}
+              <nav className="hidden lg:space-y-1">
                 {tabs.filter(t => t.show).map(({ id, label, icon: Icon }) => (
                   <button
                     key={id}
@@ -508,7 +509,7 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
                 ))}
               </nav>
 
-              <div className="mt-6 border-t border-slate-100 pt-4">
+              <div className="hidden lg:block mt-6 border-t border-slate-100 pt-4">
                 <button onClick={handleSignOut} className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors">
                   <LogOut className="h-4 w-4" />
                   Выйти
@@ -555,6 +556,28 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
                 </div>
                 <p className="text-[10px] text-slate-400 text-center">Данные из ERP будут подключены</p>
               </div>
+            </div>
+          </div>
+
+          {/* Mobile tab bar */}
+          <div className="lg:hidden">
+            <div className="grid grid-cols-2 gap-2">
+              {tabs.filter(t => t.show).map(({ id, label, icon: Icon }) => (
+                <button
+                  key={id}
+                  onClick={() => { setActiveTab(id); setSelectedOrder(null); }}
+                  className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors ${
+                    activeTab === id ? 'bg-brand-700 text-white' : 'bg-white border border-slate-200 text-slate-600'
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                  {label}
+                </button>
+              ))}
+              <button onClick={handleSignOut} className="flex items-center gap-2 rounded-lg border border-red-200 px-4 py-2.5 text-sm font-medium text-red-500 transition-colors">
+                <LogOut className="h-4 w-4" />
+                Выйти
+              </button>
             </div>
           </div>
 

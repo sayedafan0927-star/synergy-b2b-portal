@@ -13,13 +13,71 @@ import LoginPage from '@/pages/LoginPage';
 import ProfilePage from '@/pages/ProfilePage';
 import type { PageId } from '@/types';
 
+function Preloader({ onFinished }: { onFinished: () => void }) {
+  const [phase, setPhase] = useState<'logo' | 'expand' | 'done'>('logo');
+
+  useEffect(() => {
+    const t1 = setTimeout(() => setPhase('expand'), 1800);
+    const t2 = setTimeout(() => {
+      setPhase('done');
+      onFinished();
+    }, 2600);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [onFinished]);
+
+  return (
+    <div
+      className={`fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900 transition-opacity duration-500 ${
+        phase === 'done' ? 'opacity-0 pointer-events-none' : 'opacity-100'
+      }`}
+    >
+      {/* Radial glow behind logo */}
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div
+          className={`w-80 h-80 rounded-full bg-brand-600/20 blur-3xl transition-all duration-1000 ${
+            phase === 'logo' ? 'scale-100 opacity-100' : 'scale-150 opacity-0'
+          }`}
+        />
+      </div>
+
+      {/* Logo container */}
+      <div
+        className={`relative flex flex-col items-center gap-6 transition-all duration-700 ease-out ${
+          phase === 'expand' ? 'scale-110 opacity-0 translate-y-[-20px]' : 'scale-100 opacity-100 translate-y-0'
+        }`}
+      >
+        <img
+          src="/Вектор_Синэнергия.png"
+          alt="Synergiya Group"
+          className="h-32 sm:h-40 w-auto drop-shadow-2xl animate-preloader-logo brightness-0 invert"
+        />
+        <div className="flex items-center gap-2">
+          <div className="h-0.5 w-8 bg-brand-400 rounded-full animate-preloader-line-left" />
+          <div className="h-1 w-1 rounded-full bg-brand-400 animate-preloader-dot" />
+          <div className="h-0.5 w-8 bg-brand-400 rounded-full animate-preloader-line-right" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [page, setPage] = useState<PageId>('home');
   const [productId, setProductId] = useState<string>('');
+  const [catalogCollection, setCatalogCollection] = useState<string | undefined>(undefined);
+  const [preloaderDone, setPreloaderDone] = useState(false);
 
   const navigate = useCallback((target: PageId, id?: string) => {
     setPage(target);
-    if (id) setProductId(id);
+    if (target === 'catalog' && id) {
+      setCatalogCollection(id);
+    } else if (target === 'catalog') {
+      setCatalogCollection(undefined);
+    }
+    if (target !== 'product') {
+      // keep productId for product page
+    }
+    if (id && target === 'product') setProductId(id);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
@@ -36,10 +94,12 @@ export default function App() {
     document.title = titles[page];
   }, [page]);
 
+  const handlePreloaderFinished = useCallback(() => setPreloaderDone(true), []);
+
   const renderPage = () => {
     switch (page) {
       case 'home': return <HomePage onNavigate={navigate} />;
-      case 'catalog': return <CatalogPage onNavigate={navigate} />;
+      case 'catalog': return <CatalogPage key={catalogCollection ?? 'all'} onNavigate={navigate} initialCollection={catalogCollection} />;
       case 'product': return <ProductPage productId={productId} onNavigate={navigate} />;
       case 'cart': return <CartPage onNavigate={navigate} />;
       case 'contacts': return <ContactsPage onNavigate={navigate} />;
@@ -54,6 +114,7 @@ export default function App() {
   return (
     <AuthProvider>
       <CartProvider>
+        {!preloaderDone && <Preloader onFinished={handlePreloaderFinished} />}
         <div className="flex min-h-screen flex-col">
           <Header currentPage={page} onNavigate={navigate} />
           <main className="flex-1">{renderPage()}</main>

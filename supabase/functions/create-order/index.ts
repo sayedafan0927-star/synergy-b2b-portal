@@ -18,7 +18,15 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const body = await req.json();
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ error: "Invalid JSON body" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
 
     const erpResponse = await fetch(
       "https://kilem-khan.kz/api/sin/api_portal.php?action=create_order",
@@ -34,10 +42,20 @@ Deno.serve(async (req: Request) => {
       },
     );
 
-    const erpData = await erpResponse.json();
+    const rawText = await erpResponse.text();
+
+    let erpData: unknown;
+    try {
+      erpData = JSON.parse(rawText);
+    } catch {
+      return new Response(
+        JSON.stringify({ error: "ERP returned invalid response", raw: rawText.slice(0, 500) }),
+        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
 
     return new Response(JSON.stringify(erpData), {
-      status: erpResponse.status,
+      status: erpResponse.ok ? 200 : erpResponse.status,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
