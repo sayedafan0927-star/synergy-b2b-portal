@@ -57,10 +57,40 @@ function assembleProducts(
     variantsByProduct.set(v.product_id, arr);
   }
 
-  return dbProducts.map(p => ({
+  const assembled = dbProducts.map(p => ({
     ...p,
     variants: variantsByProduct.get(p.id) ?? [],
   }));
+
+  return mergeProducts(assembled);
+}
+
+/**
+ * Объединяет товары с одинаковым артикулом (collection + name) в одну карточку.
+ * Все размерные варианты из разных записей сливаются в один список variants,
+ * дубликаты размеров устраняются (оставляется первый с остатком).
+ */
+function mergeProducts(products: Product[]): Product[] {
+  const map = new Map<string, Product>();
+  for (const p of products) {
+    const key = `${p.collection}::${p.name}`;
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, { ...p, variants: [...p.variants] });
+      continue;
+    }
+    const seenSizes = new Set(existing.variants.map(v => v.size));
+    for (const v of p.variants) {
+      if (!seenSizes.has(v.size)) {
+        existing.variants.push(v);
+        seenSizes.add(v.size);
+      }
+    }
+    if (existing.images.length === 0 && p.images.length > 0) {
+      existing.images = p.images;
+    }
+  }
+  return Array.from(map.values());
 }
 
 export function triggerCatalogReload() {
@@ -93,7 +123,7 @@ export function useProducts() {
         try {
           const erpData = await fetchCatalogFromErp();
           if (!cancelled && erpData && erpData.success && Array.isArray(erpData.products) && erpData.products.length > 0) {
-            setProducts(erpData.products);
+            setProducts(mergeProducts(erpData.products as Product[]));
             setLoading(false);
             return;
           }
@@ -150,7 +180,8 @@ export function useProduct(id: string | undefined) {
         try {
           const erpData = await fetchCatalogFromErp();
           if (!cancelled && erpData && erpData.success && Array.isArray(erpData.products)) {
-            const found = erpData.products.find((p: Product) => String(p.id) === String(id));
+            const merged = mergeProducts(erpData.products as Product[]);
+            const found = merged.find((p: Product) => String(p.id) === String(id));
             if (found) {
               setProduct(found);
               setLoading(false);

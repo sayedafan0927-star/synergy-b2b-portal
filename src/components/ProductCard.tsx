@@ -1,7 +1,7 @@
 import type { Product, PageId } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserPricing } from '@/hooks/usePricing';
-import { Lock } from 'lucide-react';
+import { Lock, Layers } from 'lucide-react';
 
 interface ProductCardProps {
   product: Product;
@@ -12,6 +12,7 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
   const { user } = useAuth();
   const { getMinPricePerSqm } = useUserPricing();
   const pricePerSqm = getMinPricePerSqm(product);
+  const sizeCount = product.variants.length;
 
   return (
     <button
@@ -25,6 +26,12 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
           loading="lazy"
           className="h-full w-full object-cover transition-transform duration-500 ease-apple group-hover:scale-105"
         />
+        {sizeCount > 1 && (
+          <span className="absolute top-2 right-2 flex items-center gap-1 rounded-full bg-white/90 backdrop-blur-sm px-2 py-0.5 text-[10px] font-semibold text-slate-700 shadow-sm">
+            <Layers className="h-3 w-3" />
+            {sizeCount} разм.
+          </span>
+        )}
       </div>
 
       <div className="flex flex-col p-3 sm:p-4">
