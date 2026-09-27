@@ -517,8 +517,8 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
               </div>
             </div>
 
-            {/* Balance & Debt card (desktop only) */}
-            <div className="hidden lg:block card overflow-hidden">
+            {/* Balance & Debt card */}
+            <div className="card overflow-hidden">
               <div className="bg-gradient-to-br from-slate-800 to-slate-900 px-5 py-4">
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1">Баланс</p>
                 <p className="text-2xl font-bold text-white tracking-tight">$0<span className="text-base text-slate-400">.00</span></p>

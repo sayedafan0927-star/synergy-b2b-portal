@@ -17,8 +17,6 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
     (sum, v) => sum + v.warehouses.reduce((s, w) => s + w.stock, 0),
     0,
   );
-  const sizes = [...new Set(product.variants.map(v => v.size))].slice(0, 3);
-  const sizesLabel = sizes.join(', ') + (product.variants.length > 3 ? '…' : '');
 
   return (
     <button
@@ -38,18 +36,16 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
         <h3 className="text-sm font-semibold text-slate-900 leading-snug line-clamp-2 group-hover:text-brand-700 transition-colors">
           {product.name}
         </h3>
-        <p className="mt-1 text-xs text-slate-400">{product.manufacturer}</p>
+        <p className="mt-1 text-xs text-slate-400">{product.collection}</p>
 
-        {/* Size + stock -- priority info on mobile */}
         <div className="mt-2 flex items-center gap-2 text-xs">
-          <span className="font-medium text-slate-700">{sizesLabel}</span>
+          <span className="text-slate-400">{product.manufacturer}</span>
           <span className="text-slate-300">·</span>
           <span className={`font-semibold ${totalStock > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
             {totalStock} шт.
           </span>
         </div>
 
-        {/* Price -- only once, at the bottom */}
         <div className="mt-2 pt-2 border-t border-slate-50">
           {user ? (
             <p className="text-sm font-bold text-slate-900">

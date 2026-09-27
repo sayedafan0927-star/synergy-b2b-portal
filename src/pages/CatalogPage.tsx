@@ -58,7 +58,13 @@ function FilterSection({ title, defaultOpen = true, children }: { title: string;
 
 function CheckItem({ label, checked, onToggle }: { label: string; checked: boolean; onToggle: () => void }) {
   return (
-    <label className="flex items-center gap-2.5 cursor-pointer py-1 group">
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
+      onClick={onToggle}
+      className="flex w-full items-center gap-2.5 cursor-pointer py-1.5 text-left group"
+    >
       <span className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded border transition-colors ${checked ? 'border-brand-600 bg-brand-600' : 'border-slate-300 bg-white group-hover:border-slate-400'}`}>
         {checked && (
           <svg className="h-3 w-3 text-white" viewBox="0 0 12 12" fill="none">
@@ -67,7 +73,7 @@ function CheckItem({ label, checked, onToggle }: { label: string; checked: boole
         )}
       </span>
       <span className="text-sm text-slate-600">{label}</span>
-    </label>
+    </button>
   );
 }
 
@@ -114,7 +120,7 @@ function FilterDrawer(props: FilterDrawerProps) {
             <X className="h-5 w-5" />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto px-5 no-scrollbar">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 no-scrollbar">
           <div className="py-4 border-b border-slate-100">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
