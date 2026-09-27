@@ -50,6 +50,7 @@ export default function ProductPage({
   const isHorizontalSwipe = useRef(false);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [addedKeys, setAddedKeys] = useState<Record<string, boolean>>({});
+  const [selectedVariantIndex, setSelectedVariantIndex] = useState(0);
 
 
   useEffect(() => {
@@ -62,6 +63,7 @@ export default function ProductPage({
     });
     setQuantities(init);
     setSelectedImage(0);
+    setSelectedVariantIndex(0);
     setAddedKeys({});
   }, [product]);
 
@@ -248,6 +250,7 @@ export default function ProductPage({
   const sizeRange = product.variants.length > 1
     ? `${product.variants[0].size} — ${product.variants[product.variants.length - 1].size}`
     : product.variants[0]?.size ?? '';
+  const selectedVariant = product.variants[selectedVariantIndex] ?? product.variants[0];
 
   function CartButton({ variant, wh }: { variant: ProductVariant; wh: Warehouse }) {
     const key = rowKey(variant.sku, wh.city);
@@ -400,82 +403,66 @@ export default function ProductPage({
               </div>
             </div>
 
-          </div>
-        </div>
-
-        {/* DESKTOP VARIANT TABLE */}
-        <div className="hidden lg:block mb-10">
-          <h2 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
-            <Ruler className="h-5 w-5 text-slate-400" />
-            Размеры и наличие
+        {/* DESKTOP VARIANT SELECTOR */}
+        <div className="hidden lg:block mb-6">
+          <h2 className="text-base font-bold text-slate-900 mb-3 flex items-center gap-2">
+            <Ruler className="h-4 w-4 text-slate-400" />
+            Размер
           </h2>
-          <div className="card overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-400">
-                    <th className="py-3 pl-5 pr-3 font-semibold">Размер</th>
-                    <th className="py-3 pr-3 font-semibold">Склад</th>
-                    <th className="py-3 pr-3 font-semibold">Наличие</th>
-                    {user && <th className="py-3 pr-3 font-semibold">$/м²</th>}
-                    {user && <th className="py-3 pr-3 font-semibold">Цена</th>}
-                    <th className="py-3 pr-3 font-semibold">Кол-во</th>
-                    <th className="py-3 pr-5 font-semibold sr-only">Действие</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {product.variants.map(variant => {
-                    const variantPrice = pricing.getVariantPrice(product.collection, variant.size, variant.base_price);
-                    const pricePerSqm = pricing.getPricePerSqm(product.collection, variant.size, variant.base_price);
+          <div className="flex flex-wrap gap-2 mb-5">
+            {product.variants.map((variant, index) => {
+              const variantPrice = pricing.getVariantPrice(product.collection, variant.size, variant.base_price);
+              const variantStock = variant.warehouses.reduce((s, w) => s + w.stock, 0);
+              return (
+                <button
+                  key={variant.sku}
+                  onClick={() => setSelectedVariantIndex(index)}
+                  className={`rounded-lg border px-4 py-2.5 text-sm font-semibold transition-all ${
+                    index === selectedVariantIndex
+                      ? 'border-brand-600 bg-brand-50 text-brand-700 shadow-sm'
+                      : 'border-slate-200 text-slate-700 hover:border-brand-300 hover:bg-slate-50'
+                  }`}
+                >
+                  <span>{variant.size}</span>
+                  {user && variantStock > 0 && (
+                    <span className="ml-2 text-xs font-normal text-slate-400">{fmtPrice(Math.round(variantPrice))}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
 
-                    return variant.warehouses.map((wh, whIdx) => {
-                      const key = rowKey(variant.sku, wh.city);
-                      const qty = quantities[key] ?? 0;
-                      const isFirstRow = whIdx === 0;
-
-                      return (
-                        <tr key={key} className="group hover:bg-slate-25 transition-colors">
-                          <td className={`py-3 pl-5 pr-3 text-sm font-medium text-slate-900 whitespace-nowrap ${!isFirstRow ? 'pt-1' : ''}`}>
-                            {isFirstRow ? variant.size : ''}
-                          </td>
-                          <td className="py-3 pr-3 text-sm text-slate-600 whitespace-nowrap">{wh.city}</td>
-                          <td className="py-3 pr-3">
-                            <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${wh.stock > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
-                              <span className={`inline-block h-1.5 w-1.5 rounded-full ${wh.stock > 0 ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-                              {wh.stock} шт.
-                            </span>
-                          </td>
-                          {user && (
-                            <td className="py-3 pr-3 text-sm text-slate-500 whitespace-nowrap">
-                              {pricePerSqm > 0 ? `${Math.round(pricePerSqm)}` : '—'}
-                            </td>
-                          )}
-                          {user && (
-                            <td className="py-3 pr-3 font-bold text-slate-900 whitespace-nowrap">
-                              {isFirstRow ? fmtPrice(Math.round(variantPrice)) : ''}
-                            </td>
-                          )}
-                          <td className="py-3 pr-3">
-                            <div className="inline-flex items-center">
-                              <button onClick={() => decQty(key)} className="flex h-8 w-8 items-center justify-center rounded-l-md border border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors">
-                                <Minus className="h-3.5 w-3.5" />
-                              </button>
-                              <input type="number" min={0} max={wh.stock} value={qty} onChange={e => setQty(key, parseInt(e.target.value, 10) || 0)} className="h-8 w-12 border-y border-slate-200 bg-white text-center text-sm text-slate-900 outline-none focus:border-brand-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
-                              <button onClick={() => incQty(key)} className="flex h-8 w-8 items-center justify-center rounded-r-md border border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors">
-                                <Plus className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </td>
-                          <td className="py-3 pr-5">
-                            <CartButton variant={variant} wh={wh} />
-                          </td>
-                        </tr>
-                      );
-                    });
-                  })}
-                </tbody>
-              </table>
+          {selectedVariant && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-4">
+              {selectedVariant.warehouses.map(wh => {
+                const key = rowKey(selectedVariant.sku, wh.city);
+                const qty = quantities[key] ?? 0;
+                return (
+                  <div key={key} className="flex items-center justify-between gap-3 border-b border-slate-200 py-3 last:border-0 last:pb-0 first:pt-0">
+                    <div>
+                      <p className="text-sm font-medium text-slate-800">{wh.city}</p>
+                      <p className={`text-xs ${wh.stock > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                        {wh.stock > 0 ? `${wh.stock} шт. в наличии` : 'Нет в наличии'}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="inline-flex items-center">
+                        <button onClick={() => decQty(key)} className="flex h-9 w-9 items-center justify-center rounded-l-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 transition-colors">
+                          <Minus className="h-3.5 w-3.5" />
+                        </button>
+                        <input type="number" min={0} max={wh.stock} value={qty} onChange={e => setQty(key, parseInt(e.target.value, 10) || 0)} className="h-9 w-14 border-y border-slate-200 bg-white text-center text-sm text-slate-900 outline-none focus:border-brand-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                        <button onClick={() => incQty(key)} className="flex h-9 w-9 items-center justify-center rounded-r-md border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 transition-colors">
+                          <Plus className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      <CartButton variant={selectedVariant} wh={wh} />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
+          )}
+        </div>
           </div>
         </div>
 

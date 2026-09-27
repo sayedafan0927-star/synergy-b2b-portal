@@ -120,7 +120,7 @@ export default function App() {
       // keep productId for product page
     }
     if (id && target === 'product') setProductId(id);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({ top: 0, behavior: 'auto' });
   }, []);
 
   useEffect(() => {
@@ -142,7 +142,7 @@ export default function App() {
     switch (page) {
       case 'home': return <HomePage onNavigate={navigate} />;
       case 'catalog': return <CatalogPage key={catalogCollection ?? catalogCountry ?? 'all'} onNavigate={navigate} initialCollection={catalogCollection} initialCountry={catalogCountry} />;
-      case 'product': return <ProductPage productId={productId} onNavigate={navigate} />;
+      case 'product': return <ProductPage key={productId} productId={productId} onNavigate={navigate} />;
       case 'cart': return <CartPage onNavigate={navigate} />;
       case 'contacts': return <ContactsPage onNavigate={navigate} />;
       case 'login': return <LoginPage onNavigate={navigate} />;
