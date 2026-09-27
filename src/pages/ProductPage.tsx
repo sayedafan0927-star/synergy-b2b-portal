@@ -317,7 +317,7 @@ export default function ProductPage({
         </nav>
 
         {/* DESKTOP LAYOUT */}
-        <div className="hidden lg:grid lg:grid-cols-[420px,1fr] gap-10 mb-10">
+        <div className="hidden lg:grid lg:grid-cols-[440px,1fr] xl:grid-cols-[480px,1fr] 2xl:grid-cols-[540px,1fr] gap-10 xl:gap-14 mb-10">
           {/* LEFT: Gallery */}
           <div className="flex flex-row-reverse items-start gap-3">
             <div
@@ -346,7 +346,7 @@ export default function ProductPage({
             </div>
 
             {imageCount > 1 && (
-              <div className="flex w-16 shrink-0 flex-col gap-3 max-h-[420px] overflow-y-auto pr-1">
+              <div className="flex w-16 shrink-0 flex-col gap-3 max-h-[440px] xl:max-h-[480px] 2xl:max-h-[540px] overflow-y-auto pr-1">
                 {product.images.map((img, idx) => (
                   <button
                     key={idx}

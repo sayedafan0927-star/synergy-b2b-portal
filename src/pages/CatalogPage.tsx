@@ -340,7 +340,7 @@ function StockGridView({ filteredProducts, selectedWarehouse, onNavigate }: { fi
                                 className="h-9 w-9 rounded object-cover shrink-0"
                               />
                               <div className="min-w-0">
-                                <p className="text-xs font-semibold text-slate-900 truncate max-w-[150px] hover:text-brand-700 transition-colors">{product.name}</p>
+                                <p className="text-xs font-semibold text-slate-900 truncate max-w-[180px] sm:max-w-[220px] lg:max-w-[280px] hover:text-brand-700 transition-colors">{product.name}</p>
                                 <p className="text-[10px] text-slate-400">{product.manufacturer}</p>
                                 {(settings.show_total_pcs || settings.show_sqm) && (
                                   <p className="text-[10px] text-slate-400">
@@ -674,7 +674,7 @@ export default function CatalogPage({ onNavigate, initialCollection, initialCoun
         {filteredProducts.length > 0 ? (
           viewMode === 'grid' ? (
             <>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 lg:gap-6">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5 min-[1800px]:grid-cols-6 gap-4 lg:gap-6">
                 {visibleProducts.map(p => <ProductCard key={p.id} product={p} onNavigate={onNavigate} />)}
               </div>
               {hasMore && (
