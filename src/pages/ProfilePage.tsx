@@ -473,14 +473,14 @@ function AdminUsersTab({ onNavigate }: { onNavigate: (page: PageId) => void }) {
   };
 
   const filteredUsers = useMemo(() => {
-    if (!userSearch.trim()) return users;
+    const clients = users.filter(user => user.role === 'client');
+    if (!userSearch.trim()) return clients;
     const q = userSearch.toLowerCase().trim();
-    return users.filter(u =>
-      (u.full_name || '').toLowerCase().includes(q) ||
-      (u.company_name || '').toLowerCase().includes(q) ||
-      (u.phone || '').toLowerCase().includes(q) ||
-      (u.partner_id || '').toLowerCase().includes(q) ||
-      (u.role || '').toLowerCase().includes(q)
+    return clients.filter(user =>
+      (user.full_name || '').toLowerCase().includes(q) ||
+      (user.company_name || '').toLowerCase().includes(q) ||
+      (user.phone || '').toLowerCase().includes(q) ||
+      (user.partner_id || '').toLowerCase().includes(q)
     );
   }, [users, userSearch]);
 
@@ -490,8 +490,8 @@ function AdminUsersTab({ onNavigate }: { onNavigate: (page: PageId) => void }) {
         <div className="flex items-center gap-3">
           <Users className="h-5 w-5 text-slate-500" />
           <div>
-            <h2 className="text-lg font-bold text-slate-900">Пользователи ({filteredUsers.length})</h2>
-            <p className="text-sm text-slate-500">Управление ролями, ценами и вход от имени клиента</p>
+            <h2 className="text-lg font-bold text-slate-900">Мои клиенты ({filteredUsers.length})</h2>
+            <p className="text-sm text-slate-500">Выберите клиента, чтобы открыть портал от его имени</p>
           </div>
         </div>
         <div className="relative w-full sm:w-64">
@@ -550,7 +550,7 @@ function AdminUsersTab({ onNavigate }: { onNavigate: (page: PageId) => void }) {
                 className="flex items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100 hover:border-brand-300 transition-colors disabled:opacity-40 disabled:pointer-events-none shadow-sm"
               >
                 <UserCog className="h-3.5 w-3.5" />
-                Войти как
+                Войти под клиентом
               </button>
             </div>
           </div>
@@ -1015,7 +1015,7 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
   const tabs: { id: TabId; label: string; icon: typeof Package; show: boolean }[] = [
     { id: 'orders', label: 'Мои заказы', icon: Package, show: true },
     { id: 'admin-erp', label: 'Обмен с ERP', icon: RefreshCw, show: adminAccess },
-    { id: 'admin-users', label: 'Пользователи', icon: Users, show: adminAccess },
+    { id: 'admin-users', label: 'Мои клиенты', icon: Users, show: adminAccess },
     { id: 'admin-display', label: 'Видимость', icon: Eye, show: adminAccess },
     { id: 'settings', label: 'Настройки', icon: Settings, show: true },
   ];

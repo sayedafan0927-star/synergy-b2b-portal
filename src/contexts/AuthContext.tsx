@@ -152,7 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signUp,
         signOut: signOutFn,
         refreshProfile,
-        isAdmin: role === 'admin',
+        isAdmin: realRole === 'admin',
         realIsAdmin: realRole === 'admin',
         isManager: role === 'manager_rm' || role === 'manager_lm',
         isSupplier: role === 'supplier',
