@@ -906,7 +906,7 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
               )}
 
               {/* Desktop nav */}
-              <nav className="hidden lg:space-y-1">
+              <nav className="hidden lg:block lg:space-y-1">
                 {tabs.filter(t => t.show).map(({ id, label, icon: Icon }) => (
                   <button
                     key={id}
