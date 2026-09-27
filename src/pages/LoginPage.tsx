@@ -4,7 +4,7 @@ import type { PageId } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function LoginPage({ onNavigate }: { onNavigate: (page: PageId) => void }) {
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, signInAsDemo } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
   const [showPass, setShowPass] = useState(false);
   const [form, setForm] = useState({ email: '', password: '', name: '', company: '' });
@@ -147,6 +147,35 @@ export default function LoginPage({ onNavigate }: { onNavigate: (page: PageId) =
             >
               {isLogin ? 'Нет аккаунта? Зарегистрируйтесь' : 'Уже есть аккаунт? Войти'}
             </button>
+          </div>
+
+          {/* Quick Demo Login */}
+          <div className="mt-6 pt-6 border-t border-slate-100">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 text-center mb-3">
+              Быстрый вход для тестирования портала
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  signInAsDemo('admin');
+                  onNavigate('profile');
+                }}
+                className="flex items-center justify-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50/70 px-3 py-2 text-xs font-semibold text-brand-800 hover:bg-brand-100 transition-colors"
+              >
+                <span>👑 Демо-Админ</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  signInAsDemo('client');
+                  onNavigate('profile');
+                }}
+                className="flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+              >
+                <span>🏢 Демо-Клиент</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
