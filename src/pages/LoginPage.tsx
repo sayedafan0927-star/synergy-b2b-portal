@@ -4,7 +4,7 @@ import type { PageId } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function LoginPage({ onNavigate }: { onNavigate: (page: PageId) => void }) {
-  const { signIn, signUp, signInAsDemo, signInAsClient } = useAuth();
+  const { signIn, signInWithPortal, signUp, signInAsDemo, signInAsClient, deactivationNotice, clearDeactivationNotice } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
   const [showPass, setShowPass] = useState(false);
   const [form, setForm] = useState({ email: '', password: '', name: '', company: '' });
@@ -14,11 +14,32 @@ export default function LoginPage({ onNavigate }: { onNavigate: (page: PageId) =
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    clearDeactivationNotice();
     setBusy(true);
 
-    let err: string | null;
+    let err: string | null = null;
     if (isLogin) {
-      err = await signIn(form.email, form.password);
+      const isLikelyPhoneOrLogin = !form.email.includes('@') || /^\+?[\d\s\-()]+$/.test(form.email.trim());
+      if (isLikelyPhoneOrLogin) {
+        const portalRes = await signInWithPortal(form.email, form.password);
+        if (portalRes.success) {
+          setBusy(false);
+          onNavigate('catalog');
+          return;
+        }
+        err = portalRes.error || 'Ошибка входа';
+      } else {
+        err = await signIn(form.email, form.password);
+        if (err && (err.includes('Supabase') || err.includes('Неверный') || err.includes('fetch'))) {
+          // Fallback: пробуем как логин в ERP
+          const portalRes = await signInWithPortal(form.email, form.password);
+          if (portalRes.success) {
+            setBusy(false);
+            onNavigate('catalog');
+            return;
+          }
+        }
+      }
     } else {
       if (form.password.length < 6) {
         setError('Пароль должен быть не менее 6 символов');
@@ -62,6 +83,22 @@ export default function LoginPage({ onNavigate }: { onNavigate: (page: PageId) =
             {isLogin ? 'Войдите для доступа к оптовым ценам и истории заказов' : 'Создайте аккаунт для доступа к оптовым условиям'}
           </p>
 
+          {deactivationNotice && (
+            <div className="mb-4 flex items-start justify-between gap-2 rounded-lg bg-amber-50 border border-amber-200 p-3.5 text-xs text-amber-900 shadow-xs">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 mt-0.5 shrink-0 text-amber-600" />
+                <span>{deactivationNotice}</span>
+              </div>
+              <button
+                type="button"
+                onClick={clearDeactivationNotice}
+                className="text-amber-600 hover:text-amber-800 text-xs font-semibold px-1"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
           {error && (
             <div className="mb-4 flex items-start gap-2 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
               <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
@@ -96,13 +133,15 @@ export default function LoginPage({ onNavigate }: { onNavigate: (page: PageId) =
             )}
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">Email</label>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                {isLogin ? 'Номер телефона или Email' : 'Email'}
+              </label>
               <input
-                type="email"
+                type={isLogin ? 'text' : 'email'}
                 required
                 value={form.email}
                 onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                placeholder="email@company.kz"
+                placeholder={isLogin ? '+7 (701) 123-45-67 или email' : 'email@company.kz'}
                 className="input-field"
                 disabled={busy}
               />

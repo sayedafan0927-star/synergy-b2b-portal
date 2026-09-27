@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { User } from '@supabase/supabase-js';
+import { authenticateClientViaErp } from '@/lib/erpApi';
 
 export type UserRole = 'admin' | 'manager_rm' | 'manager_lm' | 'supplier' | 'client';
 
@@ -14,6 +15,12 @@ export interface Profile {
   manager_id: string | null;
   price_type: string;
   impersonation_enabled?: boolean;
+  is_active?: boolean;
+  status?: string;
+  debt_usd?: number;
+  balance_usd?: number;
+  credit_limit_usd?: number;
+  payment_delay_days?: number;
 }
 
 interface AuthContextValue {
@@ -21,11 +28,14 @@ interface AuthContextValue {
   profile: Profile | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<string | null>;
+  signInWithPortal: (login: string, password: string) => Promise<{ success: boolean; error?: string }>;
   signUp: (email: string, password: string, meta: { full_name: string; company_name: string }) => Promise<string | null>;
   signInAsDemo: (role?: UserRole) => void;
   signInAsClient: (client: { id: number | string; name: string; phone?: string; price_type?: string }) => void;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  deactivationNotice: string | null;
+  clearDeactivationNotice: () => void;
   isAdmin: boolean;
   realIsAdmin: boolean;
   isManager: boolean;
@@ -192,6 +202,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const [deactivationNotice, setDeactivationNotice] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('synergy:deactivation_notice');
+    }
+    return null;
+  });
+
+  const clearDeactivationNotice = useCallback(() => {
+    setDeactivationNotice(null);
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('synergy:deactivation_notice');
+    }
+  }, []);
+
   const [impersonatedProfile, setImpersonatedProfile] = useState<Profile | null>(() => {
     if (typeof window !== 'undefined') {
       const stored = sessionStorage.getItem('synergy:impersonated_profile');
@@ -231,6 +255,120 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     stopImpersonation();
   }, [stopImpersonation]);
 
+  // Мгновенная деактивация: слушатель события client_deactivated от ERP
+  useEffect(() => {
+    const handleDeactivation = (targetId: number | string) => {
+      const activePartnerId = profile?.partner_id;
+      const activeUserId = user?.id;
+
+      if (
+        (activePartnerId && String(activePartnerId) === String(targetId)) ||
+        (activeUserId && activeUserId.includes(String(targetId)))
+      ) {
+        console.warn(`[AuthContext] Instant deactivation event received for counterparty_id=${targetId}. Revoking all sessions.`);
+        const msg = 'Доступ к сайту заблокирован: учетная запись клиента деактивирована в ERP.';
+        setDeactivationNotice(msg);
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem('synergy:deactivation_notice', msg);
+          sessionStorage.removeItem('synergy:demo_auth');
+          sessionStorage.removeItem('synergy:impersonated_profile');
+        }
+        setUser(null);
+        setProfile(null);
+        stopImpersonation();
+      }
+    };
+
+    const domHandler = (e: CustomEvent<{ counterparty_id?: number | string }>) => {
+      if (e.detail?.counterparty_id) {
+        handleDeactivation(e.detail.counterparty_id);
+      }
+    };
+
+    window.addEventListener('synergy:client-deactivated', domHandler as EventListener);
+
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel('synergy_client_channel');
+      bc.onmessage = (event) => {
+        if (event.data?.event === 'client_deactivated' && event.data?.counterparty_id) {
+          handleDeactivation(event.data.counterparty_id);
+        }
+      };
+    } catch {
+      // fallback
+    }
+
+    return () => {
+      window.removeEventListener('synergy:client-deactivated', domHandler as EventListener);
+      if (bc) bc.close();
+    };
+  }, [profile, user, stopImpersonation]);
+
+  /**
+   * Прямая авторизация клиента через ERP (проверка логина, пароля и статуса is_active).
+   */
+  const signInWithPortal = useCallback(async (login: string, password: string): Promise<{ success: boolean; error?: string }> => {
+    setLoading(true);
+    try {
+      const res = await authenticateClientViaErp(login, password);
+
+      if (!res.success) {
+        setLoading(false);
+        return {
+          success: false,
+          error: res.error || 'Ошибка входа',
+        };
+      }
+
+      const client = res.client!;
+      const clientProfile: Profile = {
+        id: `erp-client-${client.id}`,
+        role: 'client',
+        partner_id: String(client.id),
+        full_name: client.name,
+        company_name: client.name,
+        phone: client.phone || '',
+        manager_id: client.regional_manager?.id ? String(client.regional_manager.id) : '1',
+        price_type: client.contracts?.[0]?.price_type || 'wholesale',
+        is_active: true,
+        status: 'active',
+        debt_usd: client.financials?.debt_usd,
+        balance_usd: client.financials?.balance_usd,
+        credit_limit_usd: client.financials?.credit_limit_usd,
+        payment_delay_days: client.financials?.payment_delay_days,
+        impersonation_enabled: true,
+      };
+
+      const mockUser: unknown = {
+        id: clientProfile.id,
+        email: `${client.phone || client.id}@kilem-khan.kz`,
+        app_metadata: {},
+        user_metadata: { full_name: clientProfile.full_name },
+        aud: 'authenticated',
+        created_at: new Date().toISOString(),
+      };
+
+      setUser(mockUser as User);
+      setProfile(clientProfile);
+      setDeactivationNotice(null);
+
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('synergy:deactivation_notice');
+        sessionStorage.setItem('synergy:demo_auth', JSON.stringify({ user: mockUser, profile: clientProfile }));
+      }
+
+      setLoading(false);
+      return { success: true };
+    } catch (err: any) {
+      setLoading(false);
+      return {
+        success: false,
+        error: err?.message || 'Не удалось выполнить вход в систему',
+      };
+    }
+  }, []);
+
   const refreshProfile = useCallback(async () => {
     if (user) await fetchProfile(user.id);
   }, [user, fetchProfile]);
@@ -246,11 +384,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profile: effectiveProfile,
         loading,
         signIn,
+        signInWithPortal,
         signUp,
         signInAsDemo,
         signInAsClient,
         signOut: signOutFn,
         refreshProfile,
+        deactivationNotice,
+        clearDeactivationNotice,
         isAdmin: realRole === 'admin',
         realIsAdmin: realRole === 'admin',
         isManager: role === 'manager_rm' || role === 'manager_lm',

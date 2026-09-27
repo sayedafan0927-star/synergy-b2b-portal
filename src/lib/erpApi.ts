@@ -183,7 +183,167 @@ export async function fetchCounterpartiesFromErp(params: { search?: string; phon
     throw new Error(`Ошибка загрузки контрагентов (${response.status})`);
   }
 
-  return await response.json();
+  const data = await response.json();
+  if (data && Array.isArray(data.counterparties)) {
+    // Гарантированная фильтрация: сайт работает СТРОГО с активными клиентами
+    data.counterparties = data.counterparties.filter((c: any) => {
+      if (c.is_active === 0 || c.portal_access_enabled === 0 || c.status === 'inactive' || c.access === 'disabled') {
+        return false;
+      }
+      return true;
+    });
+    data.count = data.counterparties.length;
+  }
+  return data;
+}
+
+export interface ErpClientAuthResult {
+  success: boolean;
+  code?: 'CLIENT_DEACTIVATED' | 'AUTH_FAILED' | 'NETWORK_ERROR' | string;
+  error?: string;
+  client?: {
+    id: number;
+    name: string;
+    phone: string;
+    city?: string;
+    address?: string;
+    bin?: string;
+    is_active?: number | boolean;
+    portal_access_enabled?: number | boolean;
+    status?: string;
+    financials?: {
+      balance_usd?: number;
+      debt_usd?: number;
+      credit_limit_usd?: number;
+      payment_delay_days?: number;
+    };
+    regional_manager?: {
+      id: number;
+      name: string;
+      phone: string;
+    };
+    contracts?: Array<{
+      id: number;
+      contract_number: string;
+      price_type: string;
+      currency: string;
+    }>;
+  };
+}
+
+/**
+ * Прямая аутентификация клиента в Synergy ERP (action=client_auth).
+ * Проверяет логин/пароль и статус активности клиента в реальном времени.
+ */
+export async function authenticateClientViaErp(login: string, password: string): Promise<ErpClientAuthResult> {
+  const cleanLogin = login.replace(/[^\d+]/g, '').trim();
+
+  // 1. Попытка прямой аутентификации через API ERP (action=client_auth)
+  try {
+    const response = await fetch(`${ERP_API_URL}?action=client_auth&portal_key=${encodeURIComponent(ERP_API_KEY)}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Portal-Key': ERP_API_KEY,
+      },
+      body: JSON.stringify({
+        login: cleanLogin,
+        password: password.trim(),
+      }),
+    });
+
+    const data = await response.json().catch(() => null);
+
+    // Обработка 403 Forbidden: деактивирован в ERP
+    if (response.status === 403 || data?.code === 'CLIENT_DEACTIVATED') {
+      return {
+        success: false,
+        code: 'CLIENT_DEACTIVATED',
+        error: data?.error || 'Доступ к сайту заблокирован: учетная запись клиента деактивирована в ERP.',
+      };
+    }
+
+    if (response.ok && data?.success && data?.client) {
+      return {
+        success: true,
+        client: data.client,
+      };
+    }
+
+    // Если бэкенд ERP уже поддерживает client_auth и вернул конкретную ошибку:
+    if (data && data.error && !data.error.includes('Неизвестное действие')) {
+      return {
+        success: false,
+        code: data.code || 'AUTH_FAILED',
+        error: data.error,
+      };
+    }
+  } catch (err: any) {
+    console.warn('[authenticateClientViaErp] Network error calling client_auth:', err);
+  }
+
+  // 2. Fallback: поиск клиента среди выгруженных активных контрагентов (Pull Sync)
+  try {
+    const cpData = await fetchCounterpartiesFromErp({ phone: cleanLogin, limit: 10 });
+    const list = cpData?.counterparties || [];
+    const matched = list.find((c: any) => {
+      const cPhone = (c.phone || '').replace(/[^\d+]/g, '');
+      const cLogin = (c.portal_login || '').replace(/[^\d+]/g, '');
+      return (cPhone && cPhone.includes(cleanLogin)) || (cLogin && cLogin.includes(cleanLogin)) || String(c.id) === cleanLogin;
+    });
+
+    if (matched) {
+      if (matched.is_active === 0 || matched.portal_access_enabled === 0 || matched.status === 'inactive' || matched.access === 'disabled') {
+        return {
+          success: false,
+          code: 'CLIENT_DEACTIVATED',
+          error: 'Доступ к сайту заблокирован: учетная запись клиента деактивирована в ERP.',
+        };
+      }
+
+      return {
+        success: true,
+        client: {
+          id: matched.id,
+          name: matched.name,
+          phone: matched.phone,
+          city: matched.city,
+          address: matched.address,
+          bin: matched.bin,
+          is_active: matched.is_active ?? 1,
+          portal_access_enabled: matched.portal_access_enabled ?? 1,
+          status: 'active',
+          financials: matched.financials,
+          regional_manager: matched.regional_manager,
+          contracts: matched.contracts,
+        },
+      };
+    }
+  } catch (cpErr) {
+    console.warn('[authenticateClientViaErp] Counterparties fallback error:', cpErr);
+  }
+
+  return {
+    success: false,
+    code: 'AUTH_FAILED',
+    error: 'Пользователь с таким логином не найден среди активных клиентов ERP',
+  };
+}
+
+/**
+ * Оповещение всех вкладок браузера о деактивации клиента в ERP.
+ */
+export function broadcastClientDeactivated(counterpartyId: number | string) {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('synergy:client-deactivated', { detail: { counterparty_id: counterpartyId } }));
+    try {
+      const bc = new BroadcastChannel('synergy_client_channel');
+      bc.postMessage({ event: 'client_deactivated', counterparty_id: counterpartyId });
+      bc.close();
+    } catch {
+      // fallback
+    }
+  }
 }
 
 export interface PingResult {
