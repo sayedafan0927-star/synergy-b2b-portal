@@ -24,6 +24,7 @@ import ProductCard from '@/components/ProductCard';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
+import ProductImage from '@/components/ProductImage';
 
 type SortOption = 'popular' | 'price-asc' | 'price-desc' | 'name';
 type ViewMode = 'grid' | 'stock';
@@ -330,7 +331,14 @@ function StockGridView({ filteredProducts, selectedWarehouse, onNavigate }: { fi
                         <td className="sticky left-0 z-10 bg-white group-hover:bg-slate-50 py-2 pl-4 pr-3 transition-colors">
                           <button onClick={() => onNavigate('product', product.id)} className="text-left">
                             <div className="flex items-center gap-2.5">
-                              <img src={product.images[0]} alt="" className="h-9 w-9 rounded object-cover shrink-0" />
+                              <ProductImage
+                                src={product.image_thumb || product.images[0]}
+                                alt={product.name}
+                                loading="lazy"
+                                decoding="async"
+                                width={72}
+                                className="h-9 w-9 rounded object-cover shrink-0"
+                              />
                               <div className="min-w-0">
                                 <p className="text-xs font-semibold text-slate-900 truncate max-w-[150px] hover:text-brand-700 transition-colors">{product.name}</p>
                                 <p className="text-[10px] text-slate-400">{product.manufacturer}</p>
