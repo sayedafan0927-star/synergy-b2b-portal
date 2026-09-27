@@ -17,6 +17,7 @@ import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import type { PageId, CartItem } from '@/types';
 import { calcSqm, parseSizeDimensions } from '@/types';
+import { submitOrderToErp } from '@/lib/erpApi';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -151,41 +152,28 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
     setSubmitError(null);
 
     try {
-      const response = await fetch(`${SUPABASE_URL}/functions/v1/create-order`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({
-          client_name: clientName.trim(),
-          client_phone: clientPhone.trim(),
-          client_company: clientCompany.trim(),
-          city: selectedCity,
-          comment: orderComment.trim(),
-          items: items.map(item => ({
-            productId: item.productId,
-            size: item.size,
-            sku: item.sku,
-            warehouse: item.warehouse,
-            price: item.price,
-            quantity: item.quantity,
-          })),
-        }),
+      const data = await submitOrderToErp({
+        client_name: clientName.trim(),
+        client_phone: clientPhone.trim(),
+        client_company: clientCompany.trim(),
+        city: selectedCity,
+        comment: orderComment.trim(),
+        items: items.map(item => ({
+          productId: item.productId,
+          size: item.size,
+          sku: item.sku,
+          warehouse: item.warehouse,
+          price: item.price,
+          quantity: item.quantity,
+        })),
       });
 
-      if (!response.ok) {
-        throw new Error(`Ошибка сервера (${response.status})`);
-      }
-
-      const data = await response.json();
-
-      if (data.success === true && data.order?.doc_number) {
+      if (data.success && data.order?.doc_number) {
         clearCart();
         setOrderDocNumber(data.order.doc_number);
         window.scrollTo({ top: 0, behavior: 'smooth' });
       } else {
-        throw new Error(data.error || data.message || 'Не удалось создать заказ');
+        throw new Error(data.error || 'Не удалось создать заказ');
       }
     } catch (err) {
       setSubmitError((err as Error).message);
