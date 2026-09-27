@@ -963,7 +963,8 @@ function AdminErpSyncTab() {
 }
 
 export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId) => void }) {
-  const { user, profile, loading, signOut, isAdmin, isManager } = useAuth();
+  const { user, profile, loading, signOut, isAdmin, realIsAdmin, isManager } = useAuth();
+  const adminAccess = realIsAdmin;
   const [activeTab, setActiveTab] = useState<TabId>('orders');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [clientDebt, setClientDebt] = useState<ClientDebtReport | null>(null);
@@ -1013,9 +1014,9 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
 
   const tabs: { id: TabId; label: string; icon: typeof Package; show: boolean }[] = [
     { id: 'orders', label: 'Мои заказы', icon: Package, show: true },
-    { id: 'admin-erp', label: 'Обмен с ERP', icon: RefreshCw, show: isAdmin },
-    { id: 'admin-users', label: 'Пользователи', icon: Users, show: isAdmin },
-    { id: 'admin-display', label: 'Видимость', icon: Eye, show: isAdmin },
+    { id: 'admin-erp', label: 'Обмен с ERP', icon: RefreshCw, show: adminAccess },
+    { id: 'admin-users', label: 'Пользователи', icon: Users, show: adminAccess },
+    { id: 'admin-display', label: 'Видимость', icon: Eye, show: adminAccess },
     { id: 'settings', label: 'Настройки', icon: Settings, show: true },
   ];
 
@@ -1205,12 +1206,12 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
                   onUpdateOrder={(updated) => setSelectedOrder(updated)}
                 />
               ) : (
-                <OrdersTab onSelectOrder={setSelectedOrder} isAdmin={isAdmin} isManager={isManager} />
+                <OrdersTab onSelectOrder={setSelectedOrder} isAdmin={adminAccess || isAdmin} isManager={isManager} />
               )
             )}
-            {activeTab === 'admin-erp' && isAdmin && <AdminErpSyncTab />}
-            {activeTab === 'admin-users' && isAdmin && <AdminUsersTab onNavigate={onNavigate} />}
-            {activeTab === 'admin-display' && isAdmin && <AdminDisplaySettings />}
+            {activeTab === 'admin-erp' && adminAccess && <AdminErpSyncTab />}
+            {activeTab === 'admin-users' && adminAccess && <AdminUsersTab onNavigate={onNavigate} />}
+            {activeTab === 'admin-display' && adminAccess && <AdminDisplaySettings />}
             {activeTab === 'settings' && (
               <div className="space-y-6">
                 <SettingsTab />

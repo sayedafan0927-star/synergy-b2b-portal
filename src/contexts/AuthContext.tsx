@@ -24,6 +24,7 @@ interface AuthContextValue {
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   isAdmin: boolean;
+  realIsAdmin: boolean;
   isManager: boolean;
   isSupplier: boolean;
   isClient: boolean;
@@ -139,6 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const effectiveProfile = impersonatedProfile ?? profile;
   const role = effectiveProfile?.role;
+  const realRole = profile?.role;
 
   return (
     <AuthContext.Provider
@@ -151,6 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signOut: signOutFn,
         refreshProfile,
         isAdmin: role === 'admin',
+        realIsAdmin: realRole === 'admin',
         isManager: role === 'manager_rm' || role === 'manager_lm',
         isSupplier: role === 'supplier',
         isClient: role === 'client' || !role,
