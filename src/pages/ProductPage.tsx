@@ -210,6 +210,20 @@ export default function ProductPage({
     return () => { document.getElementById('product-jsonld')?.remove(); };
   }, [product]);
 
+  const availableForms = useMemo(() => {
+    if (!product) return [];
+    const shapes = new Set<string>();
+    for (const v of product.variants) {
+      const { w, h } = parseSizeDimensions(v.size);
+      if (w === 0 || h === 0) continue;
+      const ratio = Math.max(w, h) / Math.min(w, h);
+      if (Math.abs(w - h) < 0.01) shapes.add('Квадрат');
+      else if (ratio >= 4) shapes.add('Дорожка');
+      else shapes.add('Прямоугольник');
+    }
+    return Array.from(shapes);
+  }, [product]);
+
   if (loading) {
     return (
       <div className="pt-20 pb-24 lg:pb-8 min-h-screen flex items-center justify-center bg-slate-50">
@@ -248,19 +262,6 @@ export default function ProductPage({
   const sizeRange = product.variants.length > 1
     ? `${product.variants[0].size} — ${product.variants[product.variants.length - 1].size}`
     : product.variants[0]?.size ?? '';
-  const availableForms = useMemo(() => {
-    const shapes = new Set<string>();
-    for (const v of product.variants) {
-      const { w, h } = parseSizeDimensions(v.size);
-      if (w === 0 || h === 0) continue;
-      const ratio = Math.max(w, h) / Math.min(w, h);
-      if (Math.abs(w - h) < 0.01) shapes.add('Квадрат');
-      else if (ratio >= 4) shapes.add('Дорожка');
-      else shapes.add('Прямоугольник');
-    }
-    return Array.from(shapes);
-  }, [product.variants]);
-
   function CartButton({ variant, wh }: { variant: ProductVariant; wh: Warehouse }) {
     const key = rowKey(variant.sku, wh.city);
     const qty = quantities[key] ?? 0;
