@@ -339,29 +339,29 @@ function StockGridView({ filteredProducts, selectedWarehouse, onNavigate }: { fi
                               <div className="flex flex-col items-center gap-1">
                                 <span className="text-[10px] text-emerald-600 font-medium">{wh.stock}</span>
                                 <div className="flex items-center">
-                                  <button onClick={() => setQty(key, Math.max(0, qty - 1))} className="flex h-6 w-5 items-center justify-center rounded-l border border-slate-200 bg-slate-50 text-slate-400 hover:bg-slate-100">
-                                    <Minus className="h-2.5 w-2.5" />
+                                  <button onClick={() => setQty(key, Math.max(0, qty - 1))} className="flex h-8 w-7 items-center justify-center rounded-l border border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors">
+                                    <Minus className="h-3.5 w-3.5" />
                                   </button>
                                   <input
                                     type="number"
                                     value={qty}
                                     onChange={e => setQty(key, parseInt(e.target.value, 10) || 0)}
-                                    className="h-6 w-8 border-y border-slate-200 bg-white text-center text-[11px] text-slate-900 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                    className="h-8 w-10 border-y border-slate-200 bg-white text-center text-xs text-slate-900 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                   />
-                                  <button onClick={() => setQty(key, qty + 1)} className="flex h-6 w-5 items-center justify-center rounded-r border border-slate-200 bg-slate-50 text-slate-400 hover:bg-slate-100">
-                                    <Plus className="h-2.5 w-2.5" />
+                                  <button onClick={() => setQty(key, qty + 1)} className="flex h-8 w-7 items-center justify-center rounded-r border border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors">
+                                    <Plus className="h-3.5 w-3.5" />
                                   </button>
                                 </div>
                                 <button
                                   onClick={() => handleAdd(product, variant, wh)}
                                   disabled={qty < 1}
-                                  className={`flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-medium transition-all ${
+                                  className={`flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-all ${
                                     added ? 'bg-emerald-600 text-white' : qty < 1 ? 'bg-slate-100 text-slate-300 cursor-not-allowed' : 'bg-brand-700 text-white hover:bg-brand-800'
                                   }`}
                                 >
-                                  {added ? <Check className="h-2.5 w-2.5" /> : <ShoppingCart className="h-2.5 w-2.5" />}
+                                  {added ? <Check className="h-3.5 w-3.5" /> : <ShoppingCart className="h-3.5 w-3.5" />}
                                   {inCart > 0 && !added && (
-                                    <span className="bg-white/30 rounded-full px-1 text-[8px]">{inCart}</span>
+                                    <span className="bg-white/30 rounded-full px-1 text-[10px]">{inCart}</span>
                                   )}
                                 </button>
                               </div>
@@ -448,8 +448,29 @@ export default function CatalogPage({ onNavigate, initialCategory }: { onNavigat
 
   if (loading) {
     return (
-      <section className="min-h-screen bg-slate-50 pt-20 pb-24 lg:pb-8 flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-brand-700" />
+      <section className="min-h-screen bg-slate-50 pt-20 pb-24 lg:pb-8">
+        <div className="container-w">
+          <div className="mb-8">
+            <div className="skeleton h-8 w-64 mb-3" />
+            <div className="skeleton h-4 w-96 max-w-full" />
+          </div>
+          <div className="mb-6 flex gap-3">
+            <div className="skeleton h-11 w-28" />
+            <div className="skeleton h-11 w-40" />
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 lg:gap-6">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="card overflow-hidden">
+                <div className="skeleton aspect-[4/3] rounded-none" />
+                <div className="p-3 sm:p-4 space-y-2">
+                  <div className="skeleton h-3 w-full" />
+                  <div className="skeleton h-3 w-2/3" />
+                  <div className="skeleton h-4 w-20 mt-2" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </section>
     );
   }
@@ -461,8 +482,9 @@ export default function CatalogPage({ onNavigate, initialCategory }: { onNavigat
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50 mb-5 mx-auto">
             <X className="h-7 w-7 text-red-500" />
           </div>
-          <h3 className="text-lg font-semibold text-slate-800 mb-2">Ошибка загрузки каталога</h3>
-          <p className="text-sm text-slate-500">{loadError}</p>
+          <h3 className="text-lg font-semibold text-slate-800 mb-2">Не удалось загрузить каталог</h3>
+          <p className="text-sm text-slate-500 mb-5">Проверьте подключение к интернету и попробуйте снова</p>
+          <button onClick={() => window.location.reload()} className="btn-primary">Повторить</button>
         </div>
       </section>
     );
@@ -484,9 +506,9 @@ export default function CatalogPage({ onNavigate, initialCategory }: { onNavigat
               <span>Фильтр</span>
               {activeFilterCount > 0 && <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-700 px-1 text-[10px] font-bold text-white">{activeFilterCount}</span>}
             </button>
-            <div className="relative hidden sm:block flex-1 max-w-md">
+            <div className="relative flex-1 max-w-md">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-              <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Поиск по каталогу..." className="input-field pl-10 text-sm" />
+              <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Поиск..." className="input-field pl-10 text-sm" />
             </div>
           </div>
 

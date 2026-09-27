@@ -26,7 +26,6 @@ export default function Footer({ onNavigate }: FooterProps) {
             <ul className="space-y-2.5">
               {[
                 { label: 'Каталог', page: 'catalog' as PageId },
-                { label: 'О компании', page: 'contacts' as PageId },
                 { label: 'Контакты', page: 'contacts' as PageId },
                 { label: 'Личный кабинет', page: 'profile' as PageId },
               ].map(({ label, page }) => (
@@ -90,12 +89,12 @@ export default function Footer({ onNavigate }: FooterProps) {
         <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-slate-800 pt-8 sm:flex-row">
           <p className="text-xs text-slate-500">&copy; 2025 Synergy-Group. Все права защищены.</p>
           <div className="flex gap-6">
-            <a href="#" className="text-xs text-slate-500 hover:text-slate-300 transition-colors">
+            <button onClick={() => onNavigate('contacts')} className="text-xs text-slate-500 hover:text-slate-300 transition-colors">
               Политика конфиденциальности
-            </a>
-            <a href="#" className="text-xs text-slate-500 hover:text-slate-300 transition-colors">
+            </button>
+            <button onClick={() => onNavigate('contacts')} className="text-xs text-slate-500 hover:text-slate-300 transition-colors">
               Публичная оферта
-            </a>
+            </button>
           </div>
         </div>
       </div>
