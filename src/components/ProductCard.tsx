@@ -11,16 +11,25 @@ interface ProductCardProps {
   onNavigate: (page: PageId, productId?: string) => void;
 }
 
+function getMainWarehouseStock(variant: ProductVariant) {
+  const mainHub = variant.warehouses.find(w =>
+    w.warehouse_id === 81 ||
+    (w.warehouse_name && (w.warehouse_name.includes('Астана') || w.warehouse_name.toLowerCase().includes('основной')))
+  );
+  return mainHub ? mainHub.stock : 0;
+}
+
 function getTotalStock(variant: ProductVariant) {
-  return variant.warehouses.reduce((total, warehouse) => total + warehouse.stock, 0);
+  return getMainWarehouseStock(variant);
 }
 
 function getAvailableWarehouse(variant: ProductVariant) {
-  return (
-    variant.warehouses.find(w => w.stock > 0) ||
-    variant.warehouses.find(w => (w.warehouse_name && w.warehouse_name.toLowerCase().includes('основной')) || (w.city && w.city.toLowerCase().includes('астана'))) ||
-    variant.warehouses[0]
-  );
+  return {
+    warehouse_id: 81,
+    warehouse_name: 'Основной Склад Астана',
+    city: 'Основной Склад Астана',
+    stock: getMainWarehouseStock(variant),
+  };
 }
 
 function sizeLabel(count: number) {

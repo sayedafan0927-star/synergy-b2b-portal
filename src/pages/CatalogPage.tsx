@@ -202,14 +202,15 @@ function StockGridView({ filteredProducts, selectedWarehouse, onNavigate }: { fi
     return map;
   }, [items]);
 
-  const cellKey = (productId: string, sku: string, city: string) => `${productId}::${sku}::${city}`;
+  const cellKey = (productId: string, sku: string, whName: string) => `${productId}::${sku}::${whName}`;
 
   const setQty = useCallback((key: string, val: number) => {
     setQuantities(prev => ({ ...prev, [key]: Math.max(0, val) }));
   }, []);
 
   const handleAdd = useCallback((product: Product, variant: ProductVariant, wh: Warehouse) => {
-    const key = cellKey(product.id, variant.sku, wh.city);
+    const whLabel = wh.warehouse_name || wh.city;
+    const key = cellKey(product.id, variant.sku, whLabel);
     const qty = quantities[key] ?? 0;
     if (qty < 1 || wh.stock < 1) return;
     const price = pricing.getVariantPrice(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
@@ -220,7 +221,7 @@ function StockGridView({ filteredProducts, selectedWarehouse, onNavigate }: { fi
       image: product.images[0],
       size: variant.size,
       sku: variant.sku,
-      warehouse: wh.city,
+      warehouse: whLabel,
       price,
     }, qty);
     setAddedKeys(prev => ({ ...prev, [key]: true }));
@@ -254,7 +255,7 @@ function StockGridView({ filteredProducts, selectedWarehouse, onNavigate }: { fi
           if (settings.show_sqm) cells.push('');
           return cells;
         }
-        const wh = variant.warehouses.find(w => w.city === warehouse);
+        const wh = variant.warehouses.find(w => (w.warehouse_name || w.city) === warehouse);
         const stock = wh?.stock ?? 0;
         const { w, h } = parseSizeDimensions(size);
         const sqm = stock * w * h;
@@ -347,7 +348,7 @@ function StockGridView({ filteredProducts, selectedWarehouse, onNavigate }: { fi
                                     {(() => {
                                       let pcs = 0; let sqm = 0;
                                       product.variants.forEach(v => {
-                                        const wh = v.warehouses.find(w => w.city === selectedWarehouse);
+                                        const wh = v.warehouses.find(w => (w.warehouse_name || w.city) === selectedWarehouse);
                                         if (wh) {
                                           pcs += wh.stock;
                                           const { w: vw, h: vh } = parseSizeDimensions(v.size);
@@ -377,7 +378,7 @@ function StockGridView({ filteredProducts, selectedWarehouse, onNavigate }: { fi
                           if (!variant) {
                             return <td key={size} className="py-2 px-2 text-center text-slate-200 border-l border-slate-50">—</td>;
                           }
-                          const wh = variant.warehouses.find(w => w.city === selectedWarehouse);
+                          const wh = variant.warehouses.find(w => (w.warehouse_name || w.city) === selectedWarehouse);
                           if (!wh || wh.stock === 0) {
                             const totalForSize = variant.warehouses.reduce((s, w) => s + w.stock, 0);
                             return (
@@ -391,10 +392,11 @@ function StockGridView({ filteredProducts, selectedWarehouse, onNavigate }: { fi
                             );
                           }
 
-                          const key = cellKey(product.id, variant.sku, wh.city);
+                          const whLabel = wh.warehouse_name || wh.city;
+                          const key = cellKey(product.id, variant.sku, whLabel);
                           const qty = quantities[key] ?? 0;
                           const added = addedKeys[key];
-                          const cartKey = `${product.id}::${variant.size}::${wh.city}`;
+                          const cartKey = `${product.id}::${variant.size}::${whLabel}`;
                           const inCart = cartCounts[cartKey] ?? 0;
 
                           return (
@@ -468,7 +470,7 @@ export default function CatalogPage({ onNavigate, initialCollection, initialCoun
   const allCollections = useMemo(() => [...new Set(products.map(p => p.collection))].sort(), [products]);
   const allManufacturers = useMemo(() => [...new Set(products.map(p => p.manufacturer))].sort(), [products]);
   const allCountries = useMemo(() => [...new Set(products.map(p => p.country))].sort(), [products]);
-  const allWarehouses = useMemo(() => [...new Set(products.flatMap(p => p.variants.flatMap(v => v.warehouses.map(w => w.city))))].sort(), [products]);
+  const allWarehouses = useMemo(() => [...new Set(products.flatMap(p => p.variants.flatMap(v => v.warehouses.map(w => w.warehouse_name || w.city))))].sort(), [products]);
   const allSizes = useMemo(() => [...new Set(products.flatMap(p => p.variants.map(v => v.size)))].sort((a, b) => sizeArea(a) - sizeArea(b)), [products]);
 
   useEffect(() => {
@@ -497,7 +499,7 @@ export default function CatalogPage({ onNavigate, initialCollection, initialCoun
     if (selectedCollections.size > 0) result = result.filter(p => selectedCollections.has(p.collection));
     if (selectedManufacturers.size > 0) result = result.filter(p => selectedManufacturers.has(p.manufacturer));
     if (selectedCountries.size > 0) result = result.filter(p => selectedCountries.has(p.country));
-    if (selectedWarehouses.size > 0) result = result.filter(p => p.variants.some(v => v.warehouses.some(w => selectedWarehouses.has(w.city) && w.stock > 0)));
+    if (selectedWarehouses.size > 0) result = result.filter(p => p.variants.some(v => v.warehouses.some(w => selectedWarehouses.has(w.warehouse_name || w.city) && w.stock > 0)));
     if (selectedSizes.size > 0) result = result.filter(p => p.variants.some(v => selectedSizes.has(v.size)));
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();

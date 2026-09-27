@@ -57,8 +57,9 @@ export default function ProductPage({
     if (!product) return;
     const init: Record<string, number> = {};
     product.variants.forEach(v => {
-      v.warehouses.forEach(wh => {
-        init[rowKey(v.sku, wh.city)] = 0;
+      filterClientWarehouses(v.warehouses).forEach(wh => {
+        const whLabel = wh.warehouse_name || wh.city;
+        init[rowKey(v.sku, whLabel)] = 0;
       });
     });
     setQuantities(init);
@@ -181,7 +182,7 @@ export default function ProductPage({
     if (!product) return;
     const minPrice = product.variants.reduce((min, v) => Math.min(min, v.base_price), Infinity);
     const maxPrice = product.variants.reduce((max, v) => Math.max(max, v.base_price), 0);
-    const inStock = product.variants.some(v => v.warehouses.some(w => w.stock > 0));
+    const inStock = product.variants.some(v => filterClientWarehouses(v.warehouses).some(w => w.stock > 0));
     const ld = {
       '@context': 'https://schema.org',
       '@type': 'Product',
@@ -275,7 +276,7 @@ export default function ProductPage({
     return list;
   }, [product]);
 
-  const totalStock = product.variants.reduce((s, v) => s + v.warehouses.reduce((a, w) => a + w.stock, 0), 0);
+  const totalStock = product.variants.reduce((s, v) => s + filterClientWarehouses(v.warehouses).reduce((a, w) => a + w.stock, 0), 0);
   const sizeRange = product.variants.length > 1
     ? `${product.variants[0].size} — ${product.variants[product.variants.length - 1].size}`
     : product.variants[0]?.size ?? '';
@@ -466,7 +467,7 @@ export default function ProductPage({
                 <div className="flex flex-wrap gap-2">
                   {product.variants.map(v => {
                     const isSelected = v.size === activeVariant?.size;
-                    const vStock = v.warehouses.reduce((sum, w) => sum + w.stock, 0);
+                    const vStock = filterClientWarehouses(v.warehouses).reduce((sum, w) => sum + w.stock, 0);
                     return (
                       <button
                         key={v.sku || v.size}

@@ -146,7 +146,7 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
           price_per_sqm: baseSqmPrice,
           base_price: Math.round(baseSqmPrice * calculateArea(itemSize) * 100) / 100,
           currency: raw.currency || 'USD',
-          warehouses: [],
+          warehouses: filterClientWarehouses([]),
           dealer_stock: (raw as any).dealer_stock,
         }];
 
@@ -200,9 +200,9 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
           // Если размер уже есть — объединяем остатки складов и дилерские остатки
           const targetVariant = existing.variants.find(ev => ev.size === v.size);
           if (targetVariant) {
-            const whMap = new Map(targetVariant.warehouses.map(w => [w.city, w]));
+            const whMap = new Map(targetVariant.warehouses.map(w => [w.warehouse_name || w.city, w]));
             for (const w of v.warehouses) {
-              const exWh = whMap.get(w.city);
+              const exWh = whMap.get(w.warehouse_name || w.city);
               if (exWh) {
                 exWh.stock += w.stock;
               } else {
@@ -228,7 +228,7 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
     }
   }
 
-  // Сортируем размеры каждого товара по возрастанию площади (без добавления фиктивных нулей)
+  // Сортируем размеры каждого товара по возрастанию площади и жестко привязываем к «Основной Склад Астана»
   const result: Product[] = [];
   for (const prod of map.values()) {
     prod.variants.sort((a, b) => {
@@ -236,6 +236,9 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
       const areaB = b.area_sqm || calculateArea(b.size);
       return areaA - areaB;
     });
+    for (const v of prod.variants) {
+      v.warehouses = filterClientWarehouses(v.warehouses);
+    }
     result.push(prod);
   }
 
@@ -243,32 +246,24 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
 }
 
 /**
- * Фильтрация складов для отображения клиенту:
- * Клиенты видят только склады с реальным наличием (> 0), либо центральный хаб (Основной Склад Астана).
- * 50+ пустых партнерских шоурумов скрываются, чтобы не создавать бардак.
+ * Склад для клиентов:
+ * Склад называется СТРОГО «Основной Склад Астана».
+ * Никакие города не выводим — только Основной Склад Астана для всех клиентов и только его остатки!
  */
 export function filterClientWarehouses(warehouses: Warehouse[] = []): Warehouse[] {
-  if (!warehouses || warehouses.length === 0) {
-    return [{ city: 'Алматы', warehouse_name: 'Основной Склад Астана', stock: 0 }];
-  }
-
-  // 1. Склады с реальным остатком
-  const withStock = warehouses.filter(w => w.stock > 0);
-  if (withStock.length > 0) {
-    return withStock;
-  }
-
-  // 2. Если остатка нет нигде, отдаем только одну строку центрального склада с 0 шт. (под заказ)
   const mainHub = warehouses.find(w =>
-    (w.warehouse_name && (w.warehouse_name.toLowerCase().includes('основной') || w.warehouse_name.toLowerCase().includes('астана'))) ||
-    (w.city && w.city.toLowerCase().includes('астана'))
+    w.warehouse_id === 81 ||
+    (w.warehouse_name && (w.warehouse_name.includes('Астана') || w.warehouse_name.toLowerCase().includes('основной')))
   );
 
-  if (mainHub) {
-    return [{ ...mainHub, stock: 0 }];
-  }
+  const stock = mainHub ? mainHub.stock : 0;
 
-  return [{ city: 'Алматы', warehouse_name: 'Основной Склад Астана', stock: 0 }];
+  return [{
+    warehouse_id: 81,
+    warehouse_name: 'Основной Склад Астана',
+    city: 'Основной Склад Астана',
+    stock: stock,
+  }];
 }
 
 export function triggerCatalogReload() {
