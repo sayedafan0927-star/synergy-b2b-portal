@@ -163,41 +163,45 @@ export default function HomePage({ onNavigate }: { onNavigate: (page: PageId, pr
         </div>
       </section>
 
-      {/* ── Categories Section ── */}
+      {/* ── Countries Section ── */}
       <section className="py-16 lg:py-24 bg-slate-50">
         <div className="container-w">
-          <h2 className="section-heading text-center">Категории</h2>
+          <h2 className="section-heading text-center">Страны-производители</h2>
           <p className="section-subheading text-center mx-auto">
-            Подберите ковровое покрытие по типу и стилю для любого интерьера
+            Ковры от ведущих фабрик Турции, Ирана и Китая — выберите страну и смотрите ассортимент
           </p>
 
-          <div className="mt-10 lg:mt-14 grid grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-            {categories.map((category) => (
-              <button
-                key={category.id}
-                onClick={() => onNavigate('catalog')}
-                className="group relative aspect-[4/3] overflow-hidden rounded-2xl"
-              >
-                <img
-                  src={category.image}
-                  alt={category.name}
-                  loading="lazy"
-                  className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-110"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-900/70 via-slate-900/20 to-transparent" />
-                <div className="absolute inset-x-0 bottom-0 p-4 sm:p-5">
-                  <h3 className="font-display text-base sm:text-lg font-semibold text-white">
-                    {category.name}
-                  </h3>
-                  <p className="mt-0.5 text-xs sm:text-sm text-slate-300 font-body">
-                    {category.count} товаров
-                  </p>
-                </div>
-                <div className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center opacity-0 translate-x-2 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-0">
-                  <ArrowRight className="h-4 w-4 text-white" />
-                </div>
-              </button>
-            ))}
+          <div className="mt-10 lg:mt-14 grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6">
+            {categories.map((category) => {
+              const countryName = category.id.replace('country:', '');
+              const count = products.filter(p => p.country === countryName).length;
+              return (
+                <button
+                  key={category.id}
+                  onClick={() => onNavigate('catalog', category.id)}
+                  className="group relative aspect-[4/3] overflow-hidden rounded-2xl"
+                >
+                  <img
+                    src={category.image}
+                    alt={category.name}
+                    loading="lazy"
+                    className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-110"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-900/70 via-slate-900/20 to-transparent" />
+                  <div className="absolute inset-x-0 bottom-0 p-4 sm:p-5">
+                    <h3 className="font-display text-base sm:text-lg font-semibold text-white">
+                      {category.name}
+                    </h3>
+                    <p className="mt-0.5 text-xs sm:text-sm text-slate-300 font-body">
+                      {count > 0 ? `${count} товаров` : 'Смотреть ассортимент'}
+                    </p>
+                  </div>
+                  <div className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center opacity-0 translate-x-2 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-0">
+                    <ArrowRight className="h-4 w-4 text-white" />
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
       </section>

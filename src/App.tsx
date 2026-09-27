@@ -101,14 +101,20 @@ export default function App() {
   const [page, setPage] = useState<PageId>('home');
   const [productId, setProductId] = useState<string>('');
   const [catalogCollection, setCatalogCollection] = useState<string | undefined>(undefined);
+  const [catalogCountry, setCatalogCountry] = useState<string | undefined>(undefined);
   const [preloaderDone, setPreloaderDone] = useState(false);
 
   const navigate = useCallback((target: PageId, id?: string) => {
     setPage(target);
-    if (target === 'catalog' && id) {
+    if (target === 'catalog' && id?.startsWith('country:')) {
+      setCatalogCountry(id.slice('country:'.length));
+      setCatalogCollection(undefined);
+    } else if (target === 'catalog' && id) {
       setCatalogCollection(id);
+      setCatalogCountry(undefined);
     } else if (target === 'catalog') {
       setCatalogCollection(undefined);
+      setCatalogCountry(undefined);
     }
     if (target !== 'product') {
       // keep productId for product page
@@ -135,7 +141,7 @@ export default function App() {
   const renderPage = () => {
     switch (page) {
       case 'home': return <HomePage onNavigate={navigate} />;
-      case 'catalog': return <CatalogPage key={catalogCollection ?? 'all'} onNavigate={navigate} initialCollection={catalogCollection} />;
+      case 'catalog': return <CatalogPage key={catalogCollection ?? catalogCountry ?? 'all'} onNavigate={navigate} initialCollection={catalogCollection} initialCountry={catalogCountry} />;
       case 'product': return <ProductPage productId={productId} onNavigate={navigate} />;
       case 'cart': return <CartPage onNavigate={navigate} />;
       case 'contacts': return <ContactsPage onNavigate={navigate} />;

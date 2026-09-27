@@ -440,7 +440,7 @@ function StockGridView({ filteredProducts, selectedWarehouse, onNavigate }: { fi
 
 /* ── Main CatalogPage ── */
 
-export default function CatalogPage({ onNavigate, initialCollection }: { onNavigate: (page: PageId, productId?: string) => void; initialCollection?: string }) {
+export default function CatalogPage({ onNavigate, initialCollection, initialCountry }: { onNavigate: (page: PageId, productId?: string) => void; initialCollection?: string; initialCountry?: string }) {
   const { products, loading, error: loadError } = useProducts();
   const pricing = useUserPricing();
 
@@ -453,7 +453,7 @@ export default function CatalogPage({ onNavigate, initialCollection }: { onNavig
 
   const [selectedCollections, setSelectedCollections] = useState<Set<string>>(() => initialCollection ? new Set([initialCollection]) : new Set());
   const [selectedManufacturers, setSelectedManufacturers] = useState<Set<string>>(new Set());
-  const [selectedCountries, setSelectedCountries] = useState<Set<string>>(new Set());
+  const [selectedCountries, setSelectedCountries] = useState<Set<string>>(() => initialCountry ? new Set([initialCountry]) : new Set());
   const [selectedWarehouses, setSelectedWarehouses] = useState<Set<string>>(new Set());
   const [selectedSizes, setSelectedSizes] = useState<Set<string>>(new Set());
 
