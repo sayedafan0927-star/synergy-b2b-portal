@@ -326,7 +326,7 @@ export default function ProductPage({
               <img
                 src={product.images[selectedImage]}
                 alt={`${product.name} — фото ${selectedImage + 1}`}
-                className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                className="h-full w-full object-contain p-6 transition-transform duration-300 group-hover:scale-105"
                 draggable={false}
               />
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors flex items-center justify-center">
@@ -334,11 +334,11 @@ export default function ProductPage({
               </div>
               {imageCount > 1 && (
                 <>
-                  <button onClick={e => { e.stopPropagation(); prevImage(); }} className="absolute left-2 top-1/2 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-full bg-white/80 backdrop-blur text-slate-700 shadow hover:bg-white transition-colors">
-                    <ChevronLeft className="h-5 w-5" />
+                  <button onClick={e => { e.stopPropagation(); prevImage(); }} className="absolute left-4 top-1/2 z-10 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full border border-slate-400 bg-white/95 text-slate-700 shadow-md hover:scale-105 hover:bg-white transition-all">
+                    <ChevronLeft className="h-6 w-6" />
                   </button>
-                  <button onClick={e => { e.stopPropagation(); nextImage(); }} className="absolute right-2 top-1/2 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-full bg-white/80 backdrop-blur text-slate-700 shadow hover:bg-white transition-colors">
-                    <ChevronRight className="h-5 w-5" />
+                  <button onClick={e => { e.stopPropagation(); nextImage(); }} className="absolute right-4 top-1/2 z-10 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full border border-slate-400 bg-white/95 text-slate-700 shadow-md hover:scale-105 hover:bg-white transition-all">
+                    <ChevronRight className="h-6 w-6" />
                   </button>
                 </>
               )}

@@ -32,12 +32,12 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
       onClick={() => onNavigate('product', product.id)}
       className="group card flex flex-col overflow-hidden text-left cursor-pointer"
     >
-      <div className="relative aspect-[4/3] overflow-hidden bg-slate-100">
+      <div className="relative aspect-[4/3] overflow-hidden bg-slate-50">
         <img
           src={product.images[activeImage]}
           alt={product.name}
           loading="lazy"
-          className="h-full w-full object-cover transition-transform duration-500 ease-apple group-hover:scale-105"
+          className="h-full w-full object-contain p-3 transition-transform duration-500 ease-apple group-hover:scale-105"
         />
         {hasMultipleImages && (
           <>
@@ -45,17 +45,17 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
               type="button"
               aria-label="Предыдущее фото"
               onClick={showPreviousImage}
-              className="absolute left-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-slate-700 opacity-100 shadow-sm transition-opacity sm:opacity-0 sm:group-hover:opacity-100 hover:bg-white"
+              className="absolute left-3 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-slate-400 bg-white/95 text-slate-700 opacity-100 shadow-md transition-all sm:opacity-0 sm:group-hover:opacity-100 hover:scale-105 hover:bg-white"
             >
-              <ChevronLeft className="h-4 w-4" />
+              <ChevronLeft className="h-5 w-5" />
             </button>
             <button
               type="button"
               aria-label="Следующее фото"
               onClick={showNextImage}
-              className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-slate-700 opacity-100 shadow-sm transition-opacity sm:opacity-0 sm:group-hover:opacity-100 hover:bg-white"
+              className="absolute right-3 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-slate-400 bg-white/95 text-slate-700 opacity-100 shadow-md transition-all sm:opacity-0 sm:group-hover:opacity-100 hover:scale-105 hover:bg-white"
             >
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="h-5 w-5" />
             </button>
             <div className="absolute bottom-2 left-1/2 flex -translate-x-1/2 gap-1 rounded-full bg-slate-900/45 px-2 py-1">
               {product.images.map((image, index) => (
