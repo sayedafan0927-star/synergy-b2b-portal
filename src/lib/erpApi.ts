@@ -53,7 +53,10 @@ export async function submitOrderToErp(payload: CreateOrderPayload): Promise<Erp
       'X-Portal-Key': ERP_API_KEY,
       'Idempotency-Key': idempotencyKey,
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      ...payload,
+      idempotency_key: idempotencyKey,
+    }),
   });
 
   const text = await response.text();
