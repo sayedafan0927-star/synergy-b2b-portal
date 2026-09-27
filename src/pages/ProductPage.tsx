@@ -85,7 +85,11 @@ export default function ProductPage({
     return map;
   }, [items, product]);
 
-  const imageCount = product?.images.length ?? 0;
+  const validImages = useMemo(() => {
+    return (product?.images || []).filter(img => typeof img === 'string' && img.trim().length > 0);
+  }, [product?.images]);
+
+  const imageCount = validImages.length;
 
   const prevImage = useCallback(() => {
     setSelectedImage(prev => (prev === 0 ? imageCount - 1 : prev - 1));
@@ -400,10 +404,10 @@ export default function ProductPage({
               className={`relative aspect-square min-w-0 flex-1 rounded-xl overflow-hidden bg-slate-100 ${imageCount > 0 ? 'cursor-zoom-in group' : ''}`}
               onClick={() => imageCount > 0 && setLightboxOpen(true)}
             >
-              {imageCount > 0 && !imageError ? (
+              {imageCount > 0 && validImages[selectedImage] && !imageError ? (
                 <>
                   <img
-                    src={product.images[selectedImage]}
+                    src={validImages[selectedImage]}
                     alt={`${product.name} — фото ${selectedImage + 1}`}
                     className="h-full w-full object-contain p-6 transition-transform duration-300 group-hover:scale-105"
                     onError={() => setImageError(true)}
@@ -430,7 +434,7 @@ export default function ProductPage({
 
             {imageCount > 1 && (
               <div className="flex w-16 shrink-0 flex-col gap-3 max-h-[440px] xl:max-h-[480px] 2xl:max-h-[540px] overflow-y-auto pr-1">
-                {product.images.map((img, idx) => (
+                {validImages.map((img, idx) => (
                   <button
                     key={idx}
                     onClick={() => setSelectedImage(idx)}
@@ -438,7 +442,7 @@ export default function ProductPage({
                       idx === selectedImage ? 'border-brand-600 shadow-md' : 'border-transparent opacity-60 hover:opacity-100'
                     }`}
                   >
-                    <img src={img} alt="" className="h-full w-full object-cover" />
+                    <ProductImage src={img} alt="" className="h-full w-full object-cover" />
                   </button>
                 ))}
               </div>
@@ -529,34 +533,48 @@ export default function ProductPage({
                   })}
                 </div>
 
-                {/* Выбранный размер: штучная цена */}
+                {/* Выбранный размер: штучная цена и идентификаторы */}
                 {activeVariant && (
-                  <div className="mt-3.5 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3 text-xs">
-                    <div>
-                      <span className="text-slate-500 font-medium">Штучная цена ({activeVariant.size}):</span>
-                      {user ? (
-                        <>
-                          <span className="ml-1.5 font-bold text-slate-900 text-base">
-                            {fmtPrice(pricing.getVariantPrice(product.collection, activeVariant.size, activeVariant.base_price, activeVariant.price_per_sqm))}
-                          </span>
-                          <span className="ml-1 text-slate-400">
-                            (${pricing.getPricePerSqm(product.collection, activeVariant.size, activeVariant.base_price, activeVariant.price_per_sqm).toFixed(2)} / м²)
-                          </span>
-                        </>
-                      ) : (
-                        <span className="ml-1 text-slate-400">Войдите для цен</span>
+                  <div className="mt-3.5 pt-3 border-t border-slate-100 space-y-2 text-xs">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-slate-600">
+                      {(activeVariant.article || product.article) && (
+                        <span>Артикул: <strong className="text-slate-900 font-semibold">{activeVariant.article || product.article}</strong></span>
+                      )}
+                      {activeVariant.barcode && (
+                        <span>Штрихкод: <strong className="text-slate-900 font-mono font-medium">{activeVariant.barcode}</strong></span>
+                      )}
+                      {activeVariant.code && (
+                        <span>Код 1С: <strong className="text-slate-700 font-mono">{activeVariant.code}</strong></span>
                       )}
                     </div>
 
-                    <button
-                      onClick={() => {
-                        const el = document.getElementById('variant-table');
-                        el?.scrollIntoView({ behavior: 'smooth' });
-                      }}
-                      className="text-brand-700 hover:text-brand-800 font-semibold inline-flex items-center gap-1 hover:underline"
-                    >
-                      Наличие на складах ↓
-                    </button>
+                    <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                      <div>
+                        <span className="text-slate-500 font-medium">Штучная цена ({activeVariant.size}):</span>
+                        {user ? (
+                          <>
+                            <span className="ml-1.5 font-bold text-slate-900 text-base">
+                              {fmtPrice(pricing.getVariantPrice(product.collection, activeVariant.size, activeVariant.base_price, activeVariant.price_per_sqm))}
+                            </span>
+                            <span className="ml-1 text-slate-400">
+                              (${pricing.getPricePerSqm(product.collection, activeVariant.size, activeVariant.base_price, activeVariant.price_per_sqm).toFixed(2)} / м²)
+                            </span>
+                          </>
+                        ) : (
+                          <span className="ml-1 text-slate-400">Войдите для цен</span>
+                        )}
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          const el = document.getElementById('variant-table');
+                          el?.scrollIntoView({ behavior: 'smooth' });
+                        }}
+                        className="text-brand-700 hover:text-brand-800 font-semibold inline-flex items-center gap-1 hover:underline"
+                      >
+                        Наличие на складах ↓
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -627,6 +645,45 @@ export default function ProductPage({
                     const pricePerSqm = pricing.getPricePerSqm(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
 
                     const rows = filterClientWarehouses(variant.warehouses, myShowroomId, myShowroomName);
+                    if (rows.length === 0) {
+                      return (
+                        <tr key={variant.sku || variant.size} className="group hover:bg-slate-25 transition-colors opacity-80">
+                          <td className="py-3 pl-5 pr-3 text-sm font-medium text-slate-900 whitespace-nowrap">
+                            <div>
+                              <span className="font-semibold text-slate-900">{variant.size}</span>
+                              <div className="mt-0.5 flex flex-wrap gap-x-2 text-[11px] text-slate-400 font-normal">
+                                {(variant.article || product.article) && (
+                                  <span>Арт: <span className="text-slate-600 font-medium">{variant.article || product.article}</span></span>
+                                )}
+                                {variant.barcode && <span>ШК: <span className="text-slate-500 font-mono">{variant.barcode}</span></span>}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3 pr-3 text-sm text-slate-400 whitespace-nowrap">—</td>
+                          <td className="py-3 pr-3">
+                            <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold bg-slate-100 text-slate-500">
+                              <span className="inline-block h-1.5 w-1.5 rounded-full bg-slate-400" />
+                              Нет на складах
+                            </span>
+                          </td>
+                          {user && (
+                            <td className="py-3 pr-3 text-sm text-slate-400 whitespace-nowrap">
+                              {pricePerSqm > 0 ? `$${pricePerSqm.toFixed(2)}` : '—'}
+                            </td>
+                          )}
+                          {user && (
+                            <td className="py-3 pr-3 font-bold text-slate-400 whitespace-nowrap">
+                              {fmtPrice(variantPrice)}
+                            </td>
+                          )}
+                          <td className="py-3 pr-3 text-sm text-slate-400">—</td>
+                          <td className="py-3 pr-5 text-right">
+                            <span className="text-xs text-slate-400 italic">Под заказ</span>
+                          </td>
+                        </tr>
+                      );
+                    }
+
                     return rows.map((wh, whIdx) => {
                       const whLabel = wh.warehouse_name || wh.city;
                       const key = rowKey(variant.sku, whLabel);
@@ -639,12 +696,18 @@ export default function ProductPage({
                             {isFirstRow ? (
                               <div>
                                 <span className="font-semibold text-slate-900">{variant.size}</span>
+                                <div className="mt-0.5 flex flex-wrap gap-x-2 text-[11px] text-slate-400 font-normal">
+                                  {(variant.article || product.article) && (
+                                    <span>Арт: <span className="text-slate-600 font-medium">{variant.article || product.article}</span></span>
+                                  )}
+                                  {variant.barcode && <span>ШК: <span className="text-slate-500 font-mono">{variant.barcode}</span></span>}
+                                </div>
                                 {(variant.dealer_stock || myShowroomId) && (
                                   <div className="mt-1 flex flex-col gap-0.5 text-[11px]">
                                     <span className="inline-flex items-center gap-1 font-medium text-emerald-700">
                                       🏪 В магазине: {myShowroomId ? (variant.warehouses.find(w => w.warehouse_id === myShowroomId)?.stock || 0) : (variant.dealer_stock?.in_showroom_qty || 0)} шт
                                     </span>
-                                    {variant.dealer_stock.in_transit_qty > 0 && (
+                                    {variant.dealer_stock && variant.dealer_stock.in_transit_qty > 0 && (
                                       <span className="inline-flex items-center gap-1 font-medium text-indigo-700">
                                         🚚 В пути: {variant.dealer_stock.in_transit_qty} шт
                                       </span>
@@ -661,7 +724,7 @@ export default function ProductPage({
                           <td className="py-3 pr-3">
                             <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${wh.stock > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
                               <span className={`inline-block h-1.5 w-1.5 rounded-full ${wh.stock > 0 ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-                              {wh.stock > 0 ? `${wh.stock} шт.` : '0 шт. (под заказ)'}
+                              {wh.stock > 0 ? `${wh.stock} шт.` : '0 шт.'}
                             </span>
                           </td>
                           {user && (
@@ -724,9 +787,9 @@ export default function ProductPage({
             onTouchMove={imageCount > 1 ? handleTouchMove : undefined}
             onTouchEnd={imageCount > 1 ? handleTouchEnd : undefined}
           >
-            {imageCount > 0 && !imageError ? (
+            {imageCount > 0 && validImages[selectedImage] && !imageError ? (
               <img
-                src={product.images[selectedImage]}
+                src={validImages[selectedImage]}
                 alt={`${product.name} — фото ${selectedImage + 1}`}
                 className="h-full w-full object-cover pointer-events-none"
                 draggable={false}
@@ -749,7 +812,7 @@ export default function ProductPage({
 
           {imageCount > 1 && (
             <div className="mb-4 flex justify-center gap-2">
-              {product.images.map((_, idx) => (
+              {validImages.map((_, idx) => (
                 <button key={idx} onClick={() => setSelectedImage(idx)} className={`h-2 w-2 rounded-full transition-all ${idx === selectedImage ? 'bg-brand-600 scale-125' : 'bg-slate-300 hover:bg-slate-400'}`} />
               ))}
             </div>
@@ -809,11 +872,20 @@ export default function ProductPage({
             {product.variants.map(variant => {
               const variantPrice = pricing.getVariantPrice(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
               const pricePerSqm = pricing.getPricePerSqm(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
+              const rows = filterClientWarehouses(variant.warehouses, myShowroomId, myShowroomName);
 
               return (
-                <div key={variant.sku} className="card p-4">
+                <div key={variant.sku || variant.size} className="card p-4">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-bold text-slate-900">{variant.size}</span>
+                    <div>
+                      <span className="text-sm font-bold text-slate-900">{variant.size}</span>
+                      <div className="mt-0.5 flex flex-wrap gap-x-2 text-[11px] text-slate-500 font-normal">
+                        {(variant.article || product.article) && (
+                          <span>Арт: <strong className="text-slate-800 font-medium">{variant.article || product.article}</strong></span>
+                        )}
+                        {variant.barcode && <span>ШК: {variant.barcode}</span>}
+                      </div>
+                    </div>
                     {user && <span className="text-base font-bold text-slate-900">{fmtPrice(variantPrice)}</span>}
                   </div>
                   {user && pricePerSqm > 0 && (
@@ -841,41 +913,47 @@ export default function ProductPage({
                     </div>
                   )}
 
-                  <div className="flex flex-col gap-3">
-                    {filterClientWarehouses(variant.warehouses, myShowroomId, myShowroomName).map(wh => {
-                      const whLabel = wh.warehouse_name || wh.city;
-                      const key = rowKey(variant.sku, whLabel);
-                      const qty = quantities[key] ?? 0;
+                  {rows.length === 0 ? (
+                    <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-2.5">
+                      <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold bg-slate-100 text-slate-500">
+                        <span className="inline-block h-1.5 w-1.5 rounded-full bg-slate-400" />
+                        Нет на складах
+                      </span>
+                      <span className="text-xs text-slate-400 italic">Под заказ</span>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-3">
+                      {rows.map(wh => {
+                        const whLabel = wh.warehouse_name || wh.city;
+                        const key = rowKey(variant.sku, whLabel);
+                        const qty = quantities[key] ?? 0;
 
-                      return (
-                        <div key={key} className="border-t border-slate-100 pt-3 first:border-0 first:pt-0">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm text-slate-700 font-medium">{whLabel}</span>
-                            <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${wh.stock > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
-                              {wh.stock > 0 ? (
-                                <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                              ) : (
-                                <span className="inline-block h-1.5 w-1.5 rounded-full bg-slate-300" />
-                              )}
-                              {wh.stock > 0 ? `${wh.stock} шт.` : '0 шт. (под заказ)'}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <div className="inline-flex items-center">
-                              <button onClick={() => decQty(key)} className="flex h-10 w-10 items-center justify-center rounded-l-md border border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors">
-                                <Minus className="h-4 w-4" />
-                              </button>
-                              <input type="number" min={0} max={wh.stock} value={qty} onChange={e => setQty(key, parseInt(e.target.value, 10) || 0)} className="h-10 w-14 border-y border-slate-200 bg-white text-center text-sm text-slate-900 outline-none focus:border-brand-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
-                              <button onClick={() => incQty(key)} className="flex h-10 w-10 items-center justify-center rounded-r-md border border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors">
-                                <Plus className="h-4 w-4" />
-                              </button>
+                        return (
+                          <div key={key} className="border-t border-slate-100 pt-3 first:border-0 first:pt-0">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-sm text-slate-700 font-medium">{whLabel}</span>
+                              <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${wh.stock > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
+                                <span className={`inline-block h-1.5 w-1.5 rounded-full ${wh.stock > 0 ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                                {wh.stock > 0 ? `${wh.stock} шт.` : '0 шт.'}
+                              </span>
                             </div>
-                            <MobileCartButton variant={variant} wh={wh} />
+                            <div className="flex items-center gap-3">
+                              <div className="inline-flex items-center">
+                                <button onClick={() => decQty(key)} className="flex h-10 w-10 items-center justify-center rounded-l-md border border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors">
+                                  <Minus className="h-4 w-4" />
+                                </button>
+                                <input type="number" min={0} max={wh.stock} value={qty} onChange={e => setQty(key, parseInt(e.target.value, 10) || 0)} className="h-10 w-14 border-y border-slate-200 bg-white text-center text-sm text-slate-900 outline-none focus:border-brand-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                <button onClick={() => incQty(key)} className="flex h-10 w-10 items-center justify-center rounded-r-md border border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors">
+                                  <Plus className="h-4 w-4" />
+                                </button>
+                              </div>
+                              <MobileCartButton variant={variant} wh={wh} />
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -926,15 +1004,17 @@ export default function ProductPage({
               </button>
             </>
           )}
-          <img
-            src={product.images[selectedImage]}
-            alt={`${product.name} — фото ${selectedImage + 1}`}
-            className="max-h-[85vh] max-w-[90vw] object-contain rounded-lg shadow-2xl"
-            onClick={e => e.stopPropagation()}
-          />
+          {imageCount > 0 && validImages[selectedImage] && (
+            <img
+              src={validImages[selectedImage]}
+              alt={`${product.name} — фото ${selectedImage + 1}`}
+              className="max-h-[85vh] max-w-[90vw] object-contain rounded-lg shadow-2xl"
+              onClick={e => e.stopPropagation()}
+            />
+          )}
           {imageCount > 1 && (
             <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2">
-              {product.images.map((_, idx) => (
+              {validImages.map((_, idx) => (
                 <button key={idx} onClick={e => { e.stopPropagation(); setSelectedImage(idx); }} aria-label={`Изображение ${idx + 1}`} aria-current={idx === selectedImage} className={`h-2.5 w-2.5 rounded-full transition-all ${idx === selectedImage ? 'bg-white scale-125' : 'bg-white/40 hover:bg-white/60'}`} />
               ))}
             </div>

@@ -111,11 +111,12 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
 
   for (const raw of rawProducts) {
     const parsed = parse1CNomenclature(raw.name, raw.collection);
+    const category = (raw.category || (raw.name?.toLowerCase().includes('дорожк') ? 'Дорожки' : 'Ковры')).trim();
     const collection = (raw.collection || parsed.collection || 'Ковры').trim();
     const article = (raw.article || parsed.sku || raw.id).trim();
     const color = (raw.color || parsed.color || '').trim();
     const normalizedColor = color.toUpperCase().replace(/[\s/\\-]+/g, '');
-    const groupKey = `${collection.toUpperCase()}__${article.toUpperCase()}${normalizedColor ? `__${normalizedColor}` : ''}`;
+    const groupKey = `${category.toUpperCase()}__${collection.toUpperCase()}__${article.toUpperCase()}${normalizedColor ? `__${normalizedColor}` : ''}`;
 
     const baseSqmPrice = Number(raw.price_per_sqm) || Number(raw.variants?.[0]?.price_per_sqm) || 15;
     const itemSize = parsed.size || raw.variants?.[0]?.size || '1.6 × 2.3';
@@ -146,27 +147,40 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
             Number(w.stock) > 0
           );
 
-          const cleanedWarehouses: Warehouse[] = [
-            {
+          const cleanedWarehouses: Warehouse[] = [];
+          if (hubStock > 0) {
+            cleanedWarehouses.push({
               warehouse_id: 81,
               warehouse_name: 'Основной Склад Астана',
               city: 'Основной Склад Астана',
               is_hub: true,
               stock: hubStock,
-            },
-            ...otherWarehouses.map(w => ({
-              ...w,
-              is_hub: false,
-            })),
-          ];
+            });
+          }
+          for (const w of otherWarehouses) {
+            if (Number(w.stock) > 0) {
+              cleanedWarehouses.push({
+                ...w,
+                is_hub: false,
+              });
+            }
+          }
+
+          const varArticle = v.article || (v as any).design_article || raw.article || article;
+          const varBarcode = v.barcode || (v as any).barcode;
+          const varCode = v.code || (v as any).code;
 
           return {
             ...v,
             size: s,
             area_sqm: area,
             sku: v.sku || `${article}-${s.replace(/\s+/g, '')}`,
+            article: varArticle,
+            barcode: varBarcode,
+            code: varCode,
             price_per_sqm: vPricePerSqm,
             price: rawVariantPrice,
+            piece_price: (v as any).piece_price || rawVariantPrice,
             base_price: rawVariantPrice,
             currency: v.currency || raw.currency || 'USD',
             warehouses: cleanedWarehouses,
@@ -177,20 +191,16 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
           id: `var-${article}-${itemSize}`,
           size: itemSize,
           sku: `${article}-${itemSize.replace(/\s+/g, '')}`,
+          article: raw.article || article,
+          barcode: (raw as any).barcode,
+          code: (raw as any).code,
           area_sqm: calculateArea(itemSize),
           price_per_sqm: baseSqmPrice,
           price: Math.round(baseSqmPrice * calculateArea(itemSize) * 100) / 100,
+          piece_price: Math.round(baseSqmPrice * calculateArea(itemSize) * 100) / 100,
           base_price: Math.round(baseSqmPrice * calculateArea(itemSize) * 100) / 100,
           currency: raw.currency || 'USD',
-          warehouses: [
-            {
-              warehouse_id: 81,
-              warehouse_name: 'Основной Склад Астана',
-              city: 'Основной Склад Астана',
-              is_hub: true,
-              stock: 0,
-            },
-          ],
+          warehouses: [],
           dealer_stock: (raw as any).dealer_stock,
         }];
 
@@ -204,7 +214,8 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
       map.set(groupKey, {
         ...raw,
         id: String(raw.id || `carpet-${groupKey.toLowerCase().replace(/[^a-z0-9_-]/g, '-')}`),
-        name: raw.name || parsed.cleanName || `${collection} ${article}${color ? ` (${color})` : ''}`,
+        name: raw.name || parsed.cleanName || `${category === 'Дорожки' ? 'Дорожка' : 'Ковер'} ${collection} ${article}${color ? ` (${color})` : ''}`,
+        category: category,
         collection: collection,
         article: article,
         color: color,
@@ -293,10 +304,10 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
       const areaB = b.area_sqm || calculateArea(b.size);
       return areaA - areaB;
     });
-    // Финальная нормализация склада хаба: имя и город строго «Основной Склад Астана»
+    // Финальная нормализация склада хаба: имя и город строго «Основной Склад Астана», только с stock > 0
     for (const v of prod.variants) {
-      v.warehouses = v.warehouses
-        .filter(w => w.warehouse_id === 81 || w.is_hub || w.stock > 0)
+      v.warehouses = (v.warehouses || [])
+        .filter(w => Number(w.stock) > 0)
         .map(w => {
           if (w.warehouse_id === 81 || w.is_hub || (w.warehouse_name && w.warehouse_name.includes('Астана'))) {
             return {
@@ -305,9 +316,13 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
               warehouse_name: 'Основной Склад Астана',
               city: 'Основной Склад Астана',
               is_hub: true,
+              stock: Number(w.stock),
             };
           }
-          return w;
+          return {
+            ...w,
+            stock: Number(w.stock),
+          };
         });
     }
     result.push(prod);
@@ -318,41 +333,46 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
 
 /**
  * Склад для клиентов:
- * 1. Центральный склад компании — СТРОГО «Основной Склад Астана» (ID 81 / is_hub: true).
- * Никакие города не выводим — только Основной Склад Астана для всех клиентов и только его остатки!
- * 2. Если авторизован дилер и у него привязан склад шоурума (showroom_warehouse_id),
- * то добавляется его склад шоурума с персональным остатком.
+ * 1. В ответе ERP приходят только склады, где товар реально есть в наличии (stock > 0).
+ * 2. Если variant.warehouses.length === 0: выводим одну строку/бейдж «Нет на складах».
+ * 3. Если variant.warehouses.length > 0: выводим строки только для тех складов, которые реально пришли.
  */
 export function filterClientWarehouses(
   warehouses: Warehouse[] = [],
   showroomWarehouseId?: number | null,
   showroomWarehouseName?: string | null
 ): Warehouse[] {
+  if (!warehouses || warehouses.length === 0) {
+    return [];
+  }
+
   const result: Warehouse[] = [];
 
   // 1. Центральный склад компании — СТРОГО ID 81 («Основной Склад Астана»)
-  const mainHub = (warehouses || []).find(w => w.warehouse_id === 81)
-    || (warehouses || []).find(w => (w.warehouse_name && w.warehouse_name.includes('Астана')) || (w.city && w.city.includes('Астана')))
-    || (warehouses || []).find(w => w.is_hub && w.stock > 0);
+  const mainHub = warehouses.find(w => w.warehouse_id === 81)
+    || warehouses.find(w => (w.warehouse_name && w.warehouse_name.includes('Астана')) || (w.city && w.city.includes('Астана')))
+    || warehouses.find(w => w.is_hub && Number(w.stock) > 0);
 
-  result.push({
-    warehouse_id: 81,
-    warehouse_name: 'Основной Склад Астана',
-    city: 'Основной Склад Астана',
-    is_hub: true,
-    stock: mainHub ? Number(mainHub.stock) || 0 : 0,
-  });
+  if (mainHub && Number(mainHub.stock) > 0) {
+    result.push({
+      warehouse_id: 81,
+      warehouse_name: 'Основной Склад Астана',
+      city: 'Основной Склад Астана',
+      is_hub: true,
+      stock: Number(mainHub.stock),
+    });
+  }
 
   // 2. Персональный склад шоурума авторизованного дилера
   if (showroomWarehouseId && showroomWarehouseId !== 81) {
-    const showroom = (warehouses || []).find(w => w.warehouse_id === showroomWarehouseId);
-    if (showroom) {
+    const showroom = warehouses.find(w => w.warehouse_id === showroomWarehouseId);
+    if (showroom && Number(showroom.stock) > 0) {
       result.push({
         warehouse_id: showroomWarehouseId,
         warehouse_name: showroomWarehouseName || showroom.warehouse_name || 'В моем магазине',
         city: showroomWarehouseName || showroom.warehouse_name || 'В моем магазине',
         is_hub: false,
-        stock: Number(showroom.stock) || 0,
+        stock: Number(showroom.stock),
       });
     }
   }

@@ -126,6 +126,15 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
       </div>
 
       <div className="flex flex-col p-3 sm:p-4">
+        <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1">
+          <span className="font-medium text-slate-700">Арт: {product.article || product.name.split(' ')[2] || '—'}</span>
+          {product.category && (
+            <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
+              {product.category}
+            </span>
+          )}
+        </div>
+
         <h3 className="text-sm font-semibold text-slate-900 leading-snug line-clamp-2 group-hover:text-brand-700 transition-colors">
           {product.name}
         </h3>
@@ -213,7 +222,15 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
               return (
                 <div key={variant.sku} className="border-b border-slate-100 pb-2 last:border-b-0 last:pb-0">
                   <div className="grid grid-cols-[1fr_auto_44px_38px] items-center gap-2 text-sm">
-                    <span className="font-medium text-slate-700 whitespace-nowrap">{variant.size}</span>
+                    <div>
+                      <span className="font-medium text-slate-700 whitespace-nowrap">{variant.size}</span>
+                      {(variant.article || variant.barcode) && (
+                        <div className="text-[10px] text-slate-400">
+                          {variant.article && <span>Арт: {variant.article}</span>}
+                          {variant.barcode && <span className="ml-1 font-mono">{variant.barcode}</span>}
+                        </div>
+                      )}
+                    </div>
                     <span className={`text-right text-xs font-medium ${available ? 'text-slate-600' : 'text-slate-300'}`}>
                       {available ? stock : '—'}
                     </span>

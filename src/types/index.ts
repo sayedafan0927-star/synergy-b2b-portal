@@ -24,6 +24,8 @@ export interface ProductVariant {
   item_id?: number;
   sku: string;
   article?: string;
+  barcode?: string;
+  code?: string;
   design_article?: string;
   size: string;
   width?: number;
@@ -33,6 +35,7 @@ export interface ProductVariant {
   shape_label?: string;
   price_per_sqm?: number;
   price?: number;
+  piece_price?: number;
   base_price: number;
   currency?: string;
   warehouses: Warehouse[];

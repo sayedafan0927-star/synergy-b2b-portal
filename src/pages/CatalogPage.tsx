@@ -465,6 +465,7 @@ export default function CatalogPage({ onNavigate, initialCollection, initialCoun
   const [sortBy, setSortBy] = useState<SortOption>('popular');
   const [stockWarehouse, setStockWarehouse] = useState('');
   const [visibleCount, setVisibleCount] = useState(12);
+  const [selectedCategory, setSelectedCategory] = useState<'all' | 'Ковры' | 'Дорожки'>('all');
 
   const [selectedCollections, setSelectedCollections] = useState<Set<string>>(() => initialCollection ? new Set([initialCollection]) : new Set());
   const [selectedManufacturers, setSelectedManufacturers] = useState<Set<string>>(new Set());
@@ -488,10 +489,11 @@ export default function CatalogPage({ onNavigate, initialCollection, initialCoun
     return next;
   };
 
-  const activeFilterCount = selectedCollections.size + selectedManufacturers.size + selectedCountries.size + selectedWarehouses.size + selectedSizes.size;
+  const activeFilterCount = (selectedCategory !== 'all' ? 1 : 0) + selectedCollections.size + selectedManufacturers.size + selectedCountries.size + selectedWarehouses.size + selectedSizes.size;
 
   const resetFilters = () => {
     setSearchQuery('');
+    setSelectedCategory('all');
     setSelectedCollections(new Set());
     setSelectedManufacturers(new Set());
     setSelectedCountries(new Set());
@@ -501,6 +503,14 @@ export default function CatalogPage({ onNavigate, initialCollection, initialCoun
 
   const filteredProducts = useMemo(() => {
     let result = [...products];
+
+    if (selectedCategory !== 'all') {
+      result = result.filter(p =>
+        (p.category && p.category.toLowerCase() === selectedCategory.toLowerCase()) ||
+        (selectedCategory === 'Дорожки' ? p.name.toLowerCase().includes('дорожк') : !p.name.toLowerCase().includes('дорожк'))
+      );
+    }
+
     if (selectedCollections.size > 0) result = result.filter(p => selectedCollections.has(p.collection));
     if (selectedManufacturers.size > 0) result = result.filter(p => selectedManufacturers.has(p.manufacturer));
     if (selectedCountries.size > 0) result = result.filter(p => selectedCountries.has(p.country));
@@ -508,7 +518,17 @@ export default function CatalogPage({ onNavigate, initialCollection, initialCoun
     if (selectedSizes.size > 0) result = result.filter(p => p.variants.some(v => selectedSizes.has(v.size)));
     if (searchQuery.trim()) {
       const q = searchQuery.trim().toLowerCase();
-      result = result.filter(p => p.name.toLowerCase().includes(q) || p.collection.toLowerCase().includes(q) || p.manufacturer.toLowerCase().includes(q));
+      result = result.filter(p =>
+        p.name.toLowerCase().includes(q) ||
+        p.collection.toLowerCase().includes(q) ||
+        p.manufacturer.toLowerCase().includes(q) ||
+        (p.article && p.article.toLowerCase().includes(q)) ||
+        p.variants.some(v =>
+          (v.article && v.article.toLowerCase().includes(q)) ||
+          (v.barcode && v.barcode.includes(q)) ||
+          (v.code && v.code.includes(q))
+        )
+      );
     }
     switch (sortBy) {
       case 'popular': result.sort((a, b) => getTotalStock(b) - getTotalStock(a)); break;
@@ -517,10 +537,10 @@ export default function CatalogPage({ onNavigate, initialCollection, initialCoun
       case 'name': result.sort((a, b) => a.name.localeCompare(b.name)); break;
     }
     return result;
-  }, [products, selectedCollections, selectedManufacturers, selectedCountries, selectedWarehouses, selectedSizes, searchQuery, sortBy, pricing]);
+  }, [products, selectedCategory, selectedCollections, selectedManufacturers, selectedCountries, selectedWarehouses, selectedSizes, searchQuery, sortBy, pricing]);
 
   // Reset visible count when filters/search/sort change
-  useEffect(() => { setVisibleCount(12); }, [selectedCollections, selectedManufacturers, selectedCountries, selectedWarehouses, selectedSizes, searchQuery, sortBy, viewMode]);
+  useEffect(() => { setVisibleCount(12); }, [selectedCategory, selectedCollections, selectedManufacturers, selectedCountries, selectedWarehouses, selectedSizes, searchQuery, sortBy, viewMode]);
 
   const visibleProducts = useMemo(() => filteredProducts.slice(0, visibleCount), [filteredProducts, visibleCount]);
   const hasMore = filteredProducts.length > visibleCount;

@@ -128,9 +128,11 @@ export async function fetchCatalogFromErp(dealerId?: string | number, priceType?
   if (dealerId) q.set('dealer_id', String(dealerId));
   if (priceType) q.set('price_type', priceType);
   q.set('portal_key', ERP_API_KEY);
+  q.set('_t', String(Date.now()));
 
   const response = await fetch(`${ERP_API_URL}?${q.toString()}`, {
     method: 'GET',
+    cache: 'no-store',
     headers: {
       'X-Portal-Key': ERP_API_KEY,
     },

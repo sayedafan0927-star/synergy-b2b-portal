@@ -15,7 +15,7 @@ interface ProductImageProps {
 export function CarpetPlaceholderIcon({ className = "w-full h-full" }: { className?: string }) {
   return (
     <div className={`flex flex-col items-center justify-center bg-gradient-to-b from-slate-50 via-slate-100 to-slate-200 text-slate-400 select-none p-4 ${className}`}>
-      <div className="relative flex flex-col items-center justify-center w-20 h-28 sm:w-24 sm:h-32 rounded border-2 border-dashed border-slate-300 bg-white/70 shadow-inner p-2">
+      <div className="relative flex flex-col items-center justify-center w-20 h-28 sm:w-24 sm:h-32 rounded border-2 border-dashed border-slate-300 bg-white/80 shadow-inner p-2">
         {/* Top fringe */}
         <div className="flex justify-between w-full h-1 border-b border-slate-200 opacity-60 mb-1">
           {[...Array(8)].map((_, i) => (
@@ -23,16 +23,14 @@ export function CarpetPlaceholderIcon({ className = "w-full h-full" }: { classNa
           ))}
         </div>
 
-        {/* Inner geometric pattern */}
-        <div className="flex-1 w-full border border-slate-200 rounded flex flex-col items-center justify-center p-1 bg-slate-50/60">
-          <svg className="w-7 h-7 text-brand-700/40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <rect x="3" y="3" width="18" height="18" rx="2" />
-            <path d="M12 3v18" strokeDasharray="2 2" />
-            <path d="M3 12h18" strokeDasharray="2 2" />
-            <circle cx="12" cy="12" r="3" />
-            <path d="m8 8 8 8" />
-            <path d="m16 8-8 8" />
-          </svg>
+        {/* Inner geometric pattern with company logo */}
+        <div className="flex-1 w-full border border-slate-200/70 rounded flex flex-col items-center justify-center p-1.5 bg-slate-50/70">
+          <img
+            src="/Вектор_Синэнергия.png"
+            alt="Synergy"
+            className="h-5 sm:h-6 w-auto object-contain opacity-40 grayscale"
+            onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none'; }}
+          />
           <span className="text-[9px] uppercase tracking-wider font-semibold text-slate-400 mt-1">Ковер</span>
         </div>
 
@@ -70,8 +68,8 @@ export default function ProductImage({
   const [hasError, setHasError] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // Если фото нет или произошла ошибка загрузки — показываем стандартную UI-заглушку ковра
-  if (!src || hasError) {
+  // Если фото нет или произошла ошибка загрузки — показываем стандартную UI-заглушку ковра с логотипом
+  if (!src || !src.trim() || hasError) {
     return <CarpetPlaceholderIcon className={className} />;
   }
 
