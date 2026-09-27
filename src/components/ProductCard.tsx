@@ -15,9 +15,9 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
   const sizeCount = product.variants.length;
 
   return (
-    <button
+    <div
       onClick={() => onNavigate('product', product.id)}
-      className="group card flex flex-col overflow-hidden text-left"
+      className="group card flex flex-col overflow-hidden text-left cursor-pointer"
     >
       <div className="relative aspect-[4/3] overflow-hidden bg-slate-100">
         <img
@@ -38,7 +38,15 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
         <h3 className="text-sm font-semibold text-slate-900 leading-snug line-clamp-2 group-hover:text-brand-700 transition-colors">
           {product.name}
         </h3>
-        <p className="mt-1 text-xs text-slate-400">{product.collection}</p>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onNavigate('catalog', product.collection);
+          }}
+          className="mt-1 inline-flex items-center gap-1 text-xs text-brand-600 hover:text-brand-800 hover:underline transition-colors w-fit"
+        >
+          {product.collection}
+        </button>
 
         <p className="mt-2 text-xs text-slate-400">{product.manufacturer}</p>
 
@@ -55,6 +63,6 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
           )}
         </div>
       </div>
-    </button>
+    </div>
   );
 }
