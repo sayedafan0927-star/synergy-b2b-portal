@@ -18,6 +18,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import type { PageId, CartItem } from '@/types';
 import { calcSqm, parseSizeDimensions } from '@/types';
 import { submitOrderToErp } from '@/lib/erpApi';
+import { supabase } from '@/lib/supabase';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -69,7 +70,7 @@ const CITIES = ['Астана', 'Алматы', 'Шымкент'];
 
 export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, productId?: string) => void }) {
   const { items, removeItem, updateQuantity, clearCart, totalItems, totalPrice, totalSqm } = useCart();
-  const { user, profile } = useAuth();
+  const { user, profile, isImpersonating, impersonatedProfile } = useAuth();
 
   const [orderDocNumber, setOrderDocNumber] = useState<string | null>(null);
   const [activeCollection, setActiveCollection] = useState<string | null>(null);
@@ -169,6 +170,51 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
       });
 
       if (data.success && data.order?.doc_number) {
+        if (user) {
+          try {
+            const targetUserId = isImpersonating && impersonatedProfile ? impersonatedProfile.id : user.id;
+            const placedById = user.id;
+            const clientNote = [
+              clientCompany.trim(),
+              `${clientName.trim()} (${clientPhone.trim()})`,
+              orderComment.trim(),
+            ].filter(Boolean).join(' | ');
+
+            const { data: dbOrder, error: orderErr } = await supabase
+              .from('orders')
+              .insert({
+                order_number: data.order.doc_number,
+                user_id: targetUserId,
+                placed_by_id: placedById,
+                status: 'pending',
+                warehouse: selectedCity,
+                notes: clientNote,
+                total_amount: totalPrice,
+                total_sqm: totalSqm,
+                total_items: totalItems,
+              })
+              .select('id')
+              .single();
+
+            if (!orderErr && dbOrder?.id) {
+              const dbItems = items.map(item => ({
+                order_id: dbOrder.id,
+                product_id: item.productId,
+                product_name: item.productName,
+                collection: item.collection,
+                size: item.size,
+                sku: item.sku,
+                warehouse: item.warehouse,
+                price: item.price,
+                quantity: item.quantity,
+              }));
+              await supabase.from('order_items').insert(dbItems);
+            }
+          } catch (dbErr) {
+            console.warn('[CartPage] Failed to save order into Supabase:', dbErr);
+          }
+        }
+
         clearCart();
         setOrderDocNumber(data.order.doc_number);
         window.scrollTo({ top: 0, behavior: 'smooth' });

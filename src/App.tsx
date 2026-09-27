@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { AuthProvider } from '@/contexts/AuthContext';
+import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { CartProvider } from '@/contexts/CartContext';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
@@ -61,6 +61,42 @@ function Preloader({ onFinished }: { onFinished: () => void }) {
   );
 }
 
+function ImpersonationBanner() {
+  const { isImpersonating, profile, stopImpersonation } = useAuth();
+  if (!isImpersonating || !profile) return null;
+
+  return (
+    <div className="bg-amber-500 text-white px-4 py-2 text-xs flex flex-wrap items-center justify-between gap-2 sticky top-0 z-[60] shadow-md">
+      <div className="flex items-center gap-2">
+        <span className="flex h-2 w-2 rounded-full bg-white animate-ping" />
+        <span>
+          Режим просмотра от имени: <strong>{profile.full_name || profile.company_name || 'Пользователь'}</strong>
+          {profile.company_name && ` (${profile.company_name})`}
+          {profile.price_type && <span className="ml-1.5 bg-amber-600 px-1.5 py-0.5 rounded text-[10px] font-mono">Тип цен: {profile.price_type}</span>}
+        </span>
+      </div>
+      <button
+        onClick={stopImpersonation}
+        className="rounded bg-white px-3 py-1 text-xs font-bold text-amber-900 shadow hover:bg-amber-50 transition-colors"
+      >
+        Вернуться в свой аккаунт
+      </button>
+    </div>
+  );
+}
+
+function MainLayout({ children, page, navigate, showFooter }: { children: React.ReactNode; page: PageId; navigate: (page: PageId, id?: string) => void; showFooter: boolean }) {
+  return (
+    <div className="flex min-h-screen flex-col">
+      <ImpersonationBanner />
+      <Header currentPage={page} onNavigate={navigate} />
+      <main className="flex-1">{children}</main>
+      {showFooter && <Footer onNavigate={navigate} />}
+      <MobileNav currentPage={page} onNavigate={navigate} />
+    </div>
+  );
+}
+
 export default function App() {
   const [page, setPage] = useState<PageId>('home');
   const [productId, setProductId] = useState<string>('');
@@ -115,12 +151,9 @@ export default function App() {
     <AuthProvider>
       <CartProvider>
         {!preloaderDone && <Preloader onFinished={handlePreloaderFinished} />}
-        <div className="flex min-h-screen flex-col">
-          <Header currentPage={page} onNavigate={navigate} />
-          <main className="flex-1">{renderPage()}</main>
-          {showFooter && <Footer onNavigate={navigate} />}
-          <MobileNav currentPage={page} onNavigate={navigate} />
-        </div>
+        <MainLayout page={page} navigate={navigate} showFooter={showFooter}>
+          {renderPage()}
+        </MainLayout>
       </CartProvider>
     </AuthProvider>
   );

@@ -27,6 +27,11 @@ interface AuthContextValue {
   isManager: boolean;
   isSupplier: boolean;
   isClient: boolean;
+  isImpersonating: boolean;
+  impersonatedProfile: Profile | null;
+  realProfile: Profile | null;
+  impersonateUser: (target: Profile) => void;
+  stopImpersonation: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -97,23 +102,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return null;
   }, []);
 
+  const [impersonatedProfile, setImpersonatedProfile] = useState<Profile | null>(() => {
+    if (typeof window !== 'undefined') {
+      const stored = sessionStorage.getItem('synergy:impersonated_profile');
+      if (stored) {
+        try { return JSON.parse(stored); } catch { return null; }
+      }
+    }
+    return null;
+  });
+
+  const impersonateUser = useCallback((target: Profile) => {
+    setImpersonatedProfile(target);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('synergy:impersonated_profile', JSON.stringify(target));
+    }
+  }, []);
+
+  const stopImpersonation = useCallback(() => {
+    setImpersonatedProfile(null);
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('synergy:impersonated_profile');
+    }
+  }, []);
+
   const signOutFn = useCallback(async () => {
     await supabase.auth.signOut();
     setUser(null);
     setProfile(null);
-  }, []);
+    stopImpersonation();
+  }, [stopImpersonation]);
 
   const refreshProfile = useCallback(async () => {
     if (user) await fetchProfile(user.id);
   }, [user, fetchProfile]);
 
-  const role = profile?.role;
+  const effectiveProfile = impersonatedProfile ?? profile;
+  const role = effectiveProfile?.role;
 
   return (
     <AuthContext.Provider
       value={{
         user,
-        profile,
+        profile: effectiveProfile,
         loading,
         signIn,
         signUp,
@@ -123,6 +154,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isManager: role === 'manager_rm' || role === 'manager_lm',
         isSupplier: role === 'supplier',
         isClient: role === 'client' || !role,
+        isImpersonating: impersonatedProfile !== null,
+        impersonatedProfile,
+        realProfile: profile,
+        impersonateUser,
+        stopImpersonation,
       }}
     >
       {children}

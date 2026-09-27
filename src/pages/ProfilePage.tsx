@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   Package,
   Settings,
@@ -28,6 +28,7 @@ import {
   Boxes,
   Activity,
   FileJson,
+  Search,
 } from 'lucide-react';
 import type { PageId } from '@/types';
 import { calcSqm, parseSizeDimensions } from '@/types';
@@ -35,9 +36,11 @@ import { useAuth, type UserRole } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { syncAllErpData, type ErpSyncReport, ERP_API_URL, fetchClientDebtFromErp, type ClientDebtReport } from '@/lib/erpApi';
 import { triggerCatalogReload } from '@/hooks/useProductData';
+import { triggerDisplaySettingsReload } from '@/hooks/useDisplaySettings';
 
 /* ─── Types ─── */
 interface OrderItem {
+  id?: string;
   productName: string;
   collection: string;
   size: string;
@@ -48,12 +51,32 @@ interface OrderItem {
 
 interface Order {
   id: string;
+  orderNumber: string;
+  userId?: string;
+  placedById?: string;
   date: string;
   status: string;
+  statusRaw: string;
   statusColor: string;
   warehouse: string;
+  notes?: string;
+  clientName?: string;
+  clientCompany?: string;
+  clientPhone?: string;
+  totalAmount: number;
+  totalSqm: number;
+  totalItems: number;
   items: OrderItem[];
 }
+
+const ORDER_STATUS_MAP: Record<string, { label: string; color: string }> = {
+  pending: { label: 'Новый', color: 'bg-amber-50 text-amber-700 border-amber-200' },
+  processing: { label: 'В обработке', color: 'bg-blue-50 text-blue-700 border-blue-200' },
+  shipped: { label: 'Отгружен', color: 'bg-purple-50 text-purple-700 border-purple-200' },
+  delivered: { label: 'Доставлен', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  cancelled: { label: 'Отменён', color: 'bg-rose-50 text-rose-700 border-rose-200' },
+  draft: { label: 'Черновик', color: 'bg-slate-100 text-slate-600 border-slate-200' },
+};
 
 interface DisplaySettings {
   show_stock: boolean;
@@ -96,44 +119,47 @@ function orderTotals(items: OrderItem[]) {
   return { qty, sqm, sum };
 }
 
-/* ─── Mock orders (demo) ─── */
-const MOCK_ORDERS: Order[] = [
-  {
-    id: 'ORD-2025-0047', date: '22.09.2025', status: 'Доставлен', statusColor: 'bg-emerald-50 text-emerald-700', warehouse: 'Астана',
-    items: [
-      { productName: 'Royal Heritage 1200', collection: 'Royal Heritage', size: '1.00 × 2.00', warehouse: 'Астана', price: 72, quantity: 4 },
-      { productName: 'Royal Heritage 1200', collection: 'Royal Heritage', size: '1.50 × 2.30', warehouse: 'Астана', price: 136, quantity: 2 },
-      { productName: 'Milano Geometric', collection: 'Milano', size: '0.80 × 1.50', warehouse: 'Астана', price: 38, quantity: 6 },
-    ],
-  },
-  {
-    id: 'ORD-2025-0039', date: '15.09.2025', status: 'В обработке', statusColor: 'bg-amber-50 text-amber-700', warehouse: 'Алматы',
-    items: [
-      { productName: 'Nordic Comfort', collection: 'Nordic', size: '1.00 × 2.00', warehouse: 'Алматы', price: 52, quantity: 3 },
-      { productName: 'Nordic Comfort', collection: 'Nordic', size: '1.50 × 2.30', warehouse: 'Алматы', price: 95, quantity: 2 },
-      { productName: 'Elegance Medallion', collection: 'Elegance', size: '1.20 × 1.70', warehouse: 'Алматы', price: 76, quantity: 3 },
-    ],
-  },
-  {
-    id: 'ORD-2025-0031', date: '02.09.2025', status: 'Доставлен', statusColor: 'bg-emerald-50 text-emerald-700', warehouse: 'Астана',
-    items: [
-      { productName: 'Royal Heritage 1200', collection: 'Royal Heritage', size: '2.00 × 3.00', warehouse: 'Астана', price: 204, quantity: 5 },
-      { productName: 'Isfahan Silk Touch', collection: 'Isfahan', size: '1.00 × 2.00', warehouse: 'Астана', price: 98, quantity: 4 },
-      { productName: 'Isfahan Silk Touch', collection: 'Isfahan', size: '1.50 × 2.30', warehouse: 'Астана', price: 182, quantity: 3 },
-      { productName: 'Avenue Runner', collection: 'Avenue', size: '0.80 × 25.00', warehouse: 'Астана', price: 109, quantity: 6 },
-      { productName: 'Avenue Runner', collection: 'Avenue', size: '1.00 × 25.00', warehouse: 'Астана', price: 136, quantity: 6 },
-    ],
-  },
-];
-
 type TabId = 'orders' | 'admin-erp' | 'admin-users' | 'admin-display' | 'settings';
 
 /* ─── Order Detail View ─── */
-function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
+function OrderDetail({
+  order,
+  onBack,
+  isAdmin,
+  onUpdateOrder,
+}: {
+  order: Order;
+  onBack: () => void;
+  isAdmin?: boolean;
+  onUpdateOrder?: (o: Order) => void;
+}) {
   const [activeCollection, setActiveCollection] = useState<string | null>(null);
   const [sizeAsc, setSizeAsc] = useState(true);
+  const [status, setStatus] = useState(order.statusRaw || 'pending');
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+
   const collections = useMemo(() => Array.from(new Set(order.items.map(i => i.collection))).sort(), [order]);
-  const totals = orderTotals(order.items);
+  const totals = useMemo(() => orderTotals(order.items), [order.items]);
+
+  const handleStatusChange = async (newStatus: string) => {
+    setUpdatingStatus(true);
+    const { error } = await supabase
+      .from('orders')
+      .update({ status: newStatus, updated_at: new Date().toISOString() })
+      .eq('id', order.id);
+
+    if (!error) {
+      const meta = ORDER_STATUS_MAP[newStatus] || { label: newStatus, color: 'bg-slate-100 text-slate-600 border-slate-200' };
+      setStatus(newStatus);
+      onUpdateOrder?.({
+        ...order,
+        status: meta.label,
+        statusRaw: newStatus,
+        statusColor: meta.color,
+      });
+    }
+    setUpdatingStatus(false);
+  };
 
   const filteredItems = useMemo(() => {
     let list = activeCollection ? order.items.filter(i => i.collection === activeCollection) : [...order.items];
@@ -159,23 +185,56 @@ function OrderDetail({ order, onBack }: { order: Order; onBack: () => void }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <button onClick={onBack} className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50"><ArrowLeft className="h-4 w-4" /></button>
-        <div className="flex-1">
-          <div className="flex items-center gap-2">
-            <Hash className="h-4 w-4 text-slate-400" />
-            <h2 className="text-lg font-bold text-slate-900">{order.id}</h2>
-            <span className={`badge ${order.statusColor}`}>{order.status}</span>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <button onClick={onBack} className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50">
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Hash className="h-4 w-4 text-slate-400" />
+              <h2 className="text-lg font-bold text-slate-900">{order.orderNumber || order.id}</h2>
+              <span className={`badge border ${order.statusColor}`}>{order.status}</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400 mt-0.5">
+              <span>{order.date}</span>
+              {order.warehouse && <span>• Склад: <strong className="text-slate-600">{order.warehouse}</strong></span>}
+              {order.clientCompany && <span>• Клиент: <strong className="text-slate-700">{order.clientCompany}</strong></span>}
+              {order.clientName && <span>({order.clientName}{order.clientPhone ? `, ${order.clientPhone}` : ''})</span>}
+            </div>
           </div>
-          <p className="text-xs text-slate-400 mt-0.5">{order.date} / {order.warehouse}</p>
         </div>
+
+        {isAdmin && (
+          <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
+            <span className="text-xs font-semibold text-slate-600">Статус заказа:</span>
+            <select
+              value={status}
+              disabled={updatingStatus}
+              onChange={(e) => handleStatusChange(e.target.value)}
+              className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-bold text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer"
+            >
+              <option value="pending">Новый</option>
+              <option value="processing">В обработке</option>
+              <option value="shipped">Отгружен</option>
+              <option value="delivered">Доставлен</option>
+              <option value="cancelled">Отменён</option>
+            </select>
+          </div>
+        )}
       </div>
+
+      {order.notes && (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs text-slate-600">
+          <strong className="text-slate-800">Примечание к заказу:</strong> {order.notes}
+        </div>
+      )}
 
       <div className="grid grid-cols-3 gap-3">
         {[
-          { label: 'Кол-во', value: `${totals.qty} шт.` },
-          { label: 'Площадь', value: `${fmt2(totals.sqm)} м²` },
-          { label: 'Сумма', value: fmtPrice(totals.sum), bold: true },
+          { label: 'Кол-во', value: `${totals.qty || order.totalItems} шт.` },
+          { label: 'Площадь', value: `${fmt2(totals.sqm || order.totalSqm)} м²` },
+          { label: 'Сумма', value: fmtPrice(totals.sum || order.totalAmount), bold: true },
         ].map(s => (
           <div key={s.label} className="card px-4 py-3 text-center">
             <p className="text-[10px] uppercase tracking-wide text-slate-400">{s.label}</p>
@@ -284,8 +343,11 @@ function AdminDisplaySettings() {
     }));
   };
 
+  const [saved, setSaved] = useState(false);
+
   const handleSave = async () => {
     setSaving(true);
+    setSaved(false);
     for (const role of roles) {
       const s = settings[role];
       if (!s) continue;
@@ -298,7 +360,10 @@ function AdminDisplaySettings() {
         updated_at: new Date().toISOString(),
       }).eq('target_role', role);
     }
+    triggerDisplaySettingsReload();
     setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 3000);
   };
 
   const columns = [
@@ -315,7 +380,7 @@ function AdminDisplaySettings() {
         <Eye className="h-5 w-5 text-slate-500" />
         <div>
           <h2 className="text-lg font-bold text-slate-900">Видимость столбцов</h2>
-          <p className="text-sm text-slate-500">Настройте, что видит каждая роль в сетке остатков</p>
+          <p className="text-sm text-slate-500">Настройте, что видит каждая роль в сетке остатков каталога</p>
         </div>
       </div>
 
@@ -357,10 +422,16 @@ function AdminDisplaySettings() {
             </tbody>
           </table>
         </div>
-        <div className="border-t border-slate-100 px-4 py-3">
+        <div className="border-t border-slate-100 px-4 py-3 flex items-center gap-3">
           <button onClick={handleSave} disabled={saving} className="btn-primary text-sm">
             {saving ? 'Сохранение...' : 'Сохранить настройки'}
           </button>
+          {saved && (
+            <span className="text-xs text-emerald-600 font-medium flex items-center gap-1.5">
+              <CheckCircle2 className="h-4 w-4" />
+              Настройки сохранены и применены в каталоге!
+            </span>
+          )}
         </div>
       </div>
     </div>
@@ -368,13 +439,30 @@ function AdminDisplaySettings() {
 }
 
 /* ─── Admin: Users Tab ─── */
-function AdminUsersTab() {
-  const [users, setUsers] = useState<Array<{ id: string; full_name: string; company_name: string; role: UserRole; partner_id: string | null }>>([]);
+function AdminUsersTab({ onNavigate }: { onNavigate: (page: PageId) => void }) {
+  const { impersonateUser, user: currentUser } = useAuth();
+  const [users, setUsers] = useState<Array<{
+    id: string;
+    full_name: string;
+    company_name: string;
+    phone: string;
+    role: UserRole;
+    partner_id: string | null;
+    price_type: string;
+    manager_id: string | null;
+  }>>([]);
+  const [userSearch, setUserSearch] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.from('profiles').select('id, full_name, company_name, role, partner_id').order('created_at', { ascending: false }).then(({ data }) => {
-      if (data) setUsers(data as typeof users);
-    });
+    supabase
+      .from('profiles')
+      .select('id, full_name, company_name, phone, role, partner_id, price_type, manager_id')
+      .order('created_at', { ascending: false })
+      .then(({ data }) => {
+        if (data) setUsers(data as typeof users);
+        setLoading(false);
+      });
   }, []);
 
   const handleRoleChange = async (userId: string, newRole: string) => {
@@ -384,45 +472,91 @@ function AdminUsersTab() {
     }
   };
 
+  const filteredUsers = useMemo(() => {
+    if (!userSearch.trim()) return users;
+    const q = userSearch.toLowerCase().trim();
+    return users.filter(u =>
+      (u.full_name || '').toLowerCase().includes(q) ||
+      (u.company_name || '').toLowerCase().includes(q) ||
+      (u.phone || '').toLowerCase().includes(q) ||
+      (u.partner_id || '').toLowerCase().includes(q) ||
+      (u.role || '').toLowerCase().includes(q)
+    );
+  }, [users, userSearch]);
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Users className="h-5 w-5 text-slate-500" />
-        <div>
-          <h2 className="text-lg font-bold text-slate-900">Пользователи</h2>
-          <p className="text-sm text-slate-500">Управление ролями и доступом</p>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <Users className="h-5 w-5 text-slate-500" />
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">Пользователи ({filteredUsers.length})</h2>
+            <p className="text-sm text-slate-500">Управление ролями, ценами и вход от имени клиента</p>
+          </div>
+        </div>
+        <div className="relative w-full sm:w-64">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+          <input
+            type="text"
+            value={userSearch}
+            onChange={e => setUserSearch(e.target.value)}
+            placeholder="Поиск по имени, компании..."
+            className="input-field pl-9 py-1 text-xs"
+          />
         </div>
       </div>
 
       <div className="space-y-2">
-        {users.map(u => (
-          <div key={u.id} className="card px-4 py-3 flex flex-wrap items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 shrink-0">
-              <User className="h-4 w-4 text-slate-500" />
+        {filteredUsers.map(u => (
+          <div key={u.id} className="card px-4 py-3 flex flex-wrap items-center gap-3 hover:border-slate-300 transition-colors">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 shrink-0">
+              <User className="h-5 w-5 text-slate-500" />
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-slate-900 truncate">{u.full_name || 'Без имени'}</p>
-              <p className="text-xs text-slate-400 truncate">{u.company_name || 'Компания не указана'}</p>
+            <div className="flex-1 min-w-[180px]">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold text-slate-900 truncate">{u.full_name || 'Без имени'}</p>
+                {u.id === currentUser?.id && (
+                  <span className="badge bg-slate-100 text-slate-600 text-[10px]">Вы</span>
+                )}
+              </div>
+              <p className="text-xs text-slate-500 truncate">{u.company_name || 'Компания не указана'}</p>
+              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400 mt-0.5">
+                {u.phone && <span className="font-mono">{u.phone}</span>}
+                {u.price_type && <span className="text-brand-600 font-medium">Прайс: {u.price_type}</span>}
+                {u.partner_id && <span className="font-mono">ID: {u.partner_id}</span>}
+              </div>
             </div>
-            <select
-              value={u.role}
-              onChange={e => handleRoleChange(u.id, e.target.value)}
-              className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-700"
-            >
-              <option value="admin">Админ</option>
-              <option value="manager_rm">РМ</option>
-              <option value="manager_lm">ЛМ</option>
-              <option value="supplier">Поставщик</option>
-              <option value="client">Клиент</option>
-            </select>
-            <button className="flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors">
-              <UserCog className="h-3 w-3" />
-              Войти как
-            </button>
+
+            <div className="flex items-center gap-2">
+              <select
+                value={u.role}
+                onChange={e => handleRoleChange(u.id, e.target.value)}
+                className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-700"
+              >
+                <option value="admin">Админ</option>
+                <option value="manager_rm">РМ</option>
+                <option value="manager_lm">ЛМ</option>
+                <option value="supplier">Поставщик</option>
+                <option value="client">Клиент</option>
+              </select>
+
+              <button
+                onClick={() => {
+                  impersonateUser(u as any);
+                  onNavigate('catalog');
+                }}
+                disabled={u.id === currentUser?.id}
+                title={u.id === currentUser?.id ? 'Это ваш собственный аккаунт' : `Войти как ${u.full_name || u.company_name || 'клиент'}`}
+                className="flex items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100 hover:border-brand-300 transition-colors disabled:opacity-40 disabled:pointer-events-none shadow-sm"
+              >
+                <UserCog className="h-3.5 w-3.5" />
+                Войти как
+              </button>
+            </div>
           </div>
         ))}
-        {users.length === 0 && (
-          <p className="py-8 text-center text-sm text-slate-400">Пока нет зарегистрированных пользователей</p>
+        {!loading && filteredUsers.length === 0 && (
+          <p className="py-8 text-center text-sm text-slate-400">Пользователи не найдены</p>
         )}
       </div>
     </div>
@@ -1064,13 +1198,18 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
           <div>
             {activeTab === 'orders' && (
               selectedOrder ? (
-                <OrderDetail order={selectedOrder} onBack={() => setSelectedOrder(null)} />
+                <OrderDetail
+                  order={selectedOrder}
+                  onBack={() => setSelectedOrder(null)}
+                  isAdmin={isAdmin}
+                  onUpdateOrder={(updated) => setSelectedOrder(updated)}
+                />
               ) : (
                 <OrdersTab onSelectOrder={setSelectedOrder} isAdmin={isAdmin} isManager={isManager} />
               )
             )}
             {activeTab === 'admin-erp' && isAdmin && <AdminErpSyncTab />}
-            {activeTab === 'admin-users' && isAdmin && <AdminUsersTab />}
+            {activeTab === 'admin-users' && isAdmin && <AdminUsersTab onNavigate={onNavigate} />}
             {activeTab === 'admin-display' && isAdmin && <AdminDisplaySettings />}
             {activeTab === 'settings' && (
               <div className="space-y-6">
@@ -1086,54 +1225,369 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
 }
 
 /* ─── Orders Tab ─── */
-function OrdersTab({ onSelectOrder, isAdmin, isManager }: { onSelectOrder: (o: Order) => void; isAdmin: boolean; isManager: boolean }) {
+function OrdersTab({
+  onSelectOrder,
+  isAdmin,
+  isManager,
+}: {
+  onSelectOrder: (o: Order) => void;
+  isAdmin: boolean;
+  isManager: boolean;
+}) {
+  const { user } = useAuth();
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+
+  const fetchOrders = useCallback(async () => {
+    setLoading(true);
+    try {
+      let query = supabase
+        .from('orders')
+        .select(`
+          id,
+          order_number,
+          user_id,
+          placed_by_id,
+          status,
+          warehouse,
+          notes,
+          total_amount,
+          total_sqm,
+          total_items,
+          created_at,
+          updated_at,
+          order_items (
+            id,
+            product_id,
+            product_name,
+            collection,
+            size,
+            sku,
+            warehouse,
+            price,
+            quantity
+          )
+        `)
+        .order('created_at', { ascending: false });
+
+      if (!isAdmin && !isManager && user) {
+        query = query.eq('user_id', user.id);
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        console.error('[OrdersTab] Error fetching orders:', error);
+        setOrders([]);
+        return;
+      }
+
+      if (data) {
+        const uids = Array.from(new Set(data.map((o: any) => o.user_id).filter(Boolean)));
+        let profileMap: Record<string, { full_name: string; company_name: string; phone: string }> = {};
+
+        if (uids.length > 0) {
+          const { data: profs } = await supabase
+            .from('profiles')
+            .select('id, full_name, company_name, phone')
+            .in('id', uids);
+
+          if (profs) {
+            for (const p of profs) {
+              profileMap[p.id] = p;
+            }
+          }
+        }
+
+        const mapped: Order[] = data.map((o: any) => {
+          const prof = profileMap[o.user_id];
+          const st = o.status || 'pending';
+          const meta = ORDER_STATUS_MAP[st] || { label: st, color: 'bg-slate-100 text-slate-600 border-slate-200' };
+
+          const items: OrderItem[] = (o.order_items || []).map((it: any) => ({
+            id: it.id,
+            productName: it.product_name || 'Товар',
+            collection: it.collection || 'Коллекция',
+            size: it.size || '',
+            warehouse: it.warehouse || o.warehouse || '',
+            price: Number(it.price) || 0,
+            quantity: Number(it.quantity) || 1,
+          }));
+
+          const d = o.created_at ? new Date(o.created_at) : new Date();
+          const dateStr = d.toLocaleDateString('ru-RU', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+          }) + ' ' + d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+
+          return {
+            id: o.id,
+            orderNumber: o.order_number || o.id.slice(0, 8),
+            userId: o.user_id,
+            placedById: o.placed_by_id,
+            date: dateStr,
+            status: meta.label,
+            statusRaw: st,
+            statusColor: meta.color,
+            warehouse: o.warehouse || 'Главный склад',
+            notes: o.notes || '',
+            clientName: prof?.full_name || '',
+            clientCompany: prof?.company_name || '',
+            clientPhone: prof?.phone || '',
+            totalAmount: Number(o.total_amount) || 0,
+            totalSqm: Number(o.total_sqm) || 0,
+            totalItems: Number(o.total_items) || items.reduce((s, it) => s + it.quantity, 0),
+            items,
+          };
+        });
+
+        setOrders(mapped);
+      }
+    } catch (e) {
+      console.error('[OrdersTab] Unexpected error:', e);
+    } finally {
+      setLoading(false);
+    }
+  }, [isAdmin, isManager, user]);
+
+  useEffect(() => {
+    fetchOrders();
+  }, [fetchOrders]);
+
+  const handleQuickStatusChange = async (orderId: string, newStatus: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setUpdatingId(orderId);
+    const { error } = await supabase
+      .from('orders')
+      .update({ status: newStatus, updated_at: new Date().toISOString() })
+      .eq('id', orderId);
+
+    if (!error) {
+      const meta = ORDER_STATUS_MAP[newStatus] || { label: newStatus, color: 'bg-slate-100 text-slate-600 border-slate-200' };
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: meta.label, statusRaw: newStatus, statusColor: meta.color } : o));
+    }
+    setUpdatingId(null);
+  };
+
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: orders.length };
+    for (const o of orders) {
+      counts[o.statusRaw] = (counts[o.statusRaw] || 0) + 1;
+    }
+    return counts;
+  }, [orders]);
+
+  const filteredOrders = useMemo(() => {
+    return orders.filter(o => {
+      if (statusFilter !== 'all' && o.statusRaw !== statusFilter) {
+        return false;
+      }
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchNumber = o.orderNumber.toLowerCase().includes(q);
+        const matchCompany = (o.clientCompany || '').toLowerCase().includes(q);
+        const matchName = (o.clientName || '').toLowerCase().includes(q);
+        const matchPhone = (o.clientPhone || '').toLowerCase().includes(q);
+        const matchWarehouse = (o.warehouse || '').toLowerCase().includes(q);
+        const matchNotes = (o.notes || '').toLowerCase().includes(q);
+        const matchItems = o.items.some(i => i.productName.toLowerCase().includes(q) || i.collection.toLowerCase().includes(q));
+        if (!matchNumber && !matchCompany && !matchName && !matchPhone && !matchWarehouse && !matchNotes && !matchItems) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [orders, statusFilter, searchQuery]);
+
+  const filterTabs = [
+    { id: 'all', label: 'Все' },
+    { id: 'pending', label: 'Новые' },
+    { id: 'processing', label: 'В обработке' },
+    { id: 'shipped', label: 'Отгружен' },
+    { id: 'delivered', label: 'Доставлен' },
+    { id: 'cancelled', label: 'Отменён' },
+  ];
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-50">
             <Package className="h-5 w-5 text-slate-500" />
           </div>
           <div>
             <h2 className="text-lg font-bold text-slate-900">
-              {isAdmin ? 'Все заказы' : isManager ? 'Заказы клиентов' : 'Мои заказы'}
+              {isAdmin ? 'Все заказы' : isManager ? 'Заказы клиентов' : 'Мои заказы'} ({orders.length})
             </h2>
-            <p className="text-sm text-slate-500">Демо-данные, подключится к реальным заказам</p>
+            <p className="text-sm text-slate-500">
+              {isAdmin ? 'Управление заказами всех клиентов' : 'История ваших заказов на портале'}
+            </p>
           </div>
+        </div>
+
+        <button
+          onClick={fetchOrders}
+          disabled={loading}
+          className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+          Обновить
+        </button>
+      </div>
+
+      {/* Filter and Search Bar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {filterTabs.map(t => {
+            const count = statusCounts[t.id] ?? 0;
+            const active = statusFilter === t.id;
+            return (
+              <button
+                key={t.id}
+                onClick={() => setStatusFilter(t.id)}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors flex items-center gap-1.5 ${
+                  active ? 'bg-brand-700 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                <span>{t.label}</span>
+                <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${active ? 'bg-brand-800 text-white' : 'bg-slate-200 text-slate-700'}`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="relative w-full sm:w-64">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Поиск по номеру, клиенту..."
+            className="input-field pl-9 py-1 text-xs"
+          />
         </div>
       </div>
 
-      <div className="space-y-3">
-        {MOCK_ORDERS.map(order => {
-          const t = orderTotals(order.items);
-          const collections = [...new Set(order.items.map(i => i.collection))];
-          return (
-            <button key={order.id} onClick={() => onSelectOrder(order)} className="card p-5 w-full text-left hover:border-brand-200 transition-colors group">
-              <div className="flex flex-wrap items-center gap-3 mb-4">
-                <div className="flex items-center gap-1.5">
-                  <Hash className="h-3.5 w-3.5 text-slate-400" />
-                  <span className="text-sm font-bold text-slate-900">{order.id}</span>
+      {/* Orders List */}
+      {loading ? (
+        <div className="py-12 flex flex-col items-center justify-center text-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand-600 border-t-transparent mb-3" />
+          <p className="text-xs text-slate-400">Загрузка заказов...</p>
+        </div>
+      ) : filteredOrders.length === 0 ? (
+        <div className="card p-12 text-center">
+          <Package className="h-10 w-10 text-slate-300 mx-auto mb-3" />
+          <h3 className="text-sm font-semibold text-slate-900 mb-1">
+            {orders.length === 0 ? 'Заказов пока нет' : 'Ничего не найдено'}
+          </h3>
+          <p className="text-xs text-slate-500 max-w-sm mx-auto">
+            {orders.length === 0
+              ? 'Новые оформленные заказы будут отображаться в этом реестре.'
+              : 'Попробуйте изменить параметры поиска или фильтр статуса.'}
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filteredOrders.map(order => {
+            const t = orderTotals(order.items);
+            const collections = [...new Set(order.items.map(i => i.collection))];
+            return (
+              <div
+                key={order.id}
+                onClick={() => onSelectOrder(order)}
+                className="card p-5 w-full text-left hover:border-brand-300 hover:shadow-sm transition-all cursor-pointer group"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-3 border-b border-slate-100 pb-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-1.5 font-mono font-bold text-slate-900 bg-slate-100 px-2.5 py-1 rounded text-sm">
+                      <Hash className="h-3.5 w-3.5 text-slate-500" />
+                      {order.orderNumber}
+                    </div>
+                    <span className={`badge border ${order.statusColor}`}>
+                      {order.status}
+                    </span>
+                    {isAdmin && (
+                      <div className="ml-1" onClick={e => e.stopPropagation()}>
+                        <select
+                          value={order.statusRaw}
+                          disabled={updatingId === order.id}
+                          onChange={(e) => handleQuickStatusChange(order.id, e.target.value, e as any)}
+                          className="rounded border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600 focus:outline-none focus:ring-1 focus:ring-brand-500 cursor-pointer"
+                        >
+                          <option value="pending">Новый</option>
+                          <option value="processing">В обработке</option>
+                          <option value="shipped">Отгружен</option>
+                          <option value="delivered">Доставлен</option>
+                          <option value="cancelled">Отменён</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-3 text-xs text-slate-400">
+                    <div className="flex items-center gap-1">
+                      <Calendar className="h-3.5 w-3.5" />
+                      {order.date}
+                    </div>
+                    <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-brand-500 transition-colors" />
+                  </div>
                 </div>
-                <span className={`badge ${order.statusColor}`}>{order.status}</span>
-                <div className="flex items-center gap-1.5 text-xs text-slate-400 ml-auto">
-                  <Calendar className="h-3.5 w-3.5" />
-                  {order.date}
+
+                {/* Client info banner if admin or manager */}
+                {(isAdmin || isManager) && (order.clientCompany || order.clientName) && (
+                  <div className="mb-3 flex flex-wrap items-center gap-2 text-xs bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
+                    <User className="h-3.5 w-3.5 text-slate-400" />
+                    <span className="font-semibold text-slate-800">{order.clientCompany || order.clientName}</span>
+                    {order.clientCompany && order.clientName && (
+                      <span className="text-slate-500">({order.clientName})</span>
+                    )}
+                    {order.clientPhone && (
+                      <span className="text-slate-400 font-mono text-[11px] ml-auto">{order.clientPhone}</span>
+                    )}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+                  <div>
+                    <p className="text-xs text-slate-400 mb-0.5">Кол-во</p>
+                    <p className="text-sm font-semibold text-slate-900">{order.totalItems || t.qty} шт.</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-400 mb-0.5">Площадь</p>
+                    <p className="text-sm font-semibold text-slate-900">{fmt2(order.totalSqm || t.sqm)} м²</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-400 mb-0.5">Сумма</p>
+                    <p className="text-sm font-bold text-brand-700">{fmtPrice(order.totalAmount || t.sum)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-400 mb-0.5">Склад</p>
+                    <div className="flex items-center gap-1">
+                      <MapPin className="h-3 w-3 text-slate-400" />
+                      <p className="text-sm text-slate-700 truncate">{order.warehouse || 'Главный'}</p>
+                    </div>
+                  </div>
                 </div>
-                <ChevronRight className="h-4 w-4 text-slate-300 group-hover:text-brand-500 transition-colors" />
+
+                {collections.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {collections.map(col => (
+                      <span key={col} className="badge bg-slate-100 text-slate-600 text-[10px]">
+                        {col}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
-                <div><p className="text-xs text-slate-400 mb-0.5">Кол-во</p><p className="text-sm font-semibold text-slate-900">{t.qty} шт.</p></div>
-                <div><p className="text-xs text-slate-400 mb-0.5">Площадь</p><p className="text-sm font-semibold text-slate-900">{fmt2(t.sqm)} м²</p></div>
-                <div><p className="text-xs text-slate-400 mb-0.5">Сумма</p><p className="text-sm font-bold text-brand-700">{fmtPrice(t.sum)}</p></div>
-                <div><p className="text-xs text-slate-400 mb-0.5">Склад</p><div className="flex items-center gap-1"><MapPin className="h-3 w-3 text-slate-400" /><p className="text-sm text-slate-700">{order.warehouse}</p></div></div>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {collections.map(col => <span key={col} className="badge bg-slate-50 text-slate-500 text-[10px]">{col}</span>)}
-              </div>
-            </button>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

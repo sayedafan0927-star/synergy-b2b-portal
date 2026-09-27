@@ -22,6 +22,7 @@ import { useUserPricing } from '@/hooks/usePricing';
 import ProductCard from '@/components/ProductCard';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useDisplaySettings } from '@/hooks/useDisplaySettings';
 
 type SortOption = 'popular' | 'price-asc' | 'price-desc' | 'name';
 type ViewMode = 'grid' | 'stock';
@@ -170,6 +171,7 @@ function StockGridView({ filteredProducts, selectedWarehouse, onNavigate }: { fi
   const { addItem, items } = useCart();
   const { user } = useAuth();
   const pricing = useUserPricing();
+  const { settings } = useDisplaySettings();
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [addedKeys, setAddedKeys] = useState<Record<string, boolean>>({});
 
@@ -223,12 +225,19 @@ function StockGridView({ filteredProducts, selectedWarehouse, onNavigate }: { fi
     setTimeout(() => setAddedKeys(prev => ({ ...prev, [key]: false })), 1500);
   }, [addItem, quantities, pricing]);
 
-  function exportCollectionToExcel(collection: string, prods: Product[], sizes: string[], warehouse: string, showPrices: boolean) {
+  function exportCollectionToExcel(collection: string, prods: Product[], sizes: string[], warehouse: string) {
     const BOM = '\uFEFF';
     const sep = '\t';
     const headerParts = ['Товар', 'Производитель'];
-    if (showPrices) headerParts.push('$/м²');
-    headerParts.push(...sizes.flatMap(s => [`${s} шт.`, `${s} м²`]), 'Итого шт.', 'Итого м²');
+    if (settings.show_price) headerParts.push('$/м²');
+    headerParts.push(...sizes.flatMap(s => {
+      const p = [];
+      if (settings.show_total_pcs) p.push(`${s} шт.`);
+      if (settings.show_sqm) p.push(`${s} м²`);
+      return p;
+    }));
+    if (settings.show_total_pcs) headerParts.push('Итого шт.');
+    if (settings.show_sqm) headerParts.push('Итого м²');
     const header = headerParts.join(sep);
     const rows = prods.map(product => {
       const variantMap = new Map(product.variants.map(v => [v.size, v]));
@@ -237,18 +246,28 @@ function StockGridView({ filteredProducts, selectedWarehouse, onNavigate }: { fi
       let totalSqm = 0;
       const sizeCells = sizes.flatMap(size => {
         const variant = variantMap.get(size);
-        if (!variant) return ['', ''];
+        if (!variant) {
+          const cells = [];
+          if (settings.show_total_pcs) cells.push('');
+          if (settings.show_sqm) cells.push('');
+          return cells;
+        }
         const wh = variant.warehouses.find(w => w.city === warehouse);
         const stock = wh?.stock ?? 0;
         const { w, h } = parseSizeDimensions(size);
         const sqm = stock * w * h;
         totalPcs += stock;
         totalSqm += sqm;
-        return [String(stock), sqm.toFixed(2)];
+        const cells = [];
+        if (settings.show_total_pcs) cells.push(String(stock));
+        if (settings.show_sqm) cells.push(sqm.toFixed(2));
+        return cells;
       });
       const rowParts = [product.name, product.manufacturer];
-      if (showPrices) rowParts.push(`${Math.round(pricePerSqm)}`);
-      rowParts.push(...sizeCells, String(totalPcs), totalSqm.toFixed(2));
+      if (settings.show_price) rowParts.push(`${Math.round(pricePerSqm)}`);
+      rowParts.push(...sizeCells);
+      if (settings.show_total_pcs) rowParts.push(String(totalPcs));
+      if (settings.show_sqm) rowParts.push(totalSqm.toFixed(2));
       return rowParts.join(sep);
     });
     const content = BOM + [header, ...rows].join('\n');
@@ -272,10 +291,12 @@ function StockGridView({ filteredProducts, selectedWarehouse, onNavigate }: { fi
             <div className="bg-slate-50 border-b border-slate-200 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h3 className="text-sm font-bold text-slate-900">{collection}</h3>
-                <p className="text-xs text-slate-500">{prods.length} поз. / {collTotalStock} шт. на складе</p>
+                <p className="text-xs text-slate-500">
+                  {prods.length} поз.{settings.show_total_pcs ? ` / ${collTotalStock} шт. на складе` : ''}
+                </p>
               </div>
               <button
-                onClick={() => exportCollectionToExcel(collection, prods, allSizes, selectedWarehouse, !!user)}
+                onClick={() => exportCollectionToExcel(collection, prods, allSizes, selectedWarehouse)}
                 className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 transition-colors"
               >
                 <Download className="h-3.5 w-3.5" />
@@ -290,7 +311,7 @@ function StockGridView({ filteredProducts, selectedWarehouse, onNavigate }: { fi
                     <th className="sticky left-0 z-10 bg-white py-2.5 pl-4 pr-3 text-left font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap min-w-[200px]">
                       Товар
                     </th>
-                    {user && <th className="py-2.5 px-2 text-center font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">$/м²</th>}
+                    {settings.show_price && <th className="py-2.5 px-2 text-center font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">$/м²</th>}
                     {allSizes.map(size => (
                       <th key={size} className="py-2.5 px-2 text-center font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap border-l border-slate-100">
                         {size}
@@ -312,26 +333,31 @@ function StockGridView({ filteredProducts, selectedWarehouse, onNavigate }: { fi
                               <div className="min-w-0">
                                 <p className="text-xs font-semibold text-slate-900 truncate max-w-[150px] hover:text-brand-700 transition-colors">{product.name}</p>
                                 <p className="text-[10px] text-slate-400">{product.manufacturer}</p>
-                                <p className="text-[10px] text-slate-400">
-                                  {(() => {
-                                    let pcs = 0; let sqm = 0;
-                                    product.variants.forEach(v => {
-                                      const wh = v.warehouses.find(w => w.city === selectedWarehouse);
-                                      if (wh) {
-                                        pcs += wh.stock;
-                                        const { w: vw, h: vh } = parseSizeDimensions(v.size);
-                                        sqm += wh.stock * vw * vh;
-                                      }
-                                    });
-                                    return `${pcs} шт. / ${sqm.toFixed(1)} м²`;
-                                  })()}
-                                </p>
+                                {(settings.show_total_pcs || settings.show_sqm) && (
+                                  <p className="text-[10px] text-slate-400">
+                                    {(() => {
+                                      let pcs = 0; let sqm = 0;
+                                      product.variants.forEach(v => {
+                                        const wh = v.warehouses.find(w => w.city === selectedWarehouse);
+                                        if (wh) {
+                                          pcs += wh.stock;
+                                          const { w: vw, h: vh } = parseSizeDimensions(v.size);
+                                          sqm += wh.stock * vw * vh;
+                                        }
+                                      });
+                                      const parts = [];
+                                      if (settings.show_total_pcs) parts.push(`${pcs} шт.`);
+                                      if (settings.show_sqm) parts.push(`${sqm.toFixed(1)} м²`);
+                                      return parts.join(' / ');
+                                    })()}
+                                  </p>
+                                )}
                               </div>
                             </div>
                           </button>
                         </td>
 
-                        {user && (
+                        {settings.show_price && (
                           <td className="py-2 px-2 text-center font-bold text-slate-700 whitespace-nowrap">
                             ${Math.round(pricePerSqm)}
                           </td>
@@ -365,31 +391,33 @@ function StockGridView({ filteredProducts, selectedWarehouse, onNavigate }: { fi
                           return (
                             <td key={size} className="py-1.5 px-1.5 border-l border-slate-50">
                               <div className="flex flex-col items-center gap-1">
-                                <span className="text-[10px] text-emerald-600 font-medium">{wh.stock}</span>
+                                {settings.show_stock && (
+                                  <span className="text-[10px] text-emerald-600 font-medium">{wh.stock}</span>
+                                )}
                                 <div className="flex items-center">
-                                  <button onClick={() => setQty(key, Math.max(0, qty - 1))} className="flex h-8 w-7 items-center justify-center rounded-l border border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors">
-                                    <Minus className="h-3.5 w-3.5" />
+                                  <button onClick={() => setQty(key, Math.max(0, qty - 1))} className="flex h-6 w-5 items-center justify-center rounded-l border border-slate-200 bg-slate-50 text-slate-400 hover:bg-slate-100">
+                                    <Minus className="h-2.5 w-2.5" />
                                   </button>
                                   <input
                                     type="number"
                                     value={qty}
                                     onChange={e => setQty(key, parseInt(e.target.value, 10) || 0)}
-                                    className="h-8 w-10 border-y border-slate-200 bg-white text-center text-xs text-slate-900 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                    className="h-6 w-8 border-y border-slate-200 bg-white text-center text-[11px] text-slate-900 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                   />
-                                  <button onClick={() => setQty(key, qty + 1)} className="flex h-8 w-7 items-center justify-center rounded-r border border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors">
-                                    <Plus className="h-3.5 w-3.5" />
+                                  <button onClick={() => setQty(key, qty + 1)} className="flex h-6 w-5 items-center justify-center rounded-r border border-slate-200 bg-slate-50 text-slate-400 hover:bg-slate-100">
+                                    <Plus className="h-2.5 w-2.5" />
                                   </button>
                                 </div>
                                 <button
                                   onClick={() => handleAdd(product, variant, wh)}
                                   disabled={qty < 1}
-                                  className={`flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-all ${
+                                  className={`flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-medium transition-all ${
                                     added ? 'bg-emerald-600 text-white' : qty < 1 ? 'bg-slate-100 text-slate-300 cursor-not-allowed' : 'bg-brand-700 text-white hover:bg-brand-800'
                                   }`}
                                 >
-                                  {added ? <Check className="h-3.5 w-3.5" /> : <ShoppingCart className="h-3.5 w-3.5" />}
+                                  {added ? <Check className="h-2.5 w-2.5" /> : <ShoppingCart className="h-2.5 w-2.5" />}
                                   {inCart > 0 && !added && (
-                                    <span className="bg-white/30 rounded-full px-1 text-[10px]">{inCart}</span>
+                                    <span className="bg-white/30 rounded-full px-1 text-[8px]">{inCart}</span>
                                   )}
                                 </button>
                               </div>
