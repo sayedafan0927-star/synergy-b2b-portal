@@ -50,19 +50,9 @@ export function CarpetPlaceholderIcon({ className = "w-full h-full" }: { classNa
 
 export function getOptimizedImageUrl(
   src?: string | null,
-  options: { width?: number; quality?: number; format?: 'auto' | 'webp' } = {}
+  _options: { width?: number; quality?: number; format?: 'auto' | 'webp' } = {}
 ): string {
   if (!src) return '';
-  if (src.startsWith('/')) return src;
-
-  // Cloudflare image resizing
-  if (options.width && src.includes('kilem-khan.kz')) {
-    const width = options.width;
-    const quality = options.quality || 80;
-    const format = options.format || 'auto';
-    return `https://kilem-khan.kz/cdn-cgi/image/width=${width},quality=${quality},format=${format}/${src}`;
-  }
-
   return src;
 }
 

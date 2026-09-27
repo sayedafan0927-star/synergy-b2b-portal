@@ -41,10 +41,11 @@ export default function ProductPage({
 }) {
   const { product, loading } = useProduct(productId);
   const { addItem, items } = useCart();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const pricing = useUserPricing();
 
   const [selectedImage, setSelectedImage] = useState(0);
+  const [imageError, setImageError] = useState(false);
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
@@ -52,20 +53,24 @@ export default function ProductPage({
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [addedKeys, setAddedKeys] = useState<Record<string, boolean>>({});
 
+  useEffect(() => {
+    setImageError(false);
+  }, [product, selectedImage]);
 
   useEffect(() => {
     if (!product) return;
     const init: Record<string, number> = {};
     product.variants.forEach(v => {
-      filterClientWarehouses(v.warehouses).forEach(wh => {
+      filterClientWarehouses(v.warehouses, profile?.showroom_warehouse_id, profile?.showroom_warehouse_name).forEach(wh => {
         const whLabel = wh.warehouse_name || wh.city;
         init[rowKey(v.sku, whLabel)] = 0;
       });
     });
     setQuantities(init);
     setSelectedImage(0);
+    setImageError(false);
     setAddedKeys({});
-  }, [product]);
+  }, [product, profile]);
 
   const cartCountByKey = useMemo(() => {
     const map: Record<string, number> = {};
@@ -240,6 +245,10 @@ export default function ProductPage({
   const [selectedSize, setSelectedSize] = useState<string>('');
   const activeVariant = product.variants.find(v => v.size === selectedSize) || product.variants[0];
 
+  const mainPricePerSqm = activeVariant
+    ? pricing.getPricePerSqm(product.collection, activeVariant.size, activeVariant.base_price, activeVariant.price_per_sqm)
+    : pricing.getMinPricePerSqm(product);
+
   const specs = useMemo(() => {
     const list: Array<{ label: string; value: string }> = [];
     const seen = new Set<string>();
@@ -276,18 +285,38 @@ export default function ProductPage({
     return list;
   }, [product]);
 
-  const totalStock = product.variants.reduce((s, v) => s + filterClientWarehouses(v.warehouses).reduce((a, w) => a + w.stock, 0), 0);
+  const myShowroomId = profile?.showroom_warehouse_id;
+  const myShowroomName = profile?.showroom_warehouse_name || 'В моем магазине';
+
+  const totalStock = product.variants.reduce((s, v) => s + filterClientWarehouses(v.warehouses, myShowroomId, myShowroomName).reduce((a, w) => a + w.stock, 0), 0);
   const sizeRange = product.variants.length > 1
     ? `${product.variants[0].size} — ${product.variants[product.variants.length - 1].size}`
     : product.variants[0]?.size ?? '';
   const availableForms = [product.shape_label, product.style, product.category].filter(Boolean).join(', ');
 
-  const hasDealerStock = Boolean(user && product.variants.some(v => v.dealer_stock));
-  const totalShowroomQty = product.variants.reduce((sum, v) => sum + (v.dealer_stock?.in_showroom_qty || 0), 0);
-  const totalShowroomSqm = Math.round(product.variants.reduce((sum, v) => sum + (v.dealer_stock?.in_showroom_sqm || 0), 0) * 10) / 10;
+  const hasDealerStock = Boolean(user && (product.variants.some(v => v.dealer_stock) || myShowroomId));
+  const totalShowroomQty = product.variants.reduce((sum, v) => {
+    if (myShowroomId) {
+      const wh = v.warehouses.find(w => w.warehouse_id === myShowroomId);
+      return sum + (wh?.stock || 0);
+    }
+    return sum + (v.dealer_stock?.in_showroom_qty || 0);
+  }, 0);
+  const totalShowroomSqm = Math.round(product.variants.reduce((sum, v) => {
+    if (myShowroomId) {
+      const wh = v.warehouses.find(w => w.warehouse_id === myShowroomId);
+      const { w, h } = parseSizeDimensions(v.size);
+      const area = v.area_sqm || (w * h) || 1;
+      return sum + ((wh?.stock || 0) * area);
+    }
+    return sum + (v.dealer_stock?.in_showroom_sqm || 0);
+  }, 0) * 10) / 10;
   const totalInTransitQty = product.variants.reduce((sum, v) => sum + (v.dealer_stock?.in_transit_qty || 0), 0);
   const totalInTransitSqm = Math.round(product.variants.reduce((sum, v) => sum + (v.dealer_stock?.in_transit_sqm || 0), 0) * 10) / 10;
-  const totalHubQty = product.variants.reduce((sum, v) => sum + (v.dealer_stock?.available_hub_qty || 0), 0);
+  const totalHubQty = product.variants.reduce((sum, v) => {
+    const hub = v.warehouses.find(w => w.warehouse_id === 81 || w.is_hub || (w.warehouse_name && w.warehouse_name.includes('Астана')));
+    return sum + (hub ? hub.stock : (v.dealer_stock?.available_hub_qty || 0));
+  }, 0);
 
   function CartButton({ variant, wh }: { variant: ProductVariant; wh: Warehouse }) {
     const whLabel = wh.warehouse_name || wh.city;
@@ -365,12 +394,13 @@ export default function ProductPage({
               className={`relative aspect-square min-w-0 flex-1 rounded-xl overflow-hidden bg-slate-100 ${imageCount > 0 ? 'cursor-zoom-in group' : ''}`}
               onClick={() => imageCount > 0 && setLightboxOpen(true)}
             >
-              {imageCount > 0 ? (
+              {imageCount > 0 && !imageError ? (
                 <>
                   <img
                     src={product.images[selectedImage]}
                     alt={`${product.name} — фото ${selectedImage + 1}`}
                     className="h-full w-full object-contain p-6 transition-transform duration-300 group-hover:scale-105"
+                    onError={() => setImageError(true)}
                     draggable={false}
                   />
                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors flex items-center justify-center">
@@ -553,7 +583,7 @@ export default function ProductPage({
 
                   <div className="rounded-lg bg-white p-3 border border-slate-200/80 shadow-xs">
                     <p className="text-[11px] font-semibold text-slate-700">
-                      🏢 База Алматы
+                      🏢 Основной Склад Астана
                     </p>
                     <p className="text-lg font-bold text-slate-900 mt-0.5">
                       {totalHubQty} <span className="text-xs font-normal text-slate-500">шт</span>
@@ -590,7 +620,7 @@ export default function ProductPage({
                     const variantPrice = pricing.getVariantPrice(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
                     const pricePerSqm = pricing.getPricePerSqm(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
 
-                    const rows = filterClientWarehouses(variant.warehouses);
+                    const rows = filterClientWarehouses(variant.warehouses, myShowroomId, myShowroomName);
                     return rows.map((wh, whIdx) => {
                       const whLabel = wh.warehouse_name || wh.city;
                       const key = rowKey(variant.sku, whLabel);
@@ -603,10 +633,10 @@ export default function ProductPage({
                             {isFirstRow ? (
                               <div>
                                 <span className="font-semibold text-slate-900">{variant.size}</span>
-                                {variant.dealer_stock && (
+                                {(variant.dealer_stock || myShowroomId) && (
                                   <div className="mt-1 flex flex-col gap-0.5 text-[11px]">
                                     <span className="inline-flex items-center gap-1 font-medium text-emerald-700">
-                                      🏪 В магазине: {variant.dealer_stock.in_showroom_qty} шт ({variant.dealer_stock.in_showroom_sqm} м²)
+                                      🏪 В магазине: {myShowroomId ? (variant.warehouses.find(w => w.warehouse_id === myShowroomId)?.stock || 0) : (variant.dealer_stock?.in_showroom_qty || 0)} шт
                                     </span>
                                     {variant.dealer_stock.in_transit_qty > 0 && (
                                       <span className="inline-flex items-center gap-1 font-medium text-indigo-700">
@@ -688,12 +718,13 @@ export default function ProductPage({
             onTouchMove={imageCount > 1 ? handleTouchMove : undefined}
             onTouchEnd={imageCount > 1 ? handleTouchEnd : undefined}
           >
-            {imageCount > 0 ? (
+            {imageCount > 0 && !imageError ? (
               <img
                 src={product.images[selectedImage]}
                 alt={`${product.name} — фото ${selectedImage + 1}`}
                 className="h-full w-full object-cover pointer-events-none"
                 draggable={false}
+                onError={() => setImageError(true)}
               />
             ) : (
               <CarpetPlaceholderIcon className="h-full w-full" />
@@ -757,7 +788,7 @@ export default function ProductPage({
                     </div>
                   )}
                   <div className="flex items-center justify-between text-slate-600">
-                    <span>🏢 База Алматы:</span>
+                    <span>🏢 Основной Склад Астана:</span>
                     <span className="font-medium">{totalHubQty} шт</span>
                   </div>
                 </div>
@@ -785,27 +816,27 @@ export default function ProductPage({
                     </p>
                   )}
 
-                  {variant.dealer_stock && (
+                  {(variant.dealer_stock || myShowroomId) && (
                     <div className="mb-3 rounded-lg bg-slate-50 p-2 border border-slate-200/60 text-[11px] space-y-1">
                       <div className="flex items-center justify-between text-emerald-800 font-medium">
                         <span>🏪 В магазине:</span>
-                        <span className="font-bold">{variant.dealer_stock.in_showroom_qty} шт ({variant.dealer_stock.in_showroom_sqm} м²)</span>
+                        <span className="font-bold">{myShowroomId ? (variant.warehouses.find(w => w.warehouse_id === myShowroomId)?.stock || 0) : (variant.dealer_stock?.in_showroom_qty || 0)} шт</span>
                       </div>
-                      {variant.dealer_stock.in_transit_qty > 0 && (
+                      {variant.dealer_stock?.in_transit_qty ? (
                         <div className="flex items-center justify-between text-indigo-800 font-medium">
                           <span>🚚 В пути:</span>
                           <span className="font-bold">{variant.dealer_stock.in_transit_qty} шт</span>
                         </div>
-                      )}
+                      ) : null}
                       <div className="flex items-center justify-between text-slate-600">
-                        <span>🏢 База:</span>
-                        <span>{variant.dealer_stock.available_hub_qty} шт</span>
+                        <span>🏢 Основной Склад Астана:</span>
+                        <span>{variant.warehouses.find(w => w.warehouse_id === 81 || w.is_hub || (w.warehouse_name && w.warehouse_name.includes('Астана')))?.stock || variant.dealer_stock?.available_hub_qty || 0} шт</span>
                       </div>
                     </div>
                   )}
 
                   <div className="flex flex-col gap-3">
-                    {filterClientWarehouses(variant.warehouses).map(wh => {
+                    {filterClientWarehouses(variant.warehouses, myShowroomId, myShowroomName).map(wh => {
                       const whLabel = wh.warehouse_name || wh.city;
                       const key = rowKey(variant.sku, whLabel);
                       const qty = quantities[key] ?? 0;

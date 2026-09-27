@@ -201,6 +201,7 @@ export interface ErpClientAuthResult {
   success: boolean;
   code?: 'CLIENT_DEACTIVATED' | 'AUTH_FAILED' | 'NETWORK_ERROR' | string;
   error?: string;
+  token?: string;
   client?: {
     id: number;
     name: string;
@@ -211,6 +212,11 @@ export interface ErpClientAuthResult {
     is_active?: number | boolean;
     portal_access_enabled?: number | boolean;
     status?: string;
+    price_type?: string;
+    debt_usd?: number;
+    balance_usd?: number;
+    showroom_warehouse_id?: number | null;
+    showroom_warehouse_name?: string | null;
     financials?: {
       balance_usd?: number;
       debt_usd?: number;
@@ -232,22 +238,23 @@ export interface ErpClientAuthResult {
 }
 
 /**
- * Прямая аутентификация клиента в Synergy ERP (action=client_auth).
- * Проверяет логин/пароль и статус активности клиента в реальном времени.
+ * Прямая аутентификация клиента в Synergy ERP.
+ * Вызывает production-эндпоинт action=login с проверкой активности и возвратом showroom_warehouse_id.
  */
 export async function authenticateClientViaErp(login: string, password: string): Promise<ErpClientAuthResult> {
-  const cleanLogin = login.replace(/[^\d+]/g, '').trim();
+  const cleanPhone = login.replace(/[^\d+]/g, '').trim();
 
-  // 1. Попытка прямой аутентификации через API ERP (action=client_auth)
+  // 1. Попытка авторизации через action=login в Synergy ERP
   try {
-    const response = await fetch(`${ERP_API_URL}?action=client_auth&portal_key=${encodeURIComponent(ERP_API_KEY)}`, {
+    const response = await fetch(`${ERP_API_URL}?action=login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-Portal-Key': ERP_API_KEY,
       },
       body: JSON.stringify({
-        login: cleanLogin,
+        phone: cleanPhone || login.trim(),
+        login: login.trim(),
         password: password.trim(),
       }),
     });
@@ -263,14 +270,39 @@ export async function authenticateClientViaErp(login: string, password: string):
       };
     }
 
-    if (response.ok && data?.success && data?.client) {
+    if (response.ok && data?.success) {
+      const clientId = Number(data.client_id || data.client?.id);
+      const clientName = data.name || data.client?.name || 'Клиент ERP';
+      const clientPhone = data.phone || data.client?.phone || login;
+      const priceType = data.client?.price_type || data.client?.contracts?.[0]?.price_type || 'wholesale';
+      const debtUsd = typeof data.debt_usd === 'number' ? data.debt_usd : (data.financials?.debt_usd || 0);
+      const balanceUsd = typeof data.balance_usd === 'number' ? data.balance_usd : (data.financials?.balance_usd || 0);
+      const showroomId = data.showroom_warehouse_id ?? data.client?.showroom_warehouse_id ?? null;
+      const showroomName = data.showroom_warehouse_name ?? data.client?.showroom_warehouse_name ?? null;
+
       return {
         success: true,
-        client: data.client,
+        token: data.token,
+        client: {
+          id: clientId,
+          name: clientName,
+          phone: clientPhone,
+          price_type: priceType,
+          debt_usd: debtUsd,
+          balance_usd: balanceUsd,
+          showroom_warehouse_id: showroomId,
+          showroom_warehouse_name: showroomName,
+          regional_manager: data.regional_manager || data.client?.regional_manager,
+          contracts: data.client?.contracts || [],
+          financials: {
+            debt_usd: debtUsd,
+            balance_usd: balanceUsd,
+          },
+        },
       };
     }
 
-    // Если бэкенд ERP уже поддерживает client_auth и вернул конкретную ошибку:
+    // Если бэкенд ERP вернул ошибку логина/пароля
     if (data && data.error && !data.error.includes('Неизвестное действие')) {
       return {
         success: false,
@@ -279,7 +311,7 @@ export async function authenticateClientViaErp(login: string, password: string):
       };
     }
   } catch (err: any) {
-    console.warn('[authenticateClientViaErp] Network error calling client_auth:', err);
+    console.warn('[authenticateClientViaErp] Network error calling login:', err);
   }
 
   // 2. Fallback: поиск клиента среди выгруженных активных контрагентов (Pull Sync)

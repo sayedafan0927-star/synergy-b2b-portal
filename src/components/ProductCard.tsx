@@ -39,7 +39,7 @@ function sizeLabel(count: number) {
 }
 
 export default function ProductCard({ product, onNavigate }: ProductCardProps) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { addItem } = useCart();
   const { getMinPricePerSqm, getVariantPrice } = useUserPricing();
   const [sizesOpen, setSizesOpen] = useState(false);
@@ -73,12 +73,27 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
     window.setTimeout(() => setAddedSku(current => current === variant.sku ? null : current), 1400);
   };
 
-  const hasDealerStock = Boolean(user && product.variants.some(v => v.dealer_stock));
-  const totalShowroomQty = product.variants.reduce((sum, v) => sum + (v.dealer_stock?.in_showroom_qty || 0), 0);
-  const totalShowroomSqm = Math.round(product.variants.reduce((sum, v) => sum + (v.dealer_stock?.in_showroom_sqm || 0), 0) * 10) / 10;
+  const myShowroomId = profile?.showroom_warehouse_id;
+  const hasDealerStock = Boolean(user && (product.variants.some(v => v.dealer_stock) || myShowroomId));
+  const totalShowroomQty = product.variants.reduce((sum, v) => {
+    if (myShowroomId) {
+      const wh = v.warehouses.find(w => w.warehouse_id === myShowroomId);
+      return sum + (wh?.stock || 0);
+    }
+    return sum + (v.dealer_stock?.in_showroom_qty || 0);
+  }, 0);
+  const totalShowroomSqm = Math.round(product.variants.reduce((sum, v) => {
+    if (myShowroomId) {
+      const wh = v.warehouses.find(w => w.warehouse_id === myShowroomId);
+      const { w, h } = parseSizeDimensions(v.size);
+      const area = v.area_sqm || (w * h) || 1;
+      return sum + ((wh?.stock || 0) * area);
+    }
+    return sum + (v.dealer_stock?.in_showroom_sqm || 0);
+  }, 0) * 10) / 10;
   const totalInTransitQty = product.variants.reduce((sum, v) => sum + (v.dealer_stock?.in_transit_qty || 0), 0);
   const totalInTransitSqm = Math.round(product.variants.reduce((sum, v) => sum + (v.dealer_stock?.in_transit_sqm || 0), 0) * 10) / 10;
-  const totalHubQty = product.variants.reduce((sum, v) => sum + (v.dealer_stock?.available_hub_qty || 0), 0);
+  const totalHubQty = product.variants.reduce((sum, v) => sum + getMainWarehouseStock(v), 0);
 
   return (
     <div
@@ -141,7 +156,7 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
             )}
             <div className="flex items-center justify-between text-xs">
               <span className="inline-flex items-center gap-1 text-slate-500">
-                🏢 База Алматы:
+                🏢 Основной Склад Астана:
               </span>
               <span className="font-medium text-slate-700">
                 {totalHubQty} шт

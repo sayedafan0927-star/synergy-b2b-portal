@@ -228,7 +228,7 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
     }
   }
 
-  // Сортируем размеры каждого товара по возрастанию площади и жестко привязываем к «Основной Склад Астана»
+  // Сортируем размеры каждого товара по возрастанию площади
   const result: Product[] = [];
   for (const prod of map.values()) {
     prod.variants.sort((a, b) => {
@@ -236,8 +236,20 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
       const areaB = b.area_sqm || calculateArea(b.size);
       return areaA - areaB;
     });
+    // Нормализуем склад хаба: имя и город строго «Основной Склад Астана»
     for (const v of prod.variants) {
-      v.warehouses = filterClientWarehouses(v.warehouses);
+      v.warehouses = v.warehouses.map(w => {
+        if (w.warehouse_id === 81 || w.is_hub || (w.warehouse_name && (w.warehouse_name.includes('Астана') || w.warehouse_name.toLowerCase().includes('основной')))) {
+          return {
+            ...w,
+            warehouse_id: 81,
+            warehouse_name: 'Основной Склад Астана',
+            city: 'Основной Склад Астана',
+            is_hub: true,
+          };
+        }
+        return w;
+      });
     }
     result.push(prod);
   }
@@ -247,23 +259,49 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
 
 /**
  * Склад для клиентов:
- * Склад называется СТРОГО «Основной Склад Астана».
+ * 1. Центральный склад компании — СТРОГО «Основной Склад Астана» (ID 81 / is_hub: true).
  * Никакие города не выводим — только Основной Склад Астана для всех клиентов и только его остатки!
+ * 2. Если авторизован дилер и у него привязан склад шоурума (showroom_warehouse_id),
+ * то добавляется его склад шоурума с персональным остатком.
  */
-export function filterClientWarehouses(warehouses: Warehouse[] = []): Warehouse[] {
-  const mainHub = warehouses.find(w =>
+export function filterClientWarehouses(
+  warehouses: Warehouse[] = [],
+  showroomWarehouseId?: number | null,
+  showroomWarehouseName?: string | null
+): Warehouse[] {
+  const result: Warehouse[] = [];
+
+  // 1. Центральный склад компании — «Основной Склад Астана» (всегда первый)
+  const mainHub = (warehouses || []).find(w =>
     w.warehouse_id === 81 ||
-    (w.warehouse_name && (w.warehouse_name.includes('Астана') || w.warehouse_name.toLowerCase().includes('основной')))
+    w.is_hub === true ||
+    (w.warehouse_name && (w.warehouse_name.includes('Астана') || w.warehouse_name.toLowerCase().includes('основной'))) ||
+    (w.city && (w.city.includes('Астана') || w.city.toLowerCase().includes('основной')))
   );
 
-  const stock = mainHub ? mainHub.stock : 0;
-
-  return [{
+  result.push({
     warehouse_id: 81,
     warehouse_name: 'Основной Склад Астана',
     city: 'Основной Склад Астана',
-    stock: stock,
-  }];
+    is_hub: true,
+    stock: mainHub ? mainHub.stock : 0,
+  });
+
+  // 2. Персональный склад шоурума авторизованного дилера
+  if (showroomWarehouseId && showroomWarehouseId !== 81) {
+    const showroom = (warehouses || []).find(w => w.warehouse_id === showroomWarehouseId);
+    if (showroom) {
+      result.push({
+        warehouse_id: showroomWarehouseId,
+        warehouse_name: showroomWarehouseName || showroom.warehouse_name || 'В моем магазине',
+        city: showroomWarehouseName || showroom.warehouse_name || 'В моем магазине',
+        is_hub: false,
+        stock: showroom.stock || 0,
+      });
+    }
+  }
+
+  return result;
 }
 
 export function triggerCatalogReload() {

@@ -3,6 +3,7 @@ export interface Warehouse {
   stock: number;
   warehouse_name?: string;
   warehouse_id?: number;
+  is_hub?: boolean;
 }
 
 export interface DealerStock {

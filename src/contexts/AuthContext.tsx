@@ -21,6 +21,8 @@ export interface Profile {
   balance_usd?: number;
   credit_limit_usd?: number;
   payment_delay_days?: number;
+  showroom_warehouse_id?: number | null;
+  showroom_warehouse_name?: string | null;
 }
 
 interface AuthContextValue {
@@ -31,7 +33,7 @@ interface AuthContextValue {
   signInWithPortal: (login: string, password: string) => Promise<{ success: boolean; error?: string }>;
   signUp: (email: string, password: string, meta: { full_name: string; company_name: string }) => Promise<string | null>;
   signInAsDemo: (role?: UserRole) => void;
-  signInAsClient: (client: { id: number | string; name: string; phone?: string; price_type?: string }) => void;
+  signInAsClient: (client: { id: number | string; name: string; phone?: string; price_type?: string; showroom_warehouse_id?: number | null; showroom_warehouse_name?: string | null }) => void;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   deactivationNotice: string | null;
@@ -175,7 +177,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const signInAsClient = useCallback((client: { id: number | string; name: string; phone?: string; price_type?: string }) => {
+  const signInAsClient = useCallback((client: { id: number | string; name: string; phone?: string; price_type?: string; showroom_warehouse_id?: number | null; showroom_warehouse_name?: string | null }) => {
     const clientProfile: Profile = {
       id: `erp-client-${client.id}`,
       role: 'client',
@@ -186,6 +188,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       manager_id: '1',
       price_type: client.price_type || 'wholesale',
       impersonation_enabled: true,
+      showroom_warehouse_id: client.showroom_warehouse_id ?? null,
+      showroom_warehouse_name: client.showroom_warehouse_name ?? null,
     };
     const mockUser: unknown = {
       id: clientProfile.id,
@@ -333,10 +337,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         price_type: client.contracts?.[0]?.price_type || 'wholesale',
         is_active: true,
         status: 'active',
-        debt_usd: client.financials?.debt_usd,
-        balance_usd: client.financials?.balance_usd,
+        debt_usd: client.financials?.debt_usd ?? client.debt_usd,
+        balance_usd: client.financials?.balance_usd ?? client.balance_usd,
         credit_limit_usd: client.financials?.credit_limit_usd,
         payment_delay_days: client.financials?.payment_delay_days,
+        showroom_warehouse_id: client.showroom_warehouse_id ?? null,
+        showroom_warehouse_name: client.showroom_warehouse_name ?? null,
         impersonation_enabled: true,
       };
 
