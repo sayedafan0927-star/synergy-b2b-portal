@@ -46,6 +46,8 @@ export default function HomePage({ onNavigate }: { onNavigate: (page: PageId, pr
           <img
             src="https://images.pexels.com/photos/6580227/pexels-photo-6580227.jpeg?auto=compress&cs=tinysrgb&w=1600"
             alt=""
+            loading="eager"
+            decoding="async"
             className="h-full w-full object-cover"
           />
           <div className="absolute inset-0 bg-gradient-to-r from-slate-900/90 via-slate-900/75 to-slate-900/50" />
@@ -182,6 +184,7 @@ export default function HomePage({ onNavigate }: { onNavigate: (page: PageId, pr
                   src={category.image}
                   alt={category.name}
                   loading="lazy"
+                  decoding="async"
                   className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-110"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-900/70 via-slate-900/20 to-transparent" />

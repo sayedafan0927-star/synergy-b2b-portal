@@ -19,6 +19,7 @@ import type { PageId, CartItem } from '@/types';
 import { calcSqm, parseSizeDimensions } from '@/types';
 import { submitOrderToErp } from '@/lib/erpApi';
 import { supabase } from '@/lib/supabase';
+import ProductImage from '@/components/ProductImage';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -235,7 +236,14 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
 
     return (
       <div key={key} className="card flex flex-col gap-4 p-4 sm:flex-row sm:items-center">
-        <img src={item.image} alt={item.productName} className="h-16 w-16 shrink-0 rounded-lg object-cover" />
+        <ProductImage
+          src={item.image}
+          alt={item.productName}
+          loading="lazy"
+          decoding="async"
+          width={120}
+          className="h-16 w-16 shrink-0 rounded-lg object-cover"
+        />
         <div className="flex-1 min-w-0 space-y-1">
           <h3 className="text-sm font-semibold text-slate-900 truncate">{item.productName}</h3>
           <div className="flex flex-wrap items-center gap-2">

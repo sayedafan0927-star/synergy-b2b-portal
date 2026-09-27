@@ -8,6 +8,8 @@ export interface ProductVariant {
   size: string;
   sku: string;
   base_price: number;
+  price_per_sqm?: number;
+  area_sqm?: number;
   warehouses: Warehouse[];
 }
 
@@ -22,7 +24,9 @@ export interface Product {
   country: string;
   density: string;
   pile_height: string;
+  price_per_sqm?: number;
   images: string[];
+  image_thumb?: string;
   supplier_id: number | null;
   variants: ProductVariant[];
 }

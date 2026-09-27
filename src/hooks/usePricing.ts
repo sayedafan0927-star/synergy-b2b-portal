@@ -20,8 +20,8 @@ export function useUserPricing() {
     return map;
   }, [allPrices, priceType]);
 
-  function getVariantPrice(collection: string, size: string, baseFallback: number): number {
-    const perSqm = priceMap.get(collection);
+  function getVariantPrice(collection: string, size: string, baseFallback: number, variantPerSqm?: number): number {
+    const perSqm = priceMap.get(collection) ?? (variantPerSqm && variantPerSqm > 0 ? variantPerSqm : undefined);
     if (perSqm !== undefined) {
       const { w, h } = parseSizeDimensions(size);
       const area = w * h;
@@ -30,23 +30,23 @@ export function useUserPricing() {
     return baseFallback;
   }
 
-  function getPricePerSqm(collection: string, size: string, baseFallback: number): number {
-    const perSqm = priceMap.get(collection);
+  function getPricePerSqm(collection: string, size: string, baseFallback: number, variantPerSqm?: number): number {
+    const perSqm = priceMap.get(collection) ?? (variantPerSqm && variantPerSqm > 0 ? variantPerSqm : undefined);
     if (perSqm !== undefined) return perSqm;
     const { w, h } = parseSizeDimensions(size);
     const area = w * h;
-    if (area > 0) return baseFallback / area;
-    return 0;
+    if (area > 0 && baseFallback > 0) return Math.round((baseFallback / area) * 100) / 100;
+    return baseFallback;
   }
 
   function getMinPricePerSqm(product: Product): number {
-    const perSqm = priceMap.get(product.collection);
-    if (perSqm !== undefined) return perSqm;
+    const perSqm = priceMap.get(product.collection) ?? (product.price_per_sqm && product.price_per_sqm > 0 ? product.price_per_sqm : undefined) ?? product.variants.find(v => (v.price_per_sqm ?? 0) > 0)?.price_per_sqm;
+    if (perSqm !== undefined && perSqm > 0) return perSqm;
     if (product.variants.length === 0) return 0;
     const first = product.variants[0];
     const { w, h } = parseSizeDimensions(first.size);
     const area = w * h;
-    return area > 0 ? first.base_price / area : 0;
+    return area > 0 ? Math.round((first.base_price / area) * 100) / 100 : first.base_price;
   }
 
   return { priceType, getVariantPrice, getPricePerSqm, getMinPricePerSqm };

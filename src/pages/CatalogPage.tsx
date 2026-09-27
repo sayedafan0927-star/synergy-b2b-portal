@@ -211,7 +211,7 @@ function StockGridView({ filteredProducts, selectedWarehouse, onNavigate }: { fi
     const key = cellKey(product.id, variant.sku, wh.city);
     const qty = quantities[key] ?? 0;
     if (qty < 1 || wh.stock < 1) return;
-    const price = pricing.getVariantPrice(product.collection, variant.size, variant.base_price);
+    const price = pricing.getVariantPrice(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
     addItem({
       productId: product.id,
       productName: product.name,

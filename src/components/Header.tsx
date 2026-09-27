@@ -4,6 +4,7 @@ import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProducts } from '@/hooks/useProductData';
 import type { PageId, Product } from '@/types';
+import ProductImage from '@/components/ProductImage';
 
 interface HeaderProps {
   currentPage: PageId;
@@ -146,7 +147,14 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
                           }}
                           className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0"
                         >
-                          <img src={product.images[0]} alt="" className="h-10 w-10 rounded object-cover shrink-0" />
+                          <ProductImage
+                            src={product.image_thumb || product.images[0]}
+                            alt={product.name}
+                            loading="lazy"
+                            decoding="async"
+                            width={80}
+                            className="h-10 w-10 rounded object-cover shrink-0"
+                          />
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-medium text-slate-900 truncate">
                               {highlightMatch(product.name, searchQuery)}
@@ -274,7 +282,14 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
                           }}
                           className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0"
                         >
-                          <img src={product.images[0]} alt="" className="h-10 w-10 rounded object-cover shrink-0" />
+                          <ProductImage
+                            src={product.image_thumb || product.images[0]}
+                            alt={product.name}
+                            loading="lazy"
+                            decoding="async"
+                            width={80}
+                            className="h-10 w-10 rounded object-cover shrink-0"
+                          />
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-medium text-slate-900 truncate">
                               {highlightMatch(product.name, searchQuery)}

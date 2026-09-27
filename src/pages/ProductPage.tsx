@@ -137,7 +137,7 @@ export default function ProductPage({
       const qty = quantities[key] ?? 0;
       if (qty < 1 || wh.stock < 1) return;
 
-      const price = pricing.getVariantPrice(product.collection, variant.size, variant.base_price);
+      const price = pricing.getVariantPrice(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
       addItem(
         {
           productId: product.id,
@@ -433,8 +433,8 @@ export default function ProductPage({
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {product.variants.map(variant => {
-                    const variantPrice = pricing.getVariantPrice(product.collection, variant.size, variant.base_price);
-                    const pricePerSqm = pricing.getPricePerSqm(product.collection, variant.size, variant.base_price);
+                    const variantPrice = pricing.getVariantPrice(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
+                    const pricePerSqm = pricing.getPricePerSqm(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
 
                     return variant.warehouses.map((wh, whIdx) => {
                       const key = rowKey(variant.sku, wh.city);
@@ -548,8 +548,8 @@ export default function ProductPage({
             </h3>
 
             {product.variants.map(variant => {
-              const variantPrice = pricing.getVariantPrice(product.collection, variant.size, variant.base_price);
-              const pricePerSqm = pricing.getPricePerSqm(product.collection, variant.size, variant.base_price);
+              const variantPrice = pricing.getVariantPrice(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
+              const pricePerSqm = pricing.getPricePerSqm(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
 
               return (
                 <div key={variant.sku} className="card p-4">
