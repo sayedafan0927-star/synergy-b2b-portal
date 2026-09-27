@@ -1,7 +1,8 @@
+import { useState } from 'react';
 import type { Product, PageId } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUserPricing } from '@/hooks/usePricing';
-import { Lock, Layers } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Lock, Layers } from 'lucide-react';
 
 interface ProductCardProps {
   product: Product;
@@ -11,8 +12,20 @@ interface ProductCardProps {
 export default function ProductCard({ product, onNavigate }: ProductCardProps) {
   const { user } = useAuth();
   const { getMinPricePerSqm } = useUserPricing();
+  const [activeImage, setActiveImage] = useState(0);
   const pricePerSqm = getMinPricePerSqm(product);
   const sizeCount = product.variants.length;
+  const hasMultipleImages = product.images.length > 1;
+
+  const showPreviousImage = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    setActiveImage(current => current === 0 ? product.images.length - 1 : current - 1);
+  };
+
+  const showNextImage = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    setActiveImage(current => (current + 1) % product.images.length);
+  };
 
   return (
     <div
@@ -21,16 +34,38 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
     >
       <div className="relative aspect-[4/3] overflow-hidden bg-slate-100">
         <img
-          src={product.images[0]}
+          src={product.images[activeImage]}
           alt={product.name}
           loading="lazy"
           className="h-full w-full object-cover transition-transform duration-500 ease-apple group-hover:scale-105"
         />
-        {sizeCount > 1 && (
-          <span className="absolute top-2 right-2 flex items-center gap-1 rounded-full bg-white/90 backdrop-blur-sm px-2 py-0.5 text-[10px] font-semibold text-slate-700 shadow-sm">
-            <Layers className="h-3 w-3" />
-            {sizeCount} разм.
-          </span>
+        {hasMultipleImages && (
+          <>
+            <button
+              type="button"
+              aria-label="Предыдущее фото"
+              onClick={showPreviousImage}
+              className="absolute left-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-slate-700 opacity-100 shadow-sm transition-opacity sm:opacity-0 sm:group-hover:opacity-100 hover:bg-white"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              aria-label="Следующее фото"
+              onClick={showNextImage}
+              className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-slate-700 opacity-100 shadow-sm transition-opacity sm:opacity-0 sm:group-hover:opacity-100 hover:bg-white"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+            <div className="absolute bottom-2 left-1/2 flex -translate-x-1/2 gap-1 rounded-full bg-slate-900/45 px-2 py-1">
+              {product.images.map((image, index) => (
+                <span
+                  key={`${image}-${index}`}
+                  className={`h-1.5 w-1.5 rounded-full transition-colors ${index === activeImage ? 'bg-white' : 'bg-white/45'}`}
+                />
+              ))}
+            </div>
+          </>
         )}
       </div>
 
@@ -50,7 +85,7 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
 
         <p className="mt-2 text-xs text-slate-400">{product.manufacturer}</p>
 
-        <div className="mt-2 pt-2 border-t border-slate-50">
+        <div className="mt-2 flex items-end justify-between gap-2 border-t border-slate-50 pt-2">
           {user ? (
             <p className="text-sm font-bold text-slate-900">
               ${pricePerSqm.toFixed(0)} / м²
@@ -60,6 +95,12 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
               <Lock className="h-3 w-3" />
               Войдите для цен
             </p>
+          )}
+          {sizeCount > 1 && (
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600">
+              <Layers className="h-3.5 w-3.5" />
+              {sizeCount} размеров
+            </span>
           )}
         </div>
       </div>
