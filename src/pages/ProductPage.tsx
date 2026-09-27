@@ -229,37 +229,8 @@ export default function ProductPage({
     return () => { document.getElementById('product-jsonld')?.remove(); };
   }, [product]);
 
-  if (loading) {
-    return (
-      <div className="pt-20 pb-24 lg:pb-8 min-h-screen flex items-center justify-center bg-slate-50">
-        <Loader2 className="h-8 w-8 animate-spin text-brand-700" />
-      </div>
-    );
-  }
-
-  if (!product) {
-    return (
-      <div className="pt-20 pb-24 lg:pb-8 min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="text-center max-w-md mx-auto px-4">
-          <PackageSearch className="mx-auto h-16 w-16 text-slate-300 mb-4" />
-          <h1 className="font-display text-2xl font-bold text-slate-900 mb-2">Товар не найден</h1>
-          <p className="text-slate-500 mb-6">Запрашиваемый товар не существует или был удалён из каталога.</p>
-          <button onClick={() => onNavigate('catalog')} className="btn-primary inline-flex items-center gap-2">
-            <ArrowLeft className="h-4 w-4" />
-            Вернуться в каталог
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  const activeVariant = product.variants.find(v => v.size === selectedSize) || product.variants[0];
-
-  const mainPricePerSqm = activeVariant
-    ? pricing.getPricePerSqm(product.collection, activeVariant.size, activeVariant.base_price, activeVariant.price_per_sqm)
-    : pricing.getMinPricePerSqm(product);
-
   const specs = useMemo(() => {
+    if (!product) return [];
     const list: Array<{ label: string; value: string }> = [];
     const seen = new Set<string>();
 
@@ -294,6 +265,37 @@ export default function ProductPage({
 
     return list;
   }, [product]);
+
+  if (loading) {
+    return (
+      <div className="pt-20 pb-24 lg:pb-8 min-h-screen flex items-center justify-center bg-slate-50">
+        <Loader2 className="h-8 w-8 animate-spin text-brand-700" />
+      </div>
+    );
+  }
+
+  if (!product) {
+    return (
+      <div className="pt-20 pb-24 lg:pb-8 min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center max-w-md mx-auto px-4">
+          <PackageSearch className="mx-auto h-16 w-16 text-slate-300 mb-4" />
+          <h1 className="font-display text-2xl font-bold text-slate-900 mb-2">Товар не найден</h1>
+          <p className="text-slate-500 mb-6">Запрашиваемый товар не существует или был удалён из каталога.</p>
+          <button onClick={() => onNavigate('catalog')} className="btn-primary inline-flex items-center gap-2">
+            <ArrowLeft className="h-4 w-4" />
+            Вернуться в каталог
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const activeVariant = product.variants.find(v => v.size === selectedSize) || product.variants[0];
+
+  const mainPricePerSqm = activeVariant
+    ? pricing.getPricePerSqm(product.collection, activeVariant.size, activeVariant.base_price, activeVariant.price_per_sqm)
+    : pricing.getMinPricePerSqm(product);
+
 
   const myShowroomId = profile?.showroom_warehouse_id;
   const myShowroomName = profile?.showroom_warehouse_name || 'В моем магазине';
