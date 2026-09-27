@@ -21,7 +21,7 @@ import { useProduct, filterClientWarehouses } from '@/hooks/useProductData';
 import { useUserPricing } from '@/hooks/usePricing';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { CarpetPlaceholderIcon } from '@/components/ProductImage';
+import ProductImage, { CarpetPlaceholderIcon } from '@/components/ProductImage';
 
 
 function rowKey(sku: string, city: string) {

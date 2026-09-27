@@ -688,6 +688,8 @@ function ClientDemoPanel({ client }: { client: { id: string; full_name: string; 
     return () => { cancelled = true; };
   }, [client]);
 
+  useEffect(() => {
+    let cancelled = false;
     setLoadingDebt(true);
     fetchClientDebtFromErp({
       phone: client.phone,

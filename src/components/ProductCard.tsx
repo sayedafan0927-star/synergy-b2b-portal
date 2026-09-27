@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { Product, PageId, ProductVariant } from '@/types';
+import { parseSizeDimensions } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/contexts/CartContext';
 import { useUserPricing } from '@/hooks/usePricing';

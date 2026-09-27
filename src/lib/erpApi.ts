@@ -277,6 +277,7 @@ export interface ErpClientAuthResult {
  */
 export async function authenticateClientViaErp(login: string, password: string): Promise<ErpClientAuthResult> {
   const cleanPhone = login.replace(/[^\d+]/g, '').trim();
+  const cleanLogin = cleanPhone || login.trim();
 
   // 1. Попытка авторизации через action=login в Synergy ERP
   try {
