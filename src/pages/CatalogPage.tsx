@@ -585,6 +585,10 @@ export default function CatalogPage({ onNavigate, initialCollection, initialCoun
         {/* Toolbar */}
         <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3 flex-1">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+              <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Поиск по каталогу..." className="input-field pl-10 text-sm" />
+            </div>
             <button onClick={() => setDrawerOpen(true)} className="relative flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 hover:border-slate-300 shrink-0">
               <SlidersHorizontal className="h-4 w-4" />
               <span>Фильтр</span>
