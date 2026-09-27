@@ -29,6 +29,9 @@ import {
   Activity,
   FileJson,
   Search,
+  ChevronDown,
+  Power,
+  FileText,
 } from 'lucide-react';
 import type { PageId } from '@/types';
 import { calcSqm, parseSizeDimensions } from '@/types';
@@ -440,7 +443,9 @@ function AdminDisplaySettings() {
 
 /* ─── Admin: Users Tab ─── */
 function AdminUsersTab({ onNavigate }: { onNavigate: (page: PageId) => void }) {
-  const { impersonateUser, user: currentUser } = useAuth();
+  const { impersonateUser, user: currentUser, profile: currentProfile, realIsAdmin } = useAuth();
+  const managerId = currentUser?.id;
+  const isAdminView = realIsAdmin;
   const [users, setUsers] = useState<Array<{
     id: string;
     full_name: string;
@@ -450,14 +455,16 @@ function AdminUsersTab({ onNavigate }: { onNavigate: (page: PageId) => void }) {
     partner_id: string | null;
     price_type: string;
     manager_id: string | null;
+    impersonation_enabled: boolean;
   }>>([]);
   const [userSearch, setUserSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   useEffect(() => {
     supabase
       .from('profiles')
-      .select('id, full_name, company_name, phone, role, partner_id, price_type, manager_id')
+      .select('id, full_name, company_name, phone, role, partner_id, price_type, manager_id, impersonation_enabled')
       .order('created_at', { ascending: false })
       .then(({ data }) => {
         if (data) setUsers(data as typeof users);
@@ -465,24 +472,30 @@ function AdminUsersTab({ onNavigate }: { onNavigate: (page: PageId) => void }) {
       });
   }, []);
 
-  const handleRoleChange = async (userId: string, newRole: string) => {
-    const { error } = await supabase.rpc('set_user_role', { p_user_id: userId, p_role: newRole });
+  const handleToggleImpersonation = async (userId: string, enabled: boolean) => {
+    const { error } = await supabase
+      .from('profiles')
+      .update({ impersonation_enabled: !enabled })
+      .eq('id', userId);
     if (!error) {
-      setUsers(prev => prev.map(u => u.id === userId ? { ...u, role: newRole as UserRole } : u));
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, impersonation_enabled: !enabled } : u));
     }
   };
 
   const filteredUsers = useMemo(() => {
-    if (!userSearch.trim()) return users;
+    let clients = users.filter(user => user.role === 'client');
+    if (!isAdminView && managerId) {
+      clients = clients.filter(user => user.manager_id === managerId);
+    }
+    if (!userSearch.trim()) return clients;
     const q = userSearch.toLowerCase().trim();
-    return users.filter(u =>
-      (u.full_name || '').toLowerCase().includes(q) ||
-      (u.company_name || '').toLowerCase().includes(q) ||
-      (u.phone || '').toLowerCase().includes(q) ||
-      (u.partner_id || '').toLowerCase().includes(q) ||
-      (u.role || '').toLowerCase().includes(q)
+    return clients.filter(user =>
+      (user.full_name || '').toLowerCase().includes(q) ||
+      (user.company_name || '').toLowerCase().includes(q) ||
+      (user.phone || '').toLowerCase().includes(q) ||
+      (user.partner_id || '').toLowerCase().includes(q)
     );
-  }, [users, userSearch]);
+  }, [users, userSearch, isAdminView, managerId]);
 
   return (
     <div className="space-y-6">
@@ -490,8 +503,12 @@ function AdminUsersTab({ onNavigate }: { onNavigate: (page: PageId) => void }) {
         <div className="flex items-center gap-3">
           <Users className="h-5 w-5 text-slate-500" />
           <div>
-            <h2 className="text-lg font-bold text-slate-900">Пользователи ({filteredUsers.length})</h2>
-            <p className="text-sm text-slate-500">Управление ролями, ценами и вход от имени клиента</p>
+            <h2 className="text-lg font-bold text-slate-900">Мои клиенты ({filteredUsers.length})</h2>
+            <p className="text-sm text-slate-500">
+              {isAdminView
+                ? 'Все клиенты портала. Включите доступ и зайдите под клиентом.'
+                : 'Клиенты, закреплённые за вами. Включите доступ и зайдите под клиентом.'}
+            </p>
           </div>
         </div>
         <div className="relative w-full sm:w-64">
@@ -508,56 +525,303 @@ function AdminUsersTab({ onNavigate }: { onNavigate: (page: PageId) => void }) {
 
       <div className="space-y-2">
         {filteredUsers.map(u => (
-          <div key={u.id} className="card px-4 py-3 flex flex-wrap items-center gap-3 hover:border-slate-300 transition-colors">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 shrink-0">
-              <User className="h-5 w-5 text-slate-500" />
-            </div>
-            <div className="flex-1 min-w-[180px]">
+          <div key={u.id} className="space-y-0">
+            <div className="card px-4 py-3 flex flex-wrap items-center gap-3 hover:border-slate-300 transition-colors">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 shrink-0">
+                <User className="h-5 w-5 text-slate-500" />
+              </div>
+              <div className="flex-1 min-w-[180px]">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-semibold text-slate-900 truncate">{u.full_name || 'Без имени'}</p>
+                  {u.id === currentUser?.id && (
+                    <span className="badge bg-slate-100 text-slate-600 text-[10px]">Вы</span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-500 truncate">{u.company_name || 'Компания не указана'}</p>
+                <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400 mt-0.5">
+                  {u.phone && <span className="font-mono">{u.phone}</span>}
+                  {u.price_type && <span className="text-brand-600 font-medium">Прайс: {u.price_type}</span>}
+                  {u.partner_id && <span className="font-mono">ID: {u.partner_id}</span>}
+                </div>
+              </div>
+
               <div className="flex items-center gap-2">
-                <p className="text-sm font-semibold text-slate-900 truncate">{u.full_name || 'Без имени'}</p>
-                {u.id === currentUser?.id && (
-                  <span className="badge bg-slate-100 text-slate-600 text-[10px]">Вы</span>
-                )}
-              </div>
-              <p className="text-xs text-slate-500 truncate">{u.company_name || 'Компания не указана'}</p>
-              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400 mt-0.5">
-                {u.phone && <span className="font-mono">{u.phone}</span>}
-                {u.price_type && <span className="text-brand-600 font-medium">Прайс: {u.price_type}</span>}
-                {u.partner_id && <span className="font-mono">ID: {u.partner_id}</span>}
+                <button
+                  onClick={() => handleToggleImpersonation(u.id, u.impersonation_enabled)}
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                    u.impersonation_enabled
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
+                      : 'bg-slate-50 text-slate-400 border border-slate-200 hover:bg-slate-100'
+                  }`}
+                  title={u.impersonation_enabled ? 'Доступ включён — можно войти под клиентом' : 'Включить доступ для входа под клиентом'}
+                >
+                  <Power className="h-3.5 w-3.5" />
+                  {u.impersonation_enabled ? 'Доступ вкл.' : 'Доступ выкл.'}
+                </button>
+
+                <button
+                  onClick={() => setExpandedId(expandedId === u.id ? null : u.id)}
+                  className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+                >
+                  <FileText className="h-3.5 w-3.5" />
+                  Демо
+                  <ChevronDown className={`h-3 w-3 transition-transform ${expandedId === u.id ? 'rotate-180' : ''}`} />
+                </button>
+
+                <button
+                  onClick={() => {
+                    impersonateUser(u as any);
+                    onNavigate('catalog');
+                  }}
+                  disabled={!u.impersonation_enabled || u.id === currentUser?.id}
+                  title={!u.impersonation_enabled ? 'Сначала включите доступ для этого клиента' : `Войти как ${u.full_name || u.company_name || 'клиент'}`}
+                  className="flex items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100 hover:border-brand-300 transition-colors disabled:opacity-40 disabled:pointer-events-none shadow-sm"
+                >
+                  <UserCog className="h-3.5 w-3.5" />
+                  Войти под клиентом
+                </button>
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
-              <select
-                value={u.role}
-                onChange={e => handleRoleChange(u.id, e.target.value)}
-                className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium text-slate-700"
-              >
-                <option value="admin">Админ</option>
-                <option value="manager_rm">РМ</option>
-                <option value="manager_lm">ЛМ</option>
-                <option value="supplier">Поставщик</option>
-                <option value="client">Клиент</option>
-              </select>
-
-              <button
-                onClick={() => {
-                  impersonateUser(u as any);
-                  onNavigate('catalog');
-                }}
-                disabled={u.id === currentUser?.id}
-                title={u.id === currentUser?.id ? 'Это ваш собственный аккаунт' : `Войти как ${u.full_name || u.company_name || 'клиент'}`}
-                className="flex items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100 hover:border-brand-300 transition-colors disabled:opacity-40 disabled:pointer-events-none shadow-sm"
-              >
-                <UserCog className="h-3.5 w-3.5" />
-                Войти как
-              </button>
-            </div>
+            {expandedId === u.id && (
+              <ClientDemoPanel client={u} />
+            )}
           </div>
         ))}
         {!loading && filteredUsers.length === 0 && (
-          <p className="py-8 text-center text-sm text-slate-400">Пользователи не найдены</p>
+          <p className="py-8 text-center text-sm text-slate-400">Клиенты не найдены</p>
         )}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Client Demo Panel (orders + debt preview) ─── */
+function ClientDemoPanel({ client }: { client: { id: string; full_name: string; company_name: string; phone: string; partner_id: string | null; price_type: string } }) {
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState(true);
+  const [debt, setDebt] = useState<ClientDebtReport | null>(null);
+  const [loadingDebt, setLoadingDebt] = useState(true);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingOrders(true);
+    supabase
+      .from('orders')
+      .select(`
+        id, order_number, user_id, status, warehouse, notes,
+        total_amount, total_sqm, total_items, created_at,
+        order_items (id, product_name, collection, size, sku, warehouse, price, quantity)
+      `)
+      .eq('user_id', client.id)
+      .order('created_at', { ascending: false })
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (!error && data) {
+          const mapped: Order[] = data.map((o: any) => {
+            const st = o.status || 'pending';
+            const meta = ORDER_STATUS_MAP[st] || { label: st, color: 'bg-slate-100 text-slate-600 border-slate-200' };
+            const items: OrderItem[] = (o.order_items || []).map((it: any) => ({
+              id: it.id,
+              productName: it.product_name || 'Товар',
+              collection: it.collection || 'Коллекция',
+              size: it.size || '',
+              warehouse: it.warehouse || o.warehouse || '',
+              price: Number(it.price) || 0,
+              quantity: Number(it.quantity) || 1,
+            }));
+            const d = o.created_at ? new Date(o.created_at) : new Date();
+            return {
+              id: o.id,
+              orderNumber: o.order_number || o.id.slice(0, 8),
+              userId: o.user_id,
+              date: d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
+              status: meta.label,
+              statusRaw: st,
+              statusColor: meta.color,
+              warehouse: o.warehouse || 'Главный склад',
+              notes: o.notes || '',
+              clientName: client.full_name,
+              clientCompany: client.company_name,
+              clientPhone: client.phone,
+              totalAmount: Number(o.total_amount) || 0,
+              totalSqm: Number(o.total_sqm) || 0,
+              totalItems: Number(o.total_items) || items.reduce((s, it) => s + it.quantity, 0),
+              items,
+            };
+          });
+          setOrders(mapped);
+        }
+        setLoadingOrders(false);
+      });
+
+    setLoadingDebt(true);
+    fetchClientDebtFromErp({
+      phone: client.phone,
+      search: client.company_name || client.full_name,
+    })
+      .then(res => { if (!cancelled && res.success && res.found) setDebt(res); })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoadingDebt(false); });
+
+    return () => { cancelled = true; };
+  }, [client.id]);
+
+  if (selectedOrder) {
+    return (
+      <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50/50 p-4">
+        <div className="flex items-center gap-2 mb-4">
+          <button onClick={() => setSelectedOrder(null)} className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 hover:bg-slate-50">
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+          <h4 className="text-sm font-bold text-slate-900">Заказ {selectedOrder.orderNumber}</h4>
+          <span className={`badge border ${selectedOrder.statusColor}`}>{selectedOrder.status}</span>
+        </div>
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          <div className="card px-3 py-2 text-center">
+            <p className="text-[10px] uppercase text-slate-400">Кол-во</p>
+            <p className="text-sm font-bold text-slate-900">{selectedOrder.totalItems} шт.</p>
+          </div>
+          <div className="card px-3 py-2 text-center">
+            <p className="text-[10px] uppercase text-slate-400">Площадь</p>
+            <p className="text-sm font-bold text-slate-900">{fmt2(selectedOrder.totalSqm)} м²</p>
+          </div>
+          <div className="card px-3 py-2 text-center">
+            <p className="text-[10px] uppercase text-slate-400">Сумма</p>
+            <p className="text-sm font-bold text-brand-700">{fmtPrice(selectedOrder.totalAmount)}</p>
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          {selectedOrder.items.map((item, idx) => {
+            const sqm = calcSqm(item.size, item.quantity);
+            const total = item.price * item.quantity;
+            return (
+              <div key={idx} className="flex items-center gap-3 rounded-lg bg-white border border-slate-100 px-3 py-2">
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-slate-900 truncate">{item.productName}</p>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="badge text-[10px]">{item.size}</span>
+                    <span className="text-[11px] text-slate-400">{item.warehouse}</span>
+                  </div>
+                </div>
+                <div className="flex gap-3 text-right text-xs shrink-0">
+                  <span className="text-slate-500">{item.quantity} шт.</span>
+                  <span className="text-slate-500">{fmt2(sqm)} м²</span>
+                  <span className="font-bold text-slate-900">{fmtPrice(total)}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-4">
+      <div className="flex items-center gap-2">
+        <Eye className="h-4 w-4 text-brand-600" />
+        <h4 className="text-sm font-bold text-slate-900">Демо-просмотр: {client.full_name || client.company_name}</h4>
+        <span className="badge bg-brand-50 text-brand-700 text-[10px] ml-auto">Только просмотр</span>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Package className="h-4 w-4 text-slate-500" />
+            <h5 className="text-xs font-bold text-slate-700">Заказы клиента ({orders.length})</h5>
+          </div>
+          {loadingOrders ? (
+            <div className="py-4 flex justify-center">
+              <div className="h-5 w-5 animate-spin rounded-full border-2 border-brand-600 border-t-transparent" />
+            </div>
+          ) : orders.length === 0 ? (
+            <div className="rounded-lg bg-white border border-slate-100 p-4 text-center">
+              <p className="text-xs text-slate-400">Заказов пока нет</p>
+            </div>
+          ) : (
+            <div className="space-y-1.5 max-h-[300px] overflow-y-auto">
+              {orders.map(order => {
+                const t = orderTotals(order.items);
+                return (
+                  <button
+                    key={order.id}
+                    onClick={() => setSelectedOrder(order)}
+                    className="w-full text-left rounded-lg bg-white border border-slate-100 px-3 py-2 hover:border-brand-300 hover:shadow-sm transition-all"
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-xs text-slate-900 bg-slate-100 px-1.5 py-0.5 rounded">{order.orderNumber}</span>
+                        <span className={`badge border ${order.statusColor} text-[10px]`}>{order.status}</span>
+                      </div>
+                      <span className="text-[10px] text-slate-400">{order.date}</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-[11px] text-slate-500">
+                      <span>{order.totalItems || t.qty} шт.</span>
+                      <span>{fmt2(order.totalSqm || t.sqm)} м²</span>
+                      <span className="font-bold text-brand-700 ml-auto">{fmtPrice(order.totalAmount || t.sum)}</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <DollarSign className="h-4 w-4 text-slate-500" />
+            <h5 className="text-xs font-bold text-slate-700">Финансы и долги</h5>
+          </div>
+          {loadingDebt ? (
+            <div className="py-4 flex justify-center">
+              <div className="h-5 w-5 animate-spin rounded-full border-2 border-brand-600 border-t-transparent" />
+            </div>
+          ) : debt ? (
+            <div className="rounded-lg bg-white border border-slate-100 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-500">Задолженность</span>
+                <span className="text-sm font-bold text-red-600">
+                  ${debt.financials.total_debt_usd.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-500">Оплачено</span>
+                <span className="text-sm font-bold text-emerald-600">
+                  ${debt.financials.total_paid_usd.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-500">Просрочено</span>
+                <span className="text-sm font-bold text-amber-600">
+                  ${debt.financials.overdue_usd.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+              {debt.financials.is_overdue && (
+                <div className="flex items-center gap-1.5 rounded-md bg-red-50 px-2 py-1 text-[11px] text-red-700">
+                  <AlertTriangle className="h-3 w-3" />
+                  Просрочка {debt.financials.max_overdue_days} дн.
+                </div>
+              )}
+              {debt.client?.credit_limit_usd && (
+                <div className="border-t border-slate-100 pt-2 text-[11px] text-slate-400">
+                  Лимит: ${debt.client.credit_limit_usd.toLocaleString('en-US')} • Отсрочка: {debt.client.payment_delay_days} дн.
+                </div>
+              )}
+              {debt.regional_manager?.name && (
+                <div className="border-t border-slate-100 pt-2 text-[11px] text-slate-500">
+                  Куратор РМ: <strong className="text-slate-700">{debt.regional_manager.name}</strong>
+                  {debt.regional_manager.phone && <span className="font-mono ml-1">{debt.regional_manager.phone}</span>}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-lg bg-white border border-slate-100 p-4 text-center">
+              <p className="text-xs text-slate-400">Данные из ERP не найдены</p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -963,7 +1227,9 @@ function AdminErpSyncTab() {
 }
 
 export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId) => void }) {
-  const { user, profile, loading, signOut, isAdmin, isManager } = useAuth();
+  const { user, profile, loading, signOut, isAdmin, realIsAdmin, isManager } = useAuth();
+  const adminAccess = realIsAdmin;
+  const clientsAccess = realIsAdmin || isManager;
   const [activeTab, setActiveTab] = useState<TabId>('orders');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [clientDebt, setClientDebt] = useState<ClientDebtReport | null>(null);
@@ -1013,9 +1279,9 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
 
   const tabs: { id: TabId; label: string; icon: typeof Package; show: boolean }[] = [
     { id: 'orders', label: 'Мои заказы', icon: Package, show: true },
-    { id: 'admin-erp', label: 'Обмен с ERP', icon: RefreshCw, show: isAdmin },
-    { id: 'admin-users', label: 'Пользователи', icon: Users, show: isAdmin },
-    { id: 'admin-display', label: 'Видимость', icon: Eye, show: isAdmin },
+    { id: 'admin-erp', label: 'Обмен с ERP', icon: RefreshCw, show: adminAccess },
+    { id: 'admin-users', label: 'Мои клиенты', icon: Users, show: clientsAccess },
+    { id: 'admin-display', label: 'Видимость', icon: Eye, show: adminAccess },
     { id: 'settings', label: 'Настройки', icon: Settings, show: true },
   ];
 
@@ -1205,12 +1471,12 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
                   onUpdateOrder={(updated) => setSelectedOrder(updated)}
                 />
               ) : (
-                <OrdersTab onSelectOrder={setSelectedOrder} isAdmin={isAdmin} isManager={isManager} />
+                <OrdersTab onSelectOrder={setSelectedOrder} isAdmin={adminAccess || isAdmin} isManager={isManager || clientsAccess} />
               )
             )}
-            {activeTab === 'admin-erp' && isAdmin && <AdminErpSyncTab />}
-            {activeTab === 'admin-users' && isAdmin && <AdminUsersTab onNavigate={onNavigate} />}
-            {activeTab === 'admin-display' && isAdmin && <AdminDisplaySettings />}
+            {activeTab === 'admin-erp' && adminAccess && <AdminErpSyncTab />}
+            {activeTab === 'admin-users' && clientsAccess && <AdminUsersTab onNavigate={onNavigate} />}
+            {activeTab === 'admin-display' && adminAccess && <AdminDisplaySettings />}
             {activeTab === 'settings' && (
               <div className="space-y-6">
                 <SettingsTab />

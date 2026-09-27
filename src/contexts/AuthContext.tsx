@@ -13,6 +13,7 @@ export interface Profile {
   phone: string;
   manager_id: string | null;
   price_type: string;
+  impersonation_enabled?: boolean;
 }
 
 interface AuthContextValue {
@@ -24,6 +25,7 @@ interface AuthContextValue {
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   isAdmin: boolean;
+  realIsAdmin: boolean;
   isManager: boolean;
   isSupplier: boolean;
   isClient: boolean;
@@ -44,7 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const fetchProfile = useCallback(async (userId: string) => {
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, role, partner_id, full_name, company_name, phone, manager_id, price_type')
+      .select('id, role, partner_id, full_name, company_name, phone, manager_id, price_type, impersonation_enabled')
       .eq('id', userId)
       .maybeSingle();
     if (!error && data) {
@@ -139,6 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const effectiveProfile = impersonatedProfile ?? profile;
   const role = effectiveProfile?.role;
+  const realRole = profile?.role;
 
   return (
     <AuthContext.Provider
@@ -150,7 +153,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signUp,
         signOut: signOutFn,
         refreshProfile,
-        isAdmin: role === 'admin',
+        isAdmin: realRole === 'admin',
+        realIsAdmin: realRole === 'admin',
         isManager: role === 'manager_rm' || role === 'manager_lm',
         isSupplier: role === 'supplier',
         isClient: role === 'client' || !role,
