@@ -1,8 +1,7 @@
 import { useState, useEffect, useContext } from 'react';
-import { supabase } from '@/lib/supabase';
 import { fetchCatalogFromErp } from '@/lib/erpApi';
 import { AuthContext } from '@/contexts/AuthContext';
-import type { Product, ProductVariant, Warehouse, CollectionPrice } from '@/types';
+import type { Product, ProductVariant, Warehouse } from '@/types';
 
 export const STANDARD_SIZES = ['0.8 × 1.5', '1.6 × 2.3', '2 × 3', '2.5 × 3.5', '3 × 4'];
 
@@ -443,68 +442,19 @@ export function useProducts(customDealerId?: string | number) {
 
     async function load() {
       try {
-        // 1. Приоритетный источник: реальные ковры и остатки складов из Synergy ERP
-        try {
-          const erpData = await fetchCatalogFromErp(effectiveDealerId);
-          if (!cancelled && erpData && erpData.success && Array.isArray(erpData.products) && erpData.products.length > 0) {
-            const merged = mergeProducts(erpData.products as Product[]);
-            setProducts(merged);
-            setLoading(false);
-            return;
-          }
-        } catch (erpErr) {
-          console.warn('[useProducts] ERP catalog fetch fallback:', erpErr);
+        const erpData = await fetchCatalogFromErp(effectiveDealerId);
+        if (!cancelled && erpData && erpData.success && Array.isArray(erpData.products) && erpData.products.length > 0) {
+          const merged = mergeProducts(erpData.products as Product[]);
+          setProducts(merged);
+          setLoading(false);
+          return;
         }
-
-        // 2. Резервный источник: Supabase (с защитой от сбоев)
-        try {
-          const [prodRes, varRes, stockRes] = await Promise.all([
-            supabase.from('products').select('*'),
-            supabase.from('product_variants').select('*'),
-            supabase.from('warehouse_stock').select('variant_id, city, stock'),
-          ]);
-
-          if (cancelled) return;
-
-          if (!prodRes.error && prodRes.data && prodRes.data.length > 0) {
-            const stockByVariant = new Map<string, Warehouse[]>();
-            for (const s of stockRes.data ?? []) {
-              const arr = stockByVariant.get(s.variant_id) ?? [];
-              arr.push({ city: s.city, stock: s.stock });
-              stockByVariant.set(s.variant_id, arr);
-            }
-
-            const variantsByProduct = new Map<string, ProductVariant[]>();
-            for (const v of varRes.data ?? []) {
-              const arr = variantsByProduct.get(v.product_id) ?? [];
-              arr.push({
-                id: v.id,
-                size: v.size,
-                sku: v.sku,
-                base_price: Number(v.base_price),
-                warehouses: stockByVariant.get(v.id) ?? [],
-              });
-              variantsByProduct.set(v.product_id, arr);
-            }
-
-            const assembled = prodRes.data.map(p => ({
-              ...p,
-              variants: variantsByProduct.get(p.id) ?? [],
-            }));
-
-            setProducts(mergeProducts(assembled));
-            setLoading(false);
-            return;
-          }
-        } catch (sbErr) {
-          console.warn('[useProducts] Supabase fallback error:', sbErr);
-        }
-
         if (!cancelled) {
           setLoading(false);
         }
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Network error');
+      } catch (erpErr) {
+        console.warn('[useProducts] ERP catalog fetch error:', erpErr);
+        if (!cancelled) setError(erpErr instanceof Error ? erpErr.message : 'Ошибка загрузки каталога ERP');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -535,54 +485,22 @@ export function useProduct(id: string | undefined, customDealerId?: string | num
 
     async function load() {
       try {
-        // 1. Поиск в каталоге ERP
-        try {
-          const erpData = await fetchCatalogFromErp(effectiveDealerId);
-          if (!cancelled && erpData && erpData.success && Array.isArray(erpData.products)) {
-            const merged = mergeProducts(erpData.products as Product[]);
-            const found = merged.find(p => p.id === id || p.variants.some(v => v.id === id || v.sku === id));
-            if (found) {
-              setProduct(found);
-              setLoading(false);
-              return;
-            }
+        const erpData = await fetchCatalogFromErp(effectiveDealerId);
+        if (!cancelled && erpData && erpData.success && Array.isArray(erpData.products)) {
+          const merged = mergeProducts(erpData.products as Product[]);
+          const found = merged.find(p => p.id === id || p.variants.some(v => v.id === id || v.sku === id));
+          if (found) {
+            setProduct(found);
+            setLoading(false);
+            return;
           }
-        } catch (erpErr) {
-          console.warn('[useProduct] ERP single product fallback:', erpErr);
         }
-
-        // 2. Резервный поиск
-        try {
-          const prodRes = await supabase.from('products').select('*').eq('id', id).maybeSingle();
-          if (prodRes.data) {
-            const varRes = await supabase.from('product_variants').select('*').eq('product_id', id);
-            const variantIds = (varRes.data ?? []).map(v => v.id);
-            let stockData: Array<{ variant_id: string; city: string; stock: number }> = [];
-            if (variantIds.length > 0) {
-              const stockRes = await supabase.from('warehouse_stock').select('variant_id, city, stock').in('variant_id', variantIds);
-              if (stockRes.data) stockData = stockRes.data;
-            }
-            const stockByVariant = new Map<string, Warehouse[]>();
-            for (const s of stockData) {
-              const arr = stockByVariant.get(s.variant_id) ?? [];
-              arr.push({ city: s.city, stock: s.stock });
-              stockByVariant.set(s.variant_id, arr);
-            }
-            const variants = (varRes.data ?? []).map(v => ({
-              id: v.id,
-              size: v.size,
-              sku: v.sku,
-              base_price: Number(v.base_price),
-              warehouses: stockByVariant.get(v.id) ?? [],
-            }));
-            const assembled = mergeProducts([{ ...prodRes.data, variants }]);
-            setProduct(assembled[0] ?? null);
-          }
-        } catch (sbErr) {
-          console.warn('[useProduct] Supabase lookup error:', sbErr);
+        if (!cancelled) {
+          setLoading(false);
         }
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Network error');
+      } catch (erpErr) {
+        console.warn('[useProduct] ERP single product fetch error:', erpErr);
+        if (!cancelled) setError(erpErr instanceof Error ? erpErr.message : 'Ошибка загрузки товара ERP');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -593,9 +511,4 @@ export function useProduct(id: string | undefined, customDealerId?: string | num
   }, [id, effectiveDealerId]);
 
   return { product, loading, error };
-}
-
-export function useCollectionPrices() {
-  const [prices] = useState<CollectionPrice[]>([]);
-  return prices;
 }

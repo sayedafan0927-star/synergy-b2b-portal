@@ -24,40 +24,33 @@ export function triggerDisplaySettingsReload() {
   }
 }
 
+const STORAGE_KEY = 'synergy:display_settings';
+
 export function useDisplaySettings() {
   const { profile, user } = useAuth();
   const currentRole = profile?.role || (user ? 'client' : 'client');
 
-  const [settings, setSettings] = useState<DisplaySettings>(
-    DEFAULT_SETTINGS[currentRole] || DEFAULT_SETTINGS.client,
-  );
-  const [loading, setLoading] = useState(true);
-
-  const loadSettings = useCallback(async () => {
-    try {
-      const { data, error } = await supabase
-        .from('display_settings')
-        .select('target_role, show_stock, show_reserve, show_total_pcs, show_sqm, show_price')
-        .eq('target_role', currentRole)
-        .maybeSingle();
-
-      if (!error && data) {
-        setSettings({
-          show_stock: data.show_stock,
-          show_reserve: data.show_reserve,
-          show_total_pcs: data.show_total_pcs,
-          show_sqm: data.show_sqm,
-          show_price: data.show_price,
-        });
-      } else {
-        setSettings(DEFAULT_SETTINGS[currentRole] || DEFAULT_SETTINGS.client);
+  const getStoredSettings = useCallback((): DisplaySettings => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed[currentRole]) return parsed[currentRole];
+        }
+      } catch {
+        // fallback
       }
-    } catch {
-      setSettings(DEFAULT_SETTINGS[currentRole] || DEFAULT_SETTINGS.client);
-    } finally {
-      setLoading(false);
     }
+    return DEFAULT_SETTINGS[currentRole] || DEFAULT_SETTINGS.client;
   }, [currentRole]);
+
+  const [settings, setSettings] = useState<DisplaySettings>(getStoredSettings);
+  const [loading, setLoading] = useState(false);
+
+  const loadSettings = useCallback(() => {
+    setSettings(getStoredSettings());
+  }, [getStoredSettings]);
 
   useEffect(() => {
     loadSettings();

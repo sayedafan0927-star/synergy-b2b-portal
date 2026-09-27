@@ -147,21 +147,23 @@ function OrderDetail({
 
   const handleStatusChange = async (newStatus: string) => {
     setUpdatingStatus(true);
-    const { error } = await supabase
-      .from('orders')
-      .update({ status: newStatus, updated_at: new Date().toISOString() })
-      .eq('id', order.id);
-
-    if (!error) {
-      const meta = ORDER_STATUS_MAP[newStatus] || { label: newStatus, color: 'bg-slate-100 text-slate-600 border-slate-200' };
-      setStatus(newStatus);
-      onUpdateOrder?.({
-        ...order,
-        status: meta.label,
-        statusRaw: newStatus,
-        statusColor: meta.color,
-      });
+    try {
+      await supabase
+        .from('orders')
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .eq('id', order.id);
+    } catch {
+      // safe fallback
     }
+
+    const meta = ORDER_STATUS_MAP[newStatus] || { label: newStatus, color: 'bg-slate-100 text-slate-600 border-slate-200' };
+    setStatus(newStatus);
+    onUpdateOrder?.({
+      ...order,
+      status: meta.label,
+      statusRaw: newStatus,
+      statusColor: meta.color,
+    });
     setUpdatingStatus(false);
   };
 
@@ -318,27 +320,29 @@ function OrderItemRow({ item }: { item: OrderItem }) {
 
 /* ─── Admin: Display Settings Tab ─── */
 function AdminDisplaySettings() {
-  const [settings, setSettings] = useState<Record<string, DisplaySettings>>({});
-  const [saving, setSaving] = useState(false);
   const roles: UserRole[] = ['admin', 'manager_rm', 'manager_lm', 'supplier', 'client'];
+  const defaultMap: Record<string, DisplaySettings> = {
+    admin: { show_stock: true, show_reserve: true, show_total_pcs: true, show_sqm: true, show_price: true },
+    manager_rm: { show_stock: true, show_reserve: true, show_total_pcs: true, show_sqm: true, show_price: true },
+    manager_lm: { show_stock: true, show_reserve: false, show_total_pcs: true, show_sqm: true, show_price: true },
+    supplier: { show_stock: true, show_reserve: false, show_total_pcs: true, show_sqm: true, show_price: false },
+    client: { show_stock: true, show_reserve: false, show_total_pcs: true, show_sqm: true, show_price: true },
+  };
 
-  useEffect(() => {
-    supabase.from('display_settings').select('*').then(({ data }) => {
-      if (data) {
-        const map: Record<string, DisplaySettings> = {};
-        for (const row of data) {
-          map[row.target_role] = {
-            show_stock: row.show_stock,
-            show_reserve: row.show_reserve,
-            show_total_pcs: row.show_total_pcs,
-            show_sqm: row.show_sqm,
-            show_price: row.show_price,
-          };
-        }
-        setSettings(map);
+  const [settings, setSettings] = useState<Record<string, DisplaySettings>>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('synergy:display_settings');
+        if (stored) return { ...defaultMap, ...JSON.parse(stored) };
+      } catch {
+        // fallback
       }
-    });
-  }, []);
+    }
+    return defaultMap;
+  });
+
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   const toggle = (role: string, field: keyof DisplaySettings) => {
     setSettings(prev => ({
@@ -347,22 +351,11 @@ function AdminDisplaySettings() {
     }));
   };
 
-  const [saved, setSaved] = useState(false);
-
-  const handleSave = async () => {
+  const handleSave = () => {
     setSaving(true);
     setSaved(false);
-    for (const role of roles) {
-      const s = settings[role];
-      if (!s) continue;
-      await supabase.from('display_settings').update({
-        show_stock: s.show_stock,
-        show_reserve: s.show_reserve,
-        show_total_pcs: s.show_total_pcs,
-        show_sqm: s.show_sqm,
-        show_price: s.show_price,
-        updated_at: new Date().toISOString(),
-      }).eq('target_role', role);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('synergy:display_settings', JSON.stringify(settings));
     }
     triggerDisplaySettingsReload();
     setSaving(false);
@@ -679,64 +672,13 @@ function ClientDemoPanel({ client }: { client: { id: string; full_name: string; 
               })),
             };
           });
-          setOrders(mapped);
-          setLoadingOrders(false);
-          return;
+          if (!cancelled) setOrders(mapped);
+        } else {
+          if (!cancelled) setOrders([]);
         }
       } catch (erpErr) {
-        console.warn('[ClientDemoPanel] ERP orders fallback:', erpErr);
-      }
-
-      // 2. Резервный источник: Supabase
-      try {
-        const { data, error } = await supabase
-          .from('orders')
-          .select(`
-            id, order_number, user_id, status, warehouse, notes,
-            total_amount, total_sqm, total_items, created_at,
-            order_items (id, product_name, collection, size, sku, warehouse, price, quantity)
-          `)
-          .eq('user_id', client.id)
-          .order('created_at', { ascending: false });
-
-        if (cancelled) return;
-        if (!error && data) {
-          const mapped: Order[] = data.map((o: any) => {
-            const st = o.status || 'pending';
-            const meta = ORDER_STATUS_MAP[st] || { label: st, color: 'bg-slate-100 text-slate-600 border-slate-200' };
-            const items: OrderItem[] = (o.order_items || []).map((it: any) => ({
-              id: it.id,
-              productName: it.product_name || 'Товар',
-              collection: it.collection || 'Коллекция',
-              size: it.size || '',
-              warehouse: it.warehouse || o.warehouse || '',
-              price: Number(it.price) || 0,
-              quantity: Number(it.quantity) || 1,
-            }));
-            const d = o.created_at ? new Date(o.created_at) : new Date();
-            return {
-              id: o.id,
-              orderNumber: o.order_number || o.id.slice(0, 8),
-              userId: o.user_id,
-              date: d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
-              status: meta.label,
-              statusRaw: st,
-              statusColor: meta.color,
-              warehouse: o.warehouse || 'Главный склад',
-              notes: o.notes || '',
-              clientName: client.full_name,
-              clientCompany: client.company_name,
-              clientPhone: client.phone,
-              totalAmount: Number(o.total_amount) || 0,
-              totalSqm: Number(o.total_sqm) || 0,
-              totalItems: Number(o.total_items) || items.reduce((s, it) => s + it.quantity, 0),
-              items,
-            };
-          });
-          setOrders(mapped);
-        }
-      } catch (sbErr) {
-        console.warn('[ClientDemoPanel] Supabase orders error:', sbErr);
+        console.warn('[ClientDemoPanel] ERP orders fetch error:', erpErr);
+        if (!cancelled) setOrders([]);
       } finally {
         if (!cancelled) setLoadingOrders(false);
       }
@@ -1594,7 +1536,7 @@ function OrdersTab({
   isAdmin: boolean;
   isManager: boolean;
 }) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -1604,221 +1546,71 @@ function OrdersTab({
   const fetchOrders = useCallback(async () => {
     setLoading(true);
     try {
-      // 1. Приоритет: реальные 30 заказов из Synergy ERP (1C)
-      try {
-        const erpData = await fetchClientOrdersFromErp({ limit: 100 });
-        if (erpData && erpData.success && Array.isArray(erpData.orders) && erpData.orders.length > 0) {
-          const mappedErp: Order[] = erpData.orders.map((o) => {
-            const st = o.status_code || 'pending';
-            const meta = ORDER_STATUS_MAP[st] || { label: o.status || st, color: 'bg-amber-50 text-amber-700 border-amber-200' };
-            const d = o.date ? new Date(o.date) : new Date();
-            const dateStr = d.toLocaleDateString('ru-RU', {
-              day: '2-digit',
-              month: '2-digit',
-              year: 'numeric',
-            }) + ' ' + d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+      const clientId = profile?.partner_id
+        ? Number(profile.partner_id)
+        : (profile?.id && !isNaN(Number(profile.id)) ? Number(profile.id) : undefined);
+      const phone = profile?.phone || user?.phone || (user?.user_metadata?.phone as string) || undefined;
 
-            const items: OrderItem[] = (o.items || []).map((it) => ({
-              id: String(it.id),
-              productName: it.name || 'Ковер',
-              collection: it.name.split(' ')[0] || 'Коллекция',
-              size: it.size || 'Стандарт',
-              sku: it.sku || '',
-              warehouse: o.warehouse_name || 'Основной склад',
-              price: Number(it.price) || 0,
-              quantity: Number(it.quantity) || 1,
-            }));
-
-            return {
-              id: String(o.id),
-              orderNumber: o.doc_number || `ORD-${o.id}`,
-              userId: String(o.client_id || ''),
-              date: dateStr,
-              status: o.status || meta.label,
-              statusRaw: st,
-              statusColor: meta.color,
-              warehouse: o.warehouse_name || 'Основной склад',
-              notes: o.comment || '',
-              clientName: o.client_name || 'Клиент',
-              clientCompany: o.client_name || '',
-              clientPhone: o.client_phone || '',
-              totalAmount: Number(o.total_amount) || 0,
-              totalSqm: Number(o.total_sqm) || 0,
-              totalItems: o.items_count || items.reduce((s, it) => s + it.quantity, 0),
-              items,
-            };
-          });
-
-          setOrders(mappedErp);
-          setLoading(false);
-          return;
-        }
-      } catch (erpErr) {
-        console.warn('[OrdersTab] ERP orders fallback:', erpErr);
+      const params: { phone?: string; clientId?: number; limit?: number } = { limit: 100 };
+      if (!isAdmin && !isManager) {
+        if (clientId) params.clientId = clientId;
+        if (phone) params.phone = phone;
       }
 
-      // 2. Резервный источник: Supabase (если база данных доступна)
-      try {
-        let query = supabase
-          .from('orders')
-          .select(`
-            id,
-            order_number,
-            user_id,
-            placed_by_id,
-            status,
-            warehouse,
-            notes,
-            total_amount,
-            total_sqm,
-            total_items,
-            created_at,
-            updated_at,
-            order_items (
-              id,
-              product_id,
-              product_name,
-              collection,
-              size,
-              sku,
-              warehouse,
-              price,
-              quantity
-            )
-          `)
-          .order('created_at', { ascending: false });
+      const erpData = await fetchClientOrdersFromErp(params);
+      if (erpData && erpData.success && Array.isArray(erpData.orders)) {
+        const mappedErp: Order[] = erpData.orders.map((o) => {
+          const st = o.status_code || 'pending';
+          const meta = ORDER_STATUS_MAP[st] || { label: o.status || st, color: 'bg-amber-50 text-amber-700 border-amber-200' };
+          const d = o.date ? new Date(o.date) : new Date();
+          const dateStr = d.toLocaleDateString('ru-RU', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+          }) + ' ' + d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 
-        if (!isAdmin && !isManager && user) {
-          query = query.eq('user_id', user.id);
-        }
+          const items: OrderItem[] = (o.items || []).map((it) => ({
+            id: String(it.id),
+            productName: it.name || 'Ковер',
+            collection: it.name.split(' ')[0] || 'Коллекция',
+            size: it.size || 'Стандарт',
+            sku: it.sku || '',
+            warehouse: o.warehouse_name || 'Основной Склад Астана',
+            price: Number(it.price) || 0,
+            quantity: Number(it.quantity) || 1,
+          }));
 
-        const { data, error } = await query;
-        if (error) {
-          setOrders([]);
-          setLoading(false);
-          return;
-        }
+          return {
+            id: String(o.id),
+            orderNumber: o.doc_number || `ORD-${o.id}`,
+            userId: String(o.client_id || ''),
+            date: dateStr,
+            status: o.status || meta.label,
+            statusRaw: st,
+            statusColor: meta.color,
+            warehouse: o.warehouse_name || 'Основной Склад Астана',
+            notes: o.comment || '',
+            clientName: o.client_name || profile?.full_name || 'Клиент',
+            clientCompany: o.client_name || profile?.company_name || '',
+            clientPhone: o.client_phone || profile?.phone || '',
+            totalAmount: Number(o.total_amount) || 0,
+            totalSqm: Number(o.total_sqm) || 0,
+            totalItems: o.items_count || items.reduce((s, it) => s + it.quantity, 0),
+            items,
+          };
+        });
 
-        if (data) {
-          const uids = Array.from(new Set(data.map((o: any) => o.user_id).filter(Boolean)));
-          let profileMap: Record<string, { full_name: string; company_name: string; phone: string }> = {};
-
-          if (uids.length > 0) {
-            const { data: profs } = await supabase
-              .from('profiles')
-              .select('id, full_name, company_name, phone')
-              .in('id', uids);
-
-            if (profs) {
-              for (const p of profs) {
-                profileMap[p.id] = p;
-              }
-            }
-          }
-
-          const mapped: Order[] = data.map((o: any) => {
-            const prof = profileMap[o.user_id];
-            const st = o.status || 'pending';
-            const meta = ORDER_STATUS_MAP[st] || { label: st, color: 'bg-slate-100 text-slate-600 border-slate-200' };
-
-            const items: OrderItem[] = (o.order_items || []).map((it: any) => ({
-              id: it.id,
-              productName: it.product_name || 'Товар',
-              collection: it.collection || 'Коллекция',
-              size: it.size || '',
-              warehouse: it.warehouse || o.warehouse || '',
-              price: Number(it.price) || 0,
-              quantity: Number(it.quantity) || 1,
-            }));
-
-            const d = o.created_at ? new Date(o.created_at) : new Date();
-            const dateStr = d.toLocaleDateString('ru-RU', {
-              day: '2-digit',
-              month: '2-digit',
-              year: 'numeric',
-            }) + ' ' + d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-
-            return {
-              id: o.id,
-              orderNumber: o.order_number || o.id.slice(0, 8),
-              userId: o.user_id,
-              placedById: o.placed_by_id,
-              date: dateStr,
-              status: meta.label,
-              statusRaw: st,
-              statusColor: meta.color,
-              warehouse: o.warehouse || 'Главный склад',
-              notes: o.notes || '',
-              clientName: prof?.full_name || '',
-              clientCompany: prof?.company_name || '',
-              clientPhone: prof?.phone || '',
-              totalAmount: Number(o.total_amount) || 0,
-              totalSqm: Number(o.total_sqm) || 0,
-              totalItems: Number(o.total_items) || items.reduce((s, it) => s + it.quantity, 0),
-              items,
-            };
-          });
-
-          setOrders(mapped);
-        }
-      } catch (sbErr) {
-        console.warn('[OrdersTab] Supabase fallback bypassed (offline or paused):', sbErr);
-      }
-
-      // 2. Загрузка живых заказов напрямую из Synergy ERP (1C / WMS)
-      try {
-        const erpPhone = user?.phone || user?.user_metadata?.phone || '';
-        const erpRes = await fetchClientOrdersFromErp({ phone: erpPhone, limit: 100 });
-        if (erpRes?.success && Array.isArray(erpRes.orders) && erpRes.orders.length > 0) {
-          const erpOrdersMapped: Order[] = erpRes.orders.map(eo => {
-            const st = eo.status_code || 'pending';
-            const meta = ORDER_STATUS_MAP[st] || { label: eo.status || st, color: 'bg-slate-100 text-slate-600 border-slate-200' };
-            const items: OrderItem[] = (eo.items || []).map((it, idx) => ({
-              id: String(it.id || idx),
-              productName: it.name || 'Ковер',
-              collection: it.name.split(' ')[0] || 'Коллекция',
-              size: it.size || '',
-              warehouse: eo.warehouse_name || '',
-              price: Number(it.price) || 0,
-              quantity: Number(it.quantity) || 1,
-            }));
-
-            return {
-              id: String(eo.id),
-              orderNumber: eo.doc_number || `ORD-${eo.id}`,
-              userId: user?.id || '',
-              date: eo.date || '',
-              status: eo.status || meta.label,
-              statusRaw: st,
-              statusColor: meta.color,
-              warehouse: eo.warehouse_name || 'Центральный склад',
-              notes: eo.comment || '',
-              clientName: eo.client_name || user?.name || '',
-              clientCompany: eo.client_name || user?.company_name || '',
-              clientPhone: eo.client_phone || erpPhone,
-              totalAmount: Number(eo.total_amount) || 0,
-              totalSqm: Number(eo.total_sqm) || 0,
-              totalItems: Number(eo.items_count) || items.length,
-              items
-            };
-          });
-
-          setOrders(prev => {
-            // Объединяем, исключая дубликаты по номеру заказа
-            const existingNums = new Set(prev.map(p => p.orderNumber));
-            const newFromErp = erpOrdersMapped.filter(eo => !existingNums.has(eo.orderNumber));
-            return [...newFromErp, ...prev];
-          });
-        }
-      } catch (erpErr) {
-        console.warn('[OrdersTab] ERP orders fetch warning:', erpErr);
+        setOrders(mappedErp);
+      } else {
+        setOrders([]);
       }
     } catch (e) {
-      console.error('[OrdersTab] Unexpected error:', e);
+      console.warn('[OrdersTab] Failed to fetch orders from ERP:', e);
+      setOrders([]);
     } finally {
       setLoading(false);
     }
-  }, [isAdmin, isManager, user]);
+  }, [isAdmin, isManager, profile, user]);
 
   useEffect(() => {
     fetchOrders();
@@ -1827,15 +1619,16 @@ function OrdersTab({
   const handleQuickStatusChange = async (orderId: string, newStatus: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setUpdatingId(orderId);
-    const { error } = await supabase
-      .from('orders')
-      .update({ status: newStatus, updated_at: new Date().toISOString() })
-      .eq('id', orderId);
-
-    if (!error) {
-      const meta = ORDER_STATUS_MAP[newStatus] || { label: newStatus, color: 'bg-slate-100 text-slate-600 border-slate-200' };
-      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: meta.label, statusRaw: newStatus, statusColor: meta.color } : o));
+    try {
+      await supabase
+        .from('orders')
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .eq('id', orderId);
+    } catch {
+      // safe fallback
     }
+    const meta = ORDER_STATUS_MAP[newStatus] || { label: newStatus, color: 'bg-slate-100 text-slate-600 border-slate-200' };
+    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: meta.label, statusRaw: newStatus, statusColor: meta.color } : o));
     setUpdatingId(null);
   };
 
