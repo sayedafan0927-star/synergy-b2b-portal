@@ -13,6 +13,7 @@ export interface Profile {
   phone: string;
   manager_id: string | null;
   price_type: string;
+  impersonation_enabled?: boolean;
 }
 
 interface AuthContextValue {
@@ -45,7 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const fetchProfile = useCallback(async (userId: string) => {
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, role, partner_id, full_name, company_name, phone, manager_id, price_type')
+      .select('id, role, partner_id, full_name, company_name, phone, manager_id, price_type, impersonation_enabled')
       .eq('id', userId)
       .maybeSingle();
     if (!error && data) {
