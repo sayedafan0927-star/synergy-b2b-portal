@@ -443,7 +443,9 @@ function AdminDisplaySettings() {
 
 /* ─── Admin: Users Tab ─── */
 function AdminUsersTab({ onNavigate }: { onNavigate: (page: PageId) => void }) {
-  const { impersonateUser, user: currentUser } = useAuth();
+  const { impersonateUser, user: currentUser, profile: currentProfile, realIsAdmin } = useAuth();
+  const managerId = currentUser?.id;
+  const isAdminView = realIsAdmin;
   const [users, setUsers] = useState<Array<{
     id: string;
     full_name: string;
@@ -481,7 +483,10 @@ function AdminUsersTab({ onNavigate }: { onNavigate: (page: PageId) => void }) {
   };
 
   const filteredUsers = useMemo(() => {
-    const clients = users.filter(user => user.role === 'client');
+    let clients = users.filter(user => user.role === 'client');
+    if (!isAdminView && managerId) {
+      clients = clients.filter(user => user.manager_id === managerId);
+    }
     if (!userSearch.trim()) return clients;
     const q = userSearch.toLowerCase().trim();
     return clients.filter(user =>
@@ -490,7 +495,7 @@ function AdminUsersTab({ onNavigate }: { onNavigate: (page: PageId) => void }) {
       (user.phone || '').toLowerCase().includes(q) ||
       (user.partner_id || '').toLowerCase().includes(q)
     );
-  }, [users, userSearch]);
+  }, [users, userSearch, isAdminView, managerId]);
 
   return (
     <div className="space-y-6">
@@ -499,7 +504,11 @@ function AdminUsersTab({ onNavigate }: { onNavigate: (page: PageId) => void }) {
           <Users className="h-5 w-5 text-slate-500" />
           <div>
             <h2 className="text-lg font-bold text-slate-900">Мои клиенты ({filteredUsers.length})</h2>
-            <p className="text-sm text-slate-500">Включите доступ и зайдите под клиентом, чтобы увидеть его заказы и долги</p>
+            <p className="text-sm text-slate-500">
+              {isAdminView
+                ? 'Все клиенты портала. Включите доступ и зайдите под клиентом.'
+                : 'Клиенты, закреплённые за вами. Включите доступ и зайдите под клиентом.'}
+            </p>
           </div>
         </div>
         <div className="relative w-full sm:w-64">
@@ -1220,6 +1229,7 @@ function AdminErpSyncTab() {
 export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId) => void }) {
   const { user, profile, loading, signOut, isAdmin, realIsAdmin, isManager } = useAuth();
   const adminAccess = realIsAdmin;
+  const clientsAccess = realIsAdmin || isManager;
   const [activeTab, setActiveTab] = useState<TabId>('orders');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [clientDebt, setClientDebt] = useState<ClientDebtReport | null>(null);
@@ -1270,7 +1280,7 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
   const tabs: { id: TabId; label: string; icon: typeof Package; show: boolean }[] = [
     { id: 'orders', label: 'Мои заказы', icon: Package, show: true },
     { id: 'admin-erp', label: 'Обмен с ERP', icon: RefreshCw, show: adminAccess },
-    { id: 'admin-users', label: 'Мои клиенты', icon: Users, show: adminAccess },
+    { id: 'admin-users', label: 'Мои клиенты', icon: Users, show: clientsAccess },
     { id: 'admin-display', label: 'Видимость', icon: Eye, show: adminAccess },
     { id: 'settings', label: 'Настройки', icon: Settings, show: true },
   ];
@@ -1461,11 +1471,11 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
                   onUpdateOrder={(updated) => setSelectedOrder(updated)}
                 />
               ) : (
-                <OrdersTab onSelectOrder={setSelectedOrder} isAdmin={adminAccess || isAdmin} isManager={isManager} />
+                <OrdersTab onSelectOrder={setSelectedOrder} isAdmin={adminAccess || isAdmin} isManager={isManager || clientsAccess} />
               )
             )}
             {activeTab === 'admin-erp' && adminAccess && <AdminErpSyncTab />}
-            {activeTab === 'admin-users' && adminAccess && <AdminUsersTab onNavigate={onNavigate} />}
+            {activeTab === 'admin-users' && clientsAccess && <AdminUsersTab onNavigate={onNavigate} />}
             {activeTab === 'admin-display' && adminAccess && <AdminDisplaySettings />}
             {activeTab === 'settings' && (
               <div className="space-y-6">
