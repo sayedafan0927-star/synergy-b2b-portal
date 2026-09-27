@@ -201,6 +201,40 @@ export default function ProductPage({
 
   const mainPricePerSqm = pricing.getMinPricePerSqm(product);
 
+  useEffect(() => {
+    const minPrice = product.variants.reduce((min, v) => Math.min(min, v.base_price), Infinity);
+    const maxPrice = product.variants.reduce((max, v) => Math.max(max, v.base_price), 0);
+    const inStock = product.variants.some(v => v.warehouses.some(w => w.stock > 0));
+    const ld = {
+      '@context': 'https://schema.org',
+      '@type': 'Product',
+      name: product.name,
+      image: product.images,
+      description: `${product.name} — ${product.collection}. ${product.material}, ${product.style}, ${product.country}. ${product.density}, ворс ${product.pile_height}.`,
+      brand: { '@type': 'Brand', name: product.manufacturer },
+      sku: product.variants[0]?.sku ?? product.id,
+      category: product.category,
+      material: product.material,
+      countryOfOrigin: { '@type': 'Country', name: product.country },
+      offers: {
+        '@type': 'AggregateOffer',
+        priceCurrency: 'USD',
+        lowPrice: minPrice,
+        highPrice: maxPrice,
+        offerCount: product.variants.length,
+        availability: inStock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+        seller: { '@type': 'Organization', name: 'Synergy-Group' },
+      },
+    };
+    const script = document.createElement('script');
+    script.type = 'application/ld+json';
+    script.id = 'product-jsonld';
+    script.textContent = JSON.stringify(ld);
+    document.getElementById('product-jsonld')?.remove();
+    document.head.appendChild(script);
+    return () => { document.getElementById('product-jsonld')?.remove(); };
+  }, [product]);
+
   const specs = [
     { label: 'Материал', value: product.material },
     { label: 'Стиль', value: product.style },

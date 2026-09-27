@@ -46,13 +46,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
             onClick={() => onNavigate('home')}
             className="flex items-center gap-2.5 transition-opacity hover:opacity-80"
           >
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-700">
-              <span className="text-sm font-bold text-white tracking-tight">SG</span>
-            </div>
-            <div className="hidden sm:block">
-              <span className="text-base font-bold text-slate-900 tracking-tight">Synergy</span>
-              <span className="text-base font-bold text-brand-700 tracking-tight">-Group</span>
-            </div>
+            <img src="/Вектор_Синэнергия.png" alt="Synergiya Group" className="h-9 w-auto" />
           </button>
 
           {/* Desktop nav */}

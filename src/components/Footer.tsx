@@ -12,14 +12,8 @@ export default function Footer({ onNavigate }: FooterProps) {
         <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
           {/* Brand */}
           <div className="lg:col-span-1">
-            <div className="flex items-center gap-2.5 mb-4">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-600">
-                <span className="text-sm font-bold text-white tracking-tight">SG</span>
-              </div>
-              <div>
-                <span className="text-base font-bold text-white tracking-tight">Synergy</span>
-                <span className="text-base font-bold text-brand-400 tracking-tight">-Group</span>
-              </div>
+            <div className="mb-4">
+              <img src="/Вектор_Синэнергия.png" alt="Synergiya Group" className="h-10 w-auto brightness-0 invert" />
             </div>
             <p className="text-sm leading-relaxed text-slate-400">
               Оптовые поставки ковровых покрытий. Работаем с 2015 года. Склады в Астане, Алматы и Шымкенте.

@@ -3,7 +3,7 @@ import type { PageId } from '@/types';
 import { categories } from '@/data/categories';
 import { useProducts } from '@/hooks/useProductData';
 import ProductCard from '@/components/ProductCard';
-import { useReveal } from '@/hooks/useReveal';
+
 
 const advantages = [
   {
@@ -35,10 +35,7 @@ const stats = [
 ];
 
 export default function HomePage({ onNavigate }: { onNavigate: (page: PageId, productId?: string) => void }) {
-  const advantagesReveal = useReveal();
-  const categoriesReveal = useReveal();
-  const featuredReveal = useReveal();
-  const ctaReveal = useReveal();
+
 
   const { products } = useProducts();
   const featuredProducts = products.slice(0, 4);
@@ -103,10 +100,7 @@ export default function HomePage({ onNavigate }: { onNavigate: (page: PageId, pr
       </section>
 
       {/* ── Advantages Section ── */}
-      <section
-        ref={advantagesReveal.ref}
-        className={`py-16 lg:py-24 bg-white ${advantagesReveal.visible ? 'animate-fade-up' : 'opacity-0'}`}
-      >
+      <section className="py-16 lg:py-24 bg-white">
         <div className="container-w">
           <h2 className="section-heading text-center">Почему выбирают нас</h2>
           <p className="section-subheading text-center mx-auto">
@@ -135,10 +129,7 @@ export default function HomePage({ onNavigate }: { onNavigate: (page: PageId, pr
       </section>
 
       {/* ── Categories Section ── */}
-      <section
-        ref={categoriesReveal.ref}
-        className={`py-16 lg:py-24 bg-slate-50 ${categoriesReveal.visible ? 'animate-fade-up' : 'opacity-0'}`}
-      >
+      <section className="py-16 lg:py-24 bg-slate-50">
         <div className="container-w">
           <h2 className="section-heading text-center">Категории</h2>
           <p className="section-subheading text-center mx-auto">
@@ -177,10 +168,7 @@ export default function HomePage({ onNavigate }: { onNavigate: (page: PageId, pr
       </section>
 
       {/* ── Featured Products Section ── */}
-      <section
-        ref={featuredReveal.ref}
-        className={`py-16 lg:py-24 bg-white ${featuredReveal.visible ? 'animate-fade-up' : 'opacity-0'}`}
-      >
+      <section className="py-16 lg:py-24 bg-white">
         <div className="container-w">
           <div className="flex items-end justify-between mb-10 lg:mb-14">
             <div>
@@ -221,10 +209,7 @@ export default function HomePage({ onNavigate }: { onNavigate: (page: PageId, pr
       </section>
 
       {/* ── CTA Banner Section ── */}
-      <section
-        ref={ctaReveal.ref}
-        className={`py-16 lg:py-24 ${ctaReveal.visible ? 'animate-fade-up' : 'opacity-0'}`}
-      >
+      <section className="py-16 lg:py-24">
         <div className="container-w">
           <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-brand-700 to-brand-800 px-6 py-12 sm:px-12 sm:py-16 lg:px-16 lg:py-20 text-center">
             {/* Decorative shapes */}

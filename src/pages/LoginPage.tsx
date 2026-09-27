@@ -51,14 +51,8 @@ export default function LoginPage({ onNavigate }: { onNavigate: (page: PageId) =
         </button>
 
         <div className="card p-6 sm:p-8">
-          <div className="mb-6 flex items-center gap-2.5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-700">
-              <span className="text-sm font-bold text-white tracking-tight">SG</span>
-            </div>
-            <div>
-              <span className="text-lg font-bold text-slate-900">Synergy</span>
-              <span className="text-lg font-bold text-brand-700">-Group</span>
-            </div>
+          <div className="mb-6">
+            <img src="/Вектор_Синэнергия.png" alt="Synergiya Group" className="h-12 w-auto" />
           </div>
 
           <h1 className="text-xl font-bold text-slate-900 mb-1">

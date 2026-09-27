@@ -25,13 +25,13 @@ export default function App() {
 
   useEffect(() => {
     const titles: Record<PageId, string> = {
-      home: 'Synergy-Group — Оптовые поставки ковров',
-      catalog: 'Каталог — Synergy-Group',
+      home: 'Synergy-Group — Оптовые поставки ковров в Казахстане',
+      catalog: 'Каталог ковров оптом — Synergy-Group',
       product: 'Товар — Synergy-Group',
       cart: 'Корзина — Synergy-Group',
-      contacts: 'Контакты — Synergy-Group',
-      login: 'Вход — Synergy-Group',
-      profile: 'Кабинет — Synergy-Group',
+      contacts: 'Контакты — Synergy-Group | Склады в Астане, Алматы, Шымкенте',
+      login: 'Вход в личный кабинет — Synergy-Group',
+      profile: 'Личный кабинет — Synergy-Group',
     };
     document.title = titles[page];
   }, [page]);

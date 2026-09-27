@@ -14,6 +14,7 @@ import {
   Users,
   LogOut,
   DollarSign,
+  Clock,
   Eye,
   UserCog,
 } from 'lucide-react';
@@ -515,14 +516,45 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
               </div>
             </div>
 
-            {/* Balance card */}
-            <div className="card p-4">
-              <div className="flex items-center gap-2 mb-2">
-                <DollarSign className="h-4 w-4 text-slate-400" />
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Баланс</p>
+            {/* Balance & Debt card */}
+            <div className="card overflow-hidden">
+              <div className="bg-gradient-to-br from-slate-800 to-slate-900 px-5 py-4">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 mb-1">Баланс</p>
+                <p className="text-2xl font-bold text-white tracking-tight">$0<span className="text-base text-slate-400">.00</span></p>
               </div>
-              <p className="text-xl font-bold text-slate-900">$0.00</p>
-              <p className="text-[10px] text-slate-400 mt-1">Данные из ERP не подключены</p>
+              <div className="p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-red-50">
+                      <DollarSign className="h-3.5 w-3.5 text-red-500" />
+                    </div>
+                    <span className="text-xs text-slate-500">Задолженность</span>
+                  </div>
+                  <span className="text-sm font-bold text-red-600">$0.00</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-50">
+                      <DollarSign className="h-3.5 w-3.5 text-emerald-500" />
+                    </div>
+                    <span className="text-xs text-slate-500">Оплачено</span>
+                  </div>
+                  <span className="text-sm font-bold text-emerald-600">$0.00</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-amber-50">
+                      <Clock className="h-3.5 w-3.5 text-amber-500" />
+                    </div>
+                    <span className="text-xs text-slate-500">Просрочено</span>
+                  </div>
+                  <span className="text-sm font-bold text-amber-600">$0.00</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                  <div className="h-full w-0 rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-500" />
+                </div>
+                <p className="text-[10px] text-slate-400 text-center">Данные из ERP будут подключены</p>
+              </div>
             </div>
           </div>
 
