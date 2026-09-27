@@ -234,17 +234,38 @@ export function useProduct(id: string | undefined) {
   return { product, loading, error };
 }
 
+let cachedPrices: CollectionPrice[] | null = null;
+let fetchingPrices = false;
+
 export function useCollectionPrices() {
-  const [prices, setPrices] = useState<CollectionPrice[]>([]);
+  const [prices, setPrices] = useState<CollectionPrice[]>(cachedPrices ?? []);
 
   useEffect(() => {
+    if (cachedPrices) {
+      setPrices(cachedPrices);
+      return;
+    }
+    if (fetchingPrices) return;
+    fetchingPrices = true;
+
     let cancelled = false;
     supabase
       .from('collection_prices')
       .select('collection, price_type_id, price_per_sqm')
-      .then(({ data }) => {
-        if (!cancelled && data) setPrices(data.map(d => ({ ...d, price_per_sqm: Number(d.price_per_sqm) })));
+      .then(({ data, error }) => {
+        if (!cancelled && !error && data) {
+          const parsed = data.map(d => ({ ...d, price_per_sqm: Number(d.price_per_sqm) }));
+          cachedPrices = parsed;
+          setPrices(parsed);
+        }
+      })
+      .catch(() => {
+        // Silently catch network or DNS errors if Supabase is offline
+      })
+      .finally(() => {
+        fetchingPrices = false;
       });
+
     return () => { cancelled = true; };
   }, []);
 
