@@ -70,15 +70,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const storedDemo = sessionStorage.getItem('synergy:demo_auth');
-      if (storedDemo) {
+      // 1. Проверяем наличие SSO-токена из ERP в адресной строке
+      const urlParams = new URLSearchParams(window.location.search);
+      const ssoParam = urlParams.get('sso_session');
+      if (ssoParam) {
+        // Очищаем URL от токена сразу для защиты от утечки
+        urlParams.delete('sso_session');
+        const newSearch = urlParams.toString();
+        const cleanUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '');
+        window.history.replaceState({}, document.title, cleanUrl);
+
+        fetch('/api/auth/verify-sso', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: ssoParam }),
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (data?.success && data.user && data.profile) {
+              setUser(data.user);
+              setProfile(data.profile);
+              sessionStorage.setItem('synergy:auth_session', JSON.stringify({ user: data.user, profile: data.profile }));
+            } else {
+              console.warn('[AuthContext] SSO verification rejected:', data?.error);
+            }
+          })
+          .catch(err => {
+            console.warn('[AuthContext] Failed to verify SSO token via server:', err);
+          })
+          .finally(() => {
+            setLoading(false);
+          });
+        return;
+      }
+
+      // 2. Проверяем сохраненную сессию
+      const storedAuth = sessionStorage.getItem('synergy:auth_session') || sessionStorage.getItem('synergy:demo_auth');
+      if (storedAuth) {
         try {
-          const { user: du, profile: dp } = JSON.parse(storedDemo);
-          setUser(du);
-          setProfile(dp);
+          const { user: su, profile: sp } = JSON.parse(storedAuth);
+          setUser(su);
+          setProfile(sp);
           setLoading(false);
           return;
         } catch {
+          sessionStorage.removeItem('synergy:auth_session');
           sessionStorage.removeItem('synergy:demo_auth');
         }
       }
@@ -361,7 +397,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (typeof window !== 'undefined') {
         sessionStorage.removeItem('synergy:deactivation_notice');
-        sessionStorage.setItem('synergy:demo_auth', JSON.stringify({ user: mockUser, profile: clientProfile }));
+        sessionStorage.setItem('synergy:auth_session', JSON.stringify({ user: mockUser, profile: clientProfile }));
       }
 
       setLoading(false);

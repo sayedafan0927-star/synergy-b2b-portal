@@ -188,74 +188,11 @@ export default function LoginPage({ onNavigate }: { onNavigate: (page: PageId) =
             </button>
           </div>
 
-          {/* Quick Demo Login */}
-          <div className="mt-6 pt-6 border-t border-slate-100">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 text-center mb-3">
-              Быстрый вход для тестирования портала
+          {/* Информационный блок Enterprise SSO */}
+          <div className="mt-6 pt-6 border-t border-slate-100 text-center">
+            <p className="text-[12px] text-slate-400 leading-relaxed">
+              🔐 Сотрудники компании (РМ, ЛМ, Администраторы) авторизуются в портале автоматически через кнопку «Открыть B2B-портал» в интерфейсе <strong>1С:ERP</strong>.
             </p>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  signInAsDemo('admin');
-                  onNavigate('profile');
-                }}
-                className="flex items-center justify-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50/70 px-3 py-2 text-xs font-semibold text-brand-800 hover:bg-brand-100 transition-colors"
-              >
-                <span>👑 Демо-Админ</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  signInAsDemo('client');
-                  onNavigate('profile');
-                }}
-                className="flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
-              >
-                <span>🏢 Демо-Клиент</span>
-              </button>
-            </div>
-
-            <div className="mt-3">
-              <p className="text-[11px] font-semibold text-slate-500 mb-1.5 text-center">
-                Или войти под реальным клиентом из базы ERP:
-              </p>
-              <div className="grid grid-cols-1 gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    signInAsClient({ id: 2833, name: 'Aya Home Store (Шымкент)' });
-                    onNavigate('catalog');
-                  }}
-                  className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50/70 px-3 py-2 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 transition-colors"
-                >
-                  <span>🏬 Aya Home Store (Шымкент)</span>
-                  <span className="text-[10px] text-emerald-600 font-normal">ID: 2833</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    signInAsClient({ id: 2832, name: 'TarazKilem ИП (Тараз)' });
-                    onNavigate('catalog');
-                  }}
-                  className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
-                >
-                  <span>🏪 TarazKilem ИП (Тараз)</span>
-                  <span className="text-[10px] text-slate-500 font-normal">ID: 2832</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    signInAsClient({ id: 2830, name: 'BIG CARPET ТОО (Алматы)' });
-                    onNavigate('catalog');
-                  }}
-                  className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
-                >
-                  <span>🏢 BIG CARPET ТОО (Алматы)</span>
-                  <span className="text-[10px] text-slate-500 font-normal">ID: 2830</span>
-                </button>
-              </div>
-            </div>
           </div>
         </div>
       </div>

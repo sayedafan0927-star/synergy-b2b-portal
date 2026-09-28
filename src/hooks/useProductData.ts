@@ -499,14 +499,79 @@ export function useProducts(customDealerId?: string | number) {
   useEffect(() => {
     const channel = supabase
       .channel('portal_live_updates')
-      .on('broadcast', { event: 'stock_changed' }, (payload) => {
-        console.log('[Realtime: stock_changed] Updating catalog in-flight:', payload);
-        fetchCatalogFromErp(effectiveDealerId, undefined, true).then(res => {
-          if (res && res.products) {
-            setProducts(mergeProducts(res.products));
-            if (res.summary) setSummary(res.summary);
+      .on('broadcast', { event: 'stock_changed' }, (payload: any) => {
+        const rawItems = payload?.payload?.items || payload?.items;
+        if (Array.isArray(rawItems) && rawItems.length > 0) {
+          const itemMap = new Map<string, any>();
+          for (const it of rawItems) {
+            if (it.sku) itemMap.set(String(it.sku).trim().toUpperCase(), it);
+            if (it.article) itemMap.set(String(it.article).trim().toUpperCase(), it);
+            if (it.code) itemMap.set(String(it.code).trim().toUpperCase(), it);
+            if (it.barcode) itemMap.set(String(it.barcode).trim().toUpperCase(), it);
+            if (it.item_id) itemMap.set(String(it.item_id).trim(), it);
           }
-        }).catch(() => {});
+
+          setProducts(prev => {
+            let totalFreeDelta = 0;
+            let totalReservedDelta = 0;
+            let totalDelta = 0;
+
+            const updatedProducts = prev.map(prod => {
+              let hasChange = false;
+              const updatedVariants = prod.variants.map(v => {
+                const skuKey = String(v.sku || '').trim().toUpperCase();
+                const artKey = String(v.article || '').trim().toUpperCase();
+                const codeKey = String(v.code || '').trim().toUpperCase();
+                const barcodeKey = String(v.barcode || '').trim().toUpperCase();
+                const idKey = String(v.item_id || v.id || '').trim();
+
+                const update = itemMap.get(skuKey) || itemMap.get(artKey) || itemMap.get(codeKey) || itemMap.get(barcodeKey) || itemMap.get(idKey);
+                if (update) {
+                  hasChange = true;
+                  const newFree = Number(update.free_stock ?? update.stock ?? v.free_stock);
+                  const newReserved = Number(update.reserved_stock ?? v.reserved_stock);
+                  const newTotal = Number(update.total_stock ?? (newFree + newReserved));
+
+                  totalFreeDelta += (newFree - (v.free_stock || 0));
+                  totalReservedDelta += (newReserved - (v.reserved_stock || 0));
+                  totalDelta += (newTotal - (v.total_stock || 0));
+
+                  return {
+                    ...v,
+                    free_stock: newFree,
+                    stock: newFree,
+                    reserved_stock: newReserved,
+                    total_stock: newTotal,
+                    warehouses: (v.warehouses || []).map(w => (w.warehouse_id === 81 || w.is_hub) ? {
+                      ...w,
+                      stock: newFree,
+                      free_stock: newFree,
+                      reserved_stock: newReserved,
+                      total_stock: newTotal,
+                    } : w),
+                  };
+                }
+                return v;
+              });
+              return hasChange ? { ...prod, variants: updatedVariants } : prod;
+            });
+
+            // Обновляем общую сводку на плашке
+            if (totalFreeDelta !== 0 || totalReservedDelta !== 0) {
+              setSummary(prevSummary => {
+                if (!prevSummary) return prevSummary;
+                return {
+                  ...prevSummary,
+                  free_stock_qty: Math.max(0, (prevSummary.free_stock_qty || 0) + totalFreeDelta),
+                  reserved_stock_qty: Math.max(0, (prevSummary.reserved_stock_qty || 0) + totalReservedDelta),
+                  total_stock_qty: Math.max(0, (prevSummary.total_stock_qty || 0) + totalDelta),
+                };
+              });
+            }
+
+            return updatedProducts;
+          });
+        }
       })
       .on('broadcast', { event: 'partner_stock_released' }, (payload: any) => {
         const data = payload?.payload;

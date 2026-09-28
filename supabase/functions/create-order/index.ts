@@ -28,15 +28,18 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    const incomingIdempotency = req.headers.get("Idempotency-Key") || (body as any)?.idempotency_key || crypto.randomUUID();
+    const erpUrl = Deno.env.get("ERP_API_URL") || "https://kilem-khan.kz/api/sin/api_portal.php?action=create_order";
+    const erpKey = Deno.env.get("ERP_API_KEY") || "138d1bdaf9402600c8f5d5763e2e1573c1e45d32401e62e4981cd7e898bf0544";
+
     const erpResponse = await fetch(
-      "https://kilem-khan.kz/api/sin/api_portal.php?action=create_order",
+      erpUrl,
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Portal-Key":
-            "138d1bdaf9402600c8f5d5763e2e1573c1e45d32401e62e4981cd7e898bf0544",
-          "Idempotency-Key": crypto.randomUUID(),
+          "X-Portal-Key": erpKey,
+          "Idempotency-Key": incomingIdempotency,
         },
         body: JSON.stringify(body),
       },

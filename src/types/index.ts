@@ -150,6 +150,95 @@ export interface SupplierReleasesReport {
   error?: string;
 }
 
+export interface InboundShipmentItem {
+  article: string;
+  name: string;
+  barcode?: string | null;
+  declared_qty: number;
+  actual_qty: number;
+  discrepancy_qty: number;
+  status: 'shortage' | 'missing' | 'surplus' | 'unplanned' | 'matched' | string;
+  reason?: string | null;
+}
+
+export interface InboundShipment {
+  receipt_id: number;
+  receipt_doc_number: string;
+  incoming_doc_number: string;
+  incoming_doc_date: string | null;
+  receipt_date: string;
+  supplier_id?: number | null;
+  supplier_name?: string | null;
+  warehouse_id: number;
+  warehouse_name: string;
+  city: string;
+  status: string;
+  reconciliation_status: 'matched' | 'discrepancy' | 'none' | 'pending' | string;
+  reconciliation_status_label: string;
+  declared: {
+    qty_pcs: number;
+    area_sqm: number;
+  };
+  actual: {
+    qty_pcs: number;
+    area_sqm: number;
+  };
+  discrepancy: {
+    qty_pcs: number;
+    area_sqm: number;
+  };
+  has_discrepancy: boolean;
+  comment?: string | null;
+  items_count?: number;
+  items?: InboundShipmentItem[];
+}
+
+export interface SupplierInboundShipmentsResponse {
+  success: boolean;
+  supplier_id?: number | null;
+  supplier_name?: string | null;
+  filter_status?: string;
+  pagination?: {
+    page: number;
+    limit: number;
+    total_items: number;
+    total_pages: number;
+  };
+  total_shipments: number;
+  shipments: InboundShipment[];
+  error?: string;
+}
+
+export interface SupplierDefectItem {
+  defect_id: string;
+  carpet_id: number;
+  article: string;
+  collection: string;
+  size: string;
+  warehouse_name: string;
+  city: string;
+  defect_type: 'factory_defect' | 'transit_damage' | 'client_return' | string;
+  defect_type_label: string;
+  qty_pcs: number;
+  area_sqm: number;
+  status: 'inspecting' | 'discounted' | 'written_off' | 'returned_to_factory' | string;
+  status_label: string;
+  photo_urls?: string[];
+  act_number: string;
+  act_date: string;
+  responsible_party: 'Поставщик (фабрика)' | 'Логистика / Перевозчик' | 'Склад' | string;
+  comment?: string;
+}
+
+export interface SupplierDefectsResponse {
+  success: boolean;
+  supplier_id: number;
+  supplier_name: string;
+  total_defects: number;
+  defects: SupplierDefectItem[];
+  error?: string;
+}
+
 export interface Product {
   id: string;
   name: string;

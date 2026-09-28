@@ -1,7 +1,11 @@
+import { useMemo } from 'react';
 import { Truck, Shield, Clock, Warehouse, ArrowRight, Package, MapPin, CalendarCheck } from 'lucide-react';
 import type { PageId } from '@/types';
 import { categories } from '@/data/categories';
 import { useProducts } from '@/hooks/useProductData';
+import { useAuth } from '@/contexts/AuthContext';
+import { useDisplaySettings } from '@/hooks/useDisplaySettings';
+import { isProductInStockForUser } from '@/lib/warehouseVisibility';
 import ProductCard from '@/components/ProductCard';
 
 const advantages = [
@@ -35,7 +39,15 @@ const stats = [
 
 export default function HomePage({ onNavigate }: { onNavigate: (page: PageId, productId?: string) => void }) {
   const { products } = useProducts();
-  const featuredProducts = products.slice(0, 4);
+  const { profile, isAdmin, isImpersonating } = useAuth();
+  const isEffectiveAdmin = isAdmin && !isImpersonating;
+  const { settings: displaySettings } = useDisplaySettings();
+  const hideOutOfStock = displaySettings.hide_out_of_stock_products !== false;
+
+  const featuredProducts = useMemo(() => {
+    const available = products.filter(p => isProductInStockForUser(p, profile, isEffectiveAdmin, hideOutOfStock));
+    return available.slice(0, 4);
+  }, [products, profile, isEffectiveAdmin, hideOutOfStock]);
 
   return (
     <div className="pb-16 lg:pb-0">

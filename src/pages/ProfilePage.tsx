@@ -35,6 +35,8 @@ import {
   RotateCcw,
   X,
   ShoppingCart,
+  Send,
+  Printer,
 } from 'lucide-react';
 import type { PageId } from '@/types';
 import { calcSqm, parseSizeDimensions } from '@/types';
@@ -387,11 +389,20 @@ function OrderItemRow({ item }: { item: OrderItem }) {
 function AdminDisplaySettings() {
   const roles: UserRole[] = ['admin', 'manager_rm', 'manager_lm', 'supplier', 'client'];
   const defaultMap: Record<string, DisplaySettings> = {
-    admin: { show_stock: true, show_reserve: true, show_total_pcs: true, show_sqm: true, show_price: true, show_hub_warehouse: true, show_showroom_warehouse: true, hidden_warehouses: [] },
-    manager_rm: { show_stock: true, show_reserve: true, show_total_pcs: true, show_sqm: true, show_price: true, show_hub_warehouse: true, show_showroom_warehouse: true, hidden_warehouses: [] },
-    manager_lm: { show_stock: true, show_reserve: false, show_total_pcs: true, show_sqm: true, show_price: true, show_hub_warehouse: true, show_showroom_warehouse: true, hidden_warehouses: [] },
-    supplier: { show_stock: true, show_reserve: false, show_total_pcs: true, show_sqm: true, show_price: false, show_hub_warehouse: true, show_showroom_warehouse: false, hidden_warehouses: [] },
-    client: { show_stock: true, show_reserve: false, show_total_pcs: true, show_sqm: true, show_price: true, show_hub_warehouse: true, show_showroom_warehouse: true, hidden_warehouses: [] },
+    admin: { show_stock: true, show_reserve: true, show_total_pcs: true, show_sqm: true, show_price: true, show_hub_warehouse: true, show_showroom_warehouse: true, hidden_warehouses: [], hide_out_of_stock_products: false },
+    manager_rm: { show_stock: true, show_reserve: true, show_total_pcs: true, show_sqm: true, show_price: true, show_hub_warehouse: true, show_showroom_warehouse: true, hidden_warehouses: [], hide_out_of_stock_products: false },
+    manager_lm: { show_stock: true, show_reserve: false, show_total_pcs: true, show_sqm: true, show_price: true, show_hub_warehouse: true, show_showroom_warehouse: true, hidden_warehouses: [], hide_out_of_stock_products: true },
+    supplier: { show_stock: true, show_reserve: false, show_total_pcs: true, show_sqm: true, show_price: false, show_hub_warehouse: true, show_showroom_warehouse: false, hidden_warehouses: [], hide_out_of_stock_products: false },
+    client: { show_stock: true, show_reserve: false, show_total_pcs: true, show_sqm: true, show_price: true, show_hub_warehouse: true, show_showroom_warehouse: true, hidden_warehouses: [], hide_out_of_stock_products: true },
+  };
+
+  const isFeatureEnabled = (role: string, key: keyof DisplaySettings) => {
+    const val = settings[role]?.[key];
+    if (val !== undefined) return Boolean(val);
+    if (key === 'hide_out_of_stock_products') {
+      return role === 'client' || role === 'manager_lm';
+    }
+    return true;
   };
 
   const [settings, setSettings] = useState<Record<string, DisplaySettings>>(() => {
@@ -463,10 +474,13 @@ function AdminDisplaySettings() {
   }, [clients, clientSearch]);
 
   const toggle = (role: string, field: keyof DisplaySettings) => {
-    setSettings(prev => ({
-      ...prev,
-      [role]: { ...prev[role], [field]: !prev[role]?.[field] },
-    }));
+    setSettings(prev => {
+      const currentVal = isFeatureEnabled(role, field);
+      return {
+        ...prev,
+        [role]: { ...prev[role], [field]: !currentVal },
+      };
+    });
   };
 
   const handleSave = async () => {
@@ -511,6 +525,7 @@ function AdminDisplaySettings() {
     { key: 'show_price' as const, label: 'Цена' },
     { key: 'show_hub_warehouse' as const, label: 'Склад Астана' },
     { key: 'show_showroom_warehouse' as const, label: 'Свой склад' },
+    { key: 'hide_out_of_stock_products' as const, label: 'Скрывать 0 шт.' },
   ];
 
   return (
@@ -545,10 +560,10 @@ function AdminDisplaySettings() {
                       <button
                         onClick={() => toggle(role, c.key)}
                         className={`h-5 w-5 rounded border transition-colors inline-flex items-center justify-center ${
-                          settings[role]?.[c.key] !== false ? 'bg-brand-600 border-brand-600' : 'bg-white border-slate-300'
+                          isFeatureEnabled(role, c.key) ? 'bg-brand-600 border-brand-600' : 'bg-white border-slate-300'
                         }`}
                       >
-                        {settings[role]?.[c.key] !== false && (
+                        {isFeatureEnabled(role, c.key) && (
                           <svg className="h-3 w-3 text-white" viewBox="0 0 12 12" fill="none">
                             <path d="M2.5 6L5 8.5L9.5 3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                           </svg>
@@ -1425,7 +1440,50 @@ function AdminErpSyncTab() {
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [activeSubTab, setActiveSubTab] = useState<'catalog' | 'counterparties' | 'managers' | 'raw'>('catalog');
+  const [activeSubTab, setActiveSubTab] = useState<'catalog' | 'counterparties' | 'managers' | 'logs' | 'raw'>('catalog');
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logFilterStatus, setLogFilterStatus] = useState<string>('all');
+  const [logSearchQuery, setLogSearchQuery] = useState<string>('');
+  const [selectedLog, setSelectedLog] = useState<any | null>(null);
+
+  const fetchAuditLogs = async () => {
+    setLogsLoading(true);
+    try {
+      const res = await fetch('/api/audit/logs?limit=100');
+      const data = await res.json();
+      if (data.success && Array.isArray(data.logs)) {
+        setAuditLogs(data.logs);
+      }
+    } catch (e) {
+      console.warn('[AdminErpSync] Failed to fetch audit logs:', e);
+    } finally {
+      setLogsLoading(false);
+    }
+  };
+
+  const [outboxLoading, setOutboxLoading] = useState(false);
+  const [outboxMessage, setOutboxMessage] = useState<string | null>(null);
+
+  const runOutboxSync = async () => {
+    setOutboxLoading(true);
+    setOutboxMessage(null);
+    try {
+      const res = await fetch('/api/outbox/sync', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setOutboxMessage(data.total_pending === 0 ? 'Буфер Outbox пуст: все заказы синхронизированы с 1С' : `Успешно выгружено ${data.succeeded} из ${data.total_pending} заказов в 1С`);
+        if (data.succeeded > 0) fetchAuditLogs();
+      } else {
+        setOutboxMessage(data.error || 'Ошибка синхронизации буфера');
+      }
+    } catch {
+      setOutboxMessage('Сбой обращения к сервису Outbox Worker');
+    } finally {
+      setOutboxLoading(false);
+      setTimeout(() => setOutboxMessage(null), 6000);
+    }
+  };
 
   const runSync = async () => {
     setLoading(true);
@@ -1467,19 +1525,43 @@ function AdminErpSyncTab() {
           </div>
           <div>
             <h2 className="text-lg font-bold text-slate-900">Обмен данными с ERP</h2>
-            <p className="text-xs text-slate-500">Диагностика шлюза, остатки и принудительная синхронизация</p>
+            <p className="text-xs text-slate-500">Диагностика шлюза, остатки, Outbox буфер и аудит</p>
           </div>
         </div>
 
-        <button
-          onClick={runSync}
-          disabled={loading}
-          className="btn-primary flex items-center justify-center gap-2 text-xs py-2 px-4 shadow-sm"
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-          {loading ? 'Синхронизация...' : 'Принудительно обновить'}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={runOutboxSync}
+            disabled={outboxLoading}
+            className="btn-secondary flex items-center justify-center gap-1.5 text-xs py-2 px-3 shadow-xs border border-slate-200"
+            title="Принудительно отправить буферизованные заказы в 1С"
+          >
+            <Send className={`h-3.5 w-3.5 ${outboxLoading ? 'animate-spin' : ''}`} />
+            {outboxLoading ? 'Выгрузка...' : 'Сброс буфера Outbox'}
+          </button>
+
+          <button
+            onClick={runSync}
+            disabled={loading}
+            className="btn-primary flex items-center justify-center gap-2 text-xs py-2 px-4 shadow-sm"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+            {loading ? 'Синхронизация...' : 'Принудительно обновить'}
+          </button>
+        </div>
       </div>
+
+      {outboxMessage && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50/90 p-3 flex items-center justify-between text-xs text-blue-900">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-blue-600 shrink-0" />
+            <span>{outboxMessage}</span>
+          </div>
+          <button onClick={() => setOutboxMessage(null)} className="text-blue-500 hover:text-blue-700">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Gateway Health & Status Banner */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -1644,6 +1726,20 @@ function AdminErpSyncTab() {
             <FileJson className="h-3.5 w-3.5" />
             Сырой JSON
           </button>
+          <button
+            onClick={() => {
+              setActiveSubTab('logs');
+              if (auditLogs.length === 0) fetchAuditLogs();
+            }}
+            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border-b-2 -mb-px transition-colors whitespace-nowrap ${
+              activeSubTab === 'logs'
+                ? 'border-brand-600 text-brand-700'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Activity className="h-3.5 w-3.5" />
+            Журнал аудита / Telemetry {auditLogs.length > 0 ? `(${auditLogs.length})` : ''}
+          </button>
         </div>
 
         {activeSubTab === 'raw' && (
@@ -1653,6 +1749,17 @@ function AdminErpSyncTab() {
           >
             {copied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
             {copied ? 'Скопировано!' : 'Копировать JSON'}
+          </button>
+        )}
+
+        {activeSubTab === 'logs' && (
+          <button
+            onClick={fetchAuditLogs}
+            disabled={logsLoading}
+            className="flex items-center gap-1 text-xs text-brand-700 hover:text-brand-800 font-medium px-2 py-1 rounded bg-brand-50"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${logsLoading ? 'animate-spin' : ''}`} />
+            {logsLoading ? 'Загрузка...' : 'Обновить журнал'}
           </button>
         )}
       </div>
@@ -1811,6 +1918,234 @@ function AdminErpSyncTab() {
               </pre>
             </div>
           )}
+
+          {/* AUDIT LOGS / TELEMETRY SUBTAB */}
+          {activeSubTab === 'logs' && (
+            <div className="space-y-4">
+              {/* Controls bar */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <div className="flex flex-1 items-center gap-2">
+                  <div className="relative flex-1 max-w-sm">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Поиск по событию, источнику или ошибке..."
+                      value={logSearchQuery}
+                      onChange={(e) => setLogSearchQuery(e.target.value)}
+                      className="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-500"
+                    />
+                  </div>
+                  <select
+                    value={logFilterStatus}
+                    onChange={(e) => setLogFilterStatus(e.target.value)}
+                    className="py-1.5 px-3 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-brand-500"
+                  >
+                    <option value="all">Все статусы</option>
+                    <option value="success">Только успешные (200)</option>
+                    <option value="error">Только ошибки</option>
+                    <option value="warning">Предупреждения</option>
+                  </select>
+                </div>
+                <div className="text-[11px] text-slate-500">
+                  Показано: {auditLogs.filter(l => (logFilterStatus === 'all' || l.status === logFilterStatus) && (!logSearchQuery.trim() || JSON.stringify(l).toLowerCase().includes(logSearchQuery.toLowerCase()))).length} записей
+                </div>
+              </div>
+
+              {logsLoading && auditLogs.length === 0 ? (
+                <div className="py-12 text-center">
+                  <RefreshCw className="h-6 w-6 animate-spin text-brand-600 mx-auto mb-2" />
+                  <p className="text-xs text-slate-500">Загрузка журнала аудита...</p>
+                </div>
+              ) : (
+                <div className="card overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                          <th className="py-2.5 px-3 text-left">Время</th>
+                          <th className="py-2.5 px-3 text-left">Событие</th>
+                          <th className="py-2.5 px-3 text-left">Направление / Источник</th>
+                          <th className="py-2.5 px-3 text-left">Статус</th>
+                          <th className="py-2.5 px-3 text-left">Задержка</th>
+                          <th className="py-2.5 px-3 text-right">Данные</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {auditLogs
+                          .filter(l => (logFilterStatus === 'all' || l.status === logFilterStatus) && (!logSearchQuery.trim() || JSON.stringify(l).toLowerCase().includes(logSearchQuery.toLowerCase())))
+                          .map((log: any) => {
+                            const date = log.created_at ? new Date(log.created_at) : null;
+                            const timeStr = date ? date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '—';
+                            const dateStr = date ? date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }) : '';
+
+                            return (
+                              <tr key={log.id || Math.random()} className="hover:bg-slate-25">
+                                <td className="py-2 px-3 whitespace-nowrap">
+                                  <span className="font-mono text-slate-700 block">{timeStr}</span>
+                                  <span className="text-[10px] text-slate-400 block">{dateStr}</span>
+                                </td>
+                                <td className="py-2 px-3">
+                                  <span className="font-semibold text-slate-900 block font-mono text-[11px]">{log.event_type}</span>
+                                  {(log.payload?.correlation_id || log.correlation_id) && (
+                                    <span className="font-mono text-[9px] text-brand-600 block truncate max-w-[140px]" title={log.payload?.correlation_id || log.correlation_id}>
+                                      🔗 {log.payload?.correlation_id || log.correlation_id}
+                                    </span>
+                                  )}
+                                  {log.error_message && (
+                                    <span className="text-[10px] text-red-600 line-clamp-1 mt-0.5">{log.error_message}</span>
+                                  )}
+                                </td>
+                                <td className="py-2 px-3">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className={`badge text-[9px] uppercase ${log.direction === 'inbound' ? 'bg-sky-50 text-sky-700' : 'bg-indigo-50 text-indigo-700'}`}>
+                                      {log.direction === 'inbound' ? 'Входящий' : 'Исходящий'}
+                                    </span>
+                                    <span className="font-mono text-[10px] text-slate-500">{log.source || 'api'}</span>
+                                  </div>
+                                </td>
+                                <td className="py-2 px-3">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className={`inline-block h-2 w-2 rounded-full ${
+                                      log.status === 'success' ? 'bg-emerald-500' : log.status === 'warning' ? 'bg-amber-500' : 'bg-red-500'
+                                    }`} />
+                                    <span className={`badge text-[10px] ${
+                                      log.status === 'success' ? 'bg-emerald-50 text-emerald-700' : log.status === 'warning' ? 'bg-amber-50 text-amber-700' : 'bg-red-50 text-red-700'
+                                    }`}>
+                                      {log.status === 'success' ? 'Успех' : log.status === 'warning' ? 'Предупреждение' : 'Ошибка'}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="py-2 px-3 font-mono text-slate-500">
+                                  {log.latency_ms ? `${log.latency_ms} мс` : '—'}
+                                </td>
+                                <td className="py-2 px-3 text-right">
+                                  <button
+                                    onClick={() => setSelectedLog(log)}
+                                    className="inline-flex items-center gap-1 text-[11px] text-brand-600 hover:text-brand-800 font-medium px-2 py-1 rounded hover:bg-brand-50"
+                                  >
+                                    <Eye className="h-3 w-3" />
+                                    Инспектор
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                    {auditLogs.length === 0 && (
+                      <div className="py-12 text-center text-xs text-slate-400">
+                        Журнал интеграции пока пуст. Записи появятся при оформлении заказов, вебхуках и запросах к ERP.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Payload Inspector Modal */}
+              {selectedLog && (
+                <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+                  <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden border border-slate-200">
+                    <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50">
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                          <Activity className="h-4 w-4 text-brand-600" />
+                          Аудит события: <span className="font-mono text-brand-700">{selectedLog.event_type}</span>
+                        </h3>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          ID: {selectedLog.id} • {selectedLog.created_at ? new Date(selectedLog.created_at).toLocaleString('ru-RU') : ''}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setSelectedLog(null)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200/50"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+
+                    <div className="p-4 overflow-y-auto space-y-4">
+                      {/* Meta badges */}
+                      <div className="flex flex-wrap gap-2 text-xs">
+                        <span className={`badge ${selectedLog.status === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                          Статус: {selectedLog.status}
+                        </span>
+                        <span className="badge bg-slate-100 text-slate-700">
+                          Направление: {selectedLog.direction}
+                        </span>
+                        <span className="badge bg-slate-100 text-slate-700">
+                          Источник: {selectedLog.source}
+                        </span>
+                        {selectedLog.latency_ms && (
+                          <span className="badge bg-purple-50 text-purple-700">
+                            Задержка: {selectedLog.latency_ms} мс
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Distributed Correlation-ID */}
+                      {(selectedLog.payload?.correlation_id || selectedLog.correlation_id) && (
+                        <div className="p-2.5 rounded-xl bg-blue-50/80 border border-blue-200/80 flex flex-wrap items-center justify-between gap-2 text-xs">
+                          <div>
+                            <span className="text-[10px] text-blue-600 uppercase font-bold block">Distributed Correlation-ID (Сквозной трейс):</span>
+                            <span className="font-mono font-semibold text-blue-900">{selectedLog.payload?.correlation_id || selectedLog.correlation_id}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const trc = selectedLog.payload?.correlation_id || selectedLog.correlation_id;
+                              setLogSearchQuery(trc);
+                              setSelectedLog(null);
+                            }}
+                            className="text-[11px] font-semibold text-blue-700 bg-white border border-blue-200 px-2.5 py-1 rounded-lg hover:bg-blue-100 transition-colors cursor-pointer shadow-2xs"
+                          >
+                            🔗 Найти цепочку транзакции
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Error Banner if any */}
+                      {selectedLog.error_message && (
+                        <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700">
+                          <p className="font-bold text-red-800 mb-0.5">Сообщение об ошибке:</p>
+                          {selectedLog.error_message}
+                        </div>
+                      )}
+
+                      {/* Payload JSON */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-xs font-bold text-slate-700">Payload / Тело пакета:</span>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(JSON.stringify(selectedLog.payload, null, 2));
+                            }}
+                            className="text-[11px] text-brand-600 hover:text-brand-800 flex items-center gap-1 font-medium"
+                          >
+                            <Copy className="h-3 w-3" />
+                            Копировать
+                          </button>
+                        </div>
+                        <div className="bg-slate-900 text-slate-100 rounded-xl p-3 overflow-x-auto max-h-[300px]">
+                          <pre className="text-[11px] font-mono leading-relaxed">
+                            {JSON.stringify(selectedLog.payload, null, 2) || '(Тело пакета отсутствует)'}
+                          </pre>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-3 border-t border-slate-100 bg-slate-50 flex justify-end">
+                      <button
+                        onClick={() => setSelectedLog(null)}
+                        className="btn-secondary text-xs py-1.5 px-4"
+                      >
+                        Закрыть
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -1828,6 +2163,37 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
   const [loadingDebt, setLoadingDebt] = useState<boolean>(false);
   const [repeatingOrderId, setRepeatingOrderId] = useState<string | null>(null);
   const [repeatResult, setRepeatResult] = useState<RepeatResult | null>(null);
+  const [reconciliationModalOpen, setReconciliationModalOpen] = useState(false);
+  const [reconciliationPeriod, setReconciliationPeriod] = useState<'month' | 'quarter' | 'year'>('month');
+  const [reconciliationLoading, setReconciliationLoading] = useState(false);
+  const [reconciliationData, setReconciliationData] = useState<any | null>(null);
+
+  const handleOpenReconciliationModal = async (period: 'month' | 'quarter' | 'year' = 'month') => {
+    setReconciliationModalOpen(true);
+    setReconciliationPeriod(period);
+    setReconciliationLoading(true);
+
+    try {
+      const now = new Date();
+      let daysAgo = 30;
+      if (period === 'quarter') daysAgo = 90;
+      if (period === 'year') daysAgo = 365;
+
+      const startDate = new Date(now.getTime() - daysAgo * 86400000).toISOString().split('T')[0];
+      const endDate = now.toISOString().split('T')[0];
+      const partnerId = profile?.partner_id || profile?.id || '';
+
+      const res = await fetch(`/api/erp?action=get_reconciliation_report&partner_id=${encodeURIComponent(String(partnerId))}&start_date=${startDate}&end_date=${endDate}`);
+      const data = await res.json();
+      if (data.success && data.report) {
+        setReconciliationData(data.report);
+      }
+    } catch (e) {
+      console.warn('[Profile] Reconciliation report fetch failed:', e);
+    } finally {
+      setReconciliationLoading(false);
+    }
+  };
 
   const handleRepeatOrder = async (order: Order) => {
     if (repeatingOrderId) return;
@@ -2164,6 +2530,15 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
                 <p className="text-[10px] text-slate-400 text-center">
                   {loadingDebt ? 'Загрузка данных из ERP...' : clientDebt?.found ? `Синхронизировано: ${clientDebt.client?.name}` : 'Данные из ERP подключены'}
                 </p>
+
+                <button
+                  type="button"
+                  onClick={() => handleOpenReconciliationModal()}
+                  className="w-full mt-2 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 transition-colors shadow-2xs cursor-pointer"
+                >
+                  <FileText className="h-3.5 w-3.5 text-brand-600" />
+                  Акт сверки с 1С
+                </button>
               </div>
             </div>
           </div>
@@ -2320,6 +2695,161 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
           </div>
         </div>
       )}
+
+      {/* ─── Reconciliation Report Modal (Акт сверки с 1С) ─── */}
+      {reconciliationModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-2xl max-w-3xl w-full p-6 shadow-2xl border border-slate-100 space-y-4 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
+                  <FileText className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Акт сверки взаиморасчетов</h3>
+                  <p className="text-xs text-slate-500">
+                    Контрагент: <strong>{profile?.company_name || profile?.full_name || 'Оптовый клиент'}</strong>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReconciliationModalOpen(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Period selector */}
+            <div className="flex items-center justify-between gap-2 shrink-0 bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-xs">
+              <span className="font-medium text-slate-600">Период сверки:</span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleOpenReconciliationModal('month')}
+                  className={`px-3 py-1 rounded-lg font-semibold transition-colors cursor-pointer ${
+                    reconciliationPeriod === 'month' ? 'bg-brand-700 text-white shadow-xs' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  30 дней
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleOpenReconciliationModal('quarter')}
+                  className={`px-3 py-1 rounded-lg font-semibold transition-colors cursor-pointer ${
+                    reconciliationPeriod === 'quarter' ? 'bg-brand-700 text-white shadow-xs' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  Квартал
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleOpenReconciliationModal('year')}
+                  className={`px-3 py-1 rounded-lg font-semibold transition-colors cursor-pointer ${
+                    reconciliationPeriod === 'year' ? 'bg-brand-700 text-white shadow-xs' : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  С начала года
+                </button>
+              </div>
+            </div>
+
+            {/* Content body */}
+            <div className="overflow-y-auto flex-1 space-y-4 pr-1">
+              {reconciliationLoading ? (
+                <div className="py-16 text-center">
+                  <RefreshCw className="h-7 w-7 animate-spin text-brand-600 mx-auto mb-2" />
+                  <p className="text-xs text-slate-500">Запрос проводок и актов из 1С:ERP...</p>
+                </div>
+              ) : reconciliationData ? (
+                <div className="space-y-4">
+                  {/* KPI cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                    <div className="card p-3 bg-slate-50">
+                      <span className="text-[10px] text-slate-400 uppercase font-semibold">Входящее сальдо</span>
+                      <p className="text-sm font-bold text-slate-800 mt-0.5">${reconciliationData.initial_balance ?? '0.00'}</p>
+                    </div>
+                    <div className="card p-3 bg-slate-50">
+                      <span className="text-[10px] text-slate-400 uppercase font-semibold">Отгрузки (Дебет)</span>
+                      <p className="text-sm font-bold text-red-600 mt-0.5">${reconciliationData.total_debit ?? '0.00'}</p>
+                    </div>
+                    <div className="card p-3 bg-slate-50">
+                      <span className="text-[10px] text-slate-400 uppercase font-semibold">Оплаты (Кредит)</span>
+                      <p className="text-sm font-bold text-emerald-600 mt-0.5">${reconciliationData.total_credit ?? '0.00'}</p>
+                    </div>
+                    <div className="card p-3 bg-slate-50">
+                      <span className="text-[10px] text-slate-400 uppercase font-semibold">Конечное сальдо</span>
+                      <p className="text-sm font-bold text-slate-900 mt-0.5">${reconciliationData.final_balance ?? '0.00'}</p>
+                    </div>
+                  </div>
+
+                  {/* Transactions table */}
+                  <div className="card overflow-hidden border border-slate-200">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                          <th className="py-2 px-3 text-left">Дата</th>
+                          <th className="py-2 px-3 text-left">Документ</th>
+                          <th className="py-2 px-3 text-left">Номер</th>
+                          <th className="py-2 px-3 text-right">Отгрузка ($)</th>
+                          <th className="py-2 px-3 text-right">Оплата ($)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {reconciliationData.transactions && reconciliationData.transactions.length > 0 ? (
+                          reconciliationData.transactions.map((tx: any, idx: number) => (
+                            <tr key={idx} className="hover:bg-slate-25">
+                              <td className="py-2 px-3 font-mono text-slate-600">{tx.date}</td>
+                              <td className="py-2 px-3 font-medium text-slate-800">{tx.doc_type}</td>
+                              <td className="py-2 px-3 font-mono text-slate-500">{tx.doc_number}</td>
+                              <td className="py-2 px-3 text-right font-semibold text-slate-900">
+                                {tx.debit > 0 ? `$${Number(tx.debit).toFixed(2)}` : '—'}
+                              </td>
+                              <td className="py-2 px-3 text-right font-semibold text-emerald-600">
+                                {tx.credit > 0 ? `$${Number(tx.credit).toFixed(2)}` : '—'}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={5} className="py-8 text-center text-slate-400">
+                              За выбранный период проводок в 1С не зафиксировано
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : (
+                <div className="py-12 text-center text-xs text-slate-400">
+                  Не удалось загрузить данные акта сверки
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-between shrink-0">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="btn-secondary flex items-center gap-1.5 text-xs py-1.5 px-3 cursor-pointer"
+              >
+                <Printer className="h-3.5 w-3.5" />
+                Печать
+              </button>
+              <button
+                type="button"
+                onClick={() => setReconciliationModalOpen(false)}
+                className="btn-primary text-xs py-1.5 px-4 cursor-pointer"
+              >
+                Закрыть
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2420,32 +2950,44 @@ function OrdersTab({
 
   // Сквозная подписка на Realtime обновления статусов заказов со склада/WMS
   useEffect(() => {
-    const channel = supabase
-      .channel('portal_order_live_sync')
-      .on('broadcast', { event: 'order_status_changed' }, (payload: any) => {
-        const data = payload?.payload;
-        if (!data || !data.order_id) return;
-        const targetId = String(data.order_id);
-        const newStatus = data.new_status;
-        const meta = ORDER_STATUS_MAP[newStatus] || { label: newStatus, color: 'bg-slate-100 text-slate-600 border-slate-200' };
+    const handleOrderStatusEvent = (payload: any) => {
+      const data = payload?.payload || payload;
+      if (!data || (!data.order_id && !data.order_doc_number)) return;
+      const targetId = String(data.order_id || '');
+      const newStatus = data.new_status || data.status || 'cancelled';
+      const meta = ORDER_STATUS_MAP[newStatus] || { label: newStatus, color: 'bg-slate-100 text-slate-600 border-slate-200' };
 
-        setOrders(prev => prev.map(o => {
-          if (o.id === targetId || o.orderNumber === data.order_doc_number) {
-            return {
-              ...o,
-              status: meta.label,
-              statusRaw: newStatus,
-              statusColor: meta.color,
-              notes: data.comment || o.notes,
-            };
-          }
-          return o;
-        }));
-      })
+      setOrders(prev => prev.map(o => {
+        const matchesId = targetId && (o.id === targetId || o.id === `erp-${targetId}` || String(o.id) === targetId);
+        const matchesDoc = Boolean(data.order_doc_number && (o.orderNumber === data.order_doc_number || o.id === data.order_doc_number));
+        const matchesDocId = Boolean(targetId && o.orderNumber === targetId);
+
+        if (matchesId || matchesDoc || matchesDocId) {
+          return {
+            ...o,
+            status: meta.label,
+            statusRaw: newStatus,
+            statusColor: meta.color,
+            notes: data.comment || data.reason || o.notes,
+          };
+        }
+        return o;
+      }));
+    };
+
+    const channel1 = supabase
+      .channel('portal_live_updates')
+      .on('broadcast', { event: 'order_status_changed' }, handleOrderStatusEvent)
+      .subscribe();
+
+    const channel2 = supabase
+      .channel('portal_order_live_sync')
+      .on('broadcast', { event: 'order_status_changed' }, handleOrderStatusEvent)
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(channel1);
+      supabase.removeChannel(channel2);
     };
   }, []);
 

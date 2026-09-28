@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Trash2,
   Plus,
@@ -12,13 +12,15 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle2,
+  AlertTriangle,
 } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import type { PageId, CartItem } from '@/types';
 import { calcSqm, parseSizeDimensions } from '@/types';
-import { submitOrderToErp } from '@/lib/erpApi';
+import { submitOrderToErp, fetchClientDebtFromErp, requestOrderApprovalViaWhatsApp } from '@/lib/erpApi';
 import { triggerCatalogReload } from '@/hooks/useProductData';
+import { getPricingTier } from '@/lib/pricingEngine';
 import ProductImage from '@/components/ProductImage';
 
 function sizeArea(size: string): number {
@@ -71,6 +73,8 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
   const { user, profile, isImpersonating, impersonatedProfile } = useAuth();
 
   const [orderDocNumber, setOrderDocNumber] = useState<string | null>(null);
+  const [isWaitingApproval, setIsWaitingApproval] = useState(false);
+  const [debtReport, setDebtReport] = useState<any | null>(null);
   const [activeCollection, setActiveCollection] = useState<string | null>(null);
   const [sizeAsc, setSizeAsc] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -82,6 +86,25 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
   const [clientCompany, setClientCompany] = useState(profile?.company_name ?? '');
   const [selectedCity, setSelectedCity] = useState(CITIES[0]);
   const [orderComment, setOrderComment] = useState('');
+
+  // Загрузка финансового состояния клиента (кредитный лимит, просрочки)
+  useEffect(() => {
+    const effectiveProfile = (isImpersonating && impersonatedProfile) ? impersonatedProfile : profile;
+    if (!effectiveProfile?.partner_id && !effectiveProfile?.phone) return;
+    fetchClientDebtFromErp({
+      phone: effectiveProfile.phone,
+      counterpartyId: effectiveProfile.partner_id ? Number(effectiveProfile.partner_id) : undefined,
+    }).then(res => {
+      if (res && res.success && res.found) setDebtReport(res);
+    }).catch(() => {});
+  }, [profile, isImpersonating, impersonatedProfile]);
+
+  const creditLimit = debtReport?.financials?.credit_limit_usd ?? profile?.credit_limit_usd ?? 0;
+  const currentDebt = debtReport?.financials?.total_debt_usd ?? profile?.debt_usd ?? 0;
+  const isOverdue = Boolean(debtReport?.financials?.is_overdue || (debtReport?.financials?.overdue_usd && debtReport?.financials?.overdue_usd > 0));
+  const isBlocked = Boolean(debtReport?.client?.is_blocked_for_shipment);
+  const exceedsLimit = creditLimit > 0 && (currentDebt + totalPrice > creditLimit);
+  const requiresApproval = isBlocked || isOverdue || exceedsLimit;
 
   const collections = useMemo(() => Array.from(new Set(items.map(i => i.collection))).sort(), [items]);
 
@@ -110,15 +133,25 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
     return (
       <div className="min-h-screen pt-20 pb-24 lg:pb-8">
         <div className="container-w flex flex-col items-center justify-center py-24 text-center">
-          <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-50">
-            <CheckCircle2 className="h-8 w-8 text-emerald-600" />
+          <div className={`mb-6 flex h-20 w-20 items-center justify-center rounded-full ${isWaitingApproval ? 'bg-amber-50' : 'bg-emerald-50'}`}>
+            {isWaitingApproval ? (
+              <AlertTriangle className="h-8 w-8 text-amber-600" />
+            ) : (
+              <CheckCircle2 className="h-8 w-8 text-emerald-600" />
+            )}
           </div>
-          <h1 className="font-display text-2xl font-bold text-slate-900 sm:text-3xl">Заказ оформлен!</h1>
-          <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-6 py-4">
-            <p className="text-sm text-emerald-700 mb-1">Номер заказа</p>
-            <p className="text-2xl font-bold text-emerald-800 font-mono">{orderDocNumber}</p>
+          <h1 className="font-display text-2xl font-bold text-slate-900 sm:text-3xl">
+            {isWaitingApproval ? 'Заказ отправлен на согласование!' : 'Заказ оформлен!'}
+          </h1>
+          <div className={`mt-4 rounded-xl border px-6 py-4 ${isWaitingApproval ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}>
+            <p className={`text-sm mb-1 ${isWaitingApproval ? 'text-amber-700' : 'text-emerald-700'}`}>Номер заказа</p>
+            <p className={`text-2xl font-bold font-mono ${isWaitingApproval ? 'text-amber-800' : 'text-emerald-800'}`}>{orderDocNumber}</p>
           </div>
-          <p className="mt-4 max-w-md text-slate-500">Наш менеджер свяжется с вами для подтверждения заказа.</p>
+          <p className="mt-4 max-w-md text-slate-500">
+            {isWaitingApproval
+              ? 'Запрос на согласование условий отгрузки отправлен вашему региональному менеджеру в WhatsApp. Как только заказ будет одобрен, вам придет подтверждающее сообщение в WhatsApp.'
+              : 'Наш менеджер свяжется с вами для подтверждения заказа.'}
+          </p>
           <button onClick={() => { setOrderDocNumber(null); onNavigate('catalog'); }} className="btn-primary mt-8">
             Продолжить покупки
           </button>
@@ -156,8 +189,11 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
       ? (Number(effectiveProfile.partner_id) || effectiveProfile.partner_id)
       : undefined;
 
+    const fullComment = `${orderComment.trim()}${requiresApproval ? ' [ТРЕБУЕТСЯ АППРУВ В WHATSAPP: ' + (isBlocked ? 'Стоп-лист' : exceedsLimit ? 'Превышение кредитного лимита' : 'Просроченная задолженность') + ']' : ''}`;
+
     try {
       const data = await submitOrderToErp({
+        user_id: effectiveProfile?.id,
         client_id: clientId,
         warehouse_id: 81,
         buyer: {
@@ -168,7 +204,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
         client_phone: clientPhone.trim(),
         client_company: clientCompany.trim(),
         city: selectedCity,
-        comment: orderComment.trim(),
+        comment: fullComment,
         items: items.map(item => ({
           item_id: item.item_id || (Number(item.productId) > 0 ? Number(item.productId) : undefined),
           productId: item.productId,
@@ -182,6 +218,29 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
       });
 
       if (data.success && data.order?.doc_number) {
+        if (requiresApproval) {
+          setIsWaitingApproval(true);
+          const reason = isBlocked 
+            ? 'Ограничение отгрузок (стоп-лист по клиенту)' 
+            : exceedsLimit 
+              ? `Превышение кредитного лимита (Лимит: $${creditLimit}, Текущий долг: $${currentDebt}, Заказ: $${totalPrice.toFixed(0)})`
+              : `Имеется просроченная задолженность ($${debtReport?.financials?.overdue_usd || 0})`;
+
+          requestOrderApprovalViaWhatsApp({
+            orderId: data.order.order_id || data.order.doc_number,
+            orderDocNumber: data.order.doc_number,
+            clientName: clientCompany.trim() || clientName.trim(),
+            clientPhone: clientPhone.trim(),
+            totalAmount: totalPrice,
+            totalSqm: totalSqm,
+            itemsCount: totalItems,
+            reason,
+            managerPhone: debtReport?.regional_manager?.phone,
+          }).catch(err => console.warn('Approval dispatch notice:', err));
+        } else {
+          setIsWaitingApproval(false);
+        }
+
         clearCart();
         setOrderDocNumber(data.order.doc_number);
         setStockConflictDetails(null);
@@ -416,20 +475,42 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
             {/* Totals & submit */}
             <div className="card p-6">
               <h2 className="text-lg font-bold text-slate-900 mb-4">Итого</h2>
-              <div className="space-y-3 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Товары</span>
-                  <span className="font-medium text-slate-900">{totalItems} шт.</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Площадь</span>
-                  <span className="font-medium text-slate-900">{fmt2(totalSqm)} м²</span>
-                </div>
-                <div className="border-t border-slate-100 pt-3 flex justify-between">
-                  <span className="font-semibold text-slate-900">Сумма</span>
-                  <span className="text-lg font-bold text-brand-700">{fmtPrice(totalPrice)}</span>
-                </div>
-              </div>
+              {(() => {
+                const pricingTier = getPricingTier(profile?.price_type);
+                const hasContractDiscount = pricingTier.discountPercent > 0;
+                const baseEstimatedTotal = hasContractDiscount ? (totalPrice / (1 - pricingTier.discountPercent / 100)) : totalPrice;
+                const totalSavings = baseEstimatedTotal - totalPrice;
+
+                return (
+                  <div className="space-y-3 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Товары</span>
+                      <span className="font-medium text-slate-900">{totalItems} шт.</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Площадь</span>
+                      <span className="font-medium text-slate-900">{fmt2(totalSqm)} м²</span>
+                    </div>
+                    {hasContractDiscount && (
+                      <div className="flex items-center justify-between text-xs py-1 px-2.5 rounded-lg bg-emerald-50 border border-emerald-100">
+                        <span className="text-emerald-800 font-semibold">🏷️ {pricingTier.label}</span>
+                        <span className="text-emerald-700 font-bold">Выгода: {fmtPrice(totalSavings)}</span>
+                      </div>
+                    )}
+                    <div className="border-t border-slate-100 pt-3 flex justify-between items-baseline">
+                      <div>
+                        <span className="font-semibold text-slate-900 block">К оплате</span>
+                        {hasContractDiscount && (
+                          <span className="text-[11px] text-slate-400 line-through">
+                            {fmtPrice(baseEstimatedTotal)}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-xl font-bold text-brand-700">{fmtPrice(totalPrice)}</span>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {submitError && (
                 <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs text-red-800 space-y-2.5">
@@ -460,6 +541,23 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
                       </button>
                     </div>
                   )}
+                </div>
+              )}
+
+              {requiresApproval && !submitError && (
+                <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3.5 text-xs text-amber-900 space-y-1.5">
+                  <div className="flex items-center gap-1.5 font-bold text-amber-800">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                    <span>Требуется аппрув отгрузки</span>
+                  </div>
+                  <p className="text-[11px] text-amber-700 leading-relaxed">
+                    {isBlocked 
+                      ? 'По договору действует ограничение на отгрузки.' 
+                      : exceedsLimit 
+                        ? `Сумма заказа превышает кредитный лимит ($${creditLimit.toLocaleString()}).` 
+                        : 'Имеется просроченная задолженность.'}
+                    {' '}Заказ будет автоматически направлен на WhatsApp-согласование вашему региональному менеджеру.
+                  </p>
                 </div>
               )}
 

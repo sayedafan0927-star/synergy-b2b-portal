@@ -1,4 +1,4 @@
-import type { Warehouse } from '@/types';
+import type { Warehouse, Product, ProductVariant } from '@/types';
 import type { Profile } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 
@@ -24,15 +24,47 @@ export function isCentralWarehouse(w: { warehouse_id?: number; warehouse_name?: 
   return name.includes('астана') || name.includes('основной') || city.includes('астана');
 }
 
+let serverRulesCache: Record<string, ClientWarehouseSettings> | null = null;
+
+/**
+ * Инициализация и синхронизация складских правил из базы данных PostgreSQL
+ */
+export async function initWarehouseRulesFromServer(): Promise<Record<string, ClientWarehouseSettings>> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const res = await fetch('/api/warehouse-rules');
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.success && data?.rules) {
+        serverRulesCache = data.rules;
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data.rules));
+        triggerWarehouseSettingsReload();
+        return data.rules;
+      }
+    }
+  } catch (err) {
+    console.warn('[warehouseVisibility] Network sync fallback to localStorage:', err);
+  }
+  return getAllClientWarehouseRules();
+}
+
+// Запускаем фоновую синхронизацию с сервером при старте
+if (typeof window !== 'undefined') {
+  initWarehouseRulesFromServer().catch(() => {});
+}
+
 /**
  * Получить все сохранённые правила видимости складов для клиентов
  */
 export function getAllClientWarehouseRules(): Record<string, ClientWarehouseSettings> {
   if (typeof window === 'undefined') return {};
+  if (serverRulesCache) return serverRulesCache;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return {};
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    serverRulesCache = parsed;
+    return parsed;
   } catch (err) {
     console.warn('[warehouseVisibility] Failed to parse stored rules:', err);
     return {};
@@ -92,24 +124,12 @@ export function saveClientWarehouseSettings(
 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(allRules));
 
-    // Пробуем также сохранить в Supabase display_settings или profiles (без блокировки)
-    try {
-      supabase
-        .from('display_settings')
-        .upsert({
-          target_role: `client:${cleanKey}`,
-          show_stock: settings.showCentralWarehouse,
-          show_reserve: false,
-          show_total_pcs: settings.showShowroomWarehouse,
-          show_sqm: true,
-          show_price: true,
-          updated_at: new Date().toISOString(),
-        })
-        .then(() => {})
-        .catch(() => {});
-    } catch {
-      // Игнорируем сетевые ошибки фонового синка
-    }
+    // Персистируем настройки в PostgreSQL через защищенный серверный API
+    fetch('/api/warehouse-rules', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ clientId: cleanKey, settings: payload }),
+    }).catch(err => console.warn('[warehouseVisibility] Background sync to PostgreSQL failed:', err));
 
     triggerWarehouseSettingsReload();
   } catch (err) {
@@ -284,3 +304,81 @@ export function filterWarehousesForClient(
 
   return result;
 }
+
+/**
+ * Расчет доступного остатка для конкретного размера (варианта) товара с учетом прав пользователя
+ */
+export function getVariantStockForUser(
+  variant: ProductVariant,
+  clientProfile?: Partial<Profile> | null,
+  isEffectiveAdmin = false
+): number {
+  if (isEffectiveAdmin) {
+    if (variant.warehouses && variant.warehouses.length > 0) {
+      return variant.warehouses.reduce((sum, w) => sum + (Number(w.stock) || Number(w.free_stock) || 0), 0);
+    }
+    return Math.max(0, Number(variant.free_stock ?? variant.stock ?? 0));
+  }
+
+  // Для клиента: фильтруем склады по доступности
+  const clientWarehouses = filterWarehousesForClient(
+    variant.warehouses,
+    clientProfile,
+    clientProfile?.showroom_warehouse_name
+  );
+  let total = clientWarehouses.reduce((sum, w) => sum + (Number(w.stock) || Number(w.free_stock) || 0), 0);
+
+  // Если у клиента есть шоурум, но его склад не попал в clientWarehouses, учитываем showroom_qty / dealer_stock
+  if (clientProfile?.showroom_warehouse_id) {
+    const hasShowroomInList = clientWarehouses.some(w => w.warehouse_id === clientProfile.showroom_warehouse_id);
+    if (!hasShowroomInList) {
+      const showroomQty = Number(variant.dealer_stock?.in_showroom_qty ?? variant.showroom_qty ?? 0);
+      if (showroomQty > 0) {
+        total += showroomQty;
+      }
+    }
+  }
+
+  return Math.max(0, total);
+}
+
+/**
+ * Расчет суммарного доступного остатка (в штуках) по всем размерам товара для конкретного пользователя
+ */
+export function getProductAvailableStockForUser(
+  product: Product,
+  clientProfile?: Partial<Profile> | null,
+  isEffectiveAdmin = false
+): number {
+  if (!product.variants || product.variants.length === 0) return 0;
+  return product.variants.reduce((sum, v) => sum + getVariantStockForUser(v, clientProfile, isEffectiveAdmin), 0);
+}
+
+/**
+ * Проверка наличия товара для пользователя:
+ * - Для администратора (isEffectiveAdmin === true) — всегда возвращает true (админ видит всё ассортиментное дерево).
+ * - Для клиентов/гостей — возвращает true, ТОЛЬКО если хотя бы один размер есть в наличии (> 0 шт) на доступных складах.
+ *   Если у товара нет остатков ни по одному размеру — возвращает false (карточка должна быть скрыта).
+ */
+export function isProductInStockForUser(
+  product: Product,
+  clientProfile?: Partial<Profile> | null,
+  isEffectiveAdmin = false,
+  hideZeroStockSetting = true
+): boolean {
+  if (isEffectiveAdmin) {
+    return true;
+  }
+
+  // Если в настройках явно выключено скрытие нулевых остатков (например, предзаказ)
+  if (hideZeroStockSetting === false) {
+    return true;
+  }
+
+  if (!product.variants || product.variants.length === 0) {
+    return false;
+  }
+
+  return product.variants.some(v => getVariantStockForUser(v, clientProfile, false) > 0);
+}
+

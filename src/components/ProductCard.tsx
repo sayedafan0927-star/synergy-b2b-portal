@@ -89,7 +89,7 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
   const { settings: displaySettings } = useDisplaySettings();
   const { addItem } = useCart();
   const { language, t } = useLanguage();
-  const { getMinPricePerSqm, getVariantPrice, getPricePerSqm } = useUserPricing();
+  const { getMinPricePerSqm, getVariantPrice, getPricePerSqm, hasContractDiscount, tier } = useUserPricing();
   const [sizesOpen, setSizesOpen] = useState(false);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [addedSku, setAddedSku] = useState<string | null>(null);
@@ -195,6 +195,9 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
   const totalInTransitSqm = hasShowroom ? Math.round(product.variants.reduce((sum, v) => sum + (v.dealer_stock?.in_transit_sqm || 0), 0) * 10) / 10 : 0;
   const totalHubQty = showHub ? product.variants.reduce((sum, v) => sum + getMainWarehouseStock(v), 0) : 0;
 
+  const totalStockForCard = product.variants.reduce((sum, v) => sum + getVariantClientStock(v), 0);
+  const isOutOfStock = totalStockForCard <= 0;
+
   return (
     <div
       role="button"
@@ -229,6 +232,15 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
           <div className="absolute top-2.5 left-2.5 z-10 pointer-events-none">
             <span className="inline-flex items-center gap-1 rounded-md bg-emerald-600/90 backdrop-blur-sm px-2 py-0.5 text-[11px] font-bold text-white shadow-sm">
               🏪 В наличии: {totalShowroomQty} шт
+            </span>
+          </div>
+        )}
+
+        {/* Бейдж для админа: если у товара 0 остаток и он скрыт от клиентов */}
+        {isEffectiveAdmin && isOutOfStock && (
+          <div className="absolute top-2.5 right-2.5 z-10 pointer-events-none">
+            <span className="inline-flex items-center gap-1 rounded-md bg-amber-600/90 backdrop-blur-sm px-2 py-0.5 text-[10px] font-bold text-white shadow-sm" title="Товар с нулевым остатком скрыт от клиентов">
+              ⚠️ 0 шт · Скрыт от клиентов
             </span>
           </div>
         )}
@@ -339,7 +351,7 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
         <div className="mt-auto border-t border-slate-100 pt-2.5 flex items-center justify-between">
           <div>
             {user ? (
-              <div className="flex items-baseline gap-1 leading-tight">
+              <div className="flex items-baseline gap-1 leading-tight flex-wrap">
                 <span className={`text-sm sm:text-base font-bold ${isOnSale ? 'text-red-600' : 'text-slate-900'}`}>
                   ${pricePerSqm.toFixed(2)}
                 </span>
@@ -349,6 +361,11 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
                   </span>
                 )}
                 <span className="text-[10px] sm:text-[11px] font-normal text-slate-400">/ м²</span>
+                {hasContractDiscount && !isOnSale && (
+                  <span className="badge text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/50 py-0 px-1 ml-0.5" title={tier.label}>
+                    -{tier.discountPercent}%
+                  </span>
+                )}
               </div>
             ) : (
               <p className="flex items-center gap-1 text-xs text-slate-400 font-medium">
@@ -456,8 +473,16 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
                   );
                 })
             ) : (
-              <div className="py-3 px-2 text-center text-xs text-slate-500 font-medium">
-                Нет в наличии на доступных складах
+              <div className="py-3 px-2 text-center text-xs font-medium">
+                {isEffectiveAdmin ? (
+                  <span className="text-amber-700 bg-amber-50 px-2.5 py-1 rounded-md inline-block">
+                    ⚠️ 0 шт на складах (карточка скрыта от клиентов)
+                  </span>
+                ) : (
+                  <span className="text-slate-500">
+                    Нет в наличии на доступных складах
+                  </span>
+                )}
               </div>
             )}
           </div>

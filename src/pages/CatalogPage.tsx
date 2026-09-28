@@ -25,7 +25,7 @@ import StockSummaryBar from '@/components/StockSummaryBar';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
-import { filterWarehousesForClient } from '@/lib/warehouseVisibility';
+import { filterWarehousesForClient, isProductInStockForUser } from '@/lib/warehouseVisibility';
 import ProductImage from '@/components/ProductImage';
 
 type SortOption = 'popular' | 'price-asc' | 'price-desc' | 'name';
@@ -477,19 +477,33 @@ export default function CatalogPage({ onNavigate, initialCollection, initialCoun
   const [selectedCollections, setSelectedCollections] = useState<Set<string>>(() => initialCollection ? new Set([initialCollection]) : new Set());
   const [selectedManufacturers, setSelectedManufacturers] = useState<Set<string>>(new Set());
   const [selectedCountries, setSelectedCountries] = useState<Set<string>>(() => initialCountry ? new Set([initialCountry]) : new Set());
-  const [selectedWarehouses, setSelectedWarehouses] = useState<Set<string>>(new Set());
-  const [selectedSizes, setSelectedSizes] = useState<Set<string>>(new Set());
+  const [adminStockFilter, setAdminStockFilter] = useState<'all' | 'in_stock' | 'out_of_stock'>('all');
+  const hideOutOfStockSetting = displaySettings.hide_out_of_stock_products !== false;
 
-  const allCollections = useMemo(() => [...new Set(products.map(p => p.collection))].sort(), [products]);
-  const allManufacturers = useMemo(() => [...new Set(products.map(p => p.manufacturer))].sort(), [products]);
-  const allCountries = useMemo(() => [...new Set(products.map(p => p.country))].sort(), [products]);
+  const baseProducts = useMemo(() => {
+    if (isEffectiveAdmin) {
+      if (adminStockFilter === 'in_stock') {
+        return products.filter(p => isProductInStockForUser(p, profile, false, true));
+      }
+      if (adminStockFilter === 'out_of_stock') {
+        return products.filter(p => !isProductInStockForUser(p, profile, false, true));
+      }
+      return products;
+    }
+    // Для клиента: фильтруем товары с нулевым остатком
+    return products.filter(p => isProductInStockForUser(p, profile, false, hideOutOfStockSetting));
+  }, [products, isEffectiveAdmin, adminStockFilter, profile, hideOutOfStockSetting]);
+
+  const allCollections = useMemo(() => [...new Set(baseProducts.map(p => p.collection))].sort(), [baseProducts]);
+  const allManufacturers = useMemo(() => [...new Set(baseProducts.map(p => p.manufacturer))].sort(), [baseProducts]);
+  const allCountries = useMemo(() => [...new Set(baseProducts.map(p => p.country))].sort(), [baseProducts]);
   const allWarehouses = useMemo(() => {
     if (isEffectiveAdmin) {
-      return [...new Set(products.flatMap(p => p.variants.flatMap(v => v.warehouses.map(w => w.warehouse_name || w.city))))].sort();
+      return [...new Set(baseProducts.flatMap(p => p.variants.flatMap(v => v.warehouses.map(w => w.warehouse_name || w.city))))].sort();
     }
     const uniqueRawWarehouses: Warehouse[] = [];
     const seenKeys = new Set<string>();
-    for (const p of products) {
+    for (const p of baseProducts) {
       for (const v of p.variants) {
         for (const w of v.warehouses) {
           const key = `${w.warehouse_id}::${w.warehouse_name || w.city}`;
@@ -503,8 +517,8 @@ export default function CatalogPage({ onNavigate, initialCollection, initialCoun
     const visible = filterWarehousesForClient(uniqueRawWarehouses, profile, myShowroomName);
     const names = [...new Set(visible.map(w => w.warehouse_name || w.city))].filter(Boolean);
     return names.length > 0 ? names.sort() : ['Основной Склад Астана'];
-  }, [products, isEffectiveAdmin, profile, myShowroomName]);
-  const allSizes = useMemo(() => [...new Set(products.flatMap(p => p.variants.map(v => v.size)))].sort((a, b) => sizeArea(a) - sizeArea(b)), [products]);
+  }, [baseProducts, isEffectiveAdmin, profile, myShowroomName]);
+  const allSizes = useMemo(() => [...new Set(baseProducts.flatMap(p => p.variants.map(v => v.size)))].sort((a, b) => sizeArea(a) - sizeArea(b)), [baseProducts]);
 
   useEffect(() => {
     if (!stockWarehouse && allWarehouses.length > 0) setStockWarehouse(allWarehouses[0]);
@@ -529,7 +543,7 @@ export default function CatalogPage({ onNavigate, initialCollection, initialCoun
   };
 
   const filteredProducts = useMemo(() => {
-    let result = [...products];
+    let result = [...baseProducts];
 
     if (selectedCategory !== 'all') {
       result = result.filter(p =>
@@ -704,7 +718,7 @@ export default function CatalogPage({ onNavigate, initialCollection, initialCoun
                 : 'bg-white border border-slate-200 text-slate-700 hover:border-brand-500 hover:bg-slate-50'
             }`}
           >
-            Все категории ({products.length})
+            Все категории ({baseProducts.length})
           </button>
           <button
             onClick={() => setSelectedCategory('Ковры')}
@@ -714,7 +728,7 @@ export default function CatalogPage({ onNavigate, initialCollection, initialCoun
                 : 'bg-white border border-slate-200 text-slate-700 hover:border-brand-500 hover:bg-slate-50'
             }`}
           >
-            Ковры ({products.filter(p => p.category === 'Ковры' || !p.name.toLowerCase().includes('дорожк')).length})
+            Ковры ({baseProducts.filter(p => p.category === 'Ковры' || !p.name.toLowerCase().includes('дорожк')).length})
           </button>
           <button
             onClick={() => setSelectedCategory('Дорожки')}
@@ -724,7 +738,7 @@ export default function CatalogPage({ onNavigate, initialCollection, initialCoun
                 : 'bg-white border border-slate-200 text-slate-700 hover:border-brand-500 hover:bg-slate-50'
             }`}
           >
-            Дорожки ({products.filter(p => p.category === 'Дорожки' || p.name.toLowerCase().includes('дорожк')).length})
+            Дорожки ({baseProducts.filter(p => p.category === 'Дорожки' || p.name.toLowerCase().includes('дорожк')).length})
           </button>
         </div>
 
@@ -742,7 +756,23 @@ export default function CatalogPage({ onNavigate, initialCollection, initialCoun
             </button>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap">
+            {isEffectiveAdmin && (
+              <div className="relative">
+                <select
+                  value={adminStockFilter}
+                  onChange={e => setAdminStockFilter(e.target.value as any)}
+                  className="appearance-none rounded-lg border border-amber-300 bg-amber-50/90 py-2.5 pl-3 pr-8 text-xs font-semibold text-amber-900 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none transition-colors cursor-pointer"
+                  title="Режим видимости для администратора"
+                >
+                  <option value="all">📦 Все остатки (админ: {products.length})</option>
+                  <option value="in_stock">✅ Только в наличии ({products.filter(p => isProductInStockForUser(p, profile, false, true)).length})</option>
+                  <option value="out_of_stock">⚠️ Только отсутствующие ({products.filter(p => !isProductInStockForUser(p, profile, false, true)).length})</option>
+                </select>
+                <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-amber-700 pointer-events-none" />
+              </div>
+            )}
+
             <div className="flex rounded-lg border border-slate-200 bg-white p-0.5">
               <button onClick={() => setViewMode('grid')} className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === 'grid' ? 'bg-brand-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
                 <LayoutGrid className="h-3.5 w-3.5" />

@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import crypto from 'crypto';
+import { createClient } from '@supabase/supabase-js';
 
 const ALLOWED_KEYS = new Set([
   'SynergySecretKey2025',
@@ -7,6 +8,10 @@ const ALLOWED_KEYS = new Set([
 ]);
 
 const SECRET_KEY = process.env.PORTAL_SECRET_KEY || process.env.ERP_PORTAL_SECRET || 'SynergySecretKey2025';
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://sjvvoxxwevwgziuxjvcy.supabase.co';
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmY2dscW5qaHl1Ynh1aGZ0cndvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMwMzQ1MDUsImV4cCI6MjA1ODYxMDUwNX0.z0Vw3tJ4372iY-qC52dZ_Yl-kC46M25jH3_P9z3G30w';
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 export interface ClientSyncedPayload {
   event: 'client_synced';
@@ -122,6 +127,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       
       console.log(`[Webhook clients] ACTIVATED client: ID=${p.counterparty_id}, Name="${p.name}", Login="${p.portal_login}"`);
 
+      // Сохраняем в Supabase profiles
+      try {
+        await supabase
+          .from('profiles')
+          .upsert({
+            partner_id: String(p.counterparty_id),
+            full_name: p.name,
+            phone: p.phone,
+            company_name: p.name,
+            role: 'client',
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'partner_id' });
+      } catch (dbErr) {
+        console.warn('[Webhook clients] Profile upsert notice:', dbErr);
+      }
+
       // Формируем структурированный ответ для ERP
       return res.status(200).json({
         success: true,
@@ -139,7 +160,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (event === 'client_deactivated' || access === 'disabled' || status === 'inactive' || payload.is_active === 0) {
       console.log(`[Webhook clients] DEACTIVATED client: ID=${counterparty_id}. Revoking all sessions.`);
 
-      // Мгновенная деактивация: блокируем пользователя и отзываем все сессии
+      // Мгновенная деактивация: фиксируем в БД и транслируем в Realtime
+      try {
+        await supabase
+          .from('profiles')
+          .update({
+            updated_at: new Date().toISOString(),
+          })
+          .eq('partner_id', String(counterparty_id));
+
+        const channel = supabase.channel('portal_live_updates');
+        await channel.send({
+          type: 'broadcast',
+          event: 'client_deactivated',
+          payload: { counterparty_id },
+        });
+      } catch (dbErr) {
+        console.warn('[Webhook clients] Profile deactivation notice:', dbErr);
+      }
+
       return res.status(200).json({
         success: true,
         message: 'Client deactivated and all active sessions revoked successfully.',

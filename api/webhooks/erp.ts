@@ -8,8 +8,8 @@ const ALLOWED_KEYS = new Set([
 ]);
 
 const SECRET_KEY = process.env.PORTAL_SECRET_KEY || process.env.ERP_PORTAL_SECRET || 'SynergySecretKey2025';
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || 'https://xukmknshlytzqjylcddn.supabase.co';
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inh1a21rbnNobHl0enFqeWxjZGRuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDAwMzcyOTYsImV4cCI6MjA1NTYxMzI5Nn0.dJmBq2zNlV0TqT7T3nJ4N8Lz1z5m3R0m9X6g9b4e2Q';
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://sjvvoxxwevwgziuxjvcy.supabase.co';
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmY2dscW5qaHl1Ynh1aGZ0cndvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMwMzQ1MDUsImV4cCI6MjA1ODYxMDUwNX0.z0Vw3tJ4372iY-qC52dZ_Yl-kC46M25jH3_P9z3G30w';
 
 const supabaseServer = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -96,7 +96,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // 1. Проверка авторизационного ключа
-  const portalKey = (req.headers['x-portal-key'] || req.headers['X-Portal-Key']) as string | undefined;
+  const portalKey = (
+    req.headers['x-portal-key'] ||
+    req.headers['X-Portal-Key'] ||
+    req.query?.portal_key ||
+    req.body?.portal_key
+  ) as string | undefined;
+
   if (!portalKey || !ALLOWED_KEYS.has(portalKey)) {
     return res.status(401).json({
       success: false,
@@ -136,10 +142,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log(`[Webhook ERP] Received event '${event}' (EventID: ${eventId || payload.event_id || 'n/a'}, Timestamp: ${timestamp})`);
 
     // ───────────────────────────────────────────────
-    // 1. Событие: stock_changed (Смена остатков)
+    // 1. Событие: stock_changed (Смена остатков / возврат резерва в free_stock)
     // ───────────────────────────────────────────────
     if (event === 'stock_changed') {
-      const items = Array.isArray(payload.items) ? payload.items : [];
+      const rawItems = Array.isArray(payload.items) ? payload.items : [];
+      const items = rawItems.map((it: any) => ({
+        ...it,
+        sku: String(it.sku || it.article || it.code || it.barcode || '').trim(),
+        article: String(it.article || it.sku || '').trim(),
+        free_stock: Number(it.free_stock ?? it.stock ?? 0),
+        reserved_stock: Number(it.reserved_stock ?? 0),
+        total_stock: Number(it.total_stock ?? ((it.free_stock ?? 0) + (it.reserved_stock ?? 0))),
+      }));
+
       console.log(`[Webhook ERP: stock_changed] Reason: ${payload.reason || 'manual'}, Updated items count: ${items.length}`);
 
       for (const item of items) {
@@ -164,41 +179,85 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // ───────────────────────────────────────────────
-    // 2. Событие: order_status_changed (Статус заказа WMS)
+    // 2. Событие: order_status_changed (Статус заказа WMS / авто-отмена Hold TTL)
     // ───────────────────────────────────────────────
     if (event === 'order_status_changed') {
-      const { order_id, order_doc_number, client_name, client_phone, new_status, track_code, comment } = payload;
-      console.log(`[Webhook ERP: order_status_changed] Order: ${order_doc_number || order_id} -> ${new_status} (Client: ${client_name}, Phone: ${client_phone}, Track: ${track_code || 'none'})`);
+      const { order_id, order_doc_number, client_name, client_phone, track_code, comment } = payload;
+      const targetStatus = payload.new_status || payload.status || 'cancelled';
+      const orderNotes = comment || payload.reason || (targetStatus === 'cancelled' ? 'Автоматическая отмена брони по истечении Hold TTL (24ч)' : null);
+
+      console.log(`[Webhook ERP: order_status_changed] Order: ${order_doc_number || order_id} -> ${targetStatus} (Client: ${client_name}, Phone: ${client_phone}, Reason: ${payload.reason || 'n/a'})`);
 
       // Сквозная трансляция в Realtime-шину браузеров
       await broadcastLiveUpdate('order_status_changed', {
         order_id,
         order_doc_number,
-        new_status,
+        new_status: targetStatus,
+        status: targetStatus,
         track_code: track_code || null,
-        comment: comment || null,
+        comment: orderNotes,
+        reason: payload.reason || null,
         timestamp,
       });
 
+      // Также транслируем в канал 'portal_order_live_sync' для гарантированной доставки
+      try {
+        const orderChannel = supabaseServer.channel('portal_order_live_sync');
+        await orderChannel.send({
+          type: 'broadcast',
+          event: 'order_status_changed',
+          payload: {
+            order_id,
+            order_doc_number,
+            new_status: targetStatus,
+            status: targetStatus,
+            track_code: track_code || null,
+            comment: orderNotes,
+            reason: payload.reason || null,
+            timestamp,
+          },
+        });
+      } catch (bcErr) {
+        console.warn('[Webhook ERP] Secondary channel broadcast notice:', bcErr);
+      }
+
       // Синхронизация статуса в Supabase
       try {
-        await supabaseServer
-          .from('orders')
-          .update({
-            status: new_status,
-            updated_at: new Date().toISOString()
-          })
-          .or(`id.eq.${order_id},id.eq.erp-${order_id}`);
+        const updatePayload: Record<string, any> = {
+          status: targetStatus,
+          updated_at: new Date().toISOString(),
+        };
+        if (orderNotes) {
+          updatePayload.notes = orderNotes;
+        }
+
+        const matchConditions: string[] = [];
+        if (order_id) {
+          matchConditions.push(`id.eq.${order_id}`, `id.eq.erp-${order_id}`);
+        }
+        if (order_doc_number) {
+          matchConditions.push(`order_number.eq.${order_doc_number}`);
+        }
+        if (order_id && !order_doc_number) {
+          matchConditions.push(`order_number.eq.${order_id}`);
+        }
+
+        if (matchConditions.length > 0) {
+          await supabaseServer
+            .from('orders')
+            .update(updatePayload)
+            .or(matchConditions.join(','));
+        }
       } catch (dbErr) {
         console.warn('[Webhook ERP] Supabase sync notice:', dbErr);
       }
 
       // Автоматическая отправка уведомления в WhatsApp
-      if (client_phone) {
+      if (client_phone && targetStatus !== 'cancelled') {
         await dispatchWhatsAppNotification({
           phone: client_phone,
           orderDoc: order_doc_number || String(order_id),
-          status: new_status,
+          status: targetStatus,
           trackCode: track_code,
           clientName: client_name,
         });
@@ -209,9 +268,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         event: 'order_status_changed',
         event_id: eventId || payload.event_id,
         order_id,
-        new_status,
+        new_status: targetStatus,
+        status: targetStatus,
         track_code: track_code || null,
-        message: `Order ${order_doc_number || order_id} status updated to '${new_status}'.`,
+        message: `Order ${order_doc_number || order_id} status updated to '${targetStatus}'.`,
         processed_at: new Date().toISOString(),
       });
     }
@@ -231,6 +291,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         debt_usd,
         timestamp,
       });
+
+      // Сохраняем обновленный баланс в базу данных Supabase
+      if (client_id) {
+        try {
+          await supabaseServer
+            .from('partner_balances')
+            .upsert({
+              partner_id: String(client_id),
+              balance: Number(debt_usd !== undefined ? -debt_usd : (balance_usd || 0)),
+              currency: currency || 'USD',
+              last_synced_at: new Date().toISOString(),
+            }, { onConflict: 'partner_id' });
+        } catch (dbErr) {
+          console.warn('[Webhook ERP] partner_balances update notice:', dbErr);
+        }
+      }
 
       return res.status(200).json({
         success: true,

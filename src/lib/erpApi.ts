@@ -3,13 +3,20 @@
  * API-клиент для защищенной связки B2B-портала с бэкендом Synergy ERP.
  */
 
-import type { SupplierNetworkStockResponse, SupplierReleasesReport, SupplierInfo, ErpDisplaySettings } from '@/types';
+import type {
+  SupplierNetworkStockResponse,
+  SupplierReleasesReport,
+  SupplierInfo,
+  ErpDisplaySettings,
+  SupplierInboundShipmentsResponse,
+  InboundShipment,
+  SupplierDefectItem,
+  SupplierDefectsResponse
+} from '@/types';
 
-export const ERP_DIRECT_URL = import.meta.env.VITE_ERP_API_URL || 'https://kilem-khan.kz/api/sin/public/api_portal.php';
 export const ERP_PROXY_URL = '/api/erp';
-export const ERP_API_URL = ERP_DIRECT_URL; // alias for backwards compatibility
-export const ERP_API_KEY = import.meta.env.VITE_ERP_API_KEY || '138d1bdaf9402600c8f5d5763e2e1573c1e45d32401e62e4981cd7e898bf0544';
-export const ERP_PORTAL_SECRET = 'SynergySecretKey2025';
+export const ERP_DIRECT_URL = ERP_PROXY_URL;
+export const ERP_API_URL = ERP_PROXY_URL; // alias for backwards compatibility
 
 // ─── 1. In-Flight Request Deduplication Pool ───
 const inFlightRequests = new Map<string, Promise<any>>();
@@ -26,7 +33,7 @@ export function deduplicateRequest<T>(key: string, fn: () => Promise<T>): Promis
   return promise;
 }
 
-// ─── 2. Unified Transport (Proxy /api/erp with Direct Fallback) ───
+// ─── 2. Unified Transport (Strictly via Server-Side Proxy /api/erp) ───
 export async function erpFetch(
   action: string,
   options: {
@@ -47,44 +54,68 @@ export async function erpFetch(
     }
   }
 
-  const isBrowser = typeof window !== 'undefined';
   const proxyEndpoint = `${ERP_PROXY_URL}?${q.toString()}`;
+
+  // Генерация сквозного Correlation-ID для трассировки транзакции
+  const correlationId = `trc_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 8)}`;
 
   const requestHeaders: Record<string, string> = {
     'Accept': 'application/json',
+    'X-Correlation-ID': correlationId,
     ...(options.headers || {}),
   };
+
+  // Автоматическая передача безопасного контекста роли и partner_id для защиты от IDOR
+  if (typeof window !== 'undefined') {
+    try {
+      const sessionStr = sessionStorage.getItem('synergy:auth_session');
+      if (sessionStr) {
+        const { profile } = JSON.parse(sessionStr);
+        if (profile?.role) {
+          requestHeaders['X-User-Role'] = profile.role;
+        }
+        if (profile?.partner_id) {
+          if (profile.role === 'supplier') {
+            requestHeaders['X-Supplier-Id'] = String(profile.partner_id);
+          } else {
+            requestHeaders['X-Client-Id'] = String(profile.partner_id);
+          }
+        }
+      }
+    } catch {}
+  }
+
   if (options.body && method === 'POST') {
     requestHeaders['Content-Type'] = 'application/json';
   }
 
-  // Сначала пробуем безопасный серверный прокси /api/erp
-  if (isBrowser) {
-    try {
-      const proxyRes = await fetch(proxyEndpoint, {
-        method,
-        headers: requestHeaders,
-        body: options.body ? JSON.stringify(options.body) : undefined,
-      });
-
-      // Если серверный роут активен и ответил — возвращаем результат
-      if (proxyRes.status !== 404 && proxyRes.status !== 502) {
-        return proxyRes;
-      }
-    } catch {
-      // Игнорируем и делаем прозрачный fallback
-    }
-  }
-
-  // Fallback: прямой защищенный вызов ERP
-  q.set('portal_key', ERP_API_KEY);
-  requestHeaders['X-Portal-Key'] = ERP_API_KEY;
-
-  return await fetch(`${ERP_DIRECT_URL}?${q.toString()}`, {
+  // Все обращения осуществляются строго через защищенный серверный шлюз
+  return await fetch(proxyEndpoint, {
     method,
     headers: requestHeaders,
     body: options.body ? JSON.stringify(options.body) : undefined,
   });
+}
+
+/**
+ * Запрос WhatsApp-согласования заказа для РМ / Администратора
+ */
+export async function requestOrderApprovalViaWhatsApp(params: {
+  orderId: string | number;
+  orderDocNumber?: string;
+  clientName: string;
+  clientPhone?: string;
+  totalAmount: number;
+  totalSqm: number;
+  itemsCount: number;
+  reason: string;
+  managerPhone?: string;
+}): Promise<{ success: boolean; message?: string }> {
+  const res = await erpFetch('request_approval', {
+    method: 'POST',
+    body: params,
+  });
+  return await res.json().catch(() => ({ success: false, message: 'Сетевой сбой при отправке в WhatsApp' }));
 }
 
 // ─── 3. Stale-While-Revalidate Catalog Cache (60s TTL) ───
@@ -92,6 +123,7 @@ const CATALOG_TTL_MS = 60 * 1000;
 const catalogMemoryCache = new Map<string, { timestamp: number; data: any }>();
 
 export interface CreateOrderPayload {
+  user_id?: string;
   client_id?: number | string;
   warehouse_id?: number;
   buyer?: {
@@ -135,6 +167,7 @@ export interface ErpOrderResponse {
     currency: string;
     status: string;
     items_count: number;
+    is_buffered?: boolean;
   };
   message?: string;
   error?: string;
@@ -152,6 +185,7 @@ export async function submitOrderToErp(payload: CreateOrderPayload): Promise<Erp
   const numClientId = rawClientId ? (Number(String(rawClientId).replace(/\D+/g, '')) || Number(rawClientId)) : undefined;
 
   const normalizedPayload = {
+    user_id: payload.user_id,
     client_id: numClientId || payload.client_id,
     warehouse_id: payload.warehouse_id || 81,
     buyer: payload.buyer || {
@@ -294,6 +328,82 @@ export async function fetchSupplierNetworkStock(
 
   if (!response.ok) {
     throw new Error(`Ошибка загрузки данных поставщика (${response.status})`);
+  }
+
+  return await response.json();
+}
+
+/**
+ * Запрос реестра входящих поставок от фабрики и актов расхождений (ТТН vs Факт)
+ * action = 'supplier_inbound_shipments'
+ */
+export async function fetchSupplierInboundShipments(
+  supplierId?: number | string | null,
+  options?: {
+    status?: string;
+    page?: number;
+    limit?: number;
+  } | string
+): Promise<SupplierInboundShipmentsResponse> {
+  let status = 'all';
+  let page: number | undefined;
+  let limit: number | undefined;
+
+  if (typeof options === 'string') {
+    status = options;
+  } else if (options) {
+    status = options.status || 'all';
+    page = options.page;
+    limit = options.limit;
+  }
+
+  const params: Record<string, string | number> = {
+    _t: Date.now(),
+  };
+
+  if (supplierId !== undefined && supplierId !== null && supplierId !== 'all' && supplierId !== 0 && supplierId !== '0') {
+    params.supplier_id = String(supplierId);
+  }
+
+  if (status) {
+    params.status = status;
+  }
+
+  if (page) params.page = page;
+  if (limit) params.limit = limit;
+
+  const response = await erpFetch('supplier_inbound_shipments', {
+    method: 'GET',
+    params,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Ошибка загрузки реестра поставок (${response.status})`);
+  }
+
+  return await response.json();
+}
+
+/**
+ * Запрос реестра бракованной продукции и рекламаций по фабрике
+ * action = 'supplier_defects'
+ */
+export async function fetchSupplierDefects(
+  supplierId: number | string,
+  params: { status?: string; defectType?: string } = {}
+): Promise<SupplierDefectsResponse> {
+  const response = await erpFetch('supplier_defects', {
+    method: 'GET',
+    params: {
+      supplier_id: String(supplierId),
+      status: params.status,
+      defect_type: params.defectType,
+      _t: Date.now(),
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Ошибка загрузки рекламаций (${response.status})`);
   }
 
   return await response.json();

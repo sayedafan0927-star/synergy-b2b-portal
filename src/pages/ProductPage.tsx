@@ -18,7 +18,7 @@ import {
 import type { PageId, ProductVariant, Warehouse } from '@/types';
 import { parseSizeDimensions } from '@/types';
 import { useProduct, filterClientWarehouses } from '@/hooks/useProductData';
-import { isWarehouseVisibleForClient } from '@/lib/warehouseVisibility';
+import { isWarehouseVisibleForClient, isProductInStockForUser } from '@/lib/warehouseVisibility';
 import { useUserPricing } from '@/hooks/usePricing';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
 import { useCart } from '@/contexts/CartContext';
@@ -433,6 +433,7 @@ export default function ProductPage({
     );
   }
 
+  const isOutOfStockForClient = product ? !isProductInStockForUser(product, profile, false, true) : false;
   const cleanTitle = formatProductTitle(product, language);
 
   return (
@@ -455,6 +456,37 @@ export default function ProductPage({
             <button onClick={() => onNavigate('catalog', product.collection)} className="hover:text-brand-600 transition-colors font-medium text-slate-600">{product.collection}</button>
           </nav>
         </div>
+
+        {/* Баннер отсутствия товара на складах */}
+        {isOutOfStockForClient && !isEffectiveAdmin && (
+          <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50/90 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-amber-900 shadow-2xs">
+            <div className="flex items-start sm:items-center gap-3">
+              <span className="text-2xl shrink-0">⚠️</span>
+              <div>
+                <h4 className="text-sm font-bold text-amber-950">Товара временно нет в наличии</h4>
+                <p className="text-xs text-amber-800 mt-0.5">
+                  Данная модель полностью закончилась на доступных складах. Вы можете подобрать похожие позиции в каталоге или уточнить дату следующей поставки у вашего менеджера.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => onNavigate('catalog')}
+              className="btn-primary !bg-amber-800 hover:!bg-amber-900 text-xs py-2 px-4 shrink-0 self-start sm:self-center"
+            >
+              Перейти в каталог
+            </button>
+          </div>
+        )}
+
+        {isOutOfStockForClient && isEffectiveAdmin && (
+          <div className="mb-6 rounded-xl border border-amber-300 bg-amber-50/80 px-4 py-3 flex items-center justify-between gap-3 text-xs text-amber-900 shadow-2xs">
+            <div className="flex items-center gap-2">
+              <span className="font-bold">⚠️ Внимание администратора:</span>
+              <span>Остаток товара на складах равен 0 шт. Карточка автоматически скрыта от клиентов в каталоге.</span>
+            </div>
+          </div>
+        )}
 
         {/* DESKTOP LAYOUT (ТОЛЬКО ГАЛЕРЕЯ + ИНФО О ТОВАРЕ) */}
         <div className="hidden lg:grid lg:grid-cols-[460px,1fr] xl:grid-cols-[500px,1fr] 2xl:grid-cols-[540px,1fr] gap-10 xl:gap-14 mb-10 items-start">
@@ -553,7 +585,7 @@ export default function ProductPage({
                     {t('product.sqm_price')}
                   </span>
                   {user ? (
-                    <div className="flex items-baseline gap-2">
+                    <div className="flex items-baseline gap-2 flex-wrap">
                       <span className={`text-3xl font-extrabold tracking-tight ${activeVariant?.is_on_sale ? 'text-red-600' : 'text-brand-700'}`}>
                         {fmtPrice(mainPricePerSqm)}
                       </span>
@@ -563,6 +595,11 @@ export default function ProductPage({
                         </span>
                       )}
                       <span className="text-sm font-semibold text-slate-400">/ м²</span>
+                      {pricing.hasContractDiscount && !activeVariant?.is_on_sale && (
+                        <span className={`badge text-xs font-bold py-0.5 px-2 ${pricing.tier.badgeColor}`}>
+                          {pricing.tier.label}
+                        </span>
+                      )}
                     </div>
                   ) : (
                     <button
