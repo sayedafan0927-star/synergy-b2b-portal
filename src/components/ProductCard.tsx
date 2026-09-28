@@ -188,17 +188,11 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
       </div>
 
       <div className="flex flex-col p-3 sm:p-4">
-        {product.category && (
-          <div className="flex items-center justify-end text-[11px] text-slate-500 mb-1">
-            <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
-              {product.category}
-            </span>
-          </div>
-        )}
-
-        {/* Название товара */}
-        <h3 className="text-sm font-semibold text-slate-900 leading-snug line-clamp-1 group-hover:text-brand-700 transition-colors">
-          {product.name}
+        {/* Название товара: Артикул — Цвет (как на скриншоте 2) */}
+        <h3 className="text-sm font-bold text-slate-900 leading-snug line-clamp-2 group-hover:text-brand-700 transition-colors">
+          {(product.article && product.color)
+            ? `${product.article} — ${product.color}`
+            : product.name.replace(/^ковер\s+/i, '').replace(new RegExp(`^${product.collection}\\s+`, 'i'), '').trim() || product.name}
         </h3>
 
         {/* Коллекция */}
@@ -208,7 +202,7 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
             event.stopPropagation();
             onNavigate('catalog', product.collection);
           }}
-          className="mt-0.5 inline-flex items-center gap-1 text-xs text-brand-600 hover:text-brand-800 hover:underline transition-colors w-fit font-medium"
+          className="mt-1 inline-flex items-center text-xs text-brand-700 hover:text-brand-900 hover:underline transition-colors w-fit font-bold uppercase tracking-wider"
         >
           {product.collection}
         </button>
@@ -245,12 +239,9 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
           </div>
         )}
 
-        {/* Блок цены и размера в одной компактной строке напротив друг друга */}
-        <div className="mt-3 border-t border-slate-100 pt-2.5 flex items-center justify-between gap-2">
+        {/* Блок цены и размера в одной компактной строке напротив друг друга без серых подписей */}
+        <div className="mt-3 border-t border-slate-100 pt-2.5 flex items-center justify-between">
           <div>
-            <span className="text-[10px] font-medium text-slate-400 block leading-none mb-0.5">
-              Цена за м²
-            </span>
             {user ? (
               <p className="text-sm sm:text-base font-bold text-slate-900 leading-tight">
                 ${pricePerSqm.toFixed(2)} <span className="text-[11px] font-normal text-slate-400">/ м²</span>
@@ -263,22 +254,17 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
             )}
           </div>
 
-          <div className="flex flex-col items-end">
-            <span className="text-[10px] font-medium text-slate-400 block leading-none mb-0.5">
-              Размер
-            </span>
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                setSizesOpen(open => !open);
-              }}
-              className="flex items-center gap-1.5 rounded-full bg-slate-100 hover:bg-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 transition-colors"
-              title="Показать все размеры"
-            >
-              <span>{sizeCount} {sizeCount === 1 ? 'размер' : (sizeCount > 1 && sizeCount < 5 ? 'размера' : 'размеров')}</span>
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              setSizesOpen(open => !open);
+            }}
+            className="flex items-center gap-1.5 rounded-full bg-slate-100 hover:bg-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors cursor-pointer"
+            title="Показать все размеры"
+          >
+            <span>{sizeCount} {sizeCount === 1 ? 'размер' : (sizeCount > 1 && sizeCount < 5 ? 'размера' : 'размеров')}</span>
+          </button>
         </div>
       </div>
 

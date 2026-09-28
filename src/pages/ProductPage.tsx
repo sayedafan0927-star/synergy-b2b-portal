@@ -423,25 +423,38 @@ export default function ProductPage({
     );
   }
 
+  const cleanTitle = (product.article && product.color)
+    ? `${product.article} — ${product.color}`
+    : product.name.replace(/^ковер\s+/i, '').replace(new RegExp(`^${product.collection}\\s+`, 'i'), '').trim() || product.name;
+
   return (
     <section className="pt-20 pb-24 lg:pb-8 bg-white min-h-screen">
       <div className="container-w">
-        {/* breadcrumb */}
-        <nav className="flex items-center gap-1.5 text-sm text-slate-400 mb-6 flex-wrap">
-          <button onClick={() => onNavigate('catalog')} className="hover:text-brand-600 transition-colors">Каталог</button>
-          <ChevronRight className="h-3.5 w-3.5 shrink-0" />
-          <button onClick={() => onNavigate('catalog', product.collection)} className="hover:text-brand-600 transition-colors">{product.collection}</button>
-          <ChevronRight className="h-3.5 w-3.5 shrink-0" />
-          <span className="text-slate-600 font-medium truncate">{product.name}</span>
-        </nav>
+        {/* КНОПКА НАЗАД В КАТАЛОГ И ХЛЕБНЫЕ КРОШКИ */}
+        <div className="flex items-center gap-3 mb-6">
+          <button
+            type="button"
+            onClick={() => onNavigate('catalog')}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 shadow-2xs transition-all cursor-pointer group"
+          >
+            <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
+            <span>Назад в каталог</span>
+          </button>
+          <span className="text-slate-300">/</span>
+          <nav className="flex items-center gap-1.5 text-xs text-slate-400">
+            <button onClick={() => onNavigate('catalog')} className="hover:text-brand-600 transition-colors">Каталог</button>
+            <ChevronRight className="h-3 w-3 shrink-0" />
+            <button onClick={() => onNavigate('catalog', product.collection)} className="hover:text-brand-600 transition-colors font-medium text-slate-600">{product.collection}</button>
+          </nav>
+        </div>
 
-        {/* DESKTOP LAYOUT */}
-        <div className="hidden lg:grid lg:grid-cols-[460px,1fr] xl:grid-cols-[520px,1fr] 2xl:grid-cols-[560px,1fr] gap-10 xl:gap-14 mb-10">
+        {/* DESKTOP LAYOUT (ТОЛЬКО ГАЛЕРЕЯ + ИНФО О ТОВАРЕ) */}
+        <div className="hidden lg:grid lg:grid-cols-[460px,1fr] xl:grid-cols-[500px,1fr] 2xl:grid-cols-[540px,1fr] gap-10 xl:gap-14 mb-10 items-start">
           {/* LEFT: Gallery (RugsUSA style: vertical thumbnails on the LEFT, main large photo on the RIGHT) */}
-          <div className="flex items-start gap-3.5 sticky top-24">
+          <div className="flex items-start gap-3.5 select-none">
             {/* THUMBNAILS (LEFT) */}
             {imageCount > 1 && (
-              <div className="flex w-20 xl:w-22 shrink-0 flex-col gap-2.5 max-h-[520px] xl:max-h-[580px] overflow-y-auto pr-1 select-none scrollbar-thin">
+              <div className="flex w-20 xl:w-22 shrink-0 flex-col gap-2.5 max-h-[500px] xl:max-h-[540px] overflow-y-auto pr-1 select-none scrollbar-thin">
                 {validImages.map((img, idx) => (
                   <button
                     key={idx}
@@ -468,7 +481,7 @@ export default function ProductPage({
                 <>
                   <img
                     src={validImages[selectedImage]}
-                    alt={`${product.name} — фото ${selectedImage + 1}`}
+                    alt={`${cleanTitle} — фото ${selectedImage + 1}`}
                     className="h-full w-full object-contain p-4 transition-transform duration-300 group-hover:scale-105"
                     onError={() => setImageError(true)}
                     draggable={false}
@@ -508,24 +521,20 @@ export default function ProductPage({
           </div>
 
           {/* RIGHT: Product info card */}
-          <div className="contents">
-            <div className="flex flex-col">
-            <h1 className="font-display text-2xl xl:text-3xl font-bold text-slate-900 mb-2">{product.name}</h1>
+          <div className="flex flex-col">
+            {/* Заголовок как на 2-м скриншоте: Артикул — Цвет */}
+            <h1 className="font-display text-2xl xl:text-3xl font-extrabold text-slate-900 leading-tight mb-1">
+              {cleanTitle}
+            </h1>
 
-            <div className="flex flex-wrap items-center gap-2 mb-5">
-              <button
-                type="button"
-                onClick={() => onNavigate('catalog', product.collection)}
-                className="badge bg-brand-50 text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer font-semibold"
-              >
-                {product.collection}
-              </button>
-              {product.category && (
-                <span className="badge bg-slate-100 text-slate-600 font-medium">
-                  {product.category}
-                </span>
-              )}
-            </div>
+            {/* Коллекция */}
+            <button
+              type="button"
+              onClick={() => onNavigate('catalog', product.collection)}
+              className="text-xs font-bold uppercase tracking-wider text-brand-700 hover:text-brand-900 hover:underline transition-colors w-fit mb-5"
+            >
+              {product.collection}
+            </button>
 
             {/* БЛОК ЦЕНЫ, ФОРМЫ И РАЗМЕРОВ (БЕЗ МАТЕРИАЛА И СТИЛЯ) */}
             <div className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 shadow-xs">
@@ -710,9 +719,11 @@ export default function ProductPage({
             )}
 
             </div>
+          </div>
+        </div>
 
         {/* DESKTOP VARIANT TABLE */}
-        <div className="hidden lg:block mb-10 col-span-2">
+        <div id="variant-table" className="hidden lg:block mb-10 border-t border-slate-200 pt-8">
           <h2 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
             <Ruler className="h-5 w-5 text-slate-400" />
             Размеры и наличие
@@ -850,9 +861,6 @@ export default function ProductPage({
                 </tbody>
               </table>
             </div>
-          </div>
-        </div>
-          </div>
         </div>
 
         {/* DESKTOP SPECIFICATIONS */}
@@ -910,8 +918,8 @@ export default function ProductPage({
             </div>
           )}
 
-          <div className="flex items-baseline justify-between mb-3">
-            <h1 className="font-display text-xl font-bold text-slate-900">{product.name}</h1>
+          <div className="flex items-baseline justify-between mb-2">
+            <h1 className="font-display text-xl font-bold text-slate-900 leading-tight">{cleanTitle}</h1>
             {user ? (
               <div className="flex items-baseline gap-1 shrink-0 ml-3">
                 <span className="text-xl font-bold text-brand-700">{fmtPrice(mainPricePerSqm)}</span>
@@ -926,14 +934,13 @@ export default function ProductPage({
           </div>
 
           <div className="flex flex-wrap items-center gap-2 mb-4">
-            <button onClick={() => onNavigate('catalog', product.collection)} className="badge bg-brand-50 text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer font-semibold">
+            <button
+              type="button"
+              onClick={() => onNavigate('catalog', product.collection)}
+              className="text-xs font-bold uppercase tracking-wider text-brand-700 hover:underline"
+            >
               {product.collection}
             </button>
-            {product.category && (
-              <span className="badge bg-slate-100 text-slate-600 font-medium">
-                {product.category}
-              </span>
-            )}
           </div>
 
           {/* МОБИЛЬНЫЙ ВЫБОР ФОРМЫ (КЛИКАБЕЛЬНЫЕ БЛОКИ) */}
