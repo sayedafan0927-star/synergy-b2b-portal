@@ -133,9 +133,34 @@ export function calculateContractPrice(basePrice: number, rawPriceType?: string 
   };
 }
 
+export type CurrencyCode = 'USD' | 'KZT';
+
+export const DEFAULT_USD_KZT_RATE = 500; // Индикативный курс USD/KZT для рынка РК
+
 /**
- * Форматирование цены в USD
+ * Форматирование цены в USD или KZT
  */
-export function formatCurrency(amount: number): string {
-  return `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+export function formatCurrency(
+  amount: number,
+  currency: CurrencyCode = 'USD',
+  exchangeRate: number = DEFAULT_USD_KZT_RATE
+): string {
+  const safeAmount = Number(amount) || 0;
+  if (currency === 'KZT') {
+    const kzt = Math.round(safeAmount * exchangeRate);
+    return `${kzt.toLocaleString('ru-RU')} ₸`;
+  }
+  return `$${safeAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+/**
+ * Двойное отображение валюты для оптовиков РК ($ и ₸)
+ */
+export function formatDualCurrency(
+  amountUsd: number,
+  exchangeRate: number = DEFAULT_USD_KZT_RATE
+): string {
+  const safeAmount = Number(amountUsd) || 0;
+  const kzt = Math.round(safeAmount * exchangeRate);
+  return `$${safeAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (${kzt.toLocaleString('ru-RU')} ₸)`;
 }
