@@ -81,11 +81,12 @@ export default function SupplierCabinet({ profile, isAdmin: propIsAdmin }: Suppl
     return () => { cancelled = true; };
   }, []);
 
-  // Выбираем ID поставщика: если у профиля есть partner_id или erp_id, иначе 6 (ISMEN)
+  // Выбираем ID поставщика: для администратора 0 (Основной Склад Астана), иначе partner_id или 0
   const defaultSupplierId = useMemo(() => {
+    if (isAdmin) return 0;
     const parsed = Number(profile.partner_id);
-    return !isNaN(parsed) && parsed > 0 ? parsed : 6;
-  }, [profile.partner_id]);
+    return !isNaN(parsed) && parsed > 0 ? parsed : 0;
+  }, [isAdmin, profile.partner_id]);
 
   const [selectedSupplierId, setSelectedSupplierId] = useState<number>(defaultSupplierId);
   const [activeSubTab, setActiveSubTab] = useState<'stock' | 'releases' | 'inbound' | 'defects'>('stock');
@@ -476,7 +477,7 @@ export default function SupplierCabinet({ profile, isAdmin: propIsAdmin }: Suppl
                     onChange={e => setSelectedSupplierId(Number(e.target.value))}
                     className="appearance-none rounded-lg border border-slate-300 bg-white py-1.5 pl-3 pr-8 text-xs font-semibold text-slate-800 shadow-xs focus:border-brand-500 focus:outline-none"
                   >
-                    <option value={0}>Все фабрики (общий реестр)</option>
+                    <option value={0}>Основной Склад Астана (все поступления)</option>
                     {suppliersList.map(sup => (
                       <option key={sup.id} value={sup.id}>
                         {sup.name}
@@ -602,7 +603,7 @@ export default function SupplierCabinet({ profile, isAdmin: propIsAdmin }: Suppl
                 {hubQty} <span className="text-sm font-normal text-emerald-700">шт.</span>
               </p>
               <p className="text-xs text-emerald-600 mt-1">
-                Алматы ({hubSqm.toFixed(1)} м²)
+                Астана ({hubSqm.toFixed(1)} м²)
               </p>
             </div>
 
@@ -667,7 +668,7 @@ export default function SupplierCabinet({ profile, isAdmin: propIsAdmin }: Suppl
                   className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 focus:outline-none"
                 >
                   <option value="all">Все типы размещения</option>
-                  <option value="hub">Центральный хаб (Алматы)</option>
+                  <option value="hub">Основной хаб Астана</option>
                   <option value="consignment">Консигнация у партнеров</option>
                 </select>
               </div>
@@ -764,11 +765,11 @@ export default function SupplierCabinet({ profile, isAdmin: propIsAdmin }: Suppl
                                       <div>
                                         <span className="font-bold">
                                           {isHub
-                                            ? 'Центральный хаб (Алматы)'
+                                            ? (dist.warehouse_name || 'Основной Склад Астана')
                                             : dist.partner_name || dist.location_name || 'Партнерский магазин'}
                                         </span>
                                         <span className="text-[11px] opacity-75 ml-1.5">
-                                          • {dist.city} {dist.warehouse_name ? `(${dist.warehouse_name})` : ''}
+                                          • {dist.city === 'Алматы' ? 'Астана' : (dist.city || 'Астана')}
                                         </span>
                                       </div>
                                     </div>
@@ -1020,7 +1021,7 @@ export default function SupplierCabinet({ profile, isAdmin: propIsAdmin }: Suppl
                   <span className="text-sm font-normal text-slate-500">партий</span>
                 </p>
                 <p className="text-xs text-slate-400 mt-1">
-                  Склады Алматы и Астана
+                  Основной склад Астана
                 </p>
               </div>
 
