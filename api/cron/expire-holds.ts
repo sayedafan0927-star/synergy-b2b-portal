@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { recordAuditLog } from '../audit/logs';
 import { applyCorrelationId } from '../lib/trace';
 import { applyCorsHeaders } from '../lib/cors';
+import { logger } from '../lib/logger';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
@@ -82,7 +83,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (cancelledOrders.length > 0) {
-      console.log(`[WMS Hold Expiry] Auto-cancelled ${cancelledOrders.length} stale pending orders.`);
+      logger.info(`[WMS Hold Expiry] Auto-cancelled ${cancelledOrders.length} stale pending orders.`, {
+        cancelledCount: cancelledOrders.length,
+        ttlHours,
+      });
+
+      // Оповещаем Realtime-канал portal_live_updates о высвобождении складских остатков
+      try {
+        const channel = supabase.channel('portal_live_updates');
+        await channel.send({
+          type: 'broadcast',
+          event: 'stock_changed',
+          payload: {
+            reason: 'wms_hold_expired',
+            cancelled_count: cancelledOrders.length,
+            timestamp: new Date().toISOString(),
+          },
+        });
+      } catch (broadcastErr) {
+        logger.warn('[WMS Hold Expiry] Realtime broadcast warning', {}, broadcastErr as Error);
+      }
 
       await recordAuditLog({
         eventType: 'wms_hold_auto_expiry',
