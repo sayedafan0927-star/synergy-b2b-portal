@@ -290,12 +290,51 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       finalTotalAmount = pricingResult.totalAmount;
       finalTotalItems = pricingResult.totalItems;
 
+      // ── Pre-Order Compliance: проверка кредитного лимита и стоп-листа на сервере ──
+      let serverRequiresApproval = false;
+      let complianceReason = '';
+
+      if (callerAuth.role === 'client' && callerAuth.userId) {
+        try {
+          const { data: clientProf } = await supabase
+            .from('profiles')
+            .select('id, credit_limit_usd, partner_id, full_name, phone, manager_id')
+            .eq('id', callerAuth.userId)
+            .maybeSingle();
+
+          const limitUsd = Number(clientProf?.credit_limit_usd || 0);
+          if (limitUsd > 0 && clientProf?.partner_id) {
+            const { data: balRow } = await supabase
+              .from('partner_balances')
+              .select('balance')
+              .eq('partner_id', clientProf.partner_id)
+              .maybeSingle();
+
+            const debt = balRow ? Math.max(0, -Number(balRow.balance || 0)) : 0;
+            if (debt + finalTotalAmount > limitUsd) {
+              serverRequiresApproval = true;
+              complianceReason = `Превышение кредитного лимита на сервере (Лимит: $${limitUsd}, Текущий долг: $${debt.toFixed(0)}, Заказ: $${finalTotalAmount})`;
+            }
+          }
+        } catch (compErr) {
+          console.warn('[Compliance Validator] Check warning:', compErr);
+        }
+      }
+
+      const clientComment = rawPayload.comment || '';
+      const orderCommentWithCompliance = serverRequiresApproval
+        ? `${clientComment} [ТРЕБУЕТСЯ АППРУВ В WHATSAPP: ${complianceReason}]`.trim()
+        : clientComment;
+
       validatedOrderPayload = {
         ...rawPayload,
+        comment: orderCommentWithCompliance,
         total_amount: finalTotalAmount,
         items: pricingResult.items,
         user_id: callerAuth.userId || rawPayload.user_id,
         partner_id: (callerAuth.role === 'client' ? callerAuth.partnerId : rawPayload.partner_id) || rawPayload.client_id,
+        server_requires_approval: serverRequiresApproval,
+        compliance_reason: complianceReason,
       };
 
       // 4. ─── Transactional Outbox (Буферизация в PostgreSQL перед вызовом 1C) ───
@@ -353,6 +392,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
           if (orderItemRows.length > 0) {
             await supabase.from('order_items').insert(orderItemRows);
+          }
+
+          if (serverRequiresApproval) {
+            dispatchApprovalRequest({
+              orderId: createdRow.id,
+              orderDocNumber: outboxOrderDoc,
+              clientName: validatedOrderPayload.client_name || validatedOrderPayload.buyer?.name || 'Клиент B2B',
+              clientPhone: validatedOrderPayload.client_phone || validatedOrderPayload.buyer?.phone,
+              totalAmount: finalTotalAmount,
+              totalSqm: pricingResult.items.reduce((s, it) => s + (it.price_per_sqm > 0 ? it.price / it.price_per_sqm * it.quantity : 0), 0),
+              itemsCount: finalTotalItems,
+              reason: complianceReason || 'Превышение кредитного лимита (серверный контроль)',
+            }).catch(e => console.warn('[Auto-Approval Dispatch Warning]:', e));
           }
         }
       }

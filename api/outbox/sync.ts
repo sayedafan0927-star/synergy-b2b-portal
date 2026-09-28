@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { recordAuditLog } from '../audit/logs';
 import { applyCorrelationId } from '../lib/trace';
 import { enforceRateLimit } from '../lib/rateLimit';
+import { sendWhatsAppMessage } from '../approvals/whatsapp';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://sjvvoxxwevwgziuxjvcy.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
@@ -14,6 +15,40 @@ const MAX_RETRIES = 5;
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { persistSession: false },
 });
+
+async function dispatchDlqEmergencyAlert(params: {
+  orderId: string;
+  orderNumber: string;
+  amount: number;
+  retries: number;
+  error: string;
+}) {
+  const alertPhone = process.env.ADMIN_WHATSAPP_PHONE || '+77017770000';
+  const text = `🚨 *КРИТИЧЕСКИЙ СБОЙ OUTBOX / 1C:ERP*\n\n` +
+    `Заказ *№${params.orderNumber}* переведен в *Dead Letter Queue (DLQ)* после ${params.retries} неудачных попыток синхронизации!\n\n` +
+    `💰 Сумма заказа: $${params.amount}\n` +
+    `❌ Ошибка: ${params.error}\n\n` +
+    `_Требуется ручное вмешательство дежурного инженера или проверка доступности 1С._`;
+
+  try {
+    await sendWhatsAppMessage(alertPhone, text);
+  } catch (e) {
+    console.warn('[DLQ Alert WhatsApp notice]:', e);
+  }
+
+  const tgWebhook = process.env.TELEGRAM_ALERT_WEBHOOK_URL;
+  if (tgWebhook) {
+    try {
+      await fetch(tgWebhook, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+    } catch (e) {
+      console.warn('[DLQ Alert Telegram notice]:', e);
+    }
+  }
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS
@@ -225,6 +260,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             errorMessage: errText.slice(0, 250),
           });
 
+          if (isDlq) {
+            dispatchDlqEmergencyAlert({
+              orderId: order.id,
+              orderNumber: order.order_number,
+              amount: Number(order.total_amount || 0),
+              retries: nextRetries,
+              error: errText.slice(0, 150) || `HTTP ${erpRes.status}`,
+            }).catch(() => {});
+          }
+
           results.push({
             order_id: order.id,
             order_number: order.order_number,
@@ -249,6 +294,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             updated_at: new Date().toISOString(),
           })
           .eq('id', order.id);
+
+        if (isDlq) {
+          dispatchDlqEmergencyAlert({
+            orderId: order.id,
+            orderNumber: order.order_number,
+            amount: Number(order.total_amount || 0),
+            retries: nextRetries,
+            error: reqErr?.message || 'Постоянный сетевой сбой',
+          }).catch(() => {});
+        }
 
         results.push({
           order_id: order.id,
