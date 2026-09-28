@@ -13,6 +13,7 @@ import {
   AlertCircle,
   CheckCircle2,
   AlertTriangle,
+  Boxes,
 } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -129,6 +130,22 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
 
   const globalSizeSubtotals = useMemo(() => calcSizeSubtotals(filteredItems), [filteredItems]);
 
+  const warehousesInCart = useMemo(() => {
+    const map = new Map<string, { count: number; totalAmount: number; totalSqm: number; items: CartItem[] }>();
+    for (const item of items) {
+      const wh = item.warehouse || 'Основной Склад Астана';
+      const entry = map.get(wh) || { count: 0, totalAmount: 0, totalSqm: 0, items: [] };
+      entry.count += item.quantity;
+      entry.totalAmount += item.price * item.quantity;
+      entry.totalSqm += (item.area_sqm || 0) * item.quantity;
+      entry.items.push(item);
+      map.set(wh, entry);
+    }
+    return map;
+  }, [items]);
+
+  const hasMultipleWarehouses = warehousesInCart.size > 1;
+
   if (orderDocNumber) {
     return (
       <div className="min-h-screen pt-20 pb-24 lg:pb-8">
@@ -189,7 +206,10 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
       ? (Number(effectiveProfile.partner_id) || effectiveProfile.partner_id)
       : undefined;
 
-    const fullComment = `${orderComment.trim()}${requiresApproval ? ' [ТРЕБУЕТСЯ АППРУВ В WHATSAPP: ' + (isBlocked ? 'Стоп-лист' : exceedsLimit ? 'Превышение кредитного лимита' : 'Просроченная задолженность') + ']' : ''}`;
+    const whSummaryTag = hasMultipleWarehouses
+      ? ` [МУЛЬТИСКЛАД: ${Array.from(warehousesInCart.entries()).map(([w, d]) => `${w} (${d.count} шт, $${d.totalAmount.toFixed(0)})`).join(', ')}]`
+      : '';
+    const fullComment = `${orderComment.trim()}${whSummaryTag}${requiresApproval ? ' [ТРЕБУЕТСЯ АППРУВ В WHATSAPP: ' + (isBlocked ? 'Стоп-лист' : exceedsLimit ? 'Превышение кредитного лимита' : 'Просроченная задолженность') + ']' : ''}`;
 
     try {
       const data = await submitOrderToErp({
@@ -470,6 +490,35 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
                   />
                 </div>
               </div>
+            </div>
+
+            {/* Multi-Warehouse Status Card */}
+            <div className="card p-5 border border-slate-200/90 bg-white space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-slate-800 text-xs flex items-center gap-1.5">
+                  <Boxes className="h-4 w-4 text-brand-600" />
+                  {hasMultipleWarehouses ? 'Склады отгрузки (Мультисклад)' : 'Склад отгрузки'}
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                  {warehousesInCart.size} {warehousesInCart.size === 1 ? 'склад' : 'склада'}
+                </span>
+              </div>
+              <div className="space-y-1.5">
+                {Array.from(warehousesInCart.entries()).map(([whName, whData]) => (
+                  <div key={whName} className="flex justify-between items-center text-xs bg-slate-50/80 p-2.5 rounded-lg border border-slate-100">
+                    <div className="min-w-0 pr-2">
+                      <p className="font-medium text-slate-800 text-[11px] truncate">{whName}</p>
+                      <p className="text-[10px] text-slate-400">{whData.count} шт. / {fmt2(whData.totalSqm)} м²</p>
+                    </div>
+                    <span className="font-semibold text-slate-800 text-xs shrink-0">{fmtPrice(whData.totalAmount)}</span>
+                  </div>
+                ))}
+              </div>
+              {hasMultipleWarehouses && (
+                <div className="rounded-lg bg-amber-50/80 border border-amber-200/70 p-2.5 text-[11px] text-amber-900 leading-snug">
+                  <span className="font-semibold">📦 Раздельная доставка:</span> товары находятся на разных складах и будут сформированы отдельными отгрузочными документами.
+                </div>
+              )}
             </div>
 
             {/* Totals & submit */}

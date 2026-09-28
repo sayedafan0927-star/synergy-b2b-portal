@@ -13,6 +13,7 @@ import CartPage from '@/pages/CartPage';
 import ContactsPage from '@/pages/ContactsPage';
 import LoginPage from '@/pages/LoginPage';
 import ProfilePage from '@/pages/ProfilePage';
+import { useNetworkStatus } from '@/registerServiceWorker';
 import type { PageId } from '@/types';
 
 function Preloader({ onFinished }: { onFinished: () => void }) {
@@ -134,6 +135,7 @@ export default function App() {
   const [catalogCollection, setCatalogCollection] = useState<string | undefined>(undefined);
   const [catalogCountry, setCatalogCountry] = useState<string | undefined>(undefined);
   const [preloaderDone, setPreloaderDone] = useState(false);
+  const isOnline = useNetworkStatus();
 
   const navigate = useCallback((target: PageId, id?: string, pushToHistory = true) => {
     setPage(target);
@@ -233,6 +235,15 @@ export default function App() {
       <AuthProvider>
         <CartProvider>
           {!preloaderDone && <Preloader onFinished={handlePreloaderFinished} />}
+          {!isOnline && (
+            <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 z-[9990] flex items-center gap-2.5 rounded-xl border border-amber-300 bg-amber-500 text-white px-4 py-2.5 shadow-xl text-xs font-semibold backdrop-blur-md">
+              <span className="relative flex h-2.5 w-2.5 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
+              </span>
+              <span>Офлайн-режим: данные каталога загружены из локального кэша</span>
+            </div>
+          )}
           <MainLayout page={page} navigate={navigate} showFooter={showFooter}>
             {renderPage()}
           </MainLayout>

@@ -1,0 +1,22 @@
+{
+  "short_name": "Synergy B2B",
+  "name": "Synergy B2B Wholesale Portal",
+  "description": "Оптовый портал ковровых покрытий Synergy Group — поставки ковров в Казахстане и СНГ",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512"
+    },
+    {
+      "src": "/Вектор_Синэнергия.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "display": "standalone",
+  "orientation": "portrait"
+}
