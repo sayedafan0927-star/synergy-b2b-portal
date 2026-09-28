@@ -1096,8 +1096,17 @@ let displaySettingsCache: { data: any; expiry: number } | null = null;
         } else {
           // Fallback: Проверяем, не является ли логин/телефон сотрудником ERP (РМ, ЛМ, Администратор)
           try {
-            const loginBody = typeof req.body === 'object' && req.body !== null ? req.body : (typeof req.body === 'string' ? JSON.parse(req.body || '{}') : {});
-            const inputLogin = String(loginBody.login || loginBody.phone || req.query.login || req.query.phone || '').trim();
+            let loginBody: any = {};
+            try {
+              if (Buffer.isBuffer(req.body)) {
+                loginBody = JSON.parse(req.body.toString('utf8'));
+              } else if (typeof req.body === 'string') {
+                loginBody = JSON.parse(req.body || '{}');
+              } else if (typeof req.body === 'object' && req.body !== null) {
+                loginBody = req.body;
+              }
+            } catch {}
+            const inputLogin = String(loginBody.login || loginBody.phone || req.query?.login || req.query?.phone || '').trim();
             const inputCleanPhone = inputLogin.replace(/\D+/g, '');
 
             if (inputLogin) {
