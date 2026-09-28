@@ -188,15 +188,13 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
       </div>
 
       <div className="flex flex-col p-3 sm:p-4">
-        {/* Артикул и категория */}
-        <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1">
-          <span className="font-medium text-slate-700">Арт: {product.article || product.name.split(' ')[2] || '—'}</span>
-          {product.category && (
+        {product.category && (
+          <div className="flex items-center justify-end text-[11px] text-slate-500 mb-1">
             <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
               {product.category}
             </span>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Название товара */}
         <h3 className="text-sm font-semibold text-slate-900 leading-snug line-clamp-1 group-hover:text-brand-700 transition-colors">
@@ -269,95 +267,77 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
             <span className="text-[10px] font-medium text-slate-400 block leading-none mb-0.5">
               Размер
             </span>
-            {sizeCount > 1 ? (
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  setSizesOpen(open => !open);
-                }}
-                className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-800 hover:bg-slate-100 hover:border-slate-300 transition-colors shadow-2xs"
-                title="Показать все доступные размеры"
-              >
-                <span>{primarySize}</span>
-                <span className="text-[10px] font-bold text-brand-700 bg-brand-50 px-1 py-0.2 rounded">
-                  +{sizeCount - 1}
-                </span>
-                <ChevronDown className={`h-3 w-3 text-slate-400 transition-transform duration-200 ${sizesOpen ? 'rotate-180 text-brand-600' : ''}`} />
-              </button>
-            ) : (
-              <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-800">
-                {primarySize}
-              </span>
-            )}
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                setSizesOpen(open => !open);
+              }}
+              className="flex items-center gap-1.5 rounded-full bg-slate-100 hover:bg-slate-200 px-3 py-1 text-xs font-semibold text-slate-700 transition-colors"
+              title="Показать все размеры"
+            >
+              <span>{sizeCount} {sizeCount === 1 ? 'размер' : (sizeCount > 1 && sizeCount < 5 ? 'размера' : 'размеров')}</span>
+            </button>
           </div>
         </div>
       </div>
 
       {sizesOpen && (
         <div
-          className="absolute left-3 right-3 top-full z-40 -mt-1 rounded-lg bg-white p-3 shadow-xl ring-1 ring-slate-200"
+          className="absolute left-3 right-3 top-full z-40 -mt-1 rounded-xl bg-white p-3 shadow-xl ring-1 ring-slate-200/80"
           onClick={event => event.stopPropagation()}
         >
-          <div className="space-y-2">
+          <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
             {product.variants.map(variant => {
-              const stock = getTotalStock(variant);
-              const available = stock > 0;
               const quantity = quantities[variant.sku] ?? 1;
               const isAdded = addedSku === variant.sku;
-              const ds = variant.dealer_stock;
 
               return (
-                <div key={variant.sku} className="border-b border-slate-100 pb-2 last:border-b-0 last:pb-0">
-                  <div className="grid grid-cols-[1fr_auto_44px_38px] items-center gap-2 text-sm">
-                    <div>
-                      <span className="font-medium text-slate-700 whitespace-nowrap">{variant.size}</span>
-                      {(variant.article || variant.barcode) && (
-                        <div className="text-[10px] text-slate-400">
-                          {variant.article && <span>Арт: {variant.article}</span>}
-                          {variant.barcode && <span className="ml-1 font-mono">{variant.barcode}</span>}
-                        </div>
-                      )}
-                    </div>
-                    <span className={`text-right text-xs font-medium ${available ? 'text-slate-600' : 'text-slate-300'}`}>
-                      {available ? stock : '—'}
-                    </span>
+                <div key={variant.sku} className="flex items-center justify-between py-1.5 border-b border-slate-100 last:border-b-0">
+                  <span className="font-semibold text-slate-800 text-sm whitespace-nowrap">{variant.size}</span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setQuantity(variant.sku, Math.max(1, (quantities[variant.sku] ?? 1) - 1));
+                      }}
+                      className="h-7 w-7 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-600 hover:bg-slate-100 active:scale-95 transition-all text-xs font-bold"
+                    >
+                      -
+                    </button>
                     <input
                       type="number"
                       min="1"
-                      max={stock || undefined}
                       value={quantity}
-                      disabled={!available}
                       onChange={event => setQuantity(variant.sku, Number(event.target.value))}
                       onClick={event => event.stopPropagation()}
-                      className="h-8 w-11 rounded border border-slate-300 bg-white px-1 text-center text-sm text-slate-800 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500/30 disabled:bg-slate-50 disabled:text-slate-300"
+                      className="h-7 w-10 rounded-lg border border-slate-200 text-center text-xs font-semibold text-slate-800 outline-none focus:border-brand-500"
                     />
                     <button
-                      onClick={() => handleAdd(variant)}
-                      disabled={!available}
-                      aria-label={`Добавить размер ${variant.size} в корзину`}
-                      className={`flex h-8 w-9 items-center justify-center rounded text-white transition-colors ${
-                        isAdded ? 'bg-emerald-600' : available ? 'bg-brand-700 hover:bg-brand-800' : 'cursor-not-allowed bg-slate-200'
-                      }`}
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setQuantity(variant.sku, (quantities[variant.sku] ?? 1) + 1);
+                      }}
+                      className="h-7 w-7 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-600 hover:bg-slate-100 active:scale-95 transition-all text-xs font-bold"
                     >
-                      {isAdded ? <Check className="h-4 w-4" /> : <ShoppingCart className="h-4 w-4" />}
+                      +
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAdd(variant);
+                      }}
+                      className={`h-7 w-8 rounded-lg flex items-center justify-center text-white transition-all active:scale-95 ${
+                        isAdded ? 'bg-emerald-600 shadow-sm' : 'bg-brand-700 hover:bg-brand-800 shadow-sm'
+                      }`}
+                      title="Добавить в корзину"
+                    >
+                      {isAdded ? <Check className="h-3.5 w-3.5" /> : <ShoppingCart className="h-3.5 w-3.5" />}
                     </button>
                   </div>
-                  {ds && (
-                    <div className="mt-1 flex flex-wrap gap-1 text-[10px]">
-                      <span className="inline-flex items-center gap-0.5 rounded bg-emerald-50 px-1.5 py-0.5 font-medium text-emerald-700">
-                        🏪 В наличии: {ds.in_showroom_qty} шт ({ds.in_showroom_sqm} м²)
-                      </span>
-                      {ds.in_transit_qty > 0 && (
-                        <span className="inline-flex items-center gap-0.5 rounded bg-indigo-50 px-1.5 py-0.5 font-medium text-indigo-700">
-                          🚚 В пути: {ds.in_transit_qty} шт
-                        </span>
-                      )}
-                      <span className="inline-flex items-center gap-0.5 rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-600">
-                        🏢 База: {ds.available_hub_qty} шт
-                      </span>
-                    </div>
-                  )}
                 </div>
               );
             })}

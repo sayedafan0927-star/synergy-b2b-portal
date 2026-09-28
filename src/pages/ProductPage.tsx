@@ -33,6 +33,24 @@ function fmtPrice(n: number) {
   return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function getVariantShape(v: ProductVariant, productName = '', productCategory = ''): string {
+  const s = (v.size || '').toLowerCase();
+  const name = (productName + ' ' + (v.name || '')).toLowerCase();
+  const { w, h } = parseSizeDimensions(v.size);
+
+  if (name.includes('овал') || s.includes('овал')) return 'Овальный';
+  if (name.includes('круг') || s.includes('круг')) return 'Круглый';
+  if (v.type === 'Рулон' || productCategory.toLowerCase().includes('дорожк') || name.includes('дорожк')) {
+    return 'Дорожка';
+  }
+  if (w > 0 && h > 0) {
+    const ratio = Math.max(w, h) / Math.min(w, h);
+    if (ratio >= 2.5) return 'Дорожка';
+    if (Math.abs(w - h) < 0.05) return 'Квадратный';
+  }
+  return 'Прямоугольный';
+}
+
 export default function ProductPage({
   productId,
   onNavigate,
@@ -53,6 +71,7 @@ export default function ProductPage({
   const isHorizontalSwipe = useRef(false);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [addedKeys, setAddedKeys] = useState<Record<string, boolean>>({});
+  const [selectedShape, setSelectedShape] = useState<string>('');
   const [selectedSize, setSelectedSize] = useState<string>('');
 
   useEffect(() => {
@@ -266,6 +285,22 @@ export default function ProductPage({
     return list;
   }, [product]);
 
+  const availableShapes = useMemo(() => {
+    if (!product?.variants) return ['Прямоугольный'];
+    const shapes = Array.from(new Set(product.variants.map(v => getVariantShape(v, product.name, product.category || ''))));
+    return shapes.length > 0 ? shapes : ['Прямоугольный'];
+  }, [product]);
+
+  const activeShape = selectedShape && availableShapes.includes(selectedShape)
+    ? selectedShape
+    : (availableShapes[0] || 'Прямоугольный');
+
+  const variantsForShape = useMemo(() => {
+    if (!product?.variants) return [];
+    const matched = product.variants.filter(v => getVariantShape(v, product.name, product.category || '') === activeShape);
+    return matched.length > 0 ? matched : product.variants;
+  }, [product, activeShape]);
+
   if (loading) {
     return (
       <div className="pt-20 pb-24 lg:pb-8 min-h-screen flex items-center justify-center bg-slate-50">
@@ -290,7 +325,9 @@ export default function ProductPage({
     );
   }
 
-  const activeVariant = product.variants.find(v => v.size === selectedSize) || product.variants[0];
+  const activeVariant = variantsForShape.find(v => v.size === selectedSize)
+    || variantsForShape[0]
+    || product.variants[0];
 
   const mainPricePerSqm = activeVariant
     ? pricing.getPricePerSqm(product.collection, activeVariant.size, activeVariant.base_price, activeVariant.price_per_sqm)
@@ -399,49 +436,21 @@ export default function ProductPage({
         </nav>
 
         {/* DESKTOP LAYOUT */}
-        <div className="hidden lg:grid lg:grid-cols-[440px,1fr] xl:grid-cols-[480px,1fr] 2xl:grid-cols-[540px,1fr] gap-10 xl:gap-14 mb-10">
-          {/* LEFT: Gallery */}
-          <div className="flex flex-row-reverse items-start gap-3">
-            <div
-              className={`relative aspect-square min-w-0 flex-1 rounded-xl overflow-hidden bg-slate-100 ${imageCount > 0 ? 'cursor-zoom-in group' : ''}`}
-              onClick={() => imageCount > 0 && setLightboxOpen(true)}
-            >
-              {imageCount > 0 && validImages[selectedImage] && !imageError ? (
-                <>
-                  <img
-                    src={validImages[selectedImage]}
-                    alt={`${product.name} — фото ${selectedImage + 1}`}
-                    className="h-full w-full object-contain p-6 transition-transform duration-300 group-hover:scale-105"
-                    onError={() => setImageError(true)}
-                    draggable={false}
-                  />
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors flex items-center justify-center">
-                    <ZoomIn className="h-8 w-8 text-white opacity-0 group-hover:opacity-70 transition-opacity drop-shadow-lg" />
-                  </div>
-                </>
-              ) : (
-                <CarpetPlaceholderIcon className="h-full w-full" />
-              )}
-              {imageCount > 1 && (
-                <>
-                  <button onClick={e => { e.stopPropagation(); prevImage(); }} className="absolute left-4 top-1/2 z-10 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full border border-slate-400 bg-white/95 text-slate-700 shadow-md hover:scale-105 hover:bg-white transition-all">
-                    <ChevronLeft className="h-6 w-6" />
-                  </button>
-                  <button onClick={e => { e.stopPropagation(); nextImage(); }} className="absolute right-4 top-1/2 z-10 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full border border-slate-400 bg-white/95 text-slate-700 shadow-md hover:scale-105 hover:bg-white transition-all">
-                    <ChevronRight className="h-6 w-6" />
-                  </button>
-                </>
-              )}
-            </div>
-
+        <div className="hidden lg:grid lg:grid-cols-[460px,1fr] xl:grid-cols-[520px,1fr] 2xl:grid-cols-[560px,1fr] gap-10 xl:gap-14 mb-10">
+          {/* LEFT: Gallery (RugsUSA style: vertical thumbnails on the LEFT, main large photo on the RIGHT) */}
+          <div className="flex items-start gap-3.5 sticky top-24">
+            {/* THUMBNAILS (LEFT) */}
             {imageCount > 1 && (
-              <div className="flex w-16 shrink-0 flex-col gap-3 max-h-[440px] xl:max-h-[480px] 2xl:max-h-[540px] overflow-y-auto pr-1">
+              <div className="flex w-20 xl:w-22 shrink-0 flex-col gap-2.5 max-h-[520px] xl:max-h-[580px] overflow-y-auto pr-1 select-none scrollbar-thin">
                 {validImages.map((img, idx) => (
                   <button
                     key={idx}
+                    type="button"
                     onClick={() => setSelectedImage(idx)}
-                    className={`relative h-16 w-16 rounded-lg overflow-hidden border-2 transition-all shrink-0 ${
-                      idx === selectedImage ? 'border-brand-600 shadow-md' : 'border-transparent opacity-60 hover:opacity-100'
+                    className={`relative aspect-[4/5] w-full rounded-xl overflow-hidden border-2 transition-all shrink-0 cursor-pointer ${
+                      idx === selectedImage
+                        ? 'border-slate-900 shadow-sm ring-2 ring-slate-900/10 opacity-100'
+                        : 'border-slate-200/80 opacity-60 hover:opacity-100 hover:border-slate-400'
                     }`}
                   >
                     <ProductImage src={img} alt="" className="h-full w-full object-cover" />
@@ -449,72 +458,174 @@ export default function ProductPage({
                 ))}
               </div>
             )}
+
+            {/* MAIN LARGE PHOTO (RIGHT) */}
+            <div
+              className={`relative aspect-[4/5] min-w-0 flex-1 rounded-2xl overflow-hidden bg-slate-50 border border-slate-200/80 ${imageCount > 0 ? 'cursor-zoom-in group' : ''}`}
+              onClick={() => imageCount > 0 && setLightboxOpen(true)}
+            >
+              {imageCount > 0 && validImages[selectedImage] && !imageError ? (
+                <>
+                  <img
+                    src={validImages[selectedImage]}
+                    alt={`${product.name} — фото ${selectedImage + 1}`}
+                    className="h-full w-full object-contain p-4 transition-transform duration-300 group-hover:scale-105"
+                    onError={() => setImageError(true)}
+                    draggable={false}
+                  />
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors flex items-center justify-center pointer-events-none">
+                    <ZoomIn className="h-8 w-8 text-white opacity-0 group-hover:opacity-75 transition-opacity drop-shadow-lg" />
+                  </div>
+                </>
+              ) : (
+                <CarpetPlaceholderIcon className="h-full w-full" />
+              )}
+              {imageCount > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={e => { e.stopPropagation(); prevImage(); }}
+                    className="absolute left-3 top-1/2 z-10 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-full border border-slate-300/80 bg-white/95 text-slate-700 shadow-md hover:scale-105 hover:bg-white transition-all opacity-0 group-hover:opacity-100"
+                    aria-label="Предыдущее фото"
+                  >
+                    <ChevronLeft className="h-5 w-5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={e => { e.stopPropagation(); nextImage(); }}
+                    className="absolute right-3 top-1/2 z-10 -translate-y-1/2 flex h-10 w-10 items-center justify-center rounded-full border border-slate-300/80 bg-white/95 text-slate-700 shadow-md hover:scale-105 hover:bg-white transition-all opacity-0 group-hover:opacity-100"
+                    aria-label="Следующее фото"
+                  >
+                    <ChevronRight className="h-5 w-5" />
+                  </button>
+
+                  <div className="absolute bottom-3 right-3 rounded-md bg-slate-900/60 backdrop-blur-sm px-2 py-0.5 text-[11px] font-medium text-white">
+                    {selectedImage + 1} / {imageCount}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
 
           {/* RIGHT: Product info card */}
           <div className="contents">
             <div className="flex flex-col">
-            <h1 className="font-display text-2xl xl:text-3xl font-bold text-slate-900 mb-3">{product.name}</h1>
+            <h1 className="font-display text-2xl xl:text-3xl font-bold text-slate-900 mb-2">{product.name}</h1>
 
-            <div className="flex flex-wrap gap-2 mb-5">
-              <button onClick={() => onNavigate('catalog', product.collection)} className="badge bg-brand-50 text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer">{product.collection}</button>
-              <span className="badge bg-slate-100 text-slate-600">{product.manufacturer}</span>
+            <div className="flex flex-wrap items-center gap-2 mb-5">
+              <button
+                type="button"
+                onClick={() => onNavigate('catalog', product.collection)}
+                className="badge bg-brand-50 text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer font-semibold"
+              >
+                {product.collection}
+              </button>
+              {product.category && (
+                <span className="badge bg-slate-100 text-slate-600 font-medium">
+                  {product.category}
+                </span>
+              )}
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-slate-50/50 p-5 mb-6">
-              <div className="flex items-baseline gap-3 mb-4">
-                {user ? (
-                  <>
-                    <span className="text-3xl font-bold text-brand-700">{fmtPrice(mainPricePerSqm)}</span>
-                    <span className="text-sm text-slate-400 font-medium">/ м²</span>
-                  </>
-                ) : (
-                  <button onClick={() => onNavigate('login')} className="flex items-center gap-2 text-sm text-slate-500 hover:text-brand-700 transition-colors">
-                    <Lock className="h-4 w-4" />
-                    Войдите чтобы увидеть цены
-                  </button>
+            {/* БЛОК ЦЕНЫ, ФОРМЫ И РАЗМЕРОВ (БЕЗ МАТЕРИАЛА И СТИЛЯ) */}
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 mb-6 shadow-xs">
+              {/* 1. Цена за 1 м² и готовая цена изделия */}
+              <div className="flex flex-wrap items-baseline justify-between gap-3 pb-5 border-b border-slate-100">
+                <div>
+                  <span className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 block mb-0.5">
+                    Цена за 1 м²
+                  </span>
+                  {user ? (
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-3xl font-extrabold text-brand-700 tracking-tight">
+                        {fmtPrice(mainPricePerSqm)}
+                      </span>
+                      <span className="text-sm font-semibold text-slate-400">/ м²</span>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => onNavigate('login')}
+                      className="flex items-center gap-2 text-sm text-slate-500 hover:text-brand-700 transition-colors font-medium"
+                    >
+                      <Lock className="h-4 w-4" />
+                      Войдите, чтобы увидеть оптовые цены
+                    </button>
+                  )}
+                </div>
+
+                {user && activeVariant && (
+                  <div className="text-right">
+                    <span className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 block mb-0.5">
+                      Итого за штуку ({activeVariant.size})
+                    </span>
+                    <span className="text-xl font-bold text-slate-900">
+                      {fmtPrice(pricing.getVariantPrice(product.collection, activeVariant.size, activeVariant.base_price, activeVariant.price_per_sqm))}
+                    </span>
+                    {activeVariant.area_sqm && (
+                      <span className="text-xs text-slate-400 ml-1.5 font-normal">
+                        ({activeVariant.area_sqm} м²)
+                      </span>
+                    )}
+                  </div>
                 )}
               </div>
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <p className="text-[10px] uppercase tracking-wide text-slate-400 mb-0.5">Размеры</p>
-                  <p className="text-sm font-semibold text-slate-800">{sizeRange}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase tracking-wide text-slate-400 mb-0.5">Форма</p>
-                  <p className="text-sm font-semibold text-slate-800">{availableForms || '—'}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase tracking-wide text-slate-400 mb-0.5">Материал</p>
-                  <p className="text-sm font-semibold text-slate-800">{product.material || '—'}</p>
+
+              {/* 2. ВЫБОР ФОРМЫ (КЛИКАБЕЛЬНЫЕ БЛОКИ ФОРМ) */}
+              <div className="pt-4 pb-4 border-b border-slate-100">
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-2.5">
+                  Форма: <span className="text-brand-700 font-semibold">{activeShape}</span>
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {availableShapes.map(shape => {
+                    const isShapeActive = shape === activeShape;
+                    return (
+                      <button
+                        key={shape}
+                        type="button"
+                        onClick={() => {
+                          setSelectedShape(shape);
+                          const firstOfShape = product.variants.find(v => getVariantShape(v, product.name, product.category || '') === shape);
+                          if (firstOfShape) setSelectedSize(firstOfShape.size);
+                        }}
+                        className={`rounded-xl px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all duration-200 cursor-pointer ${
+                          isShapeActive
+                            ? 'bg-slate-900 text-white shadow-md ring-2 ring-slate-900/20'
+                            : 'bg-slate-50 border border-slate-200 text-slate-700 hover:border-slate-400 hover:bg-white'
+                        }`}
+                      >
+                        {shape}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
-            </div>
 
-            {/* ПЕРЕКЛЮЧАТЕЛЬ РАЗМЕРОВ (SIZE SWITCHER) */}
-            {product.variants.length > 0 && (
-              <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4 shadow-xs">
-                <div className="flex items-center justify-between mb-3">
-                  <label className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+              {/* 3. ДОСТУПНЫЕ РАЗМЕРЫ ДЛЯ ВЫБРАННОЙ ФОРМЫ (КЛИКАБЕЛЬНЫЕ БЛОКИ) */}
+              <div className="pt-4">
+                <div className="flex items-center justify-between mb-2.5">
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
                     <Ruler className="h-4 w-4 text-brand-600" />
-                    Размер изделия ({product.variants.length})
-                  </label>
-                  {activeVariant && (
+                    Размеры ({variantsForShape.length})
+                  </p>
+                  {activeVariant?.area_sqm && (
                     <span className="text-xs font-medium text-slate-500">
-                      {activeVariant.area_sqm ? `${activeVariant.area_sqm} м²` : ''}
+                      Площадь: {activeVariant.area_sqm} м²
                     </span>
                   )}
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  {product.variants.map(v => {
+                  {variantsForShape.map(v => {
                     const isSelected = v.size === activeVariant?.size;
                     const vStock = filterClientWarehouses(v.warehouses).reduce((sum, w) => sum + w.stock, 0);
+
                     return (
                       <button
                         key={v.sku || v.size}
+                        type="button"
                         onClick={() => setSelectedSize(v.size)}
-                        className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-all ${
+                        className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-semibold transition-all duration-200 ${
                           isSelected
                             ? 'bg-brand-700 text-white shadow-sm ring-2 ring-brand-700/20'
                             : 'bg-slate-50 border border-slate-200 text-slate-700 hover:border-brand-500 hover:bg-white'
@@ -535,52 +646,31 @@ export default function ProductPage({
                   })}
                 </div>
 
-                {/* Выбранный размер: штучная цена и идентификаторы */}
+                {/* Артикул и штрихкод выбранного размера */}
                 {activeVariant && (
-                  <div className="mt-3.5 pt-3 border-t border-slate-100 space-y-2 text-xs">
-                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-slate-600">
+                  <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
+                    <div className="flex flex-wrap gap-x-3 gap-y-1">
                       {(activeVariant.article || product.article) && (
-                        <span>Артикул: <strong className="text-slate-900 font-semibold">{activeVariant.article || product.article}</strong></span>
+                        <span>Артикул: <strong className="text-slate-800">{activeVariant.article || product.article}</strong></span>
                       )}
                       {activeVariant.barcode && (
-                        <span>Штрихкод: <strong className="text-slate-900 font-mono font-medium">{activeVariant.barcode}</strong></span>
-                      )}
-                      {activeVariant.code && (
-                        <span>Код 1С: <strong className="text-slate-700 font-mono">{activeVariant.code}</strong></span>
+                        <span>ШК: <strong className="text-slate-800 font-mono">{activeVariant.barcode}</strong></span>
                       )}
                     </div>
-
-                    <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
-                      <div>
-                        <span className="text-slate-500 font-medium">Штучная цена ({activeVariant.size}):</span>
-                        {user ? (
-                          <>
-                            <span className="ml-1.5 font-bold text-slate-900 text-base">
-                              {fmtPrice(pricing.getVariantPrice(product.collection, activeVariant.size, activeVariant.base_price, activeVariant.price_per_sqm))}
-                            </span>
-                            <span className="ml-1 text-slate-400">
-                              (${pricing.getPricePerSqm(product.collection, activeVariant.size, activeVariant.base_price, activeVariant.price_per_sqm).toFixed(2)} / м²)
-                            </span>
-                          </>
-                        ) : (
-                          <span className="ml-1 text-slate-400">Войдите для цен</span>
-                        )}
-                      </div>
-
-                      <button
-                        onClick={() => {
-                          const el = document.getElementById('variant-table');
-                          el?.scrollIntoView({ behavior: 'smooth' });
-                        }}
-                        className="text-brand-700 hover:text-brand-800 font-semibold inline-flex items-center gap-1 hover:underline"
-                      >
-                        Наличие на складах ↓
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const el = document.getElementById('variant-table');
+                        el?.scrollIntoView({ behavior: 'smooth' });
+                      }}
+                      className="text-brand-700 hover:text-brand-800 font-semibold inline-flex items-center gap-1 hover:underline text-xs"
+                    >
+                      Наличие на складах ↓
+                    </button>
                   </div>
                 )}
               </div>
-            )}
+            </div>
 
             {hasDealerStock && (
               <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50/50 p-4">
@@ -820,7 +910,7 @@ export default function ProductPage({
             </div>
           )}
 
-          <div className="flex items-baseline justify-between mb-4">
+          <div className="flex items-baseline justify-between mb-3">
             <h1 className="font-display text-xl font-bold text-slate-900">{product.name}</h1>
             {user ? (
               <div className="flex items-baseline gap-1 shrink-0 ml-3">
@@ -835,9 +925,45 @@ export default function ProductPage({
             )}
           </div>
 
-          <div className="flex flex-wrap gap-2 mb-5">
-            <button onClick={() => onNavigate('catalog', product.collection)} className="badge bg-brand-50 text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer">{product.collection}</button>
-            <span className="badge bg-slate-100 text-slate-600">{product.manufacturer}</span>
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <button onClick={() => onNavigate('catalog', product.collection)} className="badge bg-brand-50 text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer font-semibold">
+              {product.collection}
+            </button>
+            {product.category && (
+              <span className="badge bg-slate-100 text-slate-600 font-medium">
+                {product.category}
+              </span>
+            )}
+          </div>
+
+          {/* МОБИЛЬНЫЙ ВЫБОР ФОРМЫ (КЛИКАБЕЛЬНЫЕ БЛОКИ) */}
+          <div className="mb-4 rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-2">
+              Форма: <span className="text-brand-700">{activeShape}</span>
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {availableShapes.map(shape => {
+                const isShapeActive = shape === activeShape;
+                return (
+                  <button
+                    key={shape}
+                    type="button"
+                    onClick={() => {
+                      setSelectedShape(shape);
+                      const firstOfShape = product.variants.find(v => getVariantShape(v, product.name, product.category || '') === shape);
+                      if (firstOfShape) setSelectedSize(firstOfShape.size);
+                    }}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-bold uppercase tracking-wider transition-all ${
+                      isShapeActive
+                        ? 'bg-slate-900 text-white shadow-sm ring-2 ring-slate-900/20'
+                        : 'bg-slate-50 border border-slate-200 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    {shape}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <div className="flex flex-col gap-3 mb-6">
@@ -866,12 +992,14 @@ export default function ProductPage({
               </div>
             )}
 
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400 flex items-center gap-1.5">
-              <Ruler className="h-3.5 w-3.5" />
-              Размеры и наличие
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <Ruler className="h-3.5 w-3.5 text-brand-600" />
+                Размеры для формы {activeShape} ({variantsForShape.length})
+              </span>
             </h3>
 
-            {product.variants.map(variant => {
+            {variantsForShape.map(variant => {
               const variantPrice = pricing.getVariantPrice(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
               const pricePerSqm = pricing.getPricePerSqm(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
               const rows = filterClientWarehouses(variant.warehouses, myShowroomId, myShowroomName);
