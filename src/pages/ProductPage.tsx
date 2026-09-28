@@ -595,11 +595,6 @@ export default function ProductPage({
                         </span>
                       )}
                       <span className="text-sm font-semibold text-slate-400">/ м²</span>
-                      {pricing.hasContractDiscount && !activeVariant?.is_on_sale && (
-                        <span className={`badge text-xs font-bold py-0.5 px-2 ${pricing.tier.badgeColor}`}>
-                          {pricing.tier.label}
-                        </span>
-                      )}
                     </div>
                   ) : (
                     <button
@@ -854,13 +849,11 @@ export default function ProductPage({
                           <td className={`py-3 pl-5 pr-3 text-sm font-medium text-slate-900 whitespace-nowrap ${!isFirstRow ? 'pt-1' : ''}`}>
                             {isFirstRow ? (
                               <div>
-                                <div className="flex items-center gap-1.5 flex-wrap">
+                                <div className="flex items-center gap-1.5 flex-wrap" data-size-cluster={variant.size_cluster}>
                                   <span className="font-semibold text-slate-900">{variant.size}</span>
-                                  {variant.is_runner ? (
+                                  {variant.is_runner && (
                                     <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 uppercase">Дорожка</span>
-                                  ) : variant.size_cluster ? (
-                                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 uppercase">{variant.size_cluster}</span>
-                                  ) : null}
+                                  )}
                                 </div>
                                 <div className="mt-0.5 flex flex-wrap gap-x-2 text-[11px] text-slate-400 font-normal">
                                   {(variant.article || product.article) && (

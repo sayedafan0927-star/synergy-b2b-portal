@@ -362,9 +362,9 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
                   </span>
                 )}
                 <span className="text-[10px] sm:text-[11px] font-normal text-slate-400">/ м²</span>
-                {hasContractDiscount && !isOnSale && (
-                  <span className="badge text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/50 py-0 px-1 ml-0.5" title={tier.label}>
-                    -{tier.discountPercent}%
+                {isOnSale && (
+                  <span className="badge text-[9px] font-bold bg-red-50 text-red-700 border border-red-200/50 py-0 px-1 ml-0.5">
+                    Скидка
                   </span>
                 )}
               </div>
@@ -418,13 +418,11 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
                       key={variant.sku}
                       className="flex items-center justify-between py-1.5 border-b border-slate-100 last:border-b-0 gap-2"
                     >
-                      <div className="flex items-baseline gap-1.5 whitespace-nowrap shrink-0">
+                      <div className="flex items-baseline gap-1.5 whitespace-nowrap shrink-0" data-size-cluster={variant.size_cluster}>
                         <span className="font-semibold text-slate-800 text-xs sm:text-sm whitespace-nowrap">{variant.size}</span>
-                        {variant.is_runner ? (
+                        {variant.is_runner && (
                           <span className="text-[9px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1 py-0.2 rounded">Дорожка</span>
-                        ) : variant.size_cluster ? (
-                          <span className="text-[9px] font-medium text-slate-500 bg-slate-100 px-1 py-0.2 rounded uppercase">{variant.size_cluster}</span>
-                        ) : null}
+                        )}
                         <span className="text-[10px] sm:text-[11px] text-slate-400 font-normal whitespace-nowrap">({stock} шт)</span>
                       </div>
 
