@@ -97,6 +97,34 @@ function MainLayout({ children, page, navigate, showFooter }: { children: React.
   );
 }
 
+function parseUrlState(): { page: PageId; id?: string } {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const prodId = params.get('product');
+    if (prodId) return { page: 'product', id: prodId };
+
+    const country = params.get('country');
+    if (country) return { page: 'catalog', id: `country:${country}` };
+
+    const collection = params.get('collection');
+    if (collection) return { page: 'catalog', id: collection };
+
+    const pageParam = params.get('page') as PageId | null;
+    if (pageParam && ['home', 'catalog', 'product', 'cart', 'contacts', 'login', 'profile'].includes(pageParam)) {
+      return { page: pageParam };
+    }
+
+    if (params.has('catalog')) return { page: 'catalog' };
+    if (params.has('cart')) return { page: 'cart' };
+    if (params.has('contacts')) return { page: 'contacts' };
+    if (params.has('login')) return { page: 'login' };
+    if (params.has('profile')) return { page: 'profile' };
+  } catch {
+    // fallback
+  }
+  return { page: 'home' };
+}
+
 export default function App() {
   const [page, setPage] = useState<PageId>('home');
   const [productId, setProductId] = useState<string>('');
@@ -104,7 +132,7 @@ export default function App() {
   const [catalogCountry, setCatalogCountry] = useState<string | undefined>(undefined);
   const [preloaderDone, setPreloaderDone] = useState(false);
 
-  const navigate = useCallback((target: PageId, id?: string) => {
+  const navigate = useCallback((target: PageId, id?: string, pushToHistory = true) => {
     setPage(target);
     if (target === 'catalog' && id?.startsWith('country:')) {
       setCatalogCountry(id.slice('country:'.length));
@@ -116,12 +144,56 @@ export default function App() {
       setCatalogCollection(undefined);
       setCatalogCountry(undefined);
     }
-    if (target !== 'product') {
-      // keep productId for product page
-    }
     if (id && target === 'product') setProductId(id);
+
+    if (pushToHistory) {
+      const url = new URL(window.location.href);
+      url.search = '';
+      if (target === 'product' && id) {
+        url.searchParams.set('product', id);
+      } else if (target === 'catalog') {
+        if (id?.startsWith('country:')) {
+          url.searchParams.set('country', id.slice('country:'.length));
+        } else if (id) {
+          url.searchParams.set('collection', id);
+        } else {
+          url.searchParams.set('page', 'catalog');
+        }
+      } else if (target !== 'home') {
+        url.searchParams.set('page', target);
+      }
+      window.history.pushState({ page: target, id }, '', url.pathname + url.search);
+    }
+
     window.scrollTo({ top: 0, behavior: 'auto' });
   }, []);
+
+  // Синхронизация с системной кнопкой «Назад» и свайпом назад
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      const state = event.state;
+      if (state && state.page) {
+        navigate(state.page, state.id, false);
+      } else {
+        const parsed = parseUrlState();
+        navigate(parsed.page, parsed.id, false);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [navigate]);
+
+  // Первоначальное чтение URL при загрузке страницы
+  useEffect(() => {
+    const initial = parseUrlState();
+    if (initial.page !== 'home' || initial.id) {
+      navigate(initial.page, initial.id, false);
+      window.history.replaceState({ page: initial.page, id: initial.id }, '', window.location.href);
+    } else {
+      window.history.replaceState({ page: 'home' }, '', window.location.href);
+    }
+  }, [navigate]);
 
   useEffect(() => {
     const titles: Record<PageId, string> = {

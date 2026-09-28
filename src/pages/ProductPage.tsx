@@ -423,9 +423,14 @@ export default function ProductPage({
     );
   }
 
-  const cleanTitle = (product.article && product.color)
+  const isRunner = Boolean(
+    (product.category && product.category.toLowerCase().includes('дорожк')) ||
+    (product.name && product.name.toLowerCase().includes('дорожк'))
+  );
+  const baseTitle = (product.article && product.color)
     ? `${product.article} — ${product.color}`
-    : product.name.replace(/^ковер\s+/i, '').replace(new RegExp(`^${product.collection}\\s+`, 'i'), '').trim() || product.name;
+    : product.name.replace(/^ковер\s+/i, '').replace(/^дорожка\s+/i, '').replace(new RegExp(`^${product.collection}\\s+`, 'i'), '').trim() || product.name;
+  const cleanTitle = isRunner ? `Дорожка ${baseTitle}` : baseTitle;
 
   return (
     <section className="pt-20 pb-24 lg:pb-8 bg-white min-h-screen">
@@ -662,9 +667,6 @@ export default function ProductPage({
                       {(activeVariant.article || product.article) && (
                         <span>Артикул: <strong className="text-slate-800">{activeVariant.article || product.article}</strong></span>
                       )}
-                      {activeVariant.barcode && (
-                        <span>ШК: <strong className="text-slate-800 font-mono">{activeVariant.barcode}</strong></span>
-                      )}
                     </div>
                     <button
                       type="button"
@@ -758,7 +760,6 @@ export default function ProductPage({
                                 {(variant.article || product.article) && (
                                   <span>Арт: <span className="text-slate-600 font-medium">{variant.article || product.article}</span></span>
                                 )}
-                                {variant.barcode && <span>ШК: <span className="text-slate-500 font-mono">{variant.barcode}</span></span>}
                               </div>
                             </div>
                           </td>
@@ -803,7 +804,6 @@ export default function ProductPage({
                                   {(variant.article || product.article) && (
                                     <span>Арт: <span className="text-slate-600 font-medium">{variant.article || product.article}</span></span>
                                   )}
-                                  {variant.barcode && <span>ШК: <span className="text-slate-500 font-mono">{variant.barcode}</span></span>}
                                 </div>
                                 {(variant.dealer_stock || myShowroomId) && (
                                   <div className="mt-1 flex flex-col gap-0.5 text-[11px]">
@@ -1020,7 +1020,6 @@ export default function ProductPage({
                         {(variant.article || product.article) && (
                           <span>Арт: <strong className="text-slate-800 font-medium">{variant.article || product.article}</strong></span>
                         )}
-                        {variant.barcode && <span>ШК: {variant.barcode}</span>}
                       </div>
                     </div>
                     {user && <span className="text-base font-bold text-slate-900">{fmtPrice(variantPrice)}</span>}

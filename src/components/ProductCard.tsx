@@ -33,6 +33,17 @@ function getAvailableWarehouse(variant: ProductVariant) {
   };
 }
 
+export function formatProductTitle(product: { name: string; article?: string; color?: string; category?: string; collection: string }): string {
+  const isRunner = Boolean(
+    (product.category && product.category.toLowerCase().includes('дорожк')) ||
+    (product.name && product.name.toLowerCase().includes('дорожк'))
+  );
+  const base = (product.article && product.color)
+    ? `${product.article} — ${product.color}`
+    : product.name.replace(/^ковер\s+/i, '').replace(/^дорожка\s+/i, '').replace(new RegExp(`^${product.collection}\\s+`, 'i'), '').trim() || product.name;
+  return isRunner ? `Дорожка ${base}` : base;
+}
+
 export default function ProductCard({ product, onNavigate }: ProductCardProps) {
   const { user, profile } = useAuth();
   const { addItem } = useCart();
@@ -188,11 +199,9 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
       </div>
 
       <div className="flex flex-col p-3 sm:p-4">
-        {/* Название товара: Артикул — Цвет (как на скриншоте 2) */}
+        {/* Название товара: Артикул — Цвет (для дорожек с приставкой Дорожка) */}
         <h3 className="text-sm font-bold text-slate-900 leading-snug line-clamp-2 group-hover:text-brand-700 transition-colors">
-          {(product.article && product.color)
-            ? `${product.article} — ${product.color}`
-            : product.name.replace(/^ковер\s+/i, '').replace(new RegExp(`^${product.collection}\\s+`, 'i'), '').trim() || product.name}
+          {formatProductTitle(product)}
         </h3>
 
         {/* Коллекция */}
