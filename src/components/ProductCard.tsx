@@ -187,7 +187,7 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
         />
 
         {/* Бейдж наличия */}
-        {hasDealerStock && totalShowroomQty > 0 && (
+        {hasShowroom && totalShowroomQty > 0 && (
           <div className="absolute top-2.5 left-2.5 z-10 pointer-events-none">
             <span className="inline-flex items-center gap-1 rounded-md bg-emerald-600/90 backdrop-blur-sm px-2 py-0.5 text-[11px] font-bold text-white shadow-sm">
               🏪 В наличии: {totalShowroomQty} шт
