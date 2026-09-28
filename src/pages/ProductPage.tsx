@@ -25,6 +25,7 @@ import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import ProductImage, { CarpetPlaceholderIcon } from '@/components/ProductImage';
+import { formatProductTitle } from '@/components/ProductCard';
 
 
 function rowKey(sku: string, city: string) {
@@ -432,15 +433,7 @@ export default function ProductPage({
     );
   }
 
-  const isRunner = Boolean(
-    (product.category && product.category.toLowerCase().includes('дорожк')) ||
-    (product.name && product.name.toLowerCase().includes('дорожк'))
-  );
-  const baseTitle = (product.article && product.color)
-    ? `${product.article} — ${product.color}`
-    : product.name.replace(/^ковер\s+/i, '').replace(/^дорожка\s+/i, '').replace(new RegExp(`^${product.collection}\\s+`, 'i'), '').trim() || product.name;
-  const runnerPrefix = language === 'kz' ? 'Жол кілем' : 'Дорожка';
-  const cleanTitle = isRunner ? `${runnerPrefix} ${baseTitle}` : baseTitle;
+  const cleanTitle = formatProductTitle(product, language);
 
   return (
     <section className="pt-20 pb-24 lg:pb-8 bg-white min-h-screen">
@@ -481,7 +474,7 @@ export default function ProductPage({
                         : 'border-slate-200/80 opacity-60 hover:opacity-100 hover:border-slate-400'
                     }`}
                   >
-                    <ProductImage src={img} alt="" className="h-full w-full object-cover" />
+                    <ProductImage src={img} alt="" fit="contain" className="h-full w-full object-contain p-1" />
                   </button>
                 ))}
               </div>
@@ -934,7 +927,8 @@ export default function ProductPage({
         {/* MOBILE LAYOUT */}
         <div className="lg:hidden">
           <div
-            className="relative aspect-[4/3] rounded-xl overflow-hidden bg-slate-100 select-none mb-4"
+            className="relative aspect-[4/5] rounded-2xl overflow-hidden bg-slate-50 border border-slate-200/80 p-3 flex items-center justify-center select-none mb-4 cursor-zoom-in"
+            onClick={() => imageCount > 0 && setLightboxOpen(true)}
             onTouchStart={imageCount > 1 ? handleTouchStart : undefined}
             onTouchMove={imageCount > 1 ? handleTouchMove : undefined}
             onTouchEnd={imageCount > 1 ? handleTouchEnd : undefined}
@@ -943,7 +937,7 @@ export default function ProductPage({
               <img
                 src={validImages[selectedImage]}
                 alt={`${product.name} — фото ${selectedImage + 1}`}
-                className="h-full w-full object-cover pointer-events-none"
+                className="h-full w-full object-contain pointer-events-none drop-shadow-sm transition-transform duration-300"
                 draggable={false}
                 onError={() => setImageError(true)}
               />
@@ -952,20 +946,39 @@ export default function ProductPage({
             )}
             {imageCount > 1 && (
               <>
-                <button onClick={prevImage} className="absolute left-2 top-1/2 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-full bg-white/80 backdrop-blur text-slate-700 shadow hover:bg-white transition-colors">
-                  <ChevronLeft className="h-5 w-5" />
+                <button
+                  type="button"
+                  onClick={e => { e.stopPropagation(); prevImage(); }}
+                  className="absolute left-2.5 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full bg-white/90 backdrop-blur-sm text-slate-700 shadow-md border border-slate-200/80 hover:bg-white transition-all active:scale-95"
+                  aria-label="Предыдущее фото"
+                >
+                  <ChevronLeft className="h-4 w-4" />
                 </button>
-                <button onClick={nextImage} className="absolute right-2 top-1/2 -translate-y-1/2 flex h-9 w-9 items-center justify-center rounded-full bg-white/80 backdrop-blur text-slate-700 shadow hover:bg-white transition-colors">
-                  <ChevronRight className="h-5 w-5" />
+                <button
+                  type="button"
+                  onClick={e => { e.stopPropagation(); nextImage(); }}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 flex h-8 w-8 items-center justify-center rounded-full bg-white/90 backdrop-blur-sm text-slate-700 shadow-md border border-slate-200/80 hover:bg-white transition-all active:scale-95"
+                  aria-label="Следующее фото"
+                >
+                  <ChevronRight className="h-4 w-4" />
                 </button>
+                <div className="absolute bottom-2.5 right-2.5 rounded-md bg-slate-900/60 backdrop-blur-sm px-2 py-0.5 text-[10px] font-medium text-white">
+                  {selectedImage + 1} / {imageCount}
+                </div>
               </>
             )}
           </div>
 
           {imageCount > 1 && (
-            <div className="mb-4 flex justify-center gap-2">
+            <div className="mb-4 flex justify-center gap-1.5">
               {validImages.map((_, idx) => (
-                <button key={idx} onClick={() => setSelectedImage(idx)} className={`h-2 w-2 rounded-full transition-all ${idx === selectedImage ? 'bg-brand-600 scale-125' : 'bg-slate-300 hover:bg-slate-400'}`} />
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => setSelectedImage(idx)}
+                  className={`h-1.5 rounded-full transition-all ${idx === selectedImage ? 'w-4 bg-slate-900 shadow-xs' : 'w-1.5 bg-slate-300 hover:bg-slate-400'}`}
+                  aria-label={`Фото ${idx + 1}`}
+                />
               ))}
             </div>
           )}

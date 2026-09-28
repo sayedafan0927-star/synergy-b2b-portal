@@ -48,9 +48,35 @@ export function formatProductTitle(product: { name: string; article?: string; co
     (product.category && product.category.toLowerCase().includes('дорожк')) ||
     (product.name && product.name.toLowerCase().includes('дорожк'))
   );
-  const base = (product.article && product.color)
-    ? `${product.article} — ${product.color}`
-    : product.name.replace(/^ковер\s+/i, '').replace(/^дорожка\s+/i, '').replace(new RegExp(`^${product.collection}\\s+`, 'i'), '').trim() || product.name;
+
+  let art = (product.article || '').trim();
+  let col = (product.color || '').trim();
+
+  // Дедупликация повторов цвета вида "CREAM / CREAM" или "GREY / GREY"
+  if (col.includes('/')) {
+    const parts = col.split('/').map(p => p.trim());
+    if (parts.length > 1 && parts.every(p => p.toLowerCase() === parts[0].toLowerCase())) {
+      col = parts[0];
+    }
+  }
+
+  let base = '';
+  if (art && col) {
+    if (art.toLowerCase().includes(col.toLowerCase())) {
+      base = art;
+    } else {
+      base = `${art} — ${col}`;
+    }
+  } else if (art) {
+    base = art;
+  } else {
+    base = product.name
+      .replace(/^ковер\s+/i, '')
+      .replace(/^дорожка\s+/i, '')
+      .replace(new RegExp(`^${product.collection}\\s+`, 'i'), '')
+      .trim() || product.name;
+  }
+
   const prefix = lang === 'kz' ? 'Жол кілем' : 'Дорожка';
   return isRunner ? `${prefix} ${base}` : base;
 }
