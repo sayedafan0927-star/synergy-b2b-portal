@@ -428,6 +428,27 @@ function AdminDisplaySettings() {
         }
       })
       .catch(() => {});
+
+    // Загрузка глобальных серверных настроек из ERP (action=display_settings)
+    fetchDisplaySettingsFromErp().then(erpSettings => {
+      if (erpSettings) {
+        setSettings(prev => {
+          const clientPrev = prev.client || defaultMap.client;
+          return {
+            ...prev,
+            client: {
+              ...clientPrev,
+              show_stock: erpSettings.show_free_stock ?? clientPrev.show_stock,
+              show_reserve: erpSettings.show_reserved_stock ?? clientPrev.show_reserve,
+              show_total_pcs: erpSettings.show_total_stock ?? clientPrev.show_total_pcs,
+              show_price: erpSettings.show_prices ?? clientPrev.show_price,
+              show_sqm: erpSettings.show_price_per_sqm ?? clientPrev.show_sqm,
+              show_showroom_warehouse: erpSettings.show_dealer_showroom ?? clientPrev.show_showroom_warehouse,
+            },
+          };
+        });
+      }
+    }).catch(() => {});
   }, []);
 
   const filteredClients = useMemo(() => {
@@ -448,9 +469,31 @@ function AdminDisplaySettings() {
     }));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setSaving(true);
     setSaved(false);
+
+    // 1. Сохраняем глобальные настройки в ERP (action=display_settings)
+    const clientSettings = settings['client'];
+    if (clientSettings) {
+      try {
+        await saveDisplaySettingsToErp({
+          show_free_stock: clientSettings.show_stock,
+          show_reserved_stock: clientSettings.show_reserve,
+          show_to_ship_stock: clientSettings.show_total_pcs,
+          show_total_stock: clientSettings.show_total_pcs,
+          show_prices: clientSettings.show_price,
+          show_price_per_sqm: clientSettings.show_sqm,
+          show_discounts: true,
+          show_dealer_showroom: clientSettings.show_showroom_warehouse !== false,
+          allow_orders_when_zero_stock: false,
+        });
+      } catch (err) {
+        console.warn('[AdminDisplaySettings] Save to ERP warning:', err);
+      }
+    }
+
+    // 2. Сохраняем локально и оповещаем компоненты
     if (typeof window !== 'undefined') {
       localStorage.setItem('synergy:display_settings', JSON.stringify(settings));
     }
@@ -879,11 +922,13 @@ function AdminUsersTab({ onNavigate }: { onNavigate: (page: PageId) => void }) {
     price_type: string;
     manager_id: string | null;
     impersonation_enabled: boolean;
+    portal_access_enabled?: boolean;
     showroom_warehouse_id?: number | null;
     showroom_warehouse_name?: string | null;
   }>>([]);
   const [userSearch, setUserSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [warehouseModalUser, setWarehouseModalUser] = useState<typeof users[0] | null>(null);
   const [warehouseVersion, setWarehouseVersion] = useState(0);
@@ -902,19 +947,23 @@ function AdminUsersTab({ onNavigate }: { onNavigate: (page: PageId) => void }) {
       try {
         const cpData = await fetchCounterpartiesFromErp({ limit: 300 });
         if (!cancelled && cpData && cpData.success && Array.isArray(cpData.counterparties) && cpData.counterparties.length > 0) {
-          const mappedUsers = cpData.counterparties.map((cp) => ({
-            id: String(cp.id),
-            full_name: cp.name,
-            company_name: cp.name,
-            phone: cp.phone || '',
-            role: 'client' as UserRole,
-            partner_id: String(cp.id),
-            price_type: cp.cooperation_type === 'комиссия' ? 'commission' : 'wholesale',
-            manager_id: String(cp.manager_id || ''),
-            impersonation_enabled: true,
-            showroom_warehouse_id: cp.showroom_warehouse_id ?? cp.warehouse_id ?? (cp.id === 2833 ? 2833 : null),
-            showroom_warehouse_name: cp.showroom_warehouse_name ?? cp.warehouse_name ?? (cp.id === 2833 ? 'Aya Home Store (Шымкент)' : null),
-          }));
+          const mappedUsers = cpData.counterparties.map((cp) => {
+            const isAccessOn = cp.portal_access_enabled !== 0 && cp.is_active !== 0 && cp.status !== 'inactive' && cp.access !== 'disabled';
+            return {
+              id: String(cp.id),
+              full_name: cp.name,
+              company_name: cp.name,
+              phone: cp.phone || '',
+              role: 'client' as UserRole,
+              partner_id: String(cp.id),
+              price_type: cp.cooperation_type === 'комиссия' ? 'commission' : 'wholesale',
+              manager_id: String(cp.manager_id || ''),
+              portal_access_enabled: isAccessOn,
+              impersonation_enabled: isAccessOn,
+              showroom_warehouse_id: cp.showroom_warehouse_id ?? cp.warehouse_id ?? (cp.id === 2833 ? 2833 : null),
+              showroom_warehouse_name: cp.showroom_warehouse_name ?? cp.warehouse_name ?? (cp.id === 2833 ? 'Aya Home Store (Шымкент)' : null),
+            };
+          });
           setUsers(mappedUsers);
           setLoading(false);
           return;
@@ -929,7 +978,12 @@ function AdminUsersTab({ onNavigate }: { onNavigate: (page: PageId) => void }) {
           .from('profiles')
           .select('id, full_name, company_name, phone, role, partner_id, price_type, manager_id, impersonation_enabled, showroom_warehouse_id, showroom_warehouse_name')
           .order('created_at', { ascending: false });
-        if (!cancelled && data) setUsers(data as typeof users);
+        if (!cancelled && data) {
+          setUsers(data.map((u: any) => ({
+            ...u,
+            portal_access_enabled: u.impersonation_enabled !== false,
+          })));
+        }
       } catch (err) {
         console.warn('[AdminUsersTab] Supabase error:', err);
       } finally {
@@ -940,13 +994,35 @@ function AdminUsersTab({ onNavigate }: { onNavigate: (page: PageId) => void }) {
     return () => { cancelled = true; };
   }, []);
 
-  const handleToggleImpersonation = async (userId: string, enabled: boolean) => {
-    const { error } = await supabase
-      .from('profiles')
-      .update({ impersonation_enabled: !enabled })
-      .eq('id', userId);
-    if (!error) {
-      setUsers(prev => prev.map(u => u.id === userId ? { ...u, impersonation_enabled: !enabled } : u));
+  const handleToggleAccess = async (userId: string, currentEnabled: boolean) => {
+    setTogglingId(userId);
+    const newStatus = !currentEnabled;
+    try {
+      // 1. Отправляем в ERP action=update_client_access
+      await updateClientAccessInErp(userId, newStatus ? 1 : 0);
+      if (!newStatus) {
+        broadcastClientDeactivated(userId);
+      }
+
+      // 2. Обновляем локальное состояние и Supabase
+      setUsers(prev => prev.map(u => u.id === userId ? {
+        ...u,
+        portal_access_enabled: newStatus,
+        impersonation_enabled: newStatus,
+      } : u));
+
+      try {
+        await supabase
+          .from('profiles')
+          .update({ impersonation_enabled: newStatus })
+          .eq('id', userId);
+      } catch {
+        // safe fallback
+      }
+    } catch (err: any) {
+      alert(`Ошибка обновления доступа в ERP: ${err.message}`);
+    } finally {
+      setTogglingId(null);
     }
   };
 
@@ -1047,16 +1123,17 @@ function AdminUsersTab({ onNavigate }: { onNavigate: (page: PageId) => void }) {
                 </button>
 
                 <button
-                  onClick={() => handleToggleImpersonation(u.id, u.impersonation_enabled)}
+                  onClick={() => handleToggleAccess(u.id, u.portal_access_enabled ?? u.impersonation_enabled)}
+                  disabled={togglingId === u.id}
                   className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
-                    u.impersonation_enabled
+                    (u.portal_access_enabled ?? u.impersonation_enabled)
                       ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
-                      : 'bg-slate-50 text-slate-400 border border-slate-200 hover:bg-slate-100'
+                      : 'bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100'
                   }`}
-                  title={u.impersonation_enabled ? 'Доступ включён — можно войти под клиентом' : 'Включить доступ для входа под клиентом'}
+                  title={(u.portal_access_enabled ?? u.impersonation_enabled) ? 'Доступ к сайту открыт. Нажмите, чтобы заблокировать.' : 'Доступ заблокирован в ERP (CLIENT_DEACTIVATED). Нажмите, чтобы открыть доступ.'}
                 >
                   <Power className="h-3.5 w-3.5" />
-                  {u.impersonation_enabled ? 'Доступ вкл.' : 'Доступ выкл.'}
+                  {togglingId === u.id ? 'Синхронизация...' : ((u.portal_access_enabled ?? u.impersonation_enabled) ? 'Доступ вкл.' : 'Доступ выкл.')}
                 </button>
 
                 <button
