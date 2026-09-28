@@ -123,7 +123,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log(`[Webhook clients] Received event '${event}' for counterparty_id=${counterparty_id} (EventID: ${eventId || payload.event_id || 'n/a'})`);
 
     // Событие А: client_synced (Создание / Активация / Обновление)
-    if (event === 'client_synced' && (access === 'enabled' || status === 'active' || payload.is_active === 1)) {
+    if (event === 'client_synced' && (access === 'enabled' || status === 'active' || payload.is_active === 1 || (payload as any).is_active === true)) {
       const p = payload as ClientSyncedPayload;
       
       console.log(`[Webhook clients] ACTIVATED client: ID=${p.counterparty_id}, Name="${p.name}", Login="${p.portal_login}"`);
@@ -144,6 +144,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             credit_limit_usd: Number(p.credit_limit_usd || 0),
             payment_delay_days: Number(p.payment_delay_days || 0),
             role: 'client',
+            impersonation_enabled: true,
             updated_at: new Date().toISOString(),
           }, { onConflict: 'partner_id' });
 
@@ -186,8 +187,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // Событие Б: client_deactivated (Блокировка / Деактивация в ERP)
-    if (event === 'client_deactivated' || access === 'disabled' || status === 'inactive' || payload.is_active === 0) {
+    // Событие Б: client_deactivated (Блокировка / Деактивация в ERP / Перевод в архив)
+    const isDeactivation =
+      event === 'client_deactivated' ||
+      access === 'disabled' ||
+      status === 'inactive' ||
+      status === 'archived' ||
+      status === 'archive' ||
+      payload.is_active === 0 ||
+      (payload as any).is_active === false ||
+      payload.portal_access_enabled === 0 ||
+      (payload as any).portal_access_enabled === false;
+
+    if (isDeactivation) {
       console.log(`[Webhook clients] DEACTIVATED client: ID=${counterparty_id}. Revoking all sessions.`);
 
       // Мгновенная деактивация: фиксируем в БД и транслируем в Realtime
@@ -195,6 +207,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await supabase
           .from('profiles')
           .update({
+            impersonation_enabled: false,
             updated_at: new Date().toISOString(),
           })
           .eq('partner_id', String(counterparty_id));

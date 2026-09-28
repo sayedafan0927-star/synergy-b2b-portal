@@ -56,7 +56,9 @@ import {
   updateClientAccessInErp,
   fetchDisplaySettingsFromErp,
   saveDisplaySettingsToErp,
-  broadcastClientDeactivated
+  broadcastClientDeactivated,
+  isCounterpartyArchivedOrMailing,
+  isCounterpartyActive
 } from '@/lib/erpApi';
 import SupplierCabinet from '@/components/SupplierCabinet';
 import { triggerCatalogReload, mergeProducts } from '@/hooks/useProductData';
@@ -998,10 +1000,12 @@ function AdminUsersTab({ onNavigate }: { onNavigate: (page: PageId) => void }) {
     manager_id: string | null;
     impersonation_enabled: boolean;
     portal_access_enabled?: boolean;
+    is_archived_or_mailing?: boolean;
     showroom_warehouse_id?: number | null;
     showroom_warehouse_name?: string | null;
   }>>([]);
   const [userSearch, setUserSearch] = useState('');
+  const [showArchived, setShowArchived] = useState(false);
   const [loading, setLoading] = useState(true);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -1020,10 +1024,11 @@ function AdminUsersTab({ onNavigate }: { onNavigate: (page: PageId) => void }) {
       setLoading(true);
       // 1. Приоритет: реальные контрагенты из Synergy ERP
       try {
-        const cpData = await fetchCounterpartiesFromErp({ limit: 300 });
+        const cpData = await fetchCounterpartiesFromErp({ limit: 300, includeArchived: true });
         if (!cancelled && cpData && cpData.success && Array.isArray(cpData.counterparties) && cpData.counterparties.length > 0) {
           const mappedUsers = cpData.counterparties.map((cp) => {
             const isAccessOn = cp.portal_access_enabled !== 0 && cp.is_active !== 0 && cp.status !== 'inactive' && cp.access !== 'disabled';
+            const isArchived = isCounterpartyArchivedOrMailing(cp);
             return {
               id: String(cp.id),
               full_name: cp.name,
@@ -1035,6 +1040,7 @@ function AdminUsersTab({ onNavigate }: { onNavigate: (page: PageId) => void }) {
               manager_id: String(cp.manager_id || ''),
               portal_access_enabled: isAccessOn,
               impersonation_enabled: isAccessOn,
+              is_archived_or_mailing: isArchived,
               showroom_warehouse_id: cp.showroom_warehouse_id ?? cp.warehouse_id ?? (cp.id === 2833 ? 2833 : null),
               showroom_warehouse_name: cp.showroom_warehouse_name ?? cp.warehouse_name ?? (cp.id === 2833 ? 'Aya Home Store (Шымкент)' : null),
             };
@@ -1106,6 +1112,9 @@ function AdminUsersTab({ onNavigate }: { onNavigate: (page: PageId) => void }) {
     if (!isAdminView && managerId) {
       clients = clients.filter(user => user.manager_id === managerId);
     }
+    if (!showArchived) {
+      clients = clients.filter(user => !user.is_archived_or_mailing);
+    }
     if (!userSearch.trim()) return clients;
     const q = userSearch.toLowerCase().trim();
     return clients.filter(user =>
@@ -1114,7 +1123,7 @@ function AdminUsersTab({ onNavigate }: { onNavigate: (page: PageId) => void }) {
       (user.phone || '').toLowerCase().includes(q) ||
       (user.partner_id || '').toLowerCase().includes(q)
     );
-  }, [users, userSearch, isAdminView, managerId]);
+  }, [users, userSearch, isAdminView, managerId, showArchived]);
 
   return (
     <div className="space-y-6">
@@ -1130,15 +1139,30 @@ function AdminUsersTab({ onNavigate }: { onNavigate: (page: PageId) => void }) {
             </p>
           </div>
         </div>
-        <div className="relative w-full sm:w-64">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-          <input
-            type="text"
-            value={userSearch}
-            onChange={e => setUserSearch(e.target.value)}
-            placeholder="Поиск по имени, компании..."
-            className="input-field pl-9 py-1 text-xs"
-          />
+        <div className="flex flex-wrap items-center gap-2">
+          {isAdminView && (
+            <button
+              type="button"
+              onClick={() => setShowArchived(!showArchived)}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors cursor-pointer ${
+                showArchived
+                  ? 'bg-amber-50 text-amber-800 border-amber-300'
+                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              {showArchived ? 'Скрыть архив/рассылку' : 'Показать архив/рассылку'}
+            </button>
+          )}
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+            <input
+              type="text"
+              value={userSearch}
+              onChange={e => setUserSearch(e.target.value)}
+              placeholder="Поиск по имени, компании..."
+              className="input-field pl-9 py-1 text-xs"
+            />
+          </div>
         </div>
       </div>
 
@@ -1572,8 +1596,111 @@ function AdminErpSyncTab() {
   };
 
   const products = report?.catalog?.products || [];
-  const counterparties = report?.counterparties?.counterparties || [];
+  const counterparties: any[] = report?.counterparties?.counterparties || [];
   const managers = report?.regionalManagers?.managers || [];
+
+  // Фильтрация и управление доступом контрагентов (активные / архив / рассылка)
+  const [cpFilter, setCpFilter] = useState<'active' | 'archived' | 'all'>('active');
+  const [cpSearch, setCpSearch] = useState('');
+  const [cpTogglingId, setCpTogglingId] = useState<number | string | null>(null);
+  const [cpBatchLoading, setCpBatchLoading] = useState(false);
+  const [cpBatchMessage, setCpBatchMessage] = useState<string | null>(null);
+
+  const cpActiveCount = useMemo(() => counterparties.filter((c: any) => c.is_acting_client).length, [counterparties]);
+  const cpArchivedCount = useMemo(() => counterparties.filter((c: any) => c.is_archived_or_mailing).length, [counterparties]);
+
+  const filteredCounterparties = useMemo(() => {
+    let list = [...counterparties];
+    if (cpFilter === 'active') {
+      list = list.filter((c: any) => c.is_acting_client);
+    } else if (cpFilter === 'archived') {
+      list = list.filter((c: any) => c.is_archived_or_mailing);
+    }
+
+    if (cpSearch.trim()) {
+      const q = cpSearch.toLowerCase().trim();
+      list = list.filter((c: any) =>
+        (c.name || '').toLowerCase().includes(q) ||
+        (c.city || '').toLowerCase().includes(q) ||
+        (c.phone || '').toLowerCase().includes(q) ||
+        String(c.id).includes(q) ||
+        (c.regional_manager?.name || '').toLowerCase().includes(q)
+      );
+    }
+    return list;
+  }, [counterparties, cpFilter, cpSearch]);
+
+  const handleToggleCounterpartyAccess = async (cp: any) => {
+    setCpTogglingId(cp.id);
+    const currentlyEnabled = cp.portal_access_enabled !== false && cp.status !== 'inactive';
+    const newStatus = !currentlyEnabled;
+    try {
+      await updateClientAccessInErp(cp.id, newStatus ? 1 : 0);
+      if (!newStatus) {
+        broadcastClientDeactivated(cp.id);
+      }
+      setReport(prev => {
+        if (!prev?.counterparties?.counterparties) return prev;
+        const updatedList = prev.counterparties.counterparties.map((item: any) => {
+          if (item.id === cp.id) {
+            const isArch = !newStatus ? true : isCounterpartyArchivedOrMailing({ ...item, status: 'active', portal_access_enabled: true });
+            return {
+              ...item,
+              portal_access_enabled: newStatus,
+              status: newStatus ? 'active' : 'inactive',
+              is_archived_or_mailing: isArch,
+              is_acting_client: newStatus && !isArch,
+            };
+          }
+          return item;
+        });
+        return {
+          ...prev,
+          counterparties: {
+            ...prev.counterparties,
+            counterparties: updatedList,
+          },
+        };
+      });
+    } catch (err: any) {
+      alert(`Ошибка обновления доступа контрагента в ERP: ${err.message}`);
+    } finally {
+      setCpTogglingId(null);
+    }
+  };
+
+  const handleBatchDeactivateArchived = async () => {
+    const targets = counterparties.filter((c: any) => c.is_archived_or_mailing && c.status !== 'inactive' && c.portal_access_enabled !== false);
+    if (targets.length === 0) {
+      alert('Все архивные и рассылочные контакты уже деактивированы в ERP.');
+      return;
+    }
+    if (!confirm(`Вы действительно хотите деактивировать доступ в ERP для ${targets.length} недействующих / рассылочных контактов?`)) {
+      return;
+    }
+
+    setCpBatchLoading(true);
+    setCpBatchMessage(null);
+    let successCount = 0;
+    try {
+      for (const item of targets) {
+        try {
+          await updateClientAccessInErp(item.id, 0);
+          broadcastClientDeactivated(item.id);
+          successCount++;
+        } catch (e) {
+          console.warn(`[BatchDeactivate] Failed for client ${item.id}:`, e);
+        }
+      }
+      setCpBatchMessage(`Успешно деактивировано ${successCount} из ${targets.length} недействующих контактов в ERP!`);
+      runSync();
+    } catch {
+      setCpBatchMessage('Сбой при пакетной деактивации контактов в ERP');
+    } finally {
+      setCpBatchLoading(false);
+      setTimeout(() => setCpBatchMessage(null), 8000);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -1762,7 +1889,7 @@ function AdminErpSyncTab() {
             }`}
           >
             <Building2 className="h-3.5 w-3.5" />
-            Контрагенты ({counterparties.length})
+            Контрагенты ({cpActiveCount} акт. / {counterparties.length})
           </button>
           <button
             onClick={() => setActiveSubTab('managers')}
@@ -1904,50 +2031,170 @@ function AdminErpSyncTab() {
 
           {/* COUNTERPARTIES SUBTAB */}
           {activeSubTab === 'counterparties' && (
-            <div className="card overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
-                      <th className="py-2.5 px-3 text-left">ID</th>
-                      <th className="py-2.5 px-3 text-left">Контрагент</th>
-                      <th className="py-2.5 px-3 text-left">Город</th>
-                      <th className="py-2.5 px-3 text-left">Телефон</th>
-                      <th className="py-2.5 px-3 text-left">Региональный менеджер (РМ)</th>
-                      <th className="py-2.5 px-3 text-left">Тип цены по договору</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {counterparties.map((c: any) => {
-                      const contract = (c.contracts || [])[0];
-                      return (
-                        <tr key={c.id} className="hover:bg-slate-25">
-                          <td className="py-2 px-3 font-mono text-slate-400">#{c.id}</td>
-                          <td className="py-2 px-3 font-semibold text-slate-800">{c.name}</td>
-                          <td className="py-2 px-3 text-slate-600">{c.city || '—'}</td>
-                          <td className="py-2 px-3 text-slate-600 font-mono">{c.phone || '—'}</td>
-                          <td className="py-2 px-3">
-                            {c.regional_manager ? (
-                              <div>
-                                <span className="font-medium text-slate-800">{c.regional_manager.name}</span>
-                                {c.regional_manager.phone && (
-                                  <span className="text-[10px] text-slate-400 block">{c.regional_manager.phone}</span>
+            <div className="space-y-4">
+              {/* Filters, Search & Batch Deactivation */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-3 rounded-xl border border-slate-200 shadow-xs">
+                <div className="flex flex-wrap items-center gap-1.5 bg-slate-100 p-1 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => setCpFilter('active')}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+                      cpFilter === 'active'
+                        ? 'bg-white text-emerald-800 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    ✅ Только действующие ({cpActiveCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCpFilter('archived')}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+                      cpFilter === 'archived'
+                        ? 'bg-white text-amber-800 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    📦 Архив / Рассылка ({cpArchivedCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCpFilter('all')}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+                      cpFilter === 'all'
+                        ? 'bg-white text-slate-900 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Все ({counterparties.length})
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="relative w-full sm:w-64">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                    <input
+                      type="text"
+                      value={cpSearch}
+                      onChange={e => setCpSearch(e.target.value)}
+                      placeholder="Поиск по имени, городу, тел..."
+                      className="input-field pl-9 py-1.5 text-xs w-full"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleBatchDeactivateArchived}
+                    disabled={cpBatchLoading || cpArchivedCount === 0}
+                    className="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 cursor-pointer"
+                    title="Отключить доступ в ERP для всех рассылочных и архивных контактов"
+                  >
+                    <Power className={`h-3.5 w-3.5 ${cpBatchLoading ? 'animate-spin' : ''}`} />
+                    {cpBatchLoading ? 'Деактивация...' : 'Деактивировать архив/рассылку в ERP'}
+                  </button>
+                </div>
+              </div>
+
+              {cpBatchMessage && (
+                <div className="p-3 text-xs rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center justify-between">
+                  <span>{cpBatchMessage}</span>
+                  <button onClick={() => setCpBatchMessage(null)} className="text-emerald-600 hover:text-emerald-800 text-xs">✕</button>
+                </div>
+              )}
+
+              <div className="card overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                        <th className="py-2.5 px-3 text-left">ID</th>
+                        <th className="py-2.5 px-3 text-left">Контрагент</th>
+                        <th className="py-2.5 px-3 text-left">Город</th>
+                        <th className="py-2.5 px-3 text-left">Телефон</th>
+                        <th className="py-2.5 px-3 text-left">Региональный менеджер (РМ)</th>
+                        <th className="py-2.5 px-3 text-left">Тип цены</th>
+                        <th className="py-2.5 px-3 text-center">Статус</th>
+                        <th className="py-2.5 px-3 text-right">Управление доступом</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredCounterparties.map((c: any) => {
+                        const contract = (c.contracts || [])[0];
+                        const isDeactivated = c.portal_access_enabled === false || c.status === 'inactive' || c.is_active === 0;
+                        const isMailingOrArchived = c.is_archived_or_mailing;
+
+                        return (
+                          <tr key={c.id} className="hover:bg-slate-25">
+                            <td className="py-2 px-3 font-mono text-slate-400">#{c.id}</td>
+                            <td className="py-2 px-3 font-semibold text-slate-800">
+                              <div className="flex items-center gap-1.5">
+                                <span>{c.name}</span>
+                                {isMailingOrArchived && !isDeactivated && (
+                                  <span className="badge bg-amber-50 text-amber-700 text-[9px] px-1.5 py-0.5">Архив / Рассылка</span>
                                 )}
                               </div>
-                            ) : (
-                              <span className="text-slate-300">Не привязан</span>
-                            )}
-                          </td>
-                          <td className="py-2 px-3">
-                            <span className="badge bg-brand-50 text-brand-700 font-mono text-[10px]">
-                              {contract?.price_type || 'standard'}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                            </td>
+                            <td className="py-2 px-3 text-slate-600">{c.city || '—'}</td>
+                            <td className="py-2 px-3 text-slate-600 font-mono">{c.phone || '—'}</td>
+                            <td className="py-2 px-3">
+                              {c.regional_manager ? (
+                                <div>
+                                  <span className="font-medium text-slate-800">{c.regional_manager.name}</span>
+                                  {c.regional_manager.phone && (
+                                    <span className="text-[10px] text-slate-400 block">{c.regional_manager.phone}</span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-slate-300">Не привязан</span>
+                              )}
+                            </td>
+                            <td className="py-2 px-3">
+                              <span className="badge bg-brand-50 text-brand-700 font-mono text-[10px]">
+                                {contract?.price_type || c.price_type || 'standard'}
+                              </span>
+                            </td>
+                            <td className="py-2 px-3 text-center">
+                              {isDeactivated ? (
+                                <span className="badge bg-rose-50 text-rose-700 border border-rose-200 text-[10px]">
+                                  Деактивирован
+                                </span>
+                              ) : isMailingOrArchived ? (
+                                <span className="badge bg-amber-50 text-amber-700 border border-amber-200 text-[10px]">
+                                  Рассылка
+                                </span>
+                              ) : (
+                                <span className="badge bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px]">
+                                  Действующий
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2 px-3 text-right">
+                              <button
+                                type="button"
+                                onClick={() => handleToggleCounterpartyAccess(c)}
+                                disabled={cpTogglingId === c.id}
+                                className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors cursor-pointer ${
+                                  !isDeactivated
+                                    ? 'bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200'
+                                    : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200'
+                                }`}
+                                title={!isDeactivated ? 'Отключить доступ клиенту в ERP' : 'Включить доступ клиенту в ERP'}
+                              >
+                                <Power className={`h-3 w-3 ${cpTogglingId === c.id ? 'animate-spin' : ''}`} />
+                                {cpTogglingId === c.id ? '...' : (!isDeactivated ? 'Деактивировать' : 'Активировать')}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  {filteredCounterparties.length === 0 && (
+                    <p className="py-8 text-center text-xs text-slate-400">
+                      {cpSearch ? 'Контрагенты не найдены по запросу' : 'Контрагенты в данной категории отсутствуют'}
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           )}

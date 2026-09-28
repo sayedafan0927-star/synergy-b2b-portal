@@ -377,6 +377,61 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
+    // ───────────────────────────────────────────────
+    // 5. Событие: client_deactivated (Мгновенный отзыв доступа клиента)
+    // ───────────────────────────────────────────────
+    if (event === 'client_deactivated' || payload.access === 'disabled' || payload.status === 'inactive' || payload.status === 'archived' || payload.is_active === 0 || payload.is_active === false) {
+      const counterpartyId = payload.counterparty_id || payload.client_id;
+      if (counterpartyId) {
+        console.log(`[Webhook ERP: client_deactivated] Revoking access for client ${counterpartyId}`);
+        try {
+          await supabaseServer
+            .from('profiles')
+            .update({ impersonation_enabled: false, updated_at: new Date().toISOString() })
+            .eq('partner_id', String(counterpartyId));
+
+          await broadcastLiveUpdate('client_deactivated', { counterparty_id: counterpartyId });
+        } catch (dbErr) {
+          console.warn('[Webhook ERP] Client deactivation notice:', dbErr);
+        }
+      }
+
+      return res.status(200).json({
+        success: true,
+        event: 'client_deactivated',
+        counterparty_id: counterpartyId,
+        message: `Client ${counterpartyId} deactivated successfully.`,
+        processed_at: new Date().toISOString(),
+      });
+    }
+
+    // ───────────────────────────────────────────────
+    // 6. Событие: client_synced (Активация клиента)
+    // ───────────────────────────────────────────────
+    if (event === 'client_synced') {
+      const counterpartyId = payload.counterparty_id || payload.client_id;
+      if (counterpartyId) {
+        try {
+          await supabaseServer
+            .from('profiles')
+            .update({ impersonation_enabled: true, updated_at: new Date().toISOString() })
+            .eq('partner_id', String(counterpartyId));
+
+          await broadcastLiveUpdate('client_synced', { counterparty_id: counterpartyId });
+        } catch (dbErr) {
+          console.warn('[Webhook ERP] Client sync notice:', dbErr);
+        }
+      }
+
+      return res.status(200).json({
+        success: true,
+        event: 'client_synced',
+        counterparty_id: counterpartyId,
+        message: `Client ${counterpartyId} synced successfully.`,
+        processed_at: new Date().toISOString(),
+      });
+    }
+
     // Неизвестное событие
     return res.status(200).json({
       success: true,

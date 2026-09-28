@@ -453,9 +453,70 @@ export async function fetchRegionalManagersFromErp() {
 }
 
 /**
- * Получение списка контрагентов и их договоров (с возможностью поиска по телефону/названию).
+ * Проверка, является ли контрагент архивным, рассылочным (dummy) или деактивированным.
  */
-export async function fetchCounterpartiesFromErp(params: { search?: string; phone?: string; managerId?: number; limit?: number } = {}) {
+export function isCounterpartyArchivedOrMailing(c: any): boolean {
+  if (!c) return true;
+  const name = String(c.name || '').toLowerCase().trim();
+  const city = String(c.city || '').toLowerCase().trim();
+  const status = String(c.status || '').toLowerCase().trim();
+  const access = String(c.access || '').toLowerCase().trim();
+
+  // 1. Формальные флаги деактивации / архива
+  if (
+    status === 'inactive' ||
+    status === 'archived' ||
+    status === 'archive' ||
+    status === 'disabled' ||
+    status === 'deleted' ||
+    access === 'disabled' ||
+    c.is_active === 0 ||
+    c.is_active === false ||
+    c.is_active === '0' ||
+    c.portal_access_enabled === 0 ||
+    c.portal_access_enabled === false ||
+    c.portal_access_enabled === '0' ||
+    c.is_archived === true ||
+    c.is_archived === 1 ||
+    c.archived === true ||
+    c.archived === 1
+  ) {
+    return true;
+  }
+
+  // 2. Семантическая фильтрация недействующих / рассылочных контактов
+  if (
+    name.includes('рассылк') ||
+    city.includes('заполним позже') ||
+    name.includes('архив') ||
+    name.includes('[архив]') ||
+    name.includes('(архив)') ||
+    name.startsWith('для рассылки')
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Проверка, является ли контрагент реально действующим активным клиентом B2B.
+ */
+export function isCounterpartyActive(c: any): boolean {
+  return !isCounterpartyArchivedOrMailing(c);
+}
+
+/**
+ * Получение списка контрагентов и их договоров (с возможностью поиска по телефону/названию).
+ * По умолчанию возвращает СТРОГО действующих активных клиентов (без архива и рассылок).
+ */
+export async function fetchCounterpartiesFromErp(params: {
+  search?: string;
+  phone?: string;
+  managerId?: number;
+  limit?: number;
+  includeArchived?: boolean;
+} = {}) {
   const response = await erpFetch('counterparties', {
     method: 'GET',
     params: {
@@ -472,14 +533,26 @@ export async function fetchCounterpartiesFromErp(params: { search?: string; phon
 
   const data = await response.json();
   if (data && Array.isArray(data.counterparties)) {
-    // Гарантированная фильтрация: сайт работает СТРОГО с активными клиентами
-    data.counterparties = data.counterparties.filter((c: any) => {
-      if (c.is_active === 0 || c.portal_access_enabled === 0 || c.status === 'inactive' || c.access === 'disabled') {
-        return false;
-      }
-      return true;
+    // Размечаем каждого контрагента метаданными активности
+    const tagged = data.counterparties.map((c: any) => {
+      const isArchived = isCounterpartyArchivedOrMailing(c);
+      return {
+        ...c,
+        is_archived_or_mailing: isArchived,
+        is_acting_client: !isArchived,
+      };
     });
+
+    if (params.includeArchived) {
+      data.counterparties = tagged;
+    } else {
+      // По умолчанию фильтруем строго действующих клиентов
+      data.counterparties = tagged.filter((c: any) => c.is_acting_client);
+    }
     data.count = data.counterparties.length;
+    data.total_raw_count = tagged.length;
+    data.active_count = tagged.filter((c: any) => c.is_acting_client).length;
+    data.archived_count = tagged.filter((c: any) => c.is_archived_or_mailing).length;
   }
   return data;
 }
@@ -702,6 +775,8 @@ export interface ErpSyncReport {
   totalStockPcs: number;
   cities: string[];
   totalCounterparties: number;
+  activeCounterpartiesCount?: number;
+  archivedCounterpartiesCount?: number;
   totalManagers: number;
   warnings: string[];
 }
@@ -713,7 +788,7 @@ export async function syncAllErpData(): Promise<ErpSyncReport> {
   const [pingRes, catalogRes, counterpartiesRes, managersRes] = await Promise.all([
     pingErp(),
     fetchCatalogFromErp(),
-    fetchCounterpartiesFromErp({ limit: 100 }).catch(err => ({ success: false, error: err.message, counterparties: [] })),
+    fetchCounterpartiesFromErp({ limit: 300, includeArchived: true }).catch(err => ({ success: false, error: err.message, counterparties: [] })),
     fetchRegionalManagersFromErp().catch(err => ({ success: false, error: err.message, managers: [] })),
   ]);
 
@@ -735,6 +810,10 @@ export async function syncAllErpData(): Promise<ErpSyncReport> {
     }
   }
 
+  const cpList = counterpartiesRes?.counterparties || [];
+  const activeCount = counterpartiesRes?.active_count ?? cpList.filter((c: any) => c.is_acting_client).length;
+  const archivedCount = counterpartiesRes?.archived_count ?? cpList.filter((c: any) => c.is_archived_or_mailing).length;
+
   return {
     timestamp: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
     ping: pingRes,
@@ -744,7 +823,9 @@ export async function syncAllErpData(): Promise<ErpSyncReport> {
     totalProducts: products.length,
     totalStockPcs,
     cities,
-    totalCounterparties: counterpartiesRes?.counterparties?.length || counterpartiesRes?.count || 0,
+    totalCounterparties: cpList.length,
+    activeCounterpartiesCount: activeCount,
+    archivedCounterpartiesCount: archivedCount,
     totalManagers: managersRes?.managers?.length || managersRes?.count || 0,
     warnings,
   };
