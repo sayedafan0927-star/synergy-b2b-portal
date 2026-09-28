@@ -297,82 +297,83 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
 
       {sizesOpen && (
         <div
-          className="absolute left-1 right-1 sm:left-2 sm:right-2 top-full z-40 -mt-1 rounded-xl bg-white p-3 shadow-2xl ring-1 ring-slate-900/10 border border-slate-200"
+          className="absolute left-2 right-2 top-full z-40 -mt-1 rounded-xl bg-white p-3 shadow-xl ring-1 ring-slate-200/80 border border-slate-100"
           onClick={event => event.stopPropagation()}
         >
           <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1 select-none">
-            {product.variants.map(variant => {
-              const stock = getTotalStock(variant);
-              const inStock = stock > 0;
-              const quantity = quantities[variant.sku] ?? 1;
-              const isAdded = addedSku === variant.sku;
+            {product.variants.filter(v => getTotalStock(v) > 0).length > 0 ? (
+              product.variants
+                .filter(v => getTotalStock(v) > 0)
+                .map(variant => {
+                  const stock = getTotalStock(variant);
+                  const quantity = quantities[variant.sku] ?? 1;
+                  const isAdded = addedSku === variant.sku;
 
-              return (
-                <div
-                  key={variant.sku}
-                  className="flex items-center justify-between py-1.5 border-b border-slate-100 last:border-b-0 gap-2"
-                >
-                  {/* 1. Размер (слева) */}
-                  <span className="font-semibold text-slate-900 text-xs sm:text-sm whitespace-nowrap min-w-[70px]">
-                    {variant.size}
-                  </span>
-
-                  {/* 2. Остаток (по центру, как на скриншоте 2) */}
-                  <div className="flex items-center justify-center min-w-[28px]">
-                    <span
-                      className={`text-xs font-bold px-1.5 py-0.5 rounded ${
-                        inStock
-                          ? 'text-slate-800 bg-slate-100'
-                          : 'text-rose-600 bg-rose-50 font-semibold'
-                      }`}
-                      title={inStock ? `В наличии: ${stock} шт` : 'Нет в наличии'}
+                  return (
+                    <div
+                      key={variant.sku}
+                      className="flex items-center justify-between py-1.5 border-b border-slate-100 last:border-b-0 gap-2"
                     >
-                      {inStock ? stock : '0'}
-                    </span>
-                  </div>
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="font-semibold text-slate-800 text-sm whitespace-nowrap">{variant.size}</span>
+                        <span className="text-[11px] text-slate-400 font-normal">({stock} шт)</span>
+                      </div>
 
-                  {/* 3. Инпут количества и кнопка корзины (справа) */}
-                  <div className="flex items-center gap-1.5 ml-auto">
-                    <input
-                      type="number"
-                      min="1"
-                      max={inStock ? stock : 1}
-                      disabled={!inStock}
-                      value={inStock ? quantity : 0}
-                      onChange={event => {
-                        const val = Number(event.target.value);
-                        setQuantity(variant.sku, Math.max(1, Math.min(stock, val || 1)));
-                      }}
-                      onClick={event => event.stopPropagation()}
-                      className={`h-7 sm:h-8 w-10 sm:w-11 rounded border text-center text-xs font-semibold outline-none transition-colors ${
-                        inStock
-                          ? 'border-slate-300 text-slate-900 focus:border-brand-600 bg-white'
-                          : 'border-slate-200 text-slate-400 bg-slate-50 cursor-not-allowed'
-                      }`}
-                    />
-                    <button
-                      type="button"
-                      disabled={!inStock}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (!inStock) return;
-                        handleAdd(variant);
-                      }}
-                      className={`h-7 sm:h-8 w-8 sm:w-9 rounded flex items-center justify-center text-white transition-all active:scale-95 ${
-                        isAdded
-                          ? 'bg-emerald-600 shadow-sm'
-                          : inStock
-                          ? 'bg-[#B04A4A] hover:bg-[#993A3A] shadow-sm cursor-pointer'
-                          : 'bg-slate-200 text-slate-400 cursor-not-allowed opacity-60'
-                      }`}
-                      title={inStock ? 'Добавить в корзину' : 'Нет в наличии'}
-                    >
-                      {isAdded ? <Check className="h-3.5 w-3.5" /> : <ShoppingCart className="h-3.5 w-3.5" />}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+                      <div className="flex items-center gap-1.5 ml-auto">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setQuantity(variant.sku, Math.max(1, (quantities[variant.sku] ?? 1) - 1));
+                          }}
+                          className="h-7 w-7 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-600 hover:bg-slate-100 active:scale-95 transition-all text-xs font-bold"
+                        >
+                          -
+                        </button>
+                        <input
+                          type="number"
+                          min="1"
+                          max={stock}
+                          value={quantity}
+                          onChange={event => {
+                            const val = Number(event.target.value);
+                            setQuantity(variant.sku, Math.max(1, Math.min(stock, val || 1)));
+                          }}
+                          onClick={event => event.stopPropagation()}
+                          className="h-7 w-10 rounded-lg border border-slate-200 text-center text-xs font-semibold text-slate-800 outline-none focus:border-brand-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setQuantity(variant.sku, Math.min(stock, (quantities[variant.sku] ?? 1) + 1));
+                          }}
+                          className="h-7 w-7 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-600 hover:bg-slate-100 active:scale-95 transition-all text-xs font-bold"
+                        >
+                          +
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleAdd(variant);
+                          }}
+                          className={`h-7 w-8 rounded-lg flex items-center justify-center text-white transition-all active:scale-95 ${
+                            isAdded ? 'bg-emerald-600 shadow-sm' : 'bg-brand-700 hover:bg-brand-800 shadow-sm'
+                          }`}
+                          title="Добавить в корзину"
+                        >
+                          {isAdded ? <Check className="h-3.5 w-3.5" /> : <ShoppingCart className="h-3.5 w-3.5" />}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+            ) : (
+              <div className="py-3 px-2 text-center text-xs text-slate-500 font-medium">
+                Нет в наличии на складе в Астане
+              </div>
+            )}
           </div>
         </div>
       )}

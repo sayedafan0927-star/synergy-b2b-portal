@@ -32,14 +32,18 @@ import {
   ChevronDown,
   Power,
   FileText,
+  RotateCcw,
+  X,
+  ShoppingCart,
 } from 'lucide-react';
 import type { PageId } from '@/types';
 import { calcSqm, parseSizeDimensions } from '@/types';
 import { useAuth, type UserRole } from '@/contexts/AuthContext';
+import { useCart } from '@/contexts/CartContext';
 import { supabase } from '@/lib/supabase';
-import { syncAllErpData, type ErpSyncReport, ERP_API_URL, fetchClientDebtFromErp, type ClientDebtReport, fetchClientOrdersFromErp, fetchCounterpartiesFromErp } from '@/lib/erpApi';
+import { syncAllErpData, type ErpSyncReport, ERP_API_URL, fetchClientDebtFromErp, type ClientDebtReport, fetchClientOrdersFromErp, fetchCounterpartiesFromErp, fetchCatalogFromErp } from '@/lib/erpApi';
 import SupplierCabinet from '@/components/SupplierCabinet';
-import { triggerCatalogReload } from '@/hooks/useProductData';
+import { triggerCatalogReload, mergeProducts } from '@/hooks/useProductData';
 import { triggerDisplaySettingsReload } from '@/hooks/useDisplaySettings';
 
 /* ─── Types ─── */
@@ -48,9 +52,16 @@ interface OrderItem {
   productName: string;
   collection: string;
   size: string;
+  sku?: string;
   warehouse: string;
   price: number;
   quantity: number;
+}
+
+interface RepeatResult {
+  orderNumber: string;
+  added: Array<{ name: string; size: string; requestedQty: number; addedQty: number }>;
+  missing: Array<{ name: string; size: string; requestedQty: number; reason: string }>;
 }
 
 interface Order {
@@ -131,11 +142,15 @@ function OrderDetail({
   onBack,
   isAdmin,
   onUpdateOrder,
+  onRepeatOrder,
+  repeatingOrderId,
 }: {
   order: Order;
   onBack: () => void;
   isAdmin?: boolean;
   onUpdateOrder?: (o: Order) => void;
+  onRepeatOrder?: (o: Order) => void;
+  repeatingOrderId?: string | null;
 }) {
   const [activeCollection, setActiveCollection] = useState<string | null>(null);
   const [sizeAsc, setSizeAsc] = useState(true);
@@ -211,23 +226,37 @@ function OrderDetail({
           </div>
         </div>
 
-        {isAdmin && (
-          <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
-            <span className="text-xs font-semibold text-slate-600">Статус заказа:</span>
-            <select
-              value={status}
-              disabled={updatingStatus}
-              onChange={(e) => handleStatusChange(e.target.value)}
-              className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-bold text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer"
+        <div className="flex flex-wrap items-center gap-2">
+          {onRepeatOrder && (
+            <button
+              type="button"
+              onClick={() => onRepeatOrder(order)}
+              disabled={repeatingOrderId !== null}
+              className="flex items-center gap-1.5 rounded-lg bg-brand-700 hover:bg-brand-800 text-white px-3.5 py-1.5 text-xs font-semibold shadow-sm transition-all active:scale-95 disabled:opacity-50"
             >
-              <option value="pending">Новый</option>
-              <option value="processing">В обработке</option>
-              <option value="shipped">Отгружен</option>
-              <option value="delivered">Доставлен</option>
-              <option value="cancelled">Отменён</option>
-            </select>
-          </div>
-        )}
+              <RotateCcw className={`h-3.5 w-3.5 ${repeatingOrderId === order.id ? 'animate-spin' : ''}`} />
+              Повторить заказ
+            </button>
+          )}
+
+          {isAdmin && (
+            <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
+              <span className="text-xs font-semibold text-slate-600">Статус заказа:</span>
+              <select
+                value={status}
+                disabled={updatingStatus}
+                onChange={(e) => handleStatusChange(e.target.value)}
+                className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-bold text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer"
+              >
+                <option value="pending">Новый</option>
+                <option value="processing">В обработке</option>
+                <option value="shipped">Отгружен</option>
+                <option value="delivered">Доставлен</option>
+                <option value="cancelled">Отменён</option>
+              </select>
+            </div>
+          )}
+        </div>
       </div>
 
       {order.notes && (
@@ -1262,12 +1291,150 @@ function AdminErpSyncTab() {
 
 export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId) => void }) {
   const { user, profile, loading, signOut, isAdmin, realIsAdmin, isManager, isSupplier } = useAuth();
+  const { addItem } = useCart();
   const adminAccess = realIsAdmin;
   const clientsAccess = realIsAdmin || isManager;
   const [activeTab, setActiveTab] = useState<TabId>(isSupplier ? 'supplier-portal' : 'orders');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [clientDebt, setClientDebt] = useState<ClientDebtReport | null>(null);
   const [loadingDebt, setLoadingDebt] = useState<boolean>(false);
+  const [repeatingOrderId, setRepeatingOrderId] = useState<string | null>(null);
+  const [repeatResult, setRepeatResult] = useState<RepeatResult | null>(null);
+
+  const handleRepeatOrder = async (order: Order) => {
+    if (repeatingOrderId) return;
+    setRepeatingOrderId(order.id);
+
+    try {
+      const clientId = profile?.partner_id
+        ? Number(profile.partner_id)
+        : (profile?.id && !isNaN(Number(profile.id)) ? Number(profile.id) : undefined);
+      const catalogData = await fetchCatalogFromErp(clientId);
+      const rawProducts: any[] = (catalogData && catalogData.success && Array.isArray(catalogData.products))
+        ? catalogData.products
+        : [];
+      const erpProducts = mergeProducts(rawProducts);
+
+      const added: RepeatResult['added'] = [];
+      const missing: RepeatResult['missing'] = [];
+
+      for (const item of order.items) {
+        let foundProd: any;
+        let foundVariant: any;
+
+        // 1. Match by SKU or item id
+        if (item.sku || item.id) {
+          for (const p of erpProducts) {
+            const v = p.variants?.find((vr: any) =>
+              (item.sku && vr.sku === item.sku) ||
+              (item.id && (String(vr.id) === String(item.id) || vr.sku === item.id))
+            );
+            if (v) {
+              foundProd = p;
+              foundVariant = v;
+              break;
+            }
+          }
+        }
+
+        // 2. Match by collection and size
+        if (!foundVariant && item.collection && item.size) {
+          const itemCol = item.collection.toLowerCase().trim();
+          const itemSize = item.size.replace(/\s+/g, '');
+          for (const p of erpProducts) {
+            if (p.collection && p.collection.toLowerCase().trim() === itemCol) {
+              const v = p.variants?.find((vr: any) => vr.size.replace(/\s+/g, '') === itemSize);
+              if (v) {
+                foundProd = p;
+                foundVariant = v;
+                break;
+              }
+            }
+          }
+        }
+
+        // 3. Fallback match by product name and size
+        if (!foundVariant && item.productName) {
+          const itemSize = (item.size || '').replace(/\s+/g, '');
+          for (const p of erpProducts) {
+            if (p.name && p.name.toLowerCase().includes(item.productName.toLowerCase())) {
+              const v = p.variants?.find((vr: any) => !itemSize || vr.size.replace(/\s+/g, '') === itemSize);
+              if (v) {
+                foundProd = p;
+                foundVariant = v;
+                break;
+              }
+            }
+          }
+        }
+
+        if (!foundVariant || !foundProd) {
+          missing.push({
+            name: item.productName || item.collection,
+            size: item.size,
+            requestedQty: item.quantity,
+            reason: 'Товар отсутствует в текущем каталоге',
+          });
+          continue;
+        }
+
+        // Stock in Astana / main warehouse
+        const wh = foundVariant.warehouses?.find((w: any) =>
+          w.warehouse_id === 81 ||
+          (w.city && w.city.toLowerCase().includes('астан')) ||
+          (w.warehouse_name && (w.warehouse_name.toLowerCase().includes('астан') || w.warehouse_name.toLowerCase().includes('основной'))) ||
+          w.is_hub
+        );
+        const stock = wh ? (wh.stock ?? 0) : (foundVariant.warehouses?.reduce((s: number, w: any) => s + (w.stock || 0), 0) ?? 0);
+
+        if (stock <= 0) {
+          missing.push({
+            name: foundProd.name || item.productName,
+            size: item.size,
+            requestedQty: item.quantity,
+            reason: 'Нет в наличии на складе в Астане',
+          });
+          continue;
+        }
+
+        const qtyToAdd = Math.min(item.quantity, stock);
+        const prodImg = (foundProd.images && foundProd.images.length > 0) ? foundProd.images[0] : (foundProd.image_thumb || '');
+
+        addItem({
+          productId: foundProd.id,
+          item_id: foundVariant.item_id || (Number(foundVariant.id) > 0 ? Number(foundVariant.id) : undefined),
+          productName: foundProd.name,
+          collection: foundProd.collection,
+          image: prodImg,
+          size: foundVariant.size,
+          sku: foundVariant.sku,
+          warehouse: wh?.warehouse_name || wh?.city || 'Основной Склад Астана',
+          warehouse_id: wh?.warehouse_id || 81,
+          price: item.price || foundVariant.price || foundVariant.base_price,
+          price_per_sqm: foundVariant.price_per_sqm,
+          area_sqm: foundVariant.area_sqm,
+        }, qtyToAdd);
+
+        added.push({
+          name: foundProd.name,
+          size: foundVariant.size,
+          requestedQty: item.quantity,
+          addedQty: qtyToAdd,
+        });
+      }
+
+      setRepeatResult({
+        orderNumber: order.orderNumber || order.id,
+        added,
+        missing,
+      });
+    } catch (err) {
+      console.error('Failed to repeat order:', err);
+      alert('Не удалось проверить остатки. Попробуйте еще раз.');
+    } finally {
+      setRepeatingOrderId(null);
+    }
+  };
 
   useEffect(() => {
     if (!profile || profile.role === 'supplier') return;
@@ -1502,11 +1669,19 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
                 <OrderDetail
                   order={selectedOrder}
                   onBack={() => setSelectedOrder(null)}
-                  isAdmin={isAdmin}
+                  isAdmin={adminAccess || isAdmin}
                   onUpdateOrder={(updated) => setSelectedOrder(updated)}
+                  onRepeatOrder={handleRepeatOrder}
+                  repeatingOrderId={repeatingOrderId}
                 />
               ) : (
-                <OrdersTab onSelectOrder={setSelectedOrder} isAdmin={adminAccess || isAdmin} isManager={isManager || clientsAccess} />
+                <OrdersTab
+                  onSelectOrder={setSelectedOrder}
+                  isAdmin={adminAccess || isAdmin}
+                  isManager={isManager || clientsAccess}
+                  onRepeatOrder={handleRepeatOrder}
+                  repeatingOrderId={repeatingOrderId}
+                />
               )
             )}
             {activeTab === 'supplier-portal' && (isSupplier || adminAccess) && (
@@ -1524,6 +1699,99 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
           </div>
         </div>
       </div>
+
+      {/* Repeat Order Result Modal */}
+      {repeatResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-50 text-brand-700">
+                  <RotateCcw className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-base">Повтор заказа #{repeatResult.orderNumber}</h3>
+                  <p className="text-xs text-slate-500">Проверка актуальных складских остатков в Астане</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setRepeatResult(null)}
+                className="h-8 w-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Added items */}
+            {repeatResult.added.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                  <span>Добавлено в корзину ({repeatResult.added.length} поз.):</span>
+                </div>
+                <div className="bg-emerald-50/60 border border-emerald-100 rounded-xl p-3 space-y-1.5 max-h-40 overflow-y-auto">
+                  {repeatResult.added.map((item, idx) => (
+                    <div key={idx} className="flex items-center justify-between text-xs text-emerald-900">
+                      <span className="font-medium truncate mr-2">{item.name} ({item.size})</span>
+                      <span className="font-semibold whitespace-nowrap">
+                        {item.addedQty} шт.
+                        {item.addedQty < item.requestedQty && (
+                          <span className="text-[10px] text-amber-700 ml-1">(из {item.requestedQty} запрошенных)</span>
+                        )}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Missing items */}
+            {repeatResult.missing.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700">
+                  <AlertTriangle className="h-4 w-4 text-amber-600" />
+                  <span>Не добавлено — нет в наличии ({repeatResult.missing.length} поз.):</span>
+                </div>
+                <div className="bg-amber-50/60 border border-amber-200/80 rounded-xl p-3 space-y-1.5 max-h-40 overflow-y-auto">
+                  {repeatResult.missing.map((item, idx) => (
+                    <div key={idx} className="flex items-center justify-between text-xs text-amber-900">
+                      <span className="truncate mr-2">{item.name} ({item.size})</span>
+                      <span className="text-[11px] text-rose-600 font-medium whitespace-nowrap">{item.reason}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {repeatResult.added.length === 0 && repeatResult.missing.length > 0 && (
+              <p className="text-xs text-slate-500 text-center py-2">
+                К сожалению, ни одной позиции из данного заказа сейчас нет в наличии на складе в Астане.
+              </p>
+            )}
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+              <button
+                onClick={() => setRepeatResult(null)}
+                className="px-4 py-2 rounded-xl text-xs font-medium text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                Закрыть
+              </button>
+              {repeatResult.added.length > 0 && (
+                <button
+                  onClick={() => {
+                    setRepeatResult(null);
+                    onNavigate('cart');
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold bg-brand-700 hover:bg-brand-800 text-white shadow-sm transition-all cursor-pointer"
+                >
+                  <ShoppingCart className="h-4 w-4" />
+                  Перейти в корзину
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1533,10 +1801,14 @@ function OrdersTab({
   onSelectOrder,
   isAdmin,
   isManager,
+  onRepeatOrder,
+  repeatingOrderId,
 }: {
   onSelectOrder: (o: Order) => void;
   isAdmin: boolean;
   isManager: boolean;
+  onRepeatOrder?: (o: Order) => void;
+  repeatingOrderId?: string | null;
 }) {
   const { user, profile } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
@@ -1690,14 +1962,28 @@ function OrdersTab({
           </div>
         </div>
 
-        <button
-          onClick={fetchOrders}
-          disabled={loading}
-          className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors"
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-          Обновить
-        </button>
+        <div className="flex items-center gap-2">
+          {onRepeatOrder && orders.length > 0 && (
+            <button
+              onClick={() => onRepeatOrder(orders[0])}
+              disabled={repeatingOrderId !== null}
+              className="flex items-center gap-1.5 rounded-lg bg-brand-700 hover:bg-brand-800 text-white px-3.5 py-1.5 text-xs font-semibold shadow-sm transition-all active:scale-95 disabled:opacity-50"
+              title="Добавить товары из последнего заказа в корзину с проверкой наличия"
+            >
+              <RotateCcw className={`h-3.5 w-3.5 ${repeatingOrderId === orders[0].id ? 'animate-spin' : ''}`} />
+              Повторить последний заказ
+            </button>
+          )}
+
+          <button
+            onClick={fetchOrders}
+            disabled={loading}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+            Обновить
+          </button>
+        </div>
       </div>
 
       {/* Filter and Search Bar */}
@@ -1836,7 +2122,7 @@ function OrdersTab({
                   </div>
                 </div>
 
-                {collections.length > 0 && (
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100">
                   <div className="flex flex-wrap gap-1.5">
                     {collections.map(col => (
                       <span key={col} className="badge bg-slate-100 text-slate-600 text-[10px]">
@@ -1844,7 +2130,22 @@ function OrdersTab({
                       </span>
                     ))}
                   </div>
-                )}
+
+                  {onRepeatOrder && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onRepeatOrder(order);
+                      }}
+                      disabled={repeatingOrderId !== null}
+                      className="flex items-center gap-1.5 text-xs font-semibold text-brand-700 hover:text-brand-800 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-lg border border-brand-200 transition-colors ml-auto active:scale-95 disabled:opacity-50"
+                    >
+                      <RotateCcw className={`h-3 w-3 ${repeatingOrderId === order.id ? 'animate-spin' : ''}`} />
+                      Повторить заказ
+                    </button>
+                  )}
+                </div>
               </div>
             );
           })}
