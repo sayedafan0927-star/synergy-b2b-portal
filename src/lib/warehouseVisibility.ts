@@ -125,9 +125,30 @@ export function saveClientWarehouseSettings(
     localStorage.setItem(STORAGE_KEY, JSON.stringify(allRules));
 
     // Персистируем настройки в PostgreSQL через защищенный серверный API
+    let authHeaders: Record<string, string> = {};
+    try {
+      const sbKey = Object.keys(localStorage).find(k => k.startsWith('sb-') && k.endsWith('-auth-token'));
+      if (sbKey) {
+        const item = localStorage.getItem(sbKey);
+        if (item) {
+          const parsed = JSON.parse(item);
+          const accessToken = parsed?.access_token || parsed?.currentSession?.access_token;
+          if (accessToken) authHeaders['Authorization'] = `Bearer ${accessToken}`;
+        }
+      }
+      const sessionStr = sessionStorage.getItem('synergy:auth_session');
+      if (sessionStr && !authHeaders['Authorization']) {
+        const parsedSession = JSON.parse(sessionStr);
+        if (parsedSession?.token) authHeaders['Authorization'] = `Bearer ${parsedSession.token}`;
+      }
+    } catch {}
+
     fetch('/api/warehouse-rules', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders,
+      },
       body: JSON.stringify({ clientId: cleanKey, settings: payload }),
     }).catch(err => console.warn('[warehouseVisibility] Background sync to PostgreSQL failed:', err));
 

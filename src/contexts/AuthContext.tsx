@@ -391,13 +391,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         created_at: new Date().toISOString(),
       };
 
+      // Получаем криптографически подписанный Bearer-токен сессии от бэкенда
+      let sessionToken: string | undefined = res.token;
+      if (!sessionToken) {
+        try {
+          const authHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+          const storedSession = sessionStorage.getItem('synergy:auth_session');
+          if (storedSession) {
+            try {
+              const parsed = JSON.parse(storedSession);
+              if (parsed?.token) authHeaders['Authorization'] = `Bearer ${parsed.token}`;
+            } catch {}
+          }
+          const tokenRes = await fetch('/api/auth/client-token', {
+            method: 'POST',
+            headers: authHeaders,
+            body: JSON.stringify({ client: clientProfile, user: mockUser }),
+          });
+          if (tokenRes.ok) {
+            const tokenData = await tokenRes.json();
+            if (tokenData?.token) {
+              sessionToken = tokenData.token;
+            }
+          }
+        } catch (tokenErr) {
+          console.warn('[AuthContext] Notice obtaining signed client token:', tokenErr);
+        }
+      }
+
       setUser(mockUser as User);
       setProfile(clientProfile);
       setDeactivationNotice(null);
 
       if (typeof window !== 'undefined') {
         sessionStorage.removeItem('synergy:deactivation_notice');
-        sessionStorage.setItem('synergy:auth_session', JSON.stringify({ user: mockUser, profile: clientProfile }));
+        sessionStorage.setItem('synergy:auth_session', JSON.stringify({
+          user: mockUser,
+          profile: clientProfile,
+          token: sessionToken,
+        }));
       }
 
       setLoading(false);

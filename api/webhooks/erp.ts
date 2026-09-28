@@ -156,11 +156,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.log(`  -> SKU: ${item.sku}, Free stock: ${item.free_stock}, Reserved: ${item.reserved_stock}, Total: ${item.total_stock}`);
       }
 
-      // 1.1. Материализация в БД (inventory_balances) и инкрементальное обновление кэша каталога
+      // 1.1. Материализация в БД (inventory_balances) и инкрементальное обновление кэша каталога с версионированием
+      const versionTimestamp = payload.version_timestamp || (payload.timestamp ? new Date(payload.timestamp).getTime() : Date.now());
       let dbUpdated = 0;
       let cachePatched = false;
       try {
-        const patchResult = await patchCachedCatalogStock(items);
+        const patchResult = await patchCachedCatalogStock(items, 'catalog_global', versionTimestamp);
         dbUpdated = patchResult.updatedInDb;
         cachePatched = patchResult.cachePatched;
       } catch (patchErr) {
@@ -253,14 +254,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           updatePayload.notes = orderNotes;
         }
 
+        const isUuid = (val: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
         const matchConditions: string[] = [];
-        if (order_id) {
-          matchConditions.push(`id.eq.${order_id}`, `id.eq.erp-${order_id}`);
+        if (order_id && isUuid(String(order_id))) {
+          matchConditions.push(`id.eq.${order_id}`);
         }
         if (order_doc_number) {
           matchConditions.push(`order_number.eq.${order_doc_number}`);
         }
-        if (order_id && !order_doc_number) {
+        if (order_id) {
           matchConditions.push(`order_number.eq.${order_id}`);
         }
 
@@ -273,6 +275,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } catch (dbErr) {
         console.warn('[Webhook ERP] Supabase sync notice:', dbErr);
       }
+
+      await recordAuditLog({
+        eventType: 'order_status_updated',
+        direction: 'inbound',
+        status: 'success',
+        source: 'ERP Webhook',
+        payload: {
+          event_id: eventId || payload.event_id,
+          order_id,
+          order_doc_number,
+          targetStatus,
+          track_code,
+        },
+      });
 
       // Автоматическая отправка уведомления в WhatsApp
       if (client_phone && targetStatus !== 'cancelled') {
@@ -325,10 +341,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               currency: currency || 'USD',
               last_synced_at: new Date().toISOString(),
             }, { onConflict: 'partner_id' });
+
+          if (debt_usd !== undefined) {
+            await supabaseServer
+              .from('profiles')
+              .update({
+                debt_usd: Number(debt_usd),
+                updated_at: new Date().toISOString(),
+              })
+              .eq('partner_id', String(client_id));
+          }
         } catch (dbErr) {
           console.warn('[Webhook ERP] partner_balances update notice:', dbErr);
         }
       }
+
+      await recordAuditLog({
+        eventType: 'payment_received',
+        direction: 'inbound',
+        status: 'success',
+        source: 'ERP Webhook',
+        payload: {
+          event_id: eventId || payload.event_id,
+          client_id,
+          amount,
+          balance_usd,
+          debt_usd,
+          payment_doc_number,
+        },
+      });
 
       return res.status(200).json({
         success: true,
@@ -356,6 +397,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         sku,
         released_qty,
         timestamp,
+      });
+
+      await recordAuditLog({
+        eventType: 'partner_stock_released',
+        direction: 'inbound',
+        status: 'success',
+        source: 'ERP Webhook',
+        payload: {
+          event_id: eventId || payload.event_id,
+          partner_id,
+          sku,
+          released_qty,
+          doc_number,
+        },
       });
 
       return res.status(200).json({
@@ -388,6 +443,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
+      await recordAuditLog({
+        eventType: 'client_deactivated',
+        direction: 'inbound',
+        status: 'success',
+        source: 'ERP Webhook',
+        payload: {
+          event_id: eventId || payload.event_id,
+          counterparty_id: counterpartyId,
+        },
+      });
+
       return res.status(200).json({
         success: true,
         event: 'client_deactivated',
@@ -414,6 +480,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           console.warn('[Webhook ERP] Client sync notice:', dbErr);
         }
       }
+
+      await recordAuditLog({
+        eventType: 'client_synced',
+        direction: 'inbound',
+        status: 'success',
+        source: 'ERP Webhook',
+        payload: {
+          event_id: eventId || payload.event_id,
+          counterparty_id: counterpartyId,
+        },
+      });
 
       return res.status(200).json({
         success: true,

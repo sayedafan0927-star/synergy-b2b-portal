@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Menu, X, ShoppingCart, User, Shield, Phone } from 'lucide-react';
+import { Menu, X, ShoppingCart, User, Shield, Phone, CloudOff, RefreshCw } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { checkSystemHealth } from '@/lib/erpApi';
+import { getQueuedOfflineOrders, processOfflineOrderQueue, onOfflineQueueChange } from '@/lib/offlineOrderQueue';
 import type { PageId } from '@/types';
 
 interface HeaderProps {
@@ -15,6 +16,8 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [systemStatus, setSystemStatus] = useState<'ok' | 'degraded' | 'down' | 'loading'>('loading');
+  const [offlineCount, setOfflineCount] = useState(0);
+  const [isSyncingOffline, setIsSyncingOffline] = useState(false);
   const { totalItems } = useCart();
   const { user, profile, isAdmin } = useAuth();
   const { language, setLanguage, t } = useLanguage();
@@ -29,6 +32,14 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
         if (mounted) setSystemStatus('down');
       });
     return () => { mounted = false; };
+  }, []);
+
+  useEffect(() => {
+    setOfflineCount(getQueuedOfflineOrders().filter(o => o.status !== 'synced').length);
+    const unbind = onOfflineQueueChange((orders) => {
+      setOfflineCount(orders.filter(o => o.status !== 'synced').length);
+    });
+    return () => unbind();
   }, []);
 
   const navLinks: { label: string; page: PageId }[] = [
@@ -154,6 +165,31 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
               </span>
               <span className="hidden xl:inline text-[10px] text-slate-500 font-semibold">1С</span>
             </div>
+
+            {/* Offline Orders Queue Badge */}
+            {offlineCount > 0 && (
+              <button
+                type="button"
+                onClick={async () => {
+                  setIsSyncingOffline(true);
+                  try {
+                    await processOfflineOrderQueue();
+                  } finally {
+                    setIsSyncingOffline(false);
+                  }
+                }}
+                disabled={isSyncingOffline}
+                title="Есть сохраненные оффлайн-заказы. Нажмите для синхронизации с 1С"
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 text-[11px] font-semibold hover:bg-amber-100 transition-colors shadow-2xs cursor-pointer disabled:opacity-50"
+              >
+                {isSyncingOffline ? (
+                  <RefreshCw className="h-3 w-3 animate-spin text-amber-700" />
+                ) : (
+                  <CloudOff className="h-3.5 w-3.5 text-amber-600 animate-pulse" />
+                )}
+                <span>Офлайн: {offlineCount}</span>
+              </button>
+            )}
 
             <button
               onClick={() => onNavigate(user ? 'profile' : 'login')}

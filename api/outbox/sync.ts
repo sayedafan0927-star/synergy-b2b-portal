@@ -9,7 +9,7 @@ import { applyCorsHeaders } from '../lib/cors';
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://sjvvoxxwevwgziuxjvcy.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
 const SERVER_ERP_KEY = process.env.ERP_API_KEY || '';
-const TARGET_ERP_URL = process.env.ERP_API_URL || 'https://kilem-khan.kz/api/sin/public/api_portal.php';
+const TARGET_ERP_URL = process.env.ERP_API_URL || 'https://crm.kilem-khan.kz/api_portal.php';
 
 const MAX_RETRIES = 5;
 
@@ -57,6 +57,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const correlationId = applyCorrelationId(req, res);
+
+  // Проверка авторизации воркера (CRON_SECRET или PORTAL_SECRET_KEY)
+  const CRON_SECRET = process.env.CRON_SECRET || process.env.PORTAL_SECRET_KEY || '';
+  const authHeader = req.headers['authorization'] || '';
+  const cronKeyHeader = req.headers['x-cron-key'] || req.headers['x-portal-key'];
+
+  const isAuthorized =
+    (process.env.NODE_ENV !== 'production' && !CRON_SECRET) ||
+    (CRON_SECRET && (cronKeyHeader === CRON_SECRET || authHeader === `Bearer ${CRON_SECRET}`));
+
+  if (!isAuthorized) {
+    return res.status(401).json({
+      success: false,
+      error: 'Unauthorized: Invalid or missing authorization token for outbox worker.',
+    });
+  }
 
   // Rate Limiting (макс 30 запусков в минуту на IP)
   if (!enforceRateLimit(req, res, { limit: 30, windowSeconds: 60, actionPrefix: 'outbox_sync' })) {

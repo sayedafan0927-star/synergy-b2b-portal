@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://sjvvoxxwevwgziuxjvcy.supabase.co';
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmY2dscW5qaHl1Ynh1aGZ0cndvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMwMzQ1MDUsImV4cCI6MjA1ODYxMDUwNX0.z0Vw3tJ4372iY-qC52dZ_Yl-kC46M25jH3_P9z3G30w';
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -134,10 +134,15 @@ export interface StockItemUpdate {
 
 /**
  * Инкрементальное обновление остатков по вебхуку:
- * 1. Сохраняет остатки в таблицу inventory_balances
- * 2. Точечно обновляет существующий снимок каталога в catalog_cache и L1 memory
+ * 1. Защищает от Out-of-Order перезаписи устаревшими пакетами (CDC Versioning)
+ * 2. Сохраняет остатки в таблицу inventory_balances
+ * 3. Точечно обновляет существующий снимок каталога в catalog_cache и L1 memory
  */
-export async function patchCachedCatalogStock(items: StockItemUpdate[], cacheKey = 'catalog_global'): Promise<{
+export async function patchCachedCatalogStock(
+  items: StockItemUpdate[],
+  cacheKey = 'catalog_global',
+  versionTimestamp?: number | string
+): Promise<{
   updatedInDb: number;
   cachePatched: boolean;
 }> {
@@ -146,11 +151,12 @@ export async function patchCachedCatalogStock(items: StockItemUpdate[], cacheKey
   }
 
   const nowIso = new Date().toISOString();
+  const incomingVersion = versionTimestamp ? Number(versionTimestamp) : Date.now();
   let updatedInDb = 0;
 
-  // 1. Атомарный Upsert в inventory_balances
+  // 1. Атомарный Upsert в inventory_balances с защитой от Out-of-Order версий
   try {
-    const rows = items.map(it => {
+    const rawRows = items.map(it => {
       const sku = String(it.sku || it.article || it.code || '').trim();
       const free = Number(it.free_stock ?? 0);
       const reserved = Number(it.reserved_stock ?? 0);
@@ -162,19 +168,46 @@ export async function patchCachedCatalogStock(items: StockItemUpdate[], cacheKey
         free_stock: free,
         reserved_stock: reserved,
         total_stock: total,
+        state_version: incomingVersion,
         updated_at: nowIso,
       };
     }).filter(r => r.sku.length > 0);
 
-    if (rows.length > 0) {
-      const { error } = await supabase
+    if (rawRows.length > 0) {
+      // Проверяем версии существующих записей в БД
+      const skus = Array.from(new Set(rawRows.map(r => r.sku)));
+      const { data: existingBalances } = await supabase
         .from('inventory_balances')
-        .upsert(rows, { onConflict: 'sku,warehouse_id' });
+        .select('sku, warehouse_id, state_version')
+        .in('sku', skus);
 
-      if (!error) {
-        updatedInDb = rows.length;
-      } else {
-        console.warn('[CatalogCache] Error upserting inventory_balances:', error);
+      const existingMap = new Map<string, number>();
+      if (existingBalances) {
+        for (const eb of existingBalances) {
+          existingMap.set(`${eb.sku}::${eb.warehouse_id}`, Number(eb.state_version || 0));
+        }
+      }
+
+      // Отбрасываем устаревшие или дублирующиеся строки (пришедшие не по порядку: version_timestamp <= db.state_version)
+      const validRows = rawRows.filter(r => {
+        const prevVer = existingMap.get(`${r.sku}::${r.warehouse_id}`);
+        if (prevVer && prevVer >= r.state_version) {
+          console.warn(`[CatalogCache] Out-of-order or duplicate webhook ignored for SKU ${r.sku} (incoming: ${r.state_version} <= db: ${prevVer})`);
+          return false;
+        }
+        return true;
+      });
+
+      if (validRows.length > 0) {
+        const { error } = await supabase
+          .from('inventory_balances')
+          .upsert(validRows, { onConflict: 'sku,warehouse_id' });
+
+        if (!error) {
+          updatedInDb = validRows.length;
+        } else {
+          console.warn('[CatalogCache] Error upserting inventory_balances:', error);
+        }
       }
     }
   } catch (dbErr) {

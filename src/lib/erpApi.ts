@@ -160,6 +160,13 @@ export interface CreateOrderPayload {
   }>;
 }
 
+export interface SplitSubOrder {
+  doc_number: string;
+  warehouse: string;
+  amount: number;
+  items_count: number;
+}
+
 export interface ErpOrderResponse {
   success: boolean;
   order?: {
@@ -175,9 +182,13 @@ export interface ErpOrderResponse {
     status: string;
     items_count: number;
     is_buffered?: boolean;
+    split_orders?: SplitSubOrder[];
   };
+  split_orders?: SplitSubOrder[];
   message?: string;
   error?: string;
+  code?: string;
+  details?: any;
 }
 
 /**
@@ -193,6 +204,7 @@ export async function submitOrderToErp(payload: CreateOrderPayload): Promise<Erp
 
   const normalizedPayload = {
     user_id: payload.user_id,
+    partner_id: (payload as any).partner_id || numClientId || payload.client_id,
     client_id: numClientId || payload.client_id,
     warehouse_id: payload.warehouse_id || 81,
     buyer: payload.buyer || {
@@ -209,6 +221,7 @@ export async function submitOrderToErp(payload: CreateOrderPayload): Promise<Erp
       sku: item.sku,
       size: item.size,
       warehouse: item.warehouse || 'Основной Склад Астана',
+      warehouse_id: (item as any).warehouse_id || (item.warehouse && (item.warehouse.includes('Астана') || item.warehouse.includes('Основной')) ? 81 : 81),
       quantity: item.quantity,
       price: item.price,
       price_per_sqm: item.price_per_sqm,
@@ -987,6 +1000,54 @@ export async function fetchSyncBundleFromErp() {
   return await response.json();
 }
 
+export interface ReconciliationReport {
+  partner_id: string;
+  start_date: string;
+  end_date: string;
+  initial_balance: number;
+  total_debit: number;
+  total_credit: number;
+  final_balance: number;
+  transactions: Array<{
+    date: string;
+    doc_type: string;
+    doc_number: string;
+    debit: number;
+    credit: number;
+    comment?: string;
+  }>;
+}
+
+/**
+ * Получение официального акта сверки взаиморасчетов из 1С:ERP
+ */
+export async function fetchReconciliationReportFromErp(params: {
+  partnerId: string | number;
+  startDate?: string;
+  endDate?: string;
+}): Promise<{ success: boolean; report?: ReconciliationReport; error?: string }> {
+  const response = await erpFetch('get_reconciliation_report', {
+    method: 'GET',
+    params: {
+      partner_id: params.partnerId,
+      start_date: params.startDate,
+      end_date: params.endDate,
+    },
+  });
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => '');
+    let errMsg = `Ошибка загрузки акта сверки (${response.status})`;
+    try {
+      const errJson = JSON.parse(errText);
+      if (errJson?.error) errMsg = errJson.error;
+    } catch {}
+    throw new Error(errMsg);
+  }
+
+  return await response.json();
+}
+
 export interface ErpOrderItem {
   id: number;
   item_id: number;
@@ -1175,31 +1236,37 @@ export async function updateClientAccessInErp(clientId: number | string, accessE
   return { success: true };
 }
 
-/**
- * 4. Получение глобальных настроек видимости из ERP (action=display_settings).
- */
-export async function fetchDisplaySettingsFromErp(): Promise<ErpDisplaySettings | null> {
-  try {
-    const response = await erpFetch('display_settings', {
-      method: 'GET',
-      params: { _t: Date.now() },
-    });
-    if (response.ok) {
-      const data = await response.json();
-      if (data?.success && data?.settings) {
-        return data.settings;
-      }
-    }
-  } catch (err) {
-    console.warn('[fetchDisplaySettingsFromErp] Error fetching display settings from ERP:', err);
+let cachedDisplaySettings: { settings: ErpDisplaySettings; expiry: number } | null = null;
+
+export async function fetchDisplaySettingsFromErp(bypassCache = false): Promise<ErpDisplaySettings | null> {
+  if (!bypassCache && cachedDisplaySettings && cachedDisplaySettings.expiry > Date.now()) {
+    return cachedDisplaySettings.settings;
   }
-  return null;
+
+  return deduplicateRequest('display_settings', async () => {
+    try {
+      const response = await erpFetch('display_settings', {
+        method: 'GET',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data?.success && data?.settings) {
+          cachedDisplaySettings = { settings: data.settings, expiry: Date.now() + 60000 };
+          return data.settings;
+        }
+      }
+    } catch (err) {
+      console.warn('[fetchDisplaySettingsFromErp] Error fetching display settings from ERP:', err);
+    }
+    return cachedDisplaySettings ? cachedDisplaySettings.settings : null;
+  });
 }
 
 /**
  * 4. Сохранение глобальных настроек видимости в ERP (action=display_settings).
  */
 export async function saveDisplaySettingsToErp(settings: Partial<ErpDisplaySettings>): Promise<boolean> {
+  cachedDisplaySettings = null;
   try {
     const response = await erpFetch('display_settings', {
       method: 'POST',

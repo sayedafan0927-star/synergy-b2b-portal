@@ -26,10 +26,43 @@ export interface ErpSsoPayload {
 /**
  * Валидация криптографического токена из 1С / ERP
  */
-function verifyErpToken(tokenStr: string): { valid: boolean; payload?: ErpSsoPayload; error?: string } {
+function verifyErpToken(tokenStr: string, queryParams?: Record<string, any>): { valid: boolean; payload?: ErpSsoPayload; error?: string } {
   if (!SECRET_KEY) {
     return { valid: false, error: 'Конфигурация сервера: отсутствует ключ PORTAL_SECRET_KEY' };
   }
+
+  // 1. Проверка спецификации ERP_INTEGRATION_SPEC.md (HMAC-SHA256 подпись: "{manager_id}:{role}:{timestamp}")
+  if (queryParams && queryParams.manager_id && queryParams.timestamp) {
+    const managerId = String(queryParams.manager_id).trim();
+    const role = String(queryParams.role || 'manager_rm').trim() as any;
+    const timestamp = Number(queryParams.timestamp);
+    const phone = String(queryParams.phone || '').trim();
+    const name = String(queryParams.name || 'Сотрудник 1С').trim();
+
+    const payloadToSign = `${managerId}:${role}:${timestamp}`;
+    const expectedSig = crypto.createHmac('sha256', SECRET_KEY).update(payloadToSign).digest('hex');
+
+    if (tokenStr.toLowerCase() === expectedSig.toLowerCase()) {
+      // Проверка срока жизни ссылки (15 минут по спецификации)
+      const nowSec = Math.floor(Date.now() / 1000);
+      if (Math.abs(nowSec - timestamp) > 900) {
+        return { valid: false, error: 'Срок действия одноразовой ссылки из 1С истек (TTL 15 мин)' };
+      }
+
+      return {
+        valid: true,
+        payload: {
+          sub: managerId,
+          role,
+          name,
+          phone,
+          exp: (timestamp + 900) * 1000,
+        },
+      };
+    }
+  }
+
+  // 2. Fallback: проверка токена в формате base64url JSON
   try {
     const raw = Buffer.from(tokenStr, 'base64url').toString('utf8');
     const { data, sig } = JSON.parse(raw);
@@ -50,7 +83,7 @@ function verifyErpToken(tokenStr: string): { valid: boolean; payload?: ErpSsoPay
 
     return { valid: true, payload };
   } catch (err: any) {
-    return { valid: false, error: `Сбой парсинга токена: ${err?.message}` };
+    return { valid: false, error: `Сбой валидации SSO-токена: неверная подпись или формат` };
   }
 }
 
@@ -68,7 +101,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).send('SSO Token is required');
   }
 
-  const result = verifyErpToken(token);
+  const result = verifyErpToken(token, req.query);
   if (!result.valid || !result.payload) {
     await recordAuditLog({
       eventType: 'sso_auth_failed',

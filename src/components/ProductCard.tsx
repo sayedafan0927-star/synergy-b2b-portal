@@ -419,6 +419,11 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
                     >
                       <div className="flex items-baseline gap-1.5 whitespace-nowrap shrink-0">
                         <span className="font-semibold text-slate-800 text-xs sm:text-sm whitespace-nowrap">{variant.size}</span>
+                        {variant.is_runner ? (
+                          <span className="text-[9px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1 py-0.2 rounded">Дорожка</span>
+                        ) : variant.size_cluster ? (
+                          <span className="text-[9px] font-medium text-slate-500 bg-slate-100 px-1 py-0.2 rounded uppercase">{variant.size_cluster}</span>
+                        ) : null}
                         <span className="text-[10px] sm:text-[11px] text-slate-400 font-normal whitespace-nowrap">({stock} шт)</span>
                       </div>
 

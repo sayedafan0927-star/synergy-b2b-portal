@@ -14,6 +14,7 @@ import ContactsPage from '@/pages/ContactsPage';
 import LoginPage from '@/pages/LoginPage';
 import ProfilePage from '@/pages/ProfilePage';
 import { useNetworkStatus } from '@/registerServiceWorker';
+import { initOfflineQueueAutoSync } from '@/lib/offlineOrderQueue';
 import type { PageId } from '@/types';
 
 function Preloader({ onFinished }: { onFinished: () => void }) {
@@ -212,6 +213,11 @@ export default function App() {
     };
     document.title = titles[page];
   }, [page]);
+
+  useEffect(() => {
+    const cleanup = initOfflineQueueAutoSync();
+    return cleanup;
+  }, []);
 
   const handlePreloaderFinished = useCallback(() => setPreloaderDone(true), []);
 

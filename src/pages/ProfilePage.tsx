@@ -58,7 +58,8 @@ import {
   saveDisplaySettingsToErp,
   broadcastClientDeactivated,
   isCounterpartyArchivedOrMailing,
-  isCounterpartyActive
+  isCounterpartyActive,
+  fetchReconciliationReportFromErp,
 } from '@/lib/erpApi';
 import SupplierCabinet from '@/components/SupplierCabinet';
 import { triggerCatalogReload, mergeProducts } from '@/hooks/useProductData';
@@ -1057,12 +1058,12 @@ function AdminUsersTab({ onNavigate }: { onNavigate: (page: PageId) => void }) {
       try {
         const { data } = await supabase
           .from('profiles')
-          .select('id, full_name, company_name, phone, role, partner_id, price_type, manager_id, impersonation_enabled, showroom_warehouse_id, showroom_warehouse_name')
+          .select('id, full_name, company_name, phone, role, partner_id, price_type, manager_id, created_at')
           .order('created_at', { ascending: false });
         if (!cancelled && data) {
           setUsers(data.map((u: any) => ({
             ...u,
-            portal_access_enabled: u.impersonation_enabled !== false,
+            portal_access_enabled: true,
           })));
         }
       } catch (err) {
@@ -2490,13 +2491,18 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
       const endDate = now.toISOString().split('T')[0];
       const partnerId = profile?.partner_id || profile?.id || '';
 
-      const res = await fetch(`/api/erp?action=get_reconciliation_report&partner_id=${encodeURIComponent(String(partnerId))}&start_date=${startDate}&end_date=${endDate}`);
-      const data = await res.json();
+      const data = await fetchReconciliationReportFromErp({
+        partnerId: String(partnerId),
+        startDate,
+        endDate,
+      });
+
       if (data.success && data.report) {
         setReconciliationData(data.report);
       }
     } catch (e) {
       console.warn('[Profile] Reconciliation report fetch failed:', e);
+      setReconciliationData(null);
     } finally {
       setReconciliationLoading(false);
     }
@@ -3286,12 +3292,20 @@ function OrdersTab({
     const channel1 = supabase
       .channel('portal_live_updates')
       .on('broadcast', { event: 'order_status_changed' }, handleOrderStatusEvent)
-      .subscribe();
+      .subscribe((status, err) => {
+        if (status === 'CHANNEL_ERROR') {
+          console.warn('[Realtime] portal_live_updates order sync error:', err?.message || status);
+        }
+      });
 
     const channel2 = supabase
       .channel('portal_order_live_sync')
       .on('broadcast', { event: 'order_status_changed' }, handleOrderStatusEvent)
-      .subscribe();
+      .subscribe((status, err) => {
+        if (status === 'CHANNEL_ERROR') {
+          console.warn('[Realtime] portal_order_live_sync error:', err?.message || status);
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel1);

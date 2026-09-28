@@ -14,12 +14,14 @@ import {
   CheckCircle2,
   AlertTriangle,
   Boxes,
+  WifiOff,
 } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import type { PageId, CartItem } from '@/types';
 import { calcSqm, parseSizeDimensions } from '@/types';
-import { submitOrderToErp, fetchClientDebtFromErp, requestOrderApprovalViaWhatsApp } from '@/lib/erpApi';
+import { submitOrderToErp, fetchClientDebtFromErp, requestOrderApprovalViaWhatsApp, type SplitSubOrder } from '@/lib/erpApi';
+import { enqueueOfflineOrder } from '@/lib/offlineOrderQueue';
 import { triggerCatalogReload } from '@/hooks/useProductData';
 import { getPricingTier } from '@/lib/pricingEngine';
 import ProductImage from '@/components/ProductImage';
@@ -74,6 +76,8 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
   const { user, profile, isImpersonating, impersonatedProfile } = useAuth();
 
   const [orderDocNumber, setOrderDocNumber] = useState<string | null>(null);
+  const [splitOrders, setSplitOrders] = useState<SplitSubOrder[] | null>(null);
+  const [isOfflineQueued, setIsOfflineQueued] = useState(false);
   const [isWaitingApproval, setIsWaitingApproval] = useState(false);
   const [debtReport, setDebtReport] = useState<any | null>(null);
   const [activeCollection, setActiveCollection] = useState<string | null>(null);
@@ -150,26 +154,90 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
     return (
       <div className="min-h-screen pt-20 pb-24 lg:pb-8">
         <div className="container-w flex flex-col items-center justify-center py-24 text-center">
-          <div className={`mb-6 flex h-20 w-20 items-center justify-center rounded-full ${isWaitingApproval ? 'bg-amber-50' : 'bg-emerald-50'}`}>
-            {isWaitingApproval ? (
+          <div className={`mb-6 flex h-20 w-20 items-center justify-center rounded-full ${
+            isOfflineQueued 
+              ? 'bg-sky-50' 
+              : isWaitingApproval 
+              ? 'bg-amber-50' 
+              : 'bg-emerald-50'
+          }`}>
+            {isOfflineQueued ? (
+              <WifiOff className="h-8 w-8 text-sky-600" />
+            ) : isWaitingApproval ? (
               <AlertTriangle className="h-8 w-8 text-amber-600" />
             ) : (
               <CheckCircle2 className="h-8 w-8 text-emerald-600" />
             )}
           </div>
           <h1 className="font-display text-2xl font-bold text-slate-900 sm:text-3xl">
-            {isWaitingApproval ? 'Заказ отправлен на согласование!' : 'Заказ оформлен!'}
+            {isOfflineQueued
+              ? 'Заказ сохранен в офлайн-очереди!'
+              : isWaitingApproval
+              ? 'Заказ отправлен на согласование!'
+              : 'Заказ оформлен!'}
           </h1>
-          <div className={`mt-4 rounded-xl border px-6 py-4 ${isWaitingApproval ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}>
-            <p className={`text-sm mb-1 ${isWaitingApproval ? 'text-amber-700' : 'text-emerald-700'}`}>Номер заказа</p>
-            <p className={`text-2xl font-bold font-mono ${isWaitingApproval ? 'text-amber-800' : 'text-emerald-800'}`}>{orderDocNumber}</p>
+          <div className={`mt-4 rounded-xl border px-6 py-4 ${
+            isOfflineQueued
+              ? 'border-sky-200 bg-sky-50'
+              : isWaitingApproval
+              ? 'border-amber-200 bg-amber-50'
+              : 'border-emerald-200 bg-emerald-50'
+          }`}>
+            <p className={`text-sm mb-1 ${
+              isOfflineQueued
+                ? 'text-sky-700'
+                : isWaitingApproval
+                ? 'text-amber-700'
+                : 'text-emerald-700'
+            }`}>
+              {isOfflineQueued ? 'Номер в локальной очереди' : 'Номер заказа'}
+            </p>
+            <p className={`text-2xl font-bold font-mono ${
+              isOfflineQueued
+                ? 'text-sky-800'
+                : isWaitingApproval
+                ? 'text-amber-800'
+                : 'text-emerald-800'
+            }`}>
+              {orderDocNumber}
+            </p>
           </div>
+
+          {/* Мультисклад: детализированный блок субордеров */}
+          {splitOrders && splitOrders.length > 1 && (
+            <div className="mt-6 w-full max-w-md rounded-xl border border-slate-200 bg-slate-50/70 p-4 text-left shadow-2xs">
+              <div className="flex items-center gap-2 mb-3 text-slate-800 font-semibold text-sm">
+                <Boxes className="h-4 w-4 text-brand-600" />
+                <span>Мультисклад: заказ разделен на {splitOrders.length} накладные</span>
+              </div>
+              <div className="space-y-2">
+                {splitOrders.map((split, idx) => (
+                  <div key={idx} className="flex items-center justify-between rounded-lg bg-white p-3 border border-slate-200/80 text-xs shadow-2xs">
+                    <div>
+                      <div className="font-mono font-bold text-slate-900">{split.doc_number}</div>
+                      <div className="text-slate-500 mt-0.5">{split.warehouse}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-bold text-slate-900">${split.amount?.toLocaleString()}</div>
+                      <div className="text-slate-400">{split.items_count} шт</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-3 text-[11px] text-slate-500">
+                Товары распределены по региональным складам для раздельной комплектации и оперативной логистики.
+              </p>
+            </div>
+          )}
+
           <p className="mt-4 max-w-md text-slate-500">
-            {isWaitingApproval
+            {isOfflineQueued
+              ? 'Соединение с сетью отсутствует или нестабильно. Заказ надежно сохранен в локальной базе и будет автоматически передан в ERP при восстановлении интернета.'
+              : isWaitingApproval
               ? 'Запрос на согласование условий отгрузки отправлен вашему региональному менеджеру в WhatsApp. Как только заказ будет одобрен, вам придет подтверждающее сообщение в WhatsApp.'
               : 'Наш менеджер свяжется с вами для подтверждения заказа.'}
           </p>
-          <button onClick={() => { setOrderDocNumber(null); onNavigate('catalog'); }} className="btn-primary mt-8">
+          <button onClick={() => { setOrderDocNumber(null); setSplitOrders(null); setIsOfflineQueued(false); onNavigate('catalog'); }} className="btn-primary mt-8">
             Продолжить покупки
           </button>
         </div>
@@ -211,33 +279,55 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
       : '';
     const fullComment = `${orderComment.trim()}${whSummaryTag}${requiresApproval ? ' [ТРЕБУЕТСЯ АППРУВ В WHATSAPP: ' + (isBlocked ? 'Стоп-лист' : exceedsLimit ? 'Превышение кредитного лимита' : 'Просроченная задолженность') + ']' : ''}`;
 
-    try {
-      const data = await submitOrderToErp({
-        user_id: effectiveProfile?.id,
-        client_id: clientId,
-        warehouse_id: 81,
-        buyer: {
-          name: clientCompany.trim() || clientName.trim(),
-          phone: clientPhone.trim(),
-        },
-        client_name: clientName.trim(),
-        client_phone: clientPhone.trim(),
-        client_company: clientCompany.trim(),
-        city: selectedCity,
-        comment: fullComment,
-        items: items.map(item => ({
-          item_id: item.item_id || (Number(item.productId) > 0 ? Number(item.productId) : undefined),
-          productId: item.productId,
-          size: item.size,
-          sku: item.sku,
-          warehouse: item.warehouse || 'Основной Склад Астана',
-          price: item.price,
-          price_per_sqm: item.price_per_sqm,
-          quantity: item.quantity,
-        })),
-      });
+    const orderPayload = {
+      user_id: effectiveProfile?.id,
+      client_id: clientId,
+      warehouse_id: 81,
+      buyer: {
+        name: clientCompany.trim() || clientName.trim(),
+        phone: clientPhone.trim(),
+      },
+      client_name: clientName.trim(),
+      client_phone: clientPhone.trim(),
+      client_company: clientCompany.trim(),
+      city: selectedCity,
+      comment: fullComment,
+      items: items.map(item => ({
+        item_id: item.item_id || (Number(item.productId) > 0 ? Number(item.productId) : undefined),
+        productId: item.productId,
+        size: item.size,
+        sku: item.sku,
+        warehouse: item.warehouse || 'Основной Склад Астана',
+        warehouse_id: (item as any).warehouse_id,
+        price: item.price,
+        price_per_sqm: item.price_per_sqm,
+        quantity: item.quantity,
+      })),
+    };
 
-      if (data.success && data.order?.doc_number) {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      const queued = enqueueOfflineOrder(orderPayload);
+      clearCart();
+      setIsOfflineQueued(true);
+      setOrderDocNumber(queued.id);
+      setSubmitting(false);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    try {
+      const data = await submitOrderToErp(orderPayload);
+
+      if (data.success && (data.order?.doc_number || data.split_orders?.length)) {
+        const docNum = data.order?.doc_number || data.split_orders?.[0]?.doc_number || 'ORD-NEW';
+        const receivedSplits = data.split_orders || data.order?.split_orders || null;
+        if (receivedSplits && receivedSplits.length > 1) {
+          setSplitOrders(receivedSplits);
+        } else {
+          setSplitOrders(null);
+        }
+        setIsOfflineQueued(false);
+
         if (requiresApproval) {
           setIsWaitingApproval(true);
           const reason = isBlocked 
@@ -247,8 +337,8 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
               : `Имеется просроченная задолженность ($${debtReport?.financials?.overdue_usd || 0})`;
 
           requestOrderApprovalViaWhatsApp({
-            orderId: data.order.order_id || data.order.doc_number,
-            orderDocNumber: data.order.doc_number,
+            orderId: data.order?.order_id || docNum,
+            orderDocNumber: docNum,
             clientName: clientCompany.trim() || clientName.trim(),
             clientPhone: clientPhone.trim(),
             totalAmount: totalPrice,
@@ -262,13 +352,28 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
         }
 
         clearCart();
-        setOrderDocNumber(data.order.doc_number);
+        setOrderDocNumber(docNum);
         setStockConflictDetails(null);
         window.scrollTo({ top: 0, behavior: 'smooth' });
       } else {
         throw new Error(data.error || 'Не удалось создать заказ');
       }
     } catch (err: any) {
+      const isNetworkIssue =
+        (typeof navigator !== 'undefined' && !navigator.onLine) ||
+        err?.name === 'TypeError' ||
+        String(err?.message || '').toLowerCase().includes('failed to fetch') ||
+        String(err?.message || '').toLowerCase().includes('network');
+
+      if (isNetworkIssue) {
+        const queued = enqueueOfflineOrder(orderPayload);
+        clearCart();
+        setIsOfflineQueued(true);
+        setOrderDocNumber(queued.id);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+
       setSubmitError(err.message || 'Ошибка оформления заказа');
       if (err.code === 'INSUFFICIENT_STOCK' || err.details?.code === 'INSUFFICIENT_STOCK') {
         setStockConflictDetails(err.details || {});

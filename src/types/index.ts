@@ -48,6 +48,9 @@ export interface ProductVariant {
   width?: number;
   length?: number;
   area_sqm?: number;
+  size_cluster?: SizeCluster;
+  is_runner?: boolean;
+  design_id?: string;
   shape?: string;
   shape_label?: string;
   price_per_sqm?: number;
@@ -304,6 +307,22 @@ export interface CollectionPrice {
   collection: string;
   price_type_id: string;
   price_per_sqm: number;
+}
+
+export type SizeCluster = 'small' | 'medium' | 'large' | 'oversize';
+
+export function getSizeCluster(areaSqm: number): SizeCluster {
+  if (areaSqm < 2.5) return 'small';
+  if (areaSqm <= 5.5) return 'medium';
+  if (areaSqm <= 10.0) return 'large';
+  return 'oversize';
+}
+
+export function isRunnerDimension(w: number, l: number, category = ''): boolean {
+  if (category && category.toLowerCase().includes('дорожк')) return true;
+  if (w <= 0 || l <= 0) return false;
+  const ratio = Math.max(w, l) / Math.min(w, l);
+  return ratio >= 2.4;
 }
 
 export function parseSizeDimensions(size: string): { w: number; h: number } {

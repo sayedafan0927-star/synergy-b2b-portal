@@ -854,7 +854,14 @@ export default function ProductPage({
                           <td className={`py-3 pl-5 pr-3 text-sm font-medium text-slate-900 whitespace-nowrap ${!isFirstRow ? 'pt-1' : ''}`}>
                             {isFirstRow ? (
                               <div>
-                                <span className="font-semibold text-slate-900">{variant.size}</span>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-semibold text-slate-900">{variant.size}</span>
+                                  {variant.is_runner ? (
+                                    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 uppercase">Дорожка</span>
+                                  ) : variant.size_cluster ? (
+                                    <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 uppercase">{variant.size_cluster}</span>
+                                  ) : null}
+                                </div>
                                 <div className="mt-0.5 flex flex-wrap gap-x-2 text-[11px] text-slate-400 font-normal">
                                   {(variant.article || product.article) && (
                                     <span>Арт: <span className="text-slate-600 font-medium">{variant.article || product.article}</span></span>

@@ -4,7 +4,7 @@ import { recordAuditLog } from '../audit/logs';
 import { applyCorrelationId } from '../lib/trace';
 import { applyCorsHeaders } from '../lib/cors';
 
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://sjvvoxxwevwgziuxjvcy.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
 const CRON_SECRET = process.env.CRON_SECRET || process.env.PORTAL_SECRET_KEY || '';
 
@@ -19,20 +19,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const correlationId = applyCorrelationId(req, res);
 
-  // Проверка авторизации крона (Vercel Cron Header или Bearer Secret)
+  // Проверка авторизации крона (Bearer Secret или x-cron-key)
   const authHeader = req.headers['authorization'] || '';
-  const cronHeader = req.headers['x-cron-key'] || req.headers['x-vercel-cron'];
+  const cronKeyHeader = req.headers['x-cron-key'] || req.headers['x-portal-key'];
 
   const isAuthorized =
-    !CRON_SECRET || // Если секрет не настроен в dev окружении
-    cronHeader === '1' || // Vercel Cron header
-    cronHeader === CRON_SECRET ||
-    authHeader === `Bearer ${CRON_SECRET}`;
+    (process.env.NODE_ENV !== 'production' && !CRON_SECRET) ||
+    (CRON_SECRET && (cronKeyHeader === CRON_SECRET || authHeader === `Bearer ${CRON_SECRET}`));
 
   if (!isAuthorized) {
     return res.status(401).json({
       success: false,
-      error: 'Unauthorized: Invalid cron authorization token.',
+      error: 'Unauthorized: Invalid or missing cron authorization token.',
     });
   }
 

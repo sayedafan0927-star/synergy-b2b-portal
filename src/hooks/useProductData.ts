@@ -2,7 +2,8 @@ import { useState, useEffect, useContext, useCallback } from 'react';
 import { fetchCatalogFromErp, fetchSingleProductFromErp, fetchPaginatedCatalogFromErp, type PaginatedCatalogParams } from '@/lib/erpApi';
 import { AuthContext, type Profile } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import type { Product, ProductVariant, Warehouse, StockSummary } from '@/types';
+import type { Product, ProductVariant, Warehouse, StockSummary, SizeCluster } from '@/types';
+import { getSizeCluster, isRunnerDimension, parseSizeDimensions } from '@/types';
 import {
   filterWarehousesForClient,
   getClientWarehouseSettings,
@@ -133,6 +134,11 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
       ? raw.variants.map(v => {
           const s = v.size && v.size !== 'Стандарт' ? v.size.replace(/[*xXхХ]/g, ' × ') : itemSize;
           const area = v.area_sqm && v.area_sqm > 0 ? Number(v.area_sqm) : calculateArea(s);
+          const dims = parseSizeDimensions(s);
+          const vWidth = dims.w > 0 ? dims.w : (v.width || 0);
+          const vLength = dims.h > 0 ? dims.h : (v.length || 0);
+          const sizeCluster = v.size_cluster || getSizeCluster(area);
+          const isRunner = v.is_runner !== undefined ? v.is_runner : isRunnerDimension(vWidth, vLength, category);
           const vPricePerSqm = Number(v.price_per_sqm) > 0 ? Number(v.price_per_sqm) : baseSqmPrice;
           const rawVariantPrice = Number((v as any).price) > 0
             ? Number((v as any).price)
@@ -200,7 +206,11 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
           return {
             ...v,
             size: s,
+            width: vWidth,
+            length: vLength,
             area_sqm: area,
+            size_cluster: sizeCluster,
+            is_runner: isRunner,
             sku: v.sku || `${article}-${s.replace(/\s+/g, '')}`,
             article: varArticle,
             barcode: varBarcode,
@@ -229,11 +239,15 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
       : [{
           id: `var-${article}-${itemSize}`,
           size: itemSize,
+          width: parseSizeDimensions(itemSize).w,
+          length: parseSizeDimensions(itemSize).h,
           sku: `${article}-${itemSize.replace(/\s+/g, '')}`,
           article: raw.article || article,
           barcode: (raw as any).barcode,
           code: (raw as any).code,
           area_sqm: calculateArea(itemSize),
+          size_cluster: getSizeCluster(calculateArea(itemSize)),
+          is_runner: isRunnerDimension(parseSizeDimensions(itemSize).w, parseSizeDimensions(itemSize).h, category),
           price_per_sqm: baseSqmPrice,
           price: Math.round(baseSqmPrice * calculateArea(itemSize) * 100) / 100,
           piece_price: Math.round(baseSqmPrice * calculateArea(itemSize) * 100) / 100,
@@ -578,12 +592,16 @@ export function useProducts(customDealerId?: string | number) {
         if (!data || !data.sku) return;
         window.dispatchEvent(new CustomEvent('synergy:stock-event', { detail: data }));
       })
-      .subscribe();
+      .subscribe((status, err) => {
+        if (status === 'CHANNEL_ERROR') {
+          console.warn('[Realtime] portal_live_updates channel error:', err?.message || status);
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [effectiveDealerId]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;

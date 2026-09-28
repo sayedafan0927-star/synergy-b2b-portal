@@ -92,6 +92,7 @@ interface FilterDrawerProps {
   selectedCountries: Set<string>; toggleCountry: (v: string) => void;
   selectedWarehouses: Set<string>; toggleWarehouse: (v: string) => void;
   selectedSizes: Set<string>; toggleSize: (v: string) => void;
+  selectedClusters: Set<string>; toggleCluster: (v: string) => void;
   activeFilterCount: number; resetFilters: () => void;
   allCollections: string[]; allManufacturers: string[]; allCountries: string[];
   allWarehouses: string[]; allSizes: string[];
@@ -102,7 +103,8 @@ function FilterDrawer(props: FilterDrawerProps) {
     open, onClose, searchQuery, setSearchQuery,
     selectedCollections, toggleCollection, selectedManufacturers, toggleManufacturer,
     selectedCountries, toggleCountry, selectedWarehouses, toggleWarehouse,
-    selectedSizes, toggleSize, activeFilterCount, resetFilters,
+    selectedSizes, toggleSize, selectedClusters, toggleCluster,
+    activeFilterCount, resetFilters,
     allCollections, allManufacturers, allCountries, allWarehouses, allSizes,
   } = props;
 
@@ -141,6 +143,12 @@ function FilterDrawer(props: FilterDrawerProps) {
               <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Поиск по каталогу..." className="input-field pl-9 text-sm" />
             </div>
           </div>
+          <FilterSection title="КЛАСТЕРЫ РАЗМЕРОВ (RUGSUSA)" defaultOpen={true}>
+            <CheckItem label="Маленькие (< 2.5 м²)" checked={selectedClusters.has('small')} onToggle={() => toggleCluster('small')} />
+            <CheckItem label="Средние (2.5 – 5.5 м²)" checked={selectedClusters.has('medium')} onToggle={() => toggleCluster('medium')} />
+            <CheckItem label="Большие (5.5 – 10.0 м²)" checked={selectedClusters.has('large')} onToggle={() => toggleCluster('large')} />
+            <CheckItem label="Оверзайз (> 10.0 м²)" checked={selectedClusters.has('oversize')} onToggle={() => toggleCluster('oversize')} />
+          </FilterSection>
           <FilterSection title="КОЛЛЕКЦИЯ">{allCollections.map(c => <CheckItem key={c} label={c} checked={selectedCollections.has(c)} onToggle={() => toggleCollection(c)} />)}</FilterSection>
           <FilterSection title="РАЗМЕР" defaultOpen={false}>
             {rugSizes.length > 0 && (
@@ -477,6 +485,8 @@ export default function CatalogPage({ onNavigate, initialCollection, initialCoun
   const [selectedCollections, setSelectedCollections] = useState<Set<string>>(() => initialCollection ? new Set([initialCollection]) : new Set());
   const [selectedManufacturers, setSelectedManufacturers] = useState<Set<string>>(new Set());
   const [selectedCountries, setSelectedCountries] = useState<Set<string>>(() => initialCountry ? new Set([initialCountry]) : new Set());
+  const [selectedClusters, setSelectedClusters] = useState<Set<string>>(new Set());
+  const [activeClusterQuickFilter, setActiveClusterQuickFilter] = useState<'all' | 'small' | 'medium' | 'large' | 'oversize' | 'runner'>('all');
   const [adminStockFilter, setAdminStockFilter] = useState<'all' | 'in_stock' | 'out_of_stock'>('all');
   const hideOutOfStockSetting = displaySettings.hide_out_of_stock_products !== false;
 
@@ -530,11 +540,20 @@ export default function CatalogPage({ onNavigate, initialCollection, initialCoun
     return next;
   };
 
-  const activeFilterCount = (selectedCategory !== 'all' ? 1 : 0) + selectedCollections.size + selectedManufacturers.size + selectedCountries.size + selectedWarehouses.size + selectedSizes.size;
+  const activeFilterCount = (selectedCategory !== 'all' ? 1 : 0) +
+    (activeClusterQuickFilter !== 'all' ? 1 : 0) +
+    selectedCollections.size +
+    selectedManufacturers.size +
+    selectedCountries.size +
+    selectedWarehouses.size +
+    selectedSizes.size +
+    selectedClusters.size;
 
   const resetFilters = () => {
     setSearchQuery('');
     setSelectedCategory('all');
+    setActiveClusterQuickFilter('all');
+    setSelectedClusters(new Set());
     setSelectedCollections(new Set());
     setSelectedManufacturers(new Set());
     setSelectedCountries(new Set());
@@ -552,25 +571,33 @@ export default function CatalogPage({ onNavigate, initialCollection, initialCoun
       );
     }
 
+    // RugsUSA Pattern 3: Size Clustering Engine
+    if (activeClusterQuickFilter !== 'all') {
+      if (activeClusterQuickFilter === 'runner') {
+        result = result.filter(p => p.variants.some(v => v.is_runner));
+      } else {
+        result = result.filter(p => p.variants.some(v => v.size_cluster === activeClusterQuickFilter));
+      }
+    }
+    if (selectedClusters.size > 0) {
+      result = result.filter(p => p.variants.some(v => v.size_cluster && selectedClusters.has(v.size_cluster)));
+    }
+
     if (selectedCollections.size > 0) result = result.filter(p => selectedCollections.has(p.collection));
     if (selectedManufacturers.size > 0) result = result.filter(p => selectedManufacturers.has(p.manufacturer));
     if (selectedCountries.size > 0) result = result.filter(p => selectedCountries.has(p.country));
     if (selectedWarehouses.size > 0) result = result.filter(p => p.variants.some(v => v.warehouses.some(w => selectedWarehouses.has(w.warehouse_name || w.city) && w.stock > 0)));
     if (selectedSizes.size > 0) result = result.filter(p => p.variants.some(v => selectedSizes.has(v.size)));
+
+    // RugsUSA Pattern 4: Sub-50ms Faceted Multi-token Search
     if (searchQuery.trim()) {
-      const q = searchQuery.trim().toLowerCase();
-      result = result.filter(p =>
-        p.name.toLowerCase().includes(q) ||
-        p.collection.toLowerCase().includes(q) ||
-        p.manufacturer.toLowerCase().includes(q) ||
-        (p.article && p.article.toLowerCase().includes(q)) ||
-        p.variants.some(v =>
-          (v.article && v.article.toLowerCase().includes(q)) ||
-          (v.barcode && v.barcode.includes(q)) ||
-          (v.code && v.code.includes(q))
-        )
-      );
+      const tokens = searchQuery.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      result = result.filter(p => {
+        const searchable = `${p.name} ${p.collection} ${p.manufacturer} ${p.country || ''} ${p.article || ''} ${p.color || ''} ${p.variants.map(v => `${v.size} ${v.article || ''} ${v.sku || ''} ${v.barcode || ''} ${v.code || ''}`).join(' ')}`.toLowerCase();
+        return tokens.every(tok => searchable.includes(tok));
+      });
     }
+
     switch (sortBy) {
       case 'popular': result.sort((a, b) => getTotalStock(b) - getTotalStock(a)); break;
       case 'price-asc': result.sort((a, b) => pricing.getMinPricePerSqm(a) - pricing.getMinPricePerSqm(b)); break;
@@ -578,7 +605,7 @@ export default function CatalogPage({ onNavigate, initialCollection, initialCoun
       case 'name': result.sort((a, b) => a.name.localeCompare(b.name)); break;
     }
     return result;
-  }, [products, selectedCategory, selectedCollections, selectedManufacturers, selectedCountries, selectedWarehouses, selectedSizes, searchQuery, sortBy, pricing]);
+  }, [baseProducts, selectedCategory, activeClusterQuickFilter, selectedClusters, selectedCollections, selectedManufacturers, selectedCountries, selectedWarehouses, selectedSizes, searchQuery, sortBy, pricing]);
 
   const currentSummary: StockSummary = useMemo(() => {
     const isFiltered = activeFilterCount > 0 || searchQuery.trim().length > 0 || selectedCategory !== 'all' || selectedCollections.size > 0 || selectedCountries.size > 0;
@@ -631,7 +658,7 @@ export default function CatalogPage({ onNavigate, initialCollection, initialCoun
   }, [filteredProducts, serverSummary, activeFilterCount, searchQuery, selectedCategory, selectedCollections.size, selectedCountries.size]);
 
   // Reset visible count when filters/search/sort change
-  useEffect(() => { setVisibleCount(12); }, [selectedCategory, selectedCollections, selectedManufacturers, selectedCountries, selectedWarehouses, selectedSizes, searchQuery, sortBy, viewMode]);
+  useEffect(() => { setVisibleCount(12); }, [selectedCategory, activeClusterQuickFilter, selectedClusters, selectedCollections, selectedManufacturers, selectedCountries, selectedWarehouses, selectedSizes, searchQuery, sortBy, viewMode]);
 
   const visibleProducts = useMemo(() => filteredProducts.slice(0, visibleCount), [filteredProducts, visibleCount]);
   const hasMore = filteredProducts.length > visibleCount;
@@ -740,6 +767,33 @@ export default function CatalogPage({ onNavigate, initialCollection, initialCoun
           >
             Дорожки ({baseProducts.filter(p => p.category === 'Дорожки' || p.name.toLowerCase().includes('дорожк')).length})
           </button>
+        </div>
+
+        {/* RugsUSA Size Clustering Bar (Pattern 3) */}
+        <div className="mb-5 flex flex-wrap items-center gap-1.5 sm:gap-2">
+          <span className="text-xs font-bold text-slate-500 mr-1 uppercase tracking-wider hidden sm:inline">
+            Размер:
+          </span>
+          {[
+            { id: 'all', label: 'Все размеры' },
+            { id: 'small', label: 'Маленькие (< 2.5 м²)' },
+            { id: 'medium', label: 'Средние (2.5 – 5.5 м²)' },
+            { id: 'large', label: 'Большие (5.5 – 10 м²)' },
+            { id: 'oversize', label: 'Оверзайз (> 10 м²)' },
+            { id: 'runner', label: 'Дорожки' },
+          ].map(cluster => (
+            <button
+              key={cluster.id}
+              onClick={() => setActiveClusterQuickFilter(cluster.id as any)}
+              className={`px-3 py-1.5 rounded-lg text-xs transition-all ${
+                activeClusterQuickFilter === cluster.id
+                  ? 'bg-slate-900 text-white shadow-xs font-semibold ring-2 ring-slate-900/20'
+                  : 'bg-white border border-slate-200 text-slate-700 hover:border-slate-400 hover:bg-slate-50'
+              }`}
+            >
+              {cluster.label}
+            </button>
+          ))}
         </div>
 
         {/* Toolbar */}
@@ -878,6 +932,7 @@ export default function CatalogPage({ onNavigate, initialCollection, initialCoun
         selectedCountries={selectedCountries} toggleCountry={v => setSelectedCountries(s => toggle(s, v))}
         selectedWarehouses={selectedWarehouses} toggleWarehouse={v => setSelectedWarehouses(s => toggle(s, v))}
         selectedSizes={selectedSizes} toggleSize={v => setSelectedSizes(s => toggle(s, v))}
+        selectedClusters={selectedClusters} toggleCluster={v => setSelectedClusters(s => toggle(s, v))}
         activeFilterCount={activeFilterCount} resetFilters={resetFilters}
         allCollections={allCollections} allManufacturers={allManufacturers} allCountries={allCountries}
         allWarehouses={allWarehouses} allSizes={allSizes}

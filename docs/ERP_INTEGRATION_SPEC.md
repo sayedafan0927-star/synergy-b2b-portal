@@ -62,7 +62,7 @@
 ```php
 <?php
 function generatePortalSsoUrl(string $managerId, string $name, string $role, string $phone, string $portalBaseUrl = 'https://b2b.synergy.kz'): string {
-    $secret = getenv('ERP_PORTAL_SECRET') ?: 'SynergySecretKey2025';
+    $secret = getenv('ERP_PORTAL_SECRET') ?: '<YOUR_ERP_PORTAL_SECRET>';
     $timestamp = time();
     
     // Формирование криптографической подписи (TTL = 15 минут)

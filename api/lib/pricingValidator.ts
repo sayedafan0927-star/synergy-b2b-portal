@@ -16,6 +16,7 @@ export interface OrderItemInput {
   price?: number;
   price_per_sqm?: number;
   warehouse?: string;
+  warehouse_id?: number;
 }
 
 export interface ValidatedItem {
@@ -27,6 +28,7 @@ export interface ValidatedItem {
   price: number;
   price_per_sqm: number;
   warehouse: string;
+  warehouse_id?: number;
   total_line: number;
   server_verified: boolean;
 }
@@ -180,6 +182,7 @@ export async function validateAndPriceOrder(
       price: authoritativePrice,
       price_per_sqm: pricePerSqm,
       warehouse: raw.warehouse || 'Основной Склад Астана',
+      warehouse_id: raw.warehouse_id !== undefined ? Number(raw.warehouse_id) : (raw.warehouse && (raw.warehouse.includes('Астана') || raw.warehouse.includes('Основной')) ? 81 : 81),
       total_line: lineTotal,
       server_verified: serverVerified,
     });

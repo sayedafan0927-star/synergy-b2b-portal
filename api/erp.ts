@@ -1,15 +1,16 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
-import { dispatchApprovalRequest } from './approvals/whatsapp';
+import { dispatchApprovalRequest, sendWhatsAppMessage } from './approvals/whatsapp';
 import { recordAuditLog } from './audit/logs';
 import { applyCorrelationId } from './lib/trace';
-import { enforceRateLimit } from './lib/rateLimit';
+import { enforceRateLimit, getClientIp } from './lib/rateLimit';
 import { getCachedCatalog, saveCachedCatalog } from './lib/catalogCache';
 import { authenticateRequest } from './lib/authGuard';
 import { validateAndPriceOrder } from './lib/pricingValidator';
 import { applyCorsHeaders } from './lib/cors';
 
-const TARGET_ERP_URL = process.env.ERP_API_URL || 'https://kilem-khan.kz/api/sin/public/api_portal.php';
+const TARGET_ERP_URL = process.env.ERP_API_URL || 'https://crm.kilem-khan.kz/api_portal.php';
 const SERVER_ERP_KEY = process.env.ERP_API_KEY || '';
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://sjvvoxxwevwgziuxjvcy.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
@@ -21,7 +22,9 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
 // Список публичных действий, не требующих обязательной предварительной авторизации
 const PUBLIC_ACTIONS = new Set([
   'catalog',
+  'catalog_normalized',
   'catalog_paginated',
+  'reconcile_all_balances',
   'product',
   'ping',
   'login',
@@ -49,15 +52,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Сквозной Correlation-ID
   const correlationId = applyCorrelationId(req, res);
 
-  // Rate Limiting (60 запросов в минуту на IP)
-  if (!enforceRateLimit(req, res, { limit: 60, windowSeconds: 60, actionPrefix: 'erp_proxy' })) {
+let displaySettingsCache: { data: any; expiry: number } | null = null;
+
+// Rate Limiting (300 запросов в минуту на IP)
+  if (!enforceRateLimit(req, res, { limit: 300, windowSeconds: 60, actionPrefix: 'erp_proxy' })) {
     return;
   }
 
   const action = String(req.query.action || req.body?.action || '').trim();
 
+  // 0.9. Кэш настроек отображения (60s TTL)
+  if (action === 'display_settings' && req.method === 'GET') {
+    const isRefresh = req.query.refresh === 'true' || req.query.refresh === '1';
+    if (!isRefresh && displaySettingsCache && displaySettingsCache.expiry > Date.now()) {
+      res.setHeader('X-Cache', 'HIT');
+      return res.status(200).json(displaySettingsCache.data);
+    }
+  }
+
   // 1.0. Высоконагруженный кэш каталога (Staging Cache / Sub-50ms HIT)
-  if (action === 'catalog' && req.method === 'GET') {
+  if ((action === 'catalog' || action === 'catalog_normalized') && req.method === 'GET') {
     const isRefresh = req.query.refresh === 'true' || req.query.refresh === '1';
     if (!isRefresh) {
       try {
@@ -114,6 +128,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const search = String(req.query.search || '').trim();
     const category = String(req.query.category || '').trim();
     const collection = String(req.query.collection || '').trim();
+    const sizeCluster = String(req.query.size_cluster || '').trim().toLowerCase();
+    const isRunner = req.query.is_runner === 'true' || req.query.is_runner === '1';
     const inStockOnly = req.query.in_stock === 'true' || req.query.in_stock === '1';
 
     try {
@@ -172,6 +188,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               p.id?.toLowerCase().includes(sLower) ||
               (p.variants || []).some((v: any) => v.sku?.toLowerCase().includes(sLower))
             );
+          }
+          if (sizeCluster) {
+            list = list.filter((p: any) => (p.variants || []).some((v: any) => v.size_cluster === sizeCluster));
+          }
+          if (isRunner) {
+            list = list.filter((p: any) => (p.variants || []).some((v: any) => v.is_runner));
           }
           if (inStockOnly) {
             list = list.filter((p: any) => (p.variants || []).some((v: any) => (v.stock || v.total_stock || 0) > 0));
@@ -243,6 +265,103 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: err?.message });
+    }
+  }
+
+  // 1.03. Прием лидов и заявок с контактных форм B2B-портала
+  if (action === 'create_lead' && req.method === 'POST') {
+    try {
+      const payload = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
+      const name = String(payload?.name || '').trim();
+      const phone = String(payload?.phone || '').trim();
+
+      if (!name || !phone) {
+        return res.status(400).json({
+          success: false,
+          error: 'Поля "Имя" и "Телефон" обязательны для оформления заявки.',
+        });
+      }
+
+      const company = String(payload?.company || '').trim() || null;
+      const email = String(payload?.email || '').trim() || null;
+      const message = String(payload?.message || '').trim() || null;
+      const source = String(payload?.source || 'Форма заявки с сайта B2B').trim();
+      const kanbanStage = String(payload?.kanban_stage || 'Новые лиды').trim();
+      const generatedLeadId = `lead-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+      // 1. Фиксация лида в базе данных Supabase
+      let savedId = generatedLeadId;
+      try {
+        const { data: leadRow, error: leadErr } = await supabase
+          .from('leads')
+          .insert({
+            name,
+            phone,
+            company,
+            email,
+            message,
+            source,
+            kanban_stage: kanbanStage,
+            status: 'new',
+            created_at: new Date().toISOString(),
+          })
+          .select('id')
+          .maybeSingle();
+
+        if (leadErr) {
+          console.warn('[API Proxy ERP] Supabase leads table insert notice:', leadErr.message);
+        } else if (leadRow?.id) {
+          savedId = leadRow.id;
+        }
+      } catch (dbErr: any) {
+        console.warn('[API Proxy ERP] Leads database persistence warning:', dbErr?.message);
+      }
+
+      // 2. Регистрация в журнале аудита интеграций
+      await recordAuditLog({
+        eventType: 'create_lead',
+        direction: 'inbound',
+        status: 'success',
+        source: 'B2B Portal Contacts Form',
+        correlationId,
+        ip: getClientIp(req),
+        payload: {
+          lead_id: savedId,
+          name,
+          phone,
+          company,
+          email,
+          source,
+        },
+      });
+
+      // 3. Отправка оперативного WhatsApp-уведомления менеджеру
+      const managerPhone = process.env.ADMIN_WHATSAPP_PHONE || process.env.MANAGER_WHATSAPP_PHONE || '+77785806866';
+      const notificationText =
+        `📥 *НОВАЯ ЗАЯВКА С B2B ПОРТАЛА*\n\n` +
+        `👤 *Имя:* ${name}\n` +
+        `📞 *Телефон:* ${phone}\n` +
+        (company ? `🏢 *Компания:* ${company}\n` : '') +
+        (email ? `✉️ *Email:* ${email}\n` : '') +
+        (message ? `💬 *Сообщение:* ${message}\n` : '') +
+        `🏷️ *Источник:* ${source}\n` +
+        `⏱️ *Время:* ${new Date().toLocaleString('ru-RU', { timeZone: 'Asia/Almaty' })}`;
+
+      sendWhatsAppMessage(managerPhone, notificationText).catch(waErr => {
+        console.warn('[API Proxy ERP] WhatsApp lead notification error:', waErr);
+      });
+
+      return res.status(200).json({
+        success: true,
+        lead_id: savedId,
+        message: 'Заявка успешно принята. Наш менеджер свяжется с вами в ближайшее время.',
+      });
+    } catch (parseErr: any) {
+      console.error('[API Proxy ERP] Error processing create_lead:', parseErr);
+      return res.status(400).json({
+        success: false,
+        error: `Некорректный запрос заявки: ${parseErr?.message}`,
+      });
     }
   }
 
@@ -400,6 +519,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   let finalTotalItems = 0;
   let outboxOrderId: string | null = null;
   let outboxOrderDoc: string | null = null;
+  let createdSplitOrders: Array<{ doc_number: string; warehouse: string; amount: number; items_count: number }> = [];
 
   if (action === 'create_order' && req.method === 'POST') {
     try {
@@ -424,6 +544,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       finalTotalAmount = pricingResult.totalAmount;
       finalTotalItems = pricingResult.totalItems;
 
+      // ── Idempotency Check: проверка повторного запроса ──
+      const incomingIdempotencyKey = String(
+        req.headers['idempotency-key'] ||
+        req.headers['x-idempotency-key'] ||
+        rawPayload.idempotency_key ||
+        ''
+      ).trim();
+
+      if (incomingIdempotencyKey) {
+        const { data: existingOrder } = await supabase
+          .from('orders')
+          .select('id, order_number, status, total_amount')
+          .eq('idempotency_key', incomingIdempotencyKey)
+          .maybeSingle();
+
+        if (existingOrder) {
+          return res.status(200).json({
+            success: true,
+            order: {
+              order_id: existingOrder.id,
+              doc_number: existingOrder.order_number,
+              status: existingOrder.status,
+              is_buffered: true,
+              total_amount: Number(existingOrder.total_amount || 0),
+            },
+            message: 'Заказ уже был успешно зарегистрирован ранее (Idempotency Key HIT).',
+          });
+        }
+      }
+
       // ── Pre-Order Compliance: проверка кредитного лимита и стоп-листа на сервере ──
       let serverRequiresApproval = false;
       let complianceReason = '';
@@ -432,9 +582,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         try {
           const { data: clientProf } = await supabase
             .from('profiles')
-            .select('id, credit_limit_usd, partner_id, full_name, phone, manager_id')
+            .select('id, credit_limit_usd, partner_id, full_name, phone, manager_id, status, impersonation_enabled')
             .eq('id', callerAuth.userId)
             .maybeSingle();
+
+          if (clientProf?.impersonation_enabled === false || clientProf?.status === 'inactive') {
+            return res.status(403).json({
+              success: false,
+              error: 'Создание заказа заблокировано: учетная запись контрагента деактивирована в ERP.',
+            });
+          }
 
           const limitUsd = Number(clientProf?.credit_limit_usd || 0);
           if (limitUsd > 0 && clientProf?.partner_id) {
@@ -455,10 +612,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
+      // Multi-Warehouse Grouping (выявление позиций с разных складов)
+      const distinctWarehouses = Array.from(new Set(pricingResult.items.map(it => it.warehouse || 'Основной Склад Астана')));
+      const isMultiWarehouse = distinctWarehouses.length > 1;
+      const multiWhTag = isMultiWarehouse ? ` [МУЛЬТИСКЛАД: ${distinctWarehouses.join(', ')}]` : '';
+
       const clientComment = rawPayload.comment || '';
-      const orderCommentWithCompliance = serverRequiresApproval
-        ? `${clientComment} [ТРЕБУЕТСЯ АППРУВ В WHATSAPP: ${complianceReason}]`.trim()
-        : clientComment;
+      const orderCommentWithCompliance = `${clientComment}${multiWhTag}${serverRequiresApproval ? ` [ТРЕБУЕТСЯ АППРУВ В WHATSAPP: ${complianceReason}]` : ''}`.trim();
 
       validatedOrderPayload = {
         ...rawPayload,
@@ -469,13 +629,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         partner_id: (callerAuth.role === 'client' ? callerAuth.partnerId : rawPayload.partner_id) || rawPayload.client_id,
         server_requires_approval: serverRequiresApproval,
         compliance_reason: complianceReason,
+        idempotency_key: incomingIdempotencyKey || null,
+        is_multi_warehouse: isMultiWarehouse,
+        warehouses: distinctWarehouses,
       };
 
       // 4. ─── Transactional Outbox (Буферизация в PostgreSQL перед вызовом 1C) ───
       const year = new Date().getFullYear();
       outboxOrderDoc = `ORD-${year}-${Math.floor(1000 + Math.random() * 9000)}`;
 
-      let resolvedUserId = validatedOrderPayload.user_id;
+      let resolvedUserId = validatedOrderPayload.user_id || callerAuth.userId;
       if (!resolvedUserId && validatedOrderPayload.client_phone) {
         const cleanPhone = String(validatedOrderPayload.client_phone).replace(/\D+/g, '');
         const { data: matchedProfile } = await supabase
@@ -487,59 +650,126 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (matchedProfile?.id) resolvedUserId = matchedProfile.id;
       }
 
-      if (!resolvedUserId) {
-        const { data: adminProf } = await supabase.from('profiles').select('id').eq('role', 'admin').limit(1).maybeSingle();
-        resolvedUserId = adminProf?.id;
+      // Устранена привязка чужих заказов к администратору:
+      if (!resolvedUserId && callerAuth.role === 'admin' && callerAuth.userId) {
+        resolvedUserId = callerAuth.userId;
       }
 
-      if (resolvedUserId) {
-        const { data: createdRow } = await supabase
-          .from('orders')
-          .insert({
-            order_number: outboxOrderDoc,
-            user_id: resolvedUserId,
-            placed_by_id: resolvedUserId,
-            warehouse: validatedOrderPayload.items?.[0]?.warehouse || 'Основной Склад Астана',
-            notes: validatedOrderPayload.comment || '',
-            total_amount: finalTotalAmount,
-            total_items: finalTotalItems,
-            total_sqm: pricingResult.items.reduce((s, it) => s + (it.price_per_sqm > 0 ? it.price / it.price_per_sqm * it.quantity : 0), 0),
-            status: 'pending',
-          })
-          .select('id, order_number')
-          .maybeSingle();
+      if (!resolvedUserId) {
+        return res.status(401).json({
+          success: false,
+          error: 'Для оформления оптового заказа требуется авторизация (пользователь не идентифицирован).',
+        });
+      }
 
-        if (createdRow) {
-          outboxOrderId = createdRow.id;
-          outboxOrderDoc = createdRow.order_number;
+      createdSplitOrders = [];
 
-          const orderItemRows = pricingResult.items.map(it => ({
-            order_id: createdRow.id,
-            product_id: String(it.productId || it.item_id || it.sku || ''),
-            product_name: String(it.sku || 'Ковровое изделие'),
-            size: String(it.size || 'Стандарт'),
-            sku: String(it.sku || ''),
-            warehouse: String(it.warehouse || 'Основной Склад Астана'),
-            price: Number(it.price) || 0,
-            quantity: Number(it.quantity) || 1,
-          }));
+      if (isMultiWarehouse) {
+        // Создаем независимые субордера для каждого склада
+        let splitIdx = 1;
+        for (const wh of distinctWarehouses) {
+          const whItems = pricingResult.items.filter(it => (it.warehouse || 'Основной Склад Астана') === wh);
+          const whAmount = Math.round(whItems.reduce((acc, it) => acc + it.total_line, 0) * 100) / 100;
+          const whItemsCount = whItems.reduce((acc, it) => acc + it.quantity, 0);
+          const whSqm = Math.round(whItems.reduce((acc, it) => acc + (it.price_per_sqm > 0 ? it.price / it.price_per_sqm * it.quantity : 0), 0) * 100) / 100;
+          const subDoc = `${outboxOrderDoc}-${splitIdx}`;
 
-          if (orderItemRows.length > 0) {
-            await supabase.from('order_items').insert(orderItemRows);
+          const { data: subOrderRow } = await supabase
+            .from('orders')
+            .insert({
+              order_number: subDoc,
+              user_id: resolvedUserId,
+              placed_by_id: callerAuth.userId || resolvedUserId,
+              warehouse: wh,
+              notes: `[Мультисклад ${splitIdx}/${distinctWarehouses.length}: ${wh}] ${validatedOrderPayload.comment || ''}`.trim(),
+              total_amount: whAmount,
+              total_items: whItemsCount,
+              total_sqm: whSqm,
+              status: 'pending',
+              idempotency_key: incomingIdempotencyKey ? `${incomingIdempotencyKey}-wh-${splitIdx}` : null,
+            })
+            .select('id, order_number')
+            .maybeSingle();
+
+          if (subOrderRow) {
+            const subItemRows = whItems.map(it => ({
+              order_id: subOrderRow.id,
+              product_id: String(it.productId || it.item_id || it.sku || ''),
+              product_name: String(it.sku || 'Ковровое изделие'),
+              size: String(it.size || 'Стандарт'),
+              sku: String(it.sku || ''),
+              warehouse: wh,
+              price: Number(it.price) || 0,
+              quantity: Number(it.quantity) || 1,
+            }));
+            await supabase.from('order_items').insert(subItemRows);
+            createdSplitOrders.push({
+              doc_number: subDoc,
+              warehouse: wh,
+              amount: whAmount,
+              items_count: whItemsCount,
+            });
           }
+          splitIdx++;
+        }
+      }
 
-          if (serverRequiresApproval) {
-            dispatchApprovalRequest({
-              orderId: createdRow.id,
-              orderDocNumber: outboxOrderDoc,
-              clientName: validatedOrderPayload.client_name || validatedOrderPayload.buyer?.name || 'Клиент B2B',
-              clientPhone: validatedOrderPayload.client_phone || validatedOrderPayload.buyer?.phone,
-              totalAmount: finalTotalAmount,
-              totalSqm: pricingResult.items.reduce((s, it) => s + (it.price_per_sqm > 0 ? it.price / it.price_per_sqm * it.quantity : 0), 0),
-              itemsCount: finalTotalItems,
-              reason: complianceReason || 'Превышение кредитного лимита (серверный контроль)',
-            }).catch(e => console.warn('[Auto-Approval Dispatch Warning]:', e));
-          }
+      const { data: createdRow } = await supabase
+        .from('orders')
+        .insert({
+          order_number: outboxOrderDoc,
+          user_id: resolvedUserId,
+          placed_by_id: callerAuth.userId || resolvedUserId,
+          warehouse: validatedOrderPayload.items?.[0]?.warehouse || 'Основной Склад Астана',
+          notes: isMultiWarehouse ? `[Мастер-заказ мультисклада (${distinctWarehouses.length} склада)] ${validatedOrderPayload.comment || ''}`.trim() : (validatedOrderPayload.comment || ''),
+          total_amount: finalTotalAmount,
+          total_items: finalTotalItems,
+          total_sqm: pricingResult.items.reduce((s, it) => s + (it.price_per_sqm > 0 ? it.price / it.price_per_sqm * it.quantity : 0), 0),
+          status: 'pending',
+          idempotency_key: incomingIdempotencyKey || null,
+        })
+        .select('id, order_number')
+        .maybeSingle();
+
+      if (createdRow) {
+        outboxOrderId = createdRow.id;
+        outboxOrderDoc = createdRow.order_number;
+
+        if (!isMultiWarehouse) {
+          createdSplitOrders = [{
+            doc_number: outboxOrderDoc,
+            warehouse: distinctWarehouses[0] || 'Основной Склад Астана',
+            amount: finalTotalAmount,
+            items_count: finalTotalItems,
+          }];
+        }
+
+        const orderItemRows = pricingResult.items.map(it => ({
+          order_id: createdRow.id,
+          product_id: String(it.productId || it.item_id || it.sku || ''),
+          product_name: String(it.sku || 'Ковровое изделие'),
+          size: String(it.size || 'Стандарт'),
+          sku: String(it.sku || ''),
+          warehouse: String(it.warehouse || 'Основной Склад Астана'),
+          price: Number(it.price) || 0,
+          quantity: Number(it.quantity) || 1,
+        }));
+
+        if (orderItemRows.length > 0) {
+          await supabase.from('order_items').insert(orderItemRows);
+        }
+
+        if (serverRequiresApproval) {
+          dispatchApprovalRequest({
+            orderId: createdRow.id,
+            orderDocNumber: outboxOrderDoc,
+            clientName: validatedOrderPayload.client_name || validatedOrderPayload.buyer?.name || 'Клиент B2B',
+            clientPhone: validatedOrderPayload.client_phone || validatedOrderPayload.buyer?.phone,
+            totalAmount: finalTotalAmount,
+            totalSqm: pricingResult.items.reduce((s, it) => s + (it.price_per_sqm > 0 ? it.price / it.price_per_sqm * it.quantity : 0), 0),
+            itemsCount: finalTotalItems,
+            reason: complianceReason || 'Превышение кредитного лимита (серверный контроль)',
+          }).catch(e => console.warn('[Auto-Approval Dispatch Warning]:', e));
         }
       }
     } catch (parseErr: any) {
@@ -570,10 +800,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const targetUrl = `${TARGET_ERP_URL}?${queryParams.toString()}`;
 
+    const clientIp = getClientIp(req);
     const headers: Record<string, string> = {
       'X-Portal-Key': SERVER_ERP_KEY,
       'Accept': 'application/json',
       'X-Correlation-ID': correlationId,
+      'X-Forwarded-For': req.headers['x-forwarded-for'] ? String(req.headers['x-forwarded-for']) : clientIp,
+      'X-Real-IP': clientIp,
     };
 
     const idempotencyKey = req.headers['idempotency-key'] || req.headers['x-idempotency-key'];
@@ -582,9 +815,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       headers['X-Idempotency-Key'] = String(idempotencyKey);
     }
 
-    // Таймаут запроса к ERP (12 секунд)
+    // Таймаут запроса к ERP: 2.5 секунды для чекаута (быстрый fallback в Outbox) и 12 секунд для каталога
+    const erpTimeoutMs = action === 'create_order' ? 2500 : 12000;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    const timeoutId = setTimeout(() => controller.abort(), erpTimeoutMs);
 
     let fetchOptions: RequestInit = {
       method: req.method,
@@ -620,7 +854,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Resilient Staging Fallback для каталога
-    if (action === 'catalog' && erpResponse.status >= 500) {
+    if ((action === 'catalog' || action === 'catalog_normalized') && erpResponse.status >= 500) {
       try {
         const fallback = await getCachedCatalog('catalog_global');
         if (fallback && fallback.data) {
@@ -641,20 +875,145 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
       const jsonData = JSON.parse(textData);
 
-      if (action === 'catalog' && erpResponse.ok && jsonData?.success && Array.isArray(jsonData.products)) {
-        saveCachedCatalog(jsonData, 'catalog_global').catch(e => console.warn('[API Proxy ERP] Cache save error:', e));
-        res.setHeader('X-Cache', 'MISS');
+      if ((action === 'catalog' || action === 'catalog_normalized') && erpResponse.ok && jsonData?.success) {
+        // Если ERP вернул нормализованную структуру designs (Архитектура RugsUSA):
+        if (Array.isArray(jsonData.designs) && !Array.isArray(jsonData.products)) {
+          const normalizedProducts = jsonData.designs.map((d: any) => ({
+            id: String(d.design_id || d.id || `design-${d.article}`),
+            name: d.name || `${d.collection} ${d.article}`,
+            collection: d.collection,
+            article: d.article,
+            category: d.category || 'Ковры',
+            manufacturer: d.manufacturer || 'Karmen Hali',
+            country: d.country || 'Турция',
+            color: d.color || '',
+            material: d.material || '',
+            density: String(d.density || ''),
+            pile_height: String(d.pile_height || ''),
+            images: Array.isArray(d.images) ? d.images : [],
+            image_thumb: Array.isArray(d.images) && d.images[0] ? d.images[0] : undefined,
+            variants: Array.isArray(d.variants) ? d.variants.map((v: any) => ({
+              ...v,
+              id: v.id || `var-${v.sku}`,
+              base_price: Number(v.base_price || (Number(v.price_per_sqm || 15) * Number(v.area_sqm || 1))),
+              price_per_sqm: Number(v.price_per_sqm || 15),
+              stock: Number(v.free_stock ?? v.stock ?? 0),
+              free_stock: Number(v.free_stock ?? v.stock ?? 0),
+              reserved_stock: Number(v.reserved_stock ?? 0),
+              total_stock: Number(v.total_stock ?? 0),
+              warehouses: Array.isArray(v.warehouses) ? v.warehouses.map((w: any) => ({
+                ...w,
+                stock: Number(w.free_stock ?? w.stock ?? 0),
+                free_stock: Number(w.free_stock ?? w.stock ?? 0),
+                reserved_stock: Number(w.reserved_stock ?? 0),
+                total_stock: Number(w.total_stock ?? 0),
+                is_hub: w.warehouse_id === 81 || (w.warehouse_name && w.warehouse_name.includes('Астана')),
+              })) : [],
+            })) : [],
+          }));
+          jsonData.products = normalizedProducts;
+        }
+
+        if (Array.isArray(jsonData.products)) {
+          saveCachedCatalog(jsonData, 'catalog_global').catch(e => console.warn('[API Proxy ERP] Cache save error:', e));
+          res.setHeader('X-Cache', 'MISS');
+        }
       }
 
-      if (action === 'create_order' && outboxOrderId && jsonData.success && jsonData.order?.doc_number) {
-        await supabase
-          .from('orders')
-          .update({
-            order_number: jsonData.order.doc_number,
-            status: 'processing',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', outboxOrderId);
+      if (action === 'display_settings' && erpResponse.ok && jsonData?.success) {
+        displaySettingsCache = { data: jsonData, expiry: Date.now() + 60000 };
+      }
+
+      if (action === 'login' && erpResponse.ok && jsonData?.success) {
+        try {
+          const SECRET_KEY = process.env.PORTAL_SECRET_KEY || process.env.ERP_PORTAL_SECRET || '';
+          if (SECRET_KEY) {
+            const c = jsonData.client || {};
+            const pId = String(c.id || jsonData.client_id || '');
+            const uId = `erp-client-${pId}`;
+            const fName = String(jsonData.name || c.name || 'Оптовый клиент');
+            const phone = String(jsonData.phone || c.phone || '');
+            const priceType = String(c.price_type || 'wholesale');
+
+            const sessionData = {
+              user: {
+                id: uId,
+                email: `${phone.replace(/\D+/g, '') || pId}@kilem-khan.kz`,
+                user_metadata: { full_name: fName },
+              },
+              profile: {
+                id: uId,
+                role: 'client',
+                partner_id: pId,
+                full_name: fName,
+                phone,
+                company_name: fName,
+                price_type: priceType,
+                showroom_warehouse_id: c.showroom_warehouse_id ?? null,
+              },
+              timestamp: Date.now(),
+            };
+
+            const sig = crypto.createHmac('sha256', SECRET_KEY).update(JSON.stringify(sessionData)).digest('hex');
+            const signedPayload = { data: sessionData, sig };
+            const sessionToken = Buffer.from(JSON.stringify(signedPayload)).toString('base64url');
+
+            jsonData.token = sessionToken;
+            jsonData.portal_session_token = sessionToken;
+
+            // Синхронизируем профиль клиента в базе данных
+            if (pId) {
+              supabase.from('profiles').upsert({
+                id: crypto.randomUUID(),
+                partner_id: pId,
+                erp_id: Number(pId) || null,
+                full_name: fName,
+                company_name: fName,
+                phone,
+                price_type: priceType,
+                role: 'client',
+                impersonation_enabled: true,
+                updated_at: new Date().toISOString(),
+              }, { onConflict: 'partner_id' }).catch(e => console.warn('[API Proxy ERP] Profile upsert notice:', e));
+            }
+          }
+        } catch (tokenErr) {
+          console.warn('[API Proxy ERP] Error generating login session token:', tokenErr);
+        }
+      }
+
+      if (action === 'create_order') {
+        if (outboxOrderId && jsonData.success && jsonData.order?.doc_number) {
+          await supabase
+            .from('orders')
+            .update({
+              order_number: jsonData.order.doc_number,
+              status: 'processing',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', outboxOrderId);
+        }
+
+        // Обработка 409 Conflict / INSUFFICIENT_STOCK от 1C:ERP
+        if (erpResponse.status === 409 || jsonData?.error_code === 'INSUFFICIENT_STOCK') {
+          if (outboxOrderId) {
+            await supabase
+              .from('orders')
+              .update({
+                status: 'cancelled',
+                notes: `[Отклонено ERP: Недостаточно остатка] ${jsonData.details?.sku ? `SKU: ${jsonData.details.sku}, запрошено: ${jsonData.details.requested_qty}, доступно: ${jsonData.details.available_qty}` : (jsonData.error || '')}`,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', outboxOrderId);
+          }
+        }
+
+        if (jsonData && typeof jsonData === 'object' && createdSplitOrders.length > 0) {
+          jsonData.split_orders = createdSplitOrders;
+          if (jsonData.order && typeof jsonData.order === 'object') {
+            jsonData.order.split_orders = createdSplitOrders;
+          }
+        }
       }
 
       return res.json(jsonData);
@@ -663,9 +1022,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   } catch (err: any) {
     const latencyMs = Date.now() - startTime;
-    console.error('[API Proxy ERP] Error proxying request:', err?.name === 'AbortError' ? 'ERP Request Timeout (12s)' : err);
+    console.error('[API Proxy ERP] Error proxying request:', err?.name === 'AbortError' ? `ERP Request Timeout (${action === 'create_order' ? '2.5s' : '12s'})` : err);
 
-    if (action === 'catalog') {
+    if (action === 'catalog' || action === 'catalog_normalized') {
       try {
         const fallback = await getCachedCatalog('catalog_global');
         if (fallback && fallback.data) {
