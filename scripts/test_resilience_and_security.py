@@ -349,7 +349,35 @@ with open(erp_api_path, "r", encoding="utf-8") as fp:
 test_assert("partner_id:" in fresh_erp_api and "warehouse_id:" in fresh_erp_api, "src/lib/erpApi.ts createOrder includes partner_id and warehouse_id")
 
 # ------------------------------------------------------------------------------
-# 13. Summary Report
+# 13. Verifying WMS/ERP Address Storage & Order Creation Standard
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}13. Verifying WMS/ERP Address Storage & Order Payload Standard...{RESET}")
+
+with open(erp_path, "r", encoding="utf-8") as fp:
+    current_erp_code = fp.read()
+
+test_assert("delete itemObj.cell" in current_erp_code and "delete itemObj.rack" in current_erp_code, "api/erp.ts strips cell, cell_code, rack, location from items")
+test_assert("delete (validatedOrderPayload as any).cell" in current_erp_code, "api/erp.ts strips cell fields from root order payload")
+test_assert("X-Idempotency-Key" in current_erp_code and "Idempotency-Key" in current_erp_code, "api/erp.ts sets both X-Idempotency-Key and Idempotency-Key headers")
+
+with open(pricing_validator_path, "r", encoding="utf-8") as fp:
+    current_pv_code = fp.read()
+test_assert("parseDimensions" in current_pv_code and "area_sqm" in current_pv_code, "api/lib/pricingValidator.ts computes carpet width, length, area_sqm")
+test_assert("cell?: never" in current_pv_code and "rack?: never" in current_pv_code, "api/lib/pricingValidator.ts forbids cell and rack in OrderItemInput type")
+
+with open(erp_api_path, "r", encoding="utf-8") as fp:
+    current_erp_api = fp.read()
+test_assert("parseSizeDimensions" in current_erp_api and "area_sqm" in current_erp_api, "src/lib/erpApi.ts computes carpet physical dimensions for WMS")
+test_assert("X-Idempotency-Key" in current_erp_api, "src/lib/erpApi.ts includes X-Idempotency-Key in headers")
+test_assert("delete itemObj.cell" in current_erp_api, "src/lib/erpApi.ts strips any cell/rack stubs")
+
+profile_page_path = os.path.join(ROOT_DIR, "src", "pages", "ProfilePage.tsx")
+with open(profile_page_path, "r", encoding="utf-8") as fp:
+    profile_code = fp.read()
+test_assert("В авторезерве" in profile_code and "На сборке" in profile_code and "Готов к отгрузке" in profile_code, "ProfilePage.tsx implements WMS dealer lifecycle status mapping")
+
+# ------------------------------------------------------------------------------
+# 14. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

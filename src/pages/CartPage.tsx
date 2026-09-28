@@ -279,10 +279,13 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
       : '';
     const fullComment = `${orderComment.trim()}${whSummaryTag}${requiresApproval ? ' [ТРЕБУЕТСЯ АППРУВ В WHATSAPP: ' + (isBlocked ? 'Стоп-лист' : exceedsLimit ? 'Превышение кредитного лимита' : 'Просроченная задолженность') + ']' : ''}`;
 
+    const effectiveWarehouseId = items.find(it => (it as any).warehouse_id)?.warehouse_id || 1;
+
     const orderPayload = {
       user_id: effectiveProfile?.id,
       client_id: clientId,
-      warehouse_id: 81,
+      partner_id: clientId,
+      warehouse_id: effectiveWarehouseId,
       buyer: {
         name: clientCompany.trim() || clientName.trim(),
         phone: clientPhone.trim(),
@@ -298,9 +301,10 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
         size: item.size,
         sku: item.sku,
         warehouse: item.warehouse || 'Основной Склад Астана',
-        warehouse_id: (item as any).warehouse_id,
+        warehouse_id: (item as any).warehouse_id || effectiveWarehouseId,
         price: item.price,
         price_per_sqm: item.price_per_sqm,
+        area_sqm: item.area_sqm,
         quantity: item.quantity,
       })),
     };

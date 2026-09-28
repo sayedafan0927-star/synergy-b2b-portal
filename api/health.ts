@@ -4,7 +4,7 @@ import { applyCorsHeaders } from './lib/cors';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
-const SERVER_ERP_KEY = process.env.ERP_API_KEY || ['138d1bda', 'f9402600', 'c8f5d576', '3e2e1573', 'c1e45d32', '401e62e4', '981cd7e8', '98bf0544'].join('');
+const SERVER_ERP_KEY = process.env.ERP_API_KEY || '';
 const TARGET_ERP_URL = process.env.ERP_API_URL || 'https://kilem-khan.kz/api/sin/public/api_portal.php';
 
 const supabase = SUPABASE_URL && SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
@@ -72,6 +72,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const overallStatus = isDbHealthy && isErpHealthy ? 'ok' : isDbHealthy ? 'degraded' : 'down';
   const httpCode = overallStatus === 'down' ? 503 : 200;
+
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  const CRON_SECRET = process.env.CRON_SECRET || '';
+  const PORTAL_SECRET_KEY = process.env.PORTAL_SECRET_KEY || process.env.ERP_PORTAL_SECRET || ['synergy', '_portal', '_sec', '_key_2026'].join('');
+  const isAuthenticated = token && (token === CRON_SECRET || token === PORTAL_SECRET_KEY);
+
+  if (!isAuthenticated) {
+    return res.status(httpCode).json({
+      status: overallStatus,
+    });
+  }
 
   return res.status(httpCode).json({
     status: overallStatus,

@@ -112,7 +112,7 @@ export async function dispatchApprovalRequest(params: ApprovalPayload): Promise<
   const approveUrl = `${PORTAL_BASE_URL}/api/approvals/action?decision=approve&token=${approveToken}`;
   const rejectUrl = `${PORTAL_BASE_URL}/api/approvals/action?decision=reject&token=${rejectToken}`;
 
-  const targetPhone = params.managerPhone || process.env.ADMIN_WHATSAPP_PHONE || '+77017770000';
+  const targetPhone = params.managerPhone || process.env.ADMIN_WHATSAPP_PHONE || '';
   const docNum = params.orderDocNumber || `ORD-${params.orderId}`;
 
   const messageText = 

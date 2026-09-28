@@ -152,12 +152,31 @@ export interface CreateOrderPayload {
     size?: string;
     sku?: string;
     warehouse?: string;
+    warehouse_id?: number;
     price: number;
     price_per_sqm?: number;
     quantity: number;
     width?: number;
     length?: number;
+    area_sqm?: number;
+    cell?: never;
+    cell_code?: never;
+    rack?: never;
+    location?: never;
   }>;
+}
+
+export function parseSizeDimensions(sizeStr?: string): { width: number; length: number; area_sqm: number } {
+  if (!sizeStr) return { width: 1.6, length: 2.3, area_sqm: 3.68 };
+  const cleaned = sizeStr.replace(',', '.');
+  const parts = cleaned.split(/[*×xX]/).map(s => parseFloat(s.trim()));
+  if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1]) && parts[0] > 0 && parts[1] > 0) {
+    const width = Math.round(parts[0] * 100) / 100;
+    const length = Math.round(parts[1] * 100) / 100;
+    const area_sqm = Math.round(width * length * 100) / 100;
+    return { width, length, area_sqm };
+  }
+  return { width: 1.6, length: 2.3, area_sqm: 3.68 };
 }
 
 export interface SplitSubOrder {
@@ -202,11 +221,14 @@ export async function submitOrderToErp(payload: CreateOrderPayload): Promise<Erp
   const rawClientId = payload.client_id;
   const numClientId = rawClientId ? (Number(String(rawClientId).replace(/\D+/g, '')) || Number(rawClientId)) : undefined;
 
+  const defaultWarehouseId = payload.warehouse_id || (payload.items?.[0] as any)?.warehouse_id || 1;
+
   const normalizedPayload = {
+    idempotency_key: idempotencyKey,
     user_id: payload.user_id,
     partner_id: (payload as any).partner_id || numClientId || payload.client_id,
     client_id: numClientId || payload.client_id,
-    warehouse_id: payload.warehouse_id || 81,
+    warehouse_id: defaultWarehouseId,
     buyer: payload.buyer || {
       name: payload.client_company || payload.client_name || '',
       phone: payload.client_phone || '',
@@ -216,18 +238,38 @@ export async function submitOrderToErp(payload: CreateOrderPayload): Promise<Erp
     client_company: payload.client_company,
     city: payload.city || 'Астана',
     comment: payload.comment || '',
-    items: payload.items.map(item => ({
-      item_id: item.item_id || (Number(item.productId) > 0 ? Number(item.productId) : undefined),
-      sku: item.sku,
-      size: item.size,
-      warehouse: item.warehouse || 'Основной Склад Астана',
-      warehouse_id: (item as any).warehouse_id || (item.warehouse && (item.warehouse.includes('Астана') || item.warehouse.includes('Основной')) ? 81 : 81),
-      quantity: item.quantity,
-      price: item.price,
-      price_per_sqm: item.price_per_sqm,
-    })),
-    idempotency_key: idempotencyKey,
+    items: payload.items.map(item => {
+      const dims = parseSizeDimensions(item.size);
+      const width = item.width ?? dims.width;
+      const length = item.length ?? dims.length;
+      const area_sqm = item.area_sqm ?? dims.area_sqm;
+      const itemObj: Record<string, any> = {
+        item_id: item.item_id || (Number(item.productId) > 0 ? Number(item.productId) : undefined),
+        sku: item.sku,
+        size: item.size,
+        warehouse: item.warehouse || 'Основной Склад Астана',
+        warehouse_id: item.warehouse_id || defaultWarehouseId,
+        quantity: item.quantity,
+        price: item.price,
+        price_per_sqm: item.price_per_sqm,
+        width,
+        length,
+        area_sqm,
+      };
+      // WMS Address Storage: No cell/rack/location stubs from site
+      delete itemObj.cell;
+      delete itemObj.cell_code;
+      delete itemObj.rack;
+      delete itemObj.location;
+      return itemObj;
+    }),
   };
+
+  // Delete cell stubs from root payload
+  delete (normalizedPayload as any).cell;
+  delete (normalizedPayload as any).cell_code;
+  delete (normalizedPayload as any).rack;
+  delete (normalizedPayload as any).location;
 
   // Выполняем до 3 попыток при кратковременных сбоях сети
   let attempt = 0;
@@ -242,6 +284,7 @@ export async function submitOrderToErp(payload: CreateOrderPayload): Promise<Erp
         method: 'POST',
         headers: {
           'Idempotency-Key': idempotencyKey,
+          'X-Idempotency-Key': idempotencyKey,
         },
         body: normalizedPayload,
       });

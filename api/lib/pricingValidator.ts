@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://sjvvoxxwevwgziuxjvcy.supabase.co';
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
 
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_KEY, {
@@ -15,8 +15,15 @@ export interface OrderItemInput {
   quantity: number;
   price?: number;
   price_per_sqm?: number;
+  width?: number;
+  length?: number;
+  area_sqm?: number;
   warehouse?: string;
   warehouse_id?: number;
+  cell?: never;
+  cell_code?: never;
+  rack?: never;
+  location?: never;
 }
 
 export interface ValidatedItem {
@@ -27,6 +34,9 @@ export interface ValidatedItem {
   quantity: number;
   price: number;
   price_per_sqm: number;
+  width: number;
+  length: number;
+  area_sqm: number;
   warehouse: string;
   warehouse_id?: number;
   total_line: number;
@@ -57,16 +67,19 @@ function getDiscountPercent(priceType?: string | null): number {
 }
 
 /**
- * Парсинг площади размера
+ * Парсинг физических габаритов и площади коврового изделия (для WMS/ERP)
  */
-function calculateArea(sizeStr: string): number {
-  if (!sizeStr) return 3.68;
+export function parseDimensions(sizeStr: string): { width: number; length: number; area: number } {
+  if (!sizeStr) return { width: 1.6, length: 2.3, area: 3.68 };
   const cleaned = sizeStr.replace(',', '.');
   const parts = cleaned.split(/[*×xX]/).map(s => parseFloat(s.trim()));
-  if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-    return Math.round(parts[0] * parts[1] * 100) / 100;
+  if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1]) && parts[0] > 0 && parts[1] > 0) {
+    const width = Math.round(parts[0] * 100) / 100;
+    const length = Math.round(parts[1] * 100) / 100;
+    const area = Math.round(width * length * 100) / 100;
+    return { width, length, area };
   }
-  return 3.68;
+  return { width: 1.6, length: 2.3, area: 3.68 };
 }
 
 /**
@@ -171,7 +184,10 @@ export async function validateAndPriceOrder(
     totalItems += qty;
 
     const size = raw.size || dbVariant?.size || 'Стандарт';
-    const area = calculateArea(size);
+    const dims = parseDimensions(size);
+    const width = Number(raw.width) > 0 ? Number(raw.width) : dims.width;
+    const length = Number(raw.length) > 0 ? Number(raw.length) : dims.length;
+    const area = Number(raw.area_sqm) > 0 ? Number(raw.area_sqm) : (width * length > 0 ? Math.round(width * length * 100) / 100 : dims.area);
     const pricePerSqm = area > 0 ? Math.round((authoritativePrice / area) * 100) / 100 : (raw.price_per_sqm || 0);
 
     validatedItems.push({
@@ -182,6 +198,9 @@ export async function validateAndPriceOrder(
       quantity: qty,
       price: authoritativePrice,
       price_per_sqm: pricePerSqm,
+      width,
+      length,
+      area_sqm: area,
       warehouse: raw.warehouse || 'Основной Склад Астана',
       warehouse_id: raw.warehouse_id !== undefined ? Number(raw.warehouse_id) : (raw.warehouse && (raw.warehouse.includes('Астана') || raw.warehouse.includes('Основной')) ? 81 : 81),
       total_line: lineTotal,

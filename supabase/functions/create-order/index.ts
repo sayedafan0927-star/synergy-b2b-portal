@@ -1,6 +1,6 @@
 Deno.serve(async (req: Request) => {
   const corsHeaders: Record<string, string> = {
-    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Origin": "https://b2b.synergy.kz, https://synergy-b2b-portal.vercel.app",
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
     "Access-Control-Allow-Headers":
       "Content-Type, Authorization, X-Client-Info, Apikey",
@@ -28,9 +28,27 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const incomingIdempotency = req.headers.get("Idempotency-Key") || (body as any)?.idempotency_key || crypto.randomUUID();
+    const incomingIdempotency = req.headers.get("X-Idempotency-Key") || req.headers.get("Idempotency-Key") || (body as any)?.idempotency_key || crypto.randomUUID();
     const erpUrl = Deno.env.get("ERP_API_URL") || "https://kilem-khan.kz/api/sin/api_portal.php?action=create_order";
-    const erpKey = Deno.env.get("ERP_API_KEY") || "138d1bdaf9402600c8f5d5763e2e1573c1e45d32401e62e4981cd7e898bf0544";
+    const erpKey = Deno.env.get("ERP_API_KEY") || '';
+
+    // Cleanse any cell/storage stubs
+    if (body && typeof body === "object") {
+      delete (body as any).cell;
+      delete (body as any).cell_code;
+      delete (body as any).rack;
+      delete (body as any).location;
+      if (Array.isArray((body as any).items)) {
+        (body as any).items.forEach((it: any) => {
+          if (it && typeof it === "object") {
+            delete it.cell;
+            delete it.cell_code;
+            delete it.rack;
+            delete it.location;
+          }
+        });
+      }
+    }
 
     const erpResponse = await fetch(
       erpUrl,
@@ -40,6 +58,7 @@ Deno.serve(async (req: Request) => {
           "Content-Type": "application/json",
           "X-Portal-Key": erpKey,
           "Idempotency-Key": incomingIdempotency,
+          "X-Idempotency-Key": incomingIdempotency,
         },
         body: JSON.stringify(body),
       },

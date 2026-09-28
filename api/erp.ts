@@ -13,9 +13,9 @@ import { applyCorsHeaders } from './lib/cors';
 // Primary live ERP gateway: https://kilem-khan.kz/api/sin/public/api_portal.php
 // Production router alias per ERP spec: https://crm.kilem-khan.kz/api_portal.php
 const TARGET_ERP_URL = process.env.ERP_API_URL || 'https://kilem-khan.kz/api/sin/public/api_portal.php';
-const SERVER_ERP_KEY = process.env.ERP_API_KEY || ['138d1bda', 'f9402600', 'c8f5d576', '3e2e1573', 'c1e45d32', '401e62e4', '981cd7e8', '98bf0544'].join('');
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://sjvvoxxwevwgziuxjvcy.supabase.co';
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+const SERVER_ERP_KEY = process.env.ERP_API_KEY || '';
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: { persistSession: false },
@@ -42,6 +42,7 @@ const ADMIN_ACTIONS = new Set([
   'update_order_status',
   'sync_bundle',
 ]);
+let displaySettingsCache: { data: any; expiry: number } | null = null;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const startTime = Date.now();
@@ -51,10 +52,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
+  // Reject oversized payloads (10MB limit)
+  const bodyStr = JSON.stringify(req.body);
+  if (bodyStr && bodyStr.length > 10 * 1024 * 1024) {
+    return res.status(413).json({ error: 'Payload too large', maxSize: '10MB' });
+  }
+
   // Сквозной Correlation-ID
   const correlationId = applyCorrelationId(req, res);
-
-let displaySettingsCache: { data: any; expiry: number } | null = null;
 
 // Rate Limiting (300 запросов в минуту на IP)
   if (!enforceRateLimit(req, res, { limit: 300, windowSeconds: 60, actionPrefix: 'erp_proxy' })) {
@@ -338,7 +343,7 @@ let displaySettingsCache: { data: any; expiry: number } | null = null;
       });
 
       // 3. Отправка оперативного WhatsApp-уведомления менеджеру
-      const managerPhone = process.env.ADMIN_WHATSAPP_PHONE || process.env.MANAGER_WHATSAPP_PHONE || '+77785806866';
+      const managerPhone = process.env.ADMIN_WHATSAPP_PHONE || '';
       const notificationText =
         `📥 *НОВАЯ ЗАЯВКА С B2B ПОРТАЛА*\n\n` +
         `👤 *Имя:* ${name}\n` +
@@ -469,13 +474,10 @@ let displaySettingsCache: { data: any; expiry: number } | null = null;
   if (['client_debt', 'orders'].includes(action)) {
     verifiedAuth = await authenticateRequest(req, { allowServerKey: true });
     if (!verifiedAuth.isAuthenticated) {
-      const hasClientIdentifier = Boolean(req.query.phone || req.query.client_id || req.query.search);
-      if (action === 'client_debt' && !hasClientIdentifier) {
-        return res.status(401).json({
-          success: false,
-          error: verifiedAuth.error || 'Для доступа к финансовым данным требуется авторизация.',
-        });
-      }
+      return res.status(401).json({
+        success: false,
+        error: verifiedAuth.error || 'Для доступа к финансовым данным требуется авторизация.',
+      });
     }
 
     if (verifiedAuth.isAuthenticated && verifiedAuth.role === 'client') {
@@ -642,19 +644,53 @@ let displaySettingsCache: { data: any; expiry: number } | null = null;
       const clientComment = rawPayload.comment || '';
       const orderCommentWithCompliance = `${clientComment}${multiWhTag}${serverRequiresApproval ? ` [ТРЕБУЕТСЯ АППРУВ В WHATSAPP: ${complianceReason}]` : ''}`.trim();
 
+      const primaryWarehouseId = Number(pricingResult.items[0]?.warehouse_id || rawPayload.warehouse_id || 1);
+
+      // Строгая санитаризация и формат WMS/ERP:
+      // Исключаем любые складские ячейки/стеллажи, передаем габариты ковра и точный warehouse_id
+      const sanitizedItemsForErp = pricingResult.items.map(it => {
+        const itemObj: Record<string, any> = {
+          item_id: it.item_id,
+          sku: it.sku,
+          quantity: it.quantity,
+          price: it.price,
+          width: it.width,
+          length: it.length,
+          area_sqm: it.area_sqm,
+          warehouse_id: it.warehouse_id || primaryWarehouseId,
+        };
+        // Гарантия отсутствия внутрискладских ячеек адресации WMS
+        delete itemObj.cell;
+        delete itemObj.cell_code;
+        delete itemObj.rack;
+        delete itemObj.location;
+        return itemObj;
+      });
+
       validatedOrderPayload = {
         ...rawPayload,
+        idempotency_key: incomingIdempotencyKey || null,
+        warehouse_id: primaryWarehouseId,
+        partner_id: (callerAuth.role === 'client' ? callerAuth.partnerId : rawPayload.partner_id) || rawPayload.client_id,
+        client_name: rawPayload.client_name || rawPayload.buyer?.name,
+        client_phone: rawPayload.client_phone || rawPayload.buyer?.phone,
+        client_company: rawPayload.client_company || rawPayload.client_name,
+        city: rawPayload.city || 'Астана',
         comment: orderCommentWithCompliance,
         total_amount: finalTotalAmount,
-        items: pricingResult.items,
+        items: sanitizedItemsForErp,
         user_id: callerAuth.userId || rawPayload.user_id,
-        partner_id: (callerAuth.role === 'client' ? callerAuth.partnerId : rawPayload.partner_id) || rawPayload.client_id,
         server_requires_approval: serverRequiresApproval,
         compliance_reason: complianceReason,
-        idempotency_key: incomingIdempotencyKey || null,
         is_multi_warehouse: isMultiWarehouse,
         warehouses: distinctWarehouses,
       };
+
+      // Гарантия отсутствия ячеек на верхнем уровне
+      delete (validatedOrderPayload as any).cell;
+      delete (validatedOrderPayload as any).cell_code;
+      delete (validatedOrderPayload as any).rack;
+      delete (validatedOrderPayload as any).location;
 
       // 4. ─── Transactional Outbox (Буферизация в PostgreSQL перед вызовом 1C) ───
       const year = new Date().getFullYear();
@@ -1001,7 +1037,7 @@ let displaySettingsCache: { data: any; expiry: number } | null = null;
           // Если по выбранному supplier_id пришло 0 поставок, подгружаем реестр и ищем партии с товарами фабрики (напр. SAYDAM)
           if (jsonData.shipments.length === 0 && req.query.supplier_id && req.query.supplier_id !== '0') {
             try {
-              const allResp = await fetch(`${targetUrl}?action=supplier_inbound_shipments&portal_key=${serverKey}`);
+              const allResp = await fetch(`${targetUrl}?action=supplier_inbound_shipments&portal_key=${SERVER_ERP_KEY}`);
               if (allResp.ok) {
                 const allData = await allResp.json();
                 if (allData.success && Array.isArray(allData.shipments)) {
@@ -1035,7 +1071,7 @@ let displaySettingsCache: { data: any; expiry: number } | null = null;
       if (action === 'login') {
         if (erpResponse.ok && jsonData?.success) {
           try {
-            const SECRET_KEY = process.env.PORTAL_SECRET_KEY || process.env.ERP_PORTAL_SECRET || ['synergy', '_portal', '_sec', '_key_2026'].join('');
+            const SECRET_KEY = process.env.PORTAL_SECRET_KEY || '';
             if (SECRET_KEY) {
               const c = jsonData.client || {};
               const pId = String(c.id || jsonData.client_id || '');
@@ -1157,7 +1193,7 @@ let displaySettingsCache: { data: any; expiry: number } | null = null;
                 const empId = matchedEmp.id;
                 const uId = `erp-employee-${empId}`;
 
-                const SECRET_KEY = process.env.PORTAL_SECRET_KEY || process.env.ERP_PORTAL_SECRET || ['synergy', '_portal', '_sec', '_key_2026'].join('');
+                const SECRET_KEY = process.env.PORTAL_SECRET_KEY || '';
                 const sessionData = {
                   user: {
                     id: uId,
@@ -1302,7 +1338,7 @@ let displaySettingsCache: { data: any; expiry: number } | null = null;
                     const debtUsd = typeof matchedClient.financials?.debt_usd === 'number' ? matchedClient.financials.debt_usd : (matchedClient.debt_usd || 0);
                     const balanceUsd = typeof matchedClient.financials?.balance_usd === 'number' ? matchedClient.financials.balance_usd : (matchedClient.balance_usd || 0);
 
-                    const SECRET_KEY = process.env.PORTAL_SECRET_KEY || process.env.ERP_PORTAL_SECRET || ['synergy', '_portal', '_sec', '_key_2026'].join('');
+                    const SECRET_KEY = process.env.PORTAL_SECRET_KEY || '';
                     const sessionData = {
                       user: {
                         id: uId,

@@ -230,9 +230,9 @@ CREATE TABLE IF NOT EXISTS orders (
     CHECK (status IN ('draft', 'pending', 'processing', 'shipped', 'delivered', 'cancelled')),
   warehouse text NOT NULL DEFAULT '',
   notes text NOT NULL DEFAULT '',
-  total_amount numeric NOT NULL DEFAULT 0,
-  total_sqm numeric NOT NULL DEFAULT 0,
-  total_items integer NOT NULL DEFAULT 0,
+  total_amount numeric NOT NULL DEFAULT 0 CHECK (total_amount >= 0),
+  total_sqm numeric NOT NULL DEFAULT 0 CHECK (total_sqm >= 0),
+  total_items integer NOT NULL DEFAULT 0 CHECK (total_items >= 0),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -250,7 +250,7 @@ CREATE TABLE IF NOT EXISTS order_items (
   size text NOT NULL,
   sku text NOT NULL DEFAULT '',
   warehouse text NOT NULL DEFAULT '',
-  price numeric NOT NULL,
+  price numeric NOT NULL CHECK (price >= 0),
   quantity integer NOT NULL CHECK (quantity > 0),
   created_at timestamptz NOT NULL DEFAULT now()
 );
@@ -645,7 +645,7 @@ CREATE TABLE IF NOT EXISTS product_variants (
   product_id text NOT NULL REFERENCES products(id) ON DELETE CASCADE,
   size text NOT NULL,
   sku text NOT NULL UNIQUE,
-  base_price numeric NOT NULL DEFAULT 0,
+  base_price numeric NOT NULL DEFAULT 0 CHECK (base_price >= 0),
   created_at timestamptz NOT NULL DEFAULT now()
 );
 

@@ -115,8 +115,13 @@ interface Order {
 }
 
 const ORDER_STATUS_MAP: Record<string, { label: string; color: string }> = {
-  pending: { label: 'Новый', color: 'bg-amber-50 text-amber-700 border-amber-200' },
-  processing: { label: 'В обработке', color: 'bg-blue-50 text-blue-700 border-blue-200' },
+  pending: { label: 'В авторезерве', color: 'bg-amber-50 text-amber-700 border-amber-200' },
+  reserved: { label: 'В авторезерве', color: 'bg-amber-50 text-amber-700 border-amber-200' },
+  confirmed: { label: 'В авторезерве', color: 'bg-amber-50 text-amber-700 border-amber-200' },
+  processing: { label: 'На сборке', color: 'bg-blue-50 text-blue-700 border-blue-200' },
+  picking: { label: 'На сборке', color: 'bg-blue-50 text-blue-700 border-blue-200' },
+  assembled: { label: 'Готов к отгрузке', color: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+  ready: { label: 'Готов к отгрузке', color: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
   shipped: { label: 'Отгружен', color: 'bg-purple-50 text-purple-700 border-purple-200' },
   delivered: { label: 'Доставлен', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
   cancelled: { label: 'Отменён', color: 'bg-rose-50 text-rose-700 border-rose-200' },
@@ -3359,8 +3364,11 @@ function OrdersTab({
 
   const filteredOrders = useMemo(() => {
     return orders.filter(o => {
-      if (statusFilter !== 'all' && o.statusRaw !== statusFilter) {
-        return false;
+      if (statusFilter !== 'all') {
+        if (statusFilter === 'pending' && !['pending', 'reserved', 'confirmed'].includes(o.statusRaw)) return false;
+        else if (statusFilter === 'processing' && !['processing', 'picking'].includes(o.statusRaw)) return false;
+        else if (statusFilter === 'assembled' && !['assembled', 'ready'].includes(o.statusRaw)) return false;
+        else if (!['pending', 'processing', 'assembled'].includes(statusFilter) && o.statusRaw !== statusFilter) return false;
       }
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
@@ -3381,8 +3389,9 @@ function OrdersTab({
 
   const filterTabs = [
     { id: 'all', label: 'Все' },
-    { id: 'pending', label: 'Новые' },
-    { id: 'processing', label: 'В обработке' },
+    { id: 'pending', label: 'В авторезерве' },
+    { id: 'processing', label: 'На сборке' },
+    { id: 'assembled', label: 'Готов к отгрузке' },
     { id: 'shipped', label: 'Отгружен' },
     { id: 'delivered', label: 'Доставлен' },
     { id: 'cancelled', label: 'Отменён' },
