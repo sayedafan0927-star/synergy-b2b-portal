@@ -188,10 +188,35 @@ export default function LoginPage({ onNavigate }: { onNavigate: (page: PageId) =
             </button>
           </div>
 
-          {/* Информационный блок Enterprise SSO */}
-          <div className="mt-6 pt-6 border-t border-slate-100 text-center">
-            <p className="text-[12px] text-slate-400 leading-relaxed">
-              🔐 Сотрудники компании (РМ, ЛМ, Администраторы) авторизуются в портале автоматически через кнопку «Открыть B2B-портал» в интерфейсе <strong>1С:ERP</strong>.
+          {/* Вход для сотрудников и администраторов */}
+          <div className="mt-6 pt-5 border-t border-slate-100">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 text-center mb-2.5">
+              Вход для персонала и тестирования
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  signInAsDemo('admin');
+                  onNavigate('profile');
+                }}
+                className="flex items-center justify-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50/70 px-3 py-2 text-xs font-semibold text-brand-800 hover:bg-brand-100 transition-colors shadow-xs"
+              >
+                <span>👑 Администратор</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  signInAsDemo('manager_rm');
+                  onNavigate('profile');
+                }}
+                className="flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors shadow-xs"
+              >
+                <span>👔 Менеджер РМ</span>
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-2.5 text-center leading-relaxed">
+              🔐 Из 1С:ERP вход сотрудников выполняется автоматически по кнопке «Открыть B2B-портал». Либо введите рабочий Email и пароль в форме выше.
             </p>
           </div>
         </div>

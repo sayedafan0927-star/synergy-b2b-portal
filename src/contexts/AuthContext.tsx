@@ -190,12 +190,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const demoProfile: Profile = {
       id: 'demo-' + demoRole,
       role: demoRole,
-      partner_id: 'PRT-DEMO-001',
-      full_name: demoRole === 'admin' ? 'Администратор (Демо)' : 'Клиент (Демо)',
-      company_name: 'ТОО «Kilem Khan Demo»',
+      partner_id: demoRole === 'client' ? 'PRT-DEMO-001' : null,
+      full_name: demoRole === 'admin' ? 'Администратор портала' : demoRole === 'manager_rm' ? 'Региональный менеджер' : 'Клиент (Демо)',
+      company_name: 'ТОО «Kilem Khan Synergy»',
       phone: '+7 (777) 123-45-67',
       manager_id: '1',
-      price_type: 'Оптовая',
+      price_type: 'wholesale',
       impersonation_enabled: true,
     };
     const mockUser: unknown = {

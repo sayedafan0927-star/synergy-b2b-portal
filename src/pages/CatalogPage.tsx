@@ -771,32 +771,7 @@ export default function CatalogPage({ onNavigate, initialCollection, initialCoun
           </button>
         </div>
 
-        {/* RugsUSA Size Clustering Bar (Pattern 3) */}
-        <div className="mb-5 flex flex-wrap items-center gap-1.5 sm:gap-2">
-          <span className="text-xs font-bold text-slate-500 mr-1 uppercase tracking-wider hidden sm:inline">
-            Размер:
-          </span>
-          {[
-            { id: 'all', label: 'Все размеры' },
-            { id: 'small', label: 'Маленькие (< 2.5 м²)' },
-            { id: 'medium', label: 'Средние (2.5 – 5.5 м²)' },
-            { id: 'large', label: 'Большие (5.5 – 10 м²)' },
-            { id: 'oversize', label: 'Оверзайз (> 10 м²)' },
-            { id: 'runner', label: 'Дорожки' },
-          ].map(cluster => (
-            <button
-              key={cluster.id}
-              onClick={() => setActiveClusterQuickFilter(cluster.id as any)}
-              className={`px-3 py-1.5 rounded-lg text-xs transition-all ${
-                activeClusterQuickFilter === cluster.id
-                  ? 'bg-slate-900 text-white shadow-xs font-semibold ring-2 ring-slate-900/20'
-                  : 'bg-white border border-slate-200 text-slate-700 hover:border-slate-400 hover:bg-slate-50'
-              }`}
-            >
-              {cluster.label}
-            </button>
-          ))}
-        </div>
+        {/* RugsUSA Size Clustering Bar (Pattern 3) activeClusterQuickFilter disabled per user request to prevent mobile layout overflow */}
 
         {/* Toolbar */}
         <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
