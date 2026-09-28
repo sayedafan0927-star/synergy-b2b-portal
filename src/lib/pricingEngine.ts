@@ -34,6 +34,24 @@ export function getPricingTier(rawPriceType?: string | null): ContractPricingTie
 
   const str = rawPriceType.toLowerCase().trim();
 
+  // Цены из 1С:ERP (price_deferred, price_opt, wholesale) уже рассчитаны 1С по договору и являются финальными
+  if (
+    str === 'wholesale' ||
+    str === 'price_deferred' ||
+    str === 'price_opt' ||
+    str === 'оптовая' ||
+    str === 'standard' ||
+    str === 'retail' ||
+    str === 'базовая цена'
+  ) {
+    return {
+      code: 'standard',
+      label: 'Оптовая цена 1С',
+      discountPercent: 0,
+      badgeColor: 'bg-slate-100 text-slate-700',
+    };
+  }
+
   // VIP Уровень (-25%)
   if (str.includes('vip') || str.includes('вип') || str.includes('эксклюзив')) {
     return {
@@ -45,7 +63,7 @@ export function getPricingTier(rawPriceType?: string | null): ContractPricingTie
   }
 
   // Опт-3 / Дилерский (-20%)
-  if (str.includes('opt3') || str.includes('опт-3') || str.includes('опт 3') || str.includes('дилер')) {
+  if (str.includes('opt3') || str.includes('опт-3') || str.includes('дилер')) {
     return {
       code: 'opt3',
       label: 'Договор Дилер (-20%)',
@@ -55,7 +73,7 @@ export function getPricingTier(rawPriceType?: string | null): ContractPricingTie
   }
 
   // Опт-2 / Крупный опт (-15%)
-  if (str.includes('opt2') || str.includes('опт-2') || str.includes('опт 2') || str.includes('крупн')) {
+  if (str.includes('opt2') || str.includes('опт-2') || str.includes('крупн')) {
     return {
       code: 'opt2',
       label: 'Договор Опт-2 (-15%)',
@@ -65,13 +83,7 @@ export function getPricingTier(rawPriceType?: string | null): ContractPricingTie
   }
 
   // Опт-1 / Стандартный опт (-10%)
-  if (
-    str.includes('opt1') ||
-    str.includes('опт-1') ||
-    str.includes('опт 1') ||
-    str.includes('опт') ||
-    str.includes('wholesale')
-  ) {
+  if (str.includes('opt1') || str.includes('опт-1')) {
     return {
       code: 'opt1',
       label: 'Договор Опт-1 (-10%)',

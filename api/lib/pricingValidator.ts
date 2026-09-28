@@ -48,10 +48,11 @@ export interface PricingValidationResult {
 function getDiscountPercent(priceType?: string | null): number {
   if (!priceType) return 0;
   const str = priceType.toLowerCase().trim();
+  if (str === 'wholesale' || str === 'price_deferred' || str === 'price_opt' || str === 'оптовая') return 0;
   if (str.includes('vip') || str.includes('вип')) return 25;
   if (str.includes('opt3') || str.includes('опт-3') || str.includes('дилер')) return 20;
   if (str.includes('opt2') || str.includes('опт-2') || str.includes('крупн')) return 15;
-  if (str.includes('opt1') || str.includes('опт-1') || str.includes('опт') || str.includes('wholesale')) return 10;
+  if (str.includes('opt1') || str.includes('опт-1')) return 10;
   return 0;
 }
 
