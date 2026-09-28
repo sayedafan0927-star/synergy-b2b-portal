@@ -24,7 +24,7 @@ import ProductCard from '@/components/ProductCard';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
-import PetroglyphRiderRunner from '@/components/ethnic/PetroglyphRiderRunner';
+import ProductImage from '@/components/ProductImage';
 
 type SortOption = 'popular' | 'price-asc' | 'price-desc' | 'name';
 type ViewMode = 'grid' | 'stock';
@@ -664,9 +664,6 @@ export default function CatalogPage({ onNavigate, initialCollection, initialCoun
               {activeFilterCount > 0 && <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-700 px-1 text-[10px] font-bold text-white">{activeFilterCount}</span>}
             </button>
           </div>
-
-          {/* ── Animated Petroglyph Galloping Archer & Running Swordsman ── */}
-          <PetroglyphRiderRunner />
 
           <div className="flex items-center gap-3">
             <div className="flex rounded-lg border border-slate-200 bg-white p-0.5">
