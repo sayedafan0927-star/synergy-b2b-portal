@@ -1,6 +1,7 @@
 import { useState, useEffect, useContext } from 'react';
 import { fetchCatalogFromErp } from '@/lib/erpApi';
 import { AuthContext, type Profile } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabase';
 import type { Product, ProductVariant, Warehouse, StockSummary } from '@/types';
 import {
   filterWarehousesForClient,
@@ -491,6 +492,31 @@ export function useProducts(customDealerId?: string | number) {
     return () => {
       window.removeEventListener('synergy:stock-event', handleStockEvent as EventListener);
       if (bc) bc.close();
+    };
+  }, [effectiveDealerId]);
+
+  // Сквозная подписка на Supabase Realtime канал portal_live_updates
+  useEffect(() => {
+    const channel = supabase
+      .channel('portal_live_updates')
+      .on('broadcast', { event: 'stock_changed' }, (payload) => {
+        console.log('[Realtime: stock_changed] Updating catalog in-flight:', payload);
+        fetchCatalogFromErp(effectiveDealerId, undefined, true).then(res => {
+          if (res && res.products) {
+            setProducts(mergeProducts(res.products));
+            if (res.summary) setSummary(res.summary);
+          }
+        }).catch(() => {});
+      })
+      .on('broadcast', { event: 'partner_stock_released' }, (payload: any) => {
+        const data = payload?.payload;
+        if (!data || !data.sku) return;
+        window.dispatchEvent(new CustomEvent('synergy:stock-event', { detail: data }));
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
     };
   }, [effectiveDealerId]);
 

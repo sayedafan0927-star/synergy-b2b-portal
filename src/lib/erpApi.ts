@@ -5,9 +5,91 @@
 
 import type { SupplierNetworkStockResponse, SupplierReleasesReport, SupplierInfo, ErpDisplaySettings } from '@/types';
 
-export const ERP_API_URL = import.meta.env.VITE_ERP_API_URL || 'https://kilem-khan.kz/api/sin/public/api_portal.php';
+export const ERP_DIRECT_URL = import.meta.env.VITE_ERP_API_URL || 'https://kilem-khan.kz/api/sin/public/api_portal.php';
+export const ERP_PROXY_URL = '/api/erp';
+export const ERP_API_URL = ERP_DIRECT_URL; // alias for backwards compatibility
 export const ERP_API_KEY = import.meta.env.VITE_ERP_API_KEY || '138d1bdaf9402600c8f5d5763e2e1573c1e45d32401e62e4981cd7e898bf0544';
 export const ERP_PORTAL_SECRET = 'SynergySecretKey2025';
+
+// ─── 1. In-Flight Request Deduplication Pool ───
+const inFlightRequests = new Map<string, Promise<any>>();
+
+export function deduplicateRequest<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const existing = inFlightRequests.get(key);
+  if (existing) {
+    return existing;
+  }
+  const promise = fn().finally(() => {
+    inFlightRequests.delete(key);
+  });
+  inFlightRequests.set(key, promise);
+  return promise;
+}
+
+// ─── 2. Unified Transport (Proxy /api/erp with Direct Fallback) ───
+export async function erpFetch(
+  action: string,
+  options: {
+    method?: 'GET' | 'POST';
+    params?: Record<string, string | number | undefined | null>;
+    body?: any;
+    headers?: Record<string, string>;
+  } = {}
+): Promise<Response> {
+  const method = options.method || 'GET';
+  const q = new URLSearchParams();
+  q.set('action', action);
+  if (options.params) {
+    for (const [k, v] of Object.entries(options.params)) {
+      if (v !== undefined && v !== null) {
+        q.set(k, String(v));
+      }
+    }
+  }
+
+  const isBrowser = typeof window !== 'undefined';
+  const proxyEndpoint = `${ERP_PROXY_URL}?${q.toString()}`;
+
+  const requestHeaders: Record<string, string> = {
+    'Accept': 'application/json',
+    ...(options.headers || {}),
+  };
+  if (options.body && method === 'POST') {
+    requestHeaders['Content-Type'] = 'application/json';
+  }
+
+  // Сначала пробуем безопасный серверный прокси /api/erp
+  if (isBrowser) {
+    try {
+      const proxyRes = await fetch(proxyEndpoint, {
+        method,
+        headers: requestHeaders,
+        body: options.body ? JSON.stringify(options.body) : undefined,
+      });
+
+      // Если серверный роут активен и ответил — возвращаем результат
+      if (proxyRes.status !== 404 && proxyRes.status !== 502) {
+        return proxyRes;
+      }
+    } catch {
+      // Игнорируем и делаем прозрачный fallback
+    }
+  }
+
+  // Fallback: прямой защищенный вызов ERP
+  q.set('portal_key', ERP_API_KEY);
+  requestHeaders['X-Portal-Key'] = ERP_API_KEY;
+
+  return await fetch(`${ERP_DIRECT_URL}?${q.toString()}`, {
+    method,
+    headers: requestHeaders,
+    body: options.body ? JSON.stringify(options.body) : undefined,
+  });
+}
+
+// ─── 3. Stale-While-Revalidate Catalog Cache (60s TTL) ───
+const CATALOG_TTL_MS = 60 * 1000;
+const catalogMemoryCache = new Map<string, { timestamp: number; data: any }>();
 
 export interface CreateOrderPayload {
   client_id?: number | string;
@@ -59,7 +141,7 @@ export interface ErpOrderResponse {
 }
 
 /**
- * Отправка заказа в Synergy ERP с защитой от дублирования (Idempotency Key).
+ * Отправка заказа в Synergy ERP с защитой от дублирования и повторами при сбоях сети (Exponential Backoff).
  */
 export async function submitOrderToErp(payload: CreateOrderPayload): Promise<ErpOrderResponse> {
   const idempotencyKey = typeof crypto !== 'undefined' && crypto.randomUUID 
@@ -93,17 +175,44 @@ export async function submitOrderToErp(payload: CreateOrderPayload): Promise<Erp
     idempotency_key: idempotencyKey,
   };
 
-  const response = await fetch(`${ERP_API_URL}?action=create_order&portal_key=${encodeURIComponent(ERP_API_KEY)}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Portal-Key': ERP_API_KEY,
-      'Idempotency-Key': idempotencyKey,
-    },
-    body: JSON.stringify(normalizedPayload),
-  });
+  // Выполняем до 3 попыток при кратковременных сбоях сети
+  let attempt = 0;
+  const maxAttempts = 3;
+  let lastResponse: Response | null = null;
+  let text = '';
 
-  const text = await response.text();
+  while (attempt < maxAttempts) {
+    attempt++;
+    try {
+      lastResponse = await erpFetch('create_order', {
+        method: 'POST',
+        headers: {
+          'Idempotency-Key': idempotencyKey,
+        },
+        body: normalizedPayload,
+      });
+
+      text = await lastResponse.text();
+
+      // Если 502, 503, 504 — временная ошибка шлюза, пробуем повторить
+      if ([502, 503, 504].includes(lastResponse.status) && attempt < maxAttempts) {
+        await new Promise(r => setTimeout(r, attempt * 800));
+        continue;
+      }
+      break;
+    } catch (netErr) {
+      if (attempt < maxAttempts) {
+        await new Promise(r => setTimeout(r, attempt * 800));
+      } else {
+        throw netErr;
+      }
+    }
+  }
+
+  if (!lastResponse) {
+    throw new Error('Не удалось связаться с сервером заказов ERP');
+  }
+
   let data: ErpOrderResponse;
   try {
     data = JSON.parse(text);
@@ -111,15 +220,15 @@ export async function submitOrderToErp(payload: CreateOrderPayload): Promise<Erp
     throw new Error(`Некорректный ответ сервера: ${text.slice(0, 100)}`);
   }
 
-  if (!response.ok || !data.success) {
+  if (!lastResponse.ok || !data.success) {
     const errorData = data as any;
-    if (response.status === 409 || errorData?.error_code === 'INSUFFICIENT_STOCK' || errorData?.code === 'INSUFFICIENT_STOCK' || errorData?.details?.code === 'INSUFFICIENT_STOCK') {
+    if (lastResponse.status === 409 || errorData?.error_code === 'INSUFFICIENT_STOCK' || errorData?.code === 'INSUFFICIENT_STOCK' || errorData?.details?.code === 'INSUFFICIENT_STOCK') {
       const err = new Error(errorData?.error || 'Недостаточно свободного остатка на складе. Товар только что был зарезервирован другим покупателем.');
       (err as any).code = 'INSUFFICIENT_STOCK';
       (err as any).details = errorData?.details;
       throw err;
     }
-    throw new Error(data.error || `Ошибка сервера (${response.status})`);
+    throw new Error(data.error || `Ошибка сервера (${lastResponse.status})`);
   }
 
   return data;
@@ -127,29 +236,40 @@ export async function submitOrderToErp(payload: CreateOrderPayload): Promise<Erp
 
 /**
  * Получение актуального каталога и остатков по складам из ERP.
- * Для авторизованного дилера передает dealer_id для получения персональных остатков (dealer_stock).
+ * Использует Stale-While-Revalidate (SWR) кэширование и дедупликацию параллельных запросов.
  */
-export async function fetchCatalogFromErp(dealerId?: string | number, priceType?: string) {
-  const q = new URLSearchParams();
-  q.set('action', 'catalog');
-  if (dealerId) q.set('dealer_id', String(dealerId));
-  if (priceType) q.set('price_type', priceType);
-  q.set('portal_key', ERP_API_KEY);
-  q.set('_t', String(Date.now()));
+export async function fetchCatalogFromErp(dealerId?: string | number, priceType?: string, bypassCache = false) {
+  const cacheKey = `catalog_${dealerId || 'public'}_${priceType || 'default'}`;
 
-  const response = await fetch(`${ERP_API_URL}?${q.toString()}`, {
-    method: 'GET',
-    cache: 'no-store',
-    headers: {
-      'X-Portal-Key': ERP_API_KEY,
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Ошибка загрузки каталога (${response.status})`);
+  // 1. Проверяем свежий кэш в памяти
+  if (!bypassCache) {
+    const cached = catalogMemoryCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CATALOG_TTL_MS) {
+      return cached.data;
+    }
   }
 
-  return await response.json();
+  // 2. Дедупликация параллельных запросов
+  return deduplicateRequest(cacheKey, async () => {
+    const response = await erpFetch('catalog', {
+      method: 'GET',
+      params: {
+        dealer_id: dealerId ? String(dealerId) : undefined,
+        price_type: priceType || undefined,
+        _t: Date.now(),
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Ошибка загрузки каталога (${response.status})`);
+    }
+
+    const data = await response.json();
+    if (data && data.success) {
+      catalogMemoryCache.set(cacheKey, { timestamp: Date.now(), data });
+    }
+    return data;
+  });
 }
 
 /**
@@ -162,18 +282,13 @@ export async function fetchSupplierNetworkStock(
   subAction: 'stock' | 'releases' = 'stock',
   params: { startDate?: string; endDate?: string } = {}
 ): Promise<SupplierNetworkStockResponse & SupplierReleasesReport> {
-  const q = new URLSearchParams();
-  q.set('action', 'supplier_network_stock');
-  q.set('supplier_id', String(supplierId));
-  q.set('sub_action', subAction);
-  if (params.startDate) q.set('start_date', params.startDate);
-  if (params.endDate) q.set('end_date', params.endDate);
-  q.set('portal_key', ERP_API_KEY);
-
-  const response = await fetch(`${ERP_API_URL}?${q.toString()}`, {
+  const response = await erpFetch('supplier_network_stock', {
     method: 'GET',
-    headers: {
-      'X-Portal-Key': ERP_API_KEY,
+    params: {
+      supplier_id: String(supplierId),
+      sub_action: subAction,
+      start_date: params.startDate,
+      end_date: params.endDate,
     },
   });
 
@@ -188,12 +303,7 @@ export async function fetchSupplierNetworkStock(
  * Получение списка активных региональных менеджеров (РМ) и логистов (ЛМ).
  */
 export async function fetchRegionalManagersFromErp() {
-  const response = await fetch(`${ERP_API_URL}?action=regional_managers&portal_key=${encodeURIComponent(ERP_API_KEY)}`, {
-    method: 'GET',
-    headers: {
-      'X-Portal-Key': ERP_API_KEY,
-    },
-  });
+  const response = await erpFetch('regional_managers', { method: 'GET' });
 
   if (!response.ok) {
     throw new Error(`Ошибка загрузки регионалов (${response.status})`);
@@ -206,17 +316,13 @@ export async function fetchRegionalManagersFromErp() {
  * Получение списка контрагентов и их договоров (с возможностью поиска по телефону/названию).
  */
 export async function fetchCounterpartiesFromErp(params: { search?: string; phone?: string; managerId?: number; limit?: number } = {}) {
-  const q = new URLSearchParams();
-  q.set('portal_key', ERP_API_KEY);
-  if (params.search) q.set('search', params.search);
-  if (params.phone) q.set('phone', params.phone);
-  if (params.managerId) q.set('manager_id', String(params.managerId));
-  if (params.limit) q.set('limit', String(params.limit));
-
-  const response = await fetch(`${ERP_API_URL}?action=counterparties&${q.toString()}`, {
+  const response = await erpFetch('counterparties', {
     method: 'GET',
-    headers: {
-      'X-Portal-Key': ERP_API_KEY,
+    params: {
+      search: params.search,
+      phone: params.phone,
+      manager_id: params.managerId,
+      limit: params.limit,
     },
   });
 
@@ -288,17 +394,13 @@ export async function authenticateClientViaErp(login: string, password: string):
 
   // 1. Попытка авторизации через action=login в Synergy ERP
   try {
-    const response = await fetch(`${ERP_API_URL}?action=login`, {
+    const response = await erpFetch('login', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Portal-Key': ERP_API_KEY,
-      },
-      body: JSON.stringify({
+      body: {
         phone: cleanPhone || login.trim(),
         login: login.trim(),
         password: password.trim(),
-      }),
+      },
     });
 
     const data = await response.json().catch(() => null);
@@ -433,13 +535,7 @@ export interface PingResult {
  */
 export async function pingErp(): Promise<PingResult> {
   const start = performance.now();
-  const response = await fetch(`${ERP_API_URL}?action=ping&portal_key=${encodeURIComponent(ERP_API_KEY)}`, {
-    method: 'GET',
-    headers: {
-      'X-Portal-Key': ERP_API_KEY,
-    },
-  });
-
+  const response = await erpFetch('ping', { method: 'GET' });
   const latencyMs = Math.round(performance.now() - start);
 
   if (!response.ok) {
@@ -574,16 +670,12 @@ export interface ClientDebtReport {
  * Получение персональной задолженности и неоплаченных накладных клиента из ERP.
  */
 export async function fetchClientDebtFromErp(params: { phone?: string; counterpartyId?: number; search?: string }): Promise<ClientDebtReport> {
-  const q = new URLSearchParams();
-  q.set('portal_key', ERP_API_KEY);
-  if (params.phone) q.set('phone', params.phone);
-  if (params.counterpartyId) q.set('counterparty_id', String(params.counterpartyId));
-  if (params.search) q.set('search', params.search);
-
-  const response = await fetch(`${ERP_API_URL}?action=client_debt&${q.toString()}`, {
+  const response = await erpFetch('client_debt', {
     method: 'GET',
-    headers: {
-      'X-Portal-Key': ERP_API_KEY,
+    params: {
+      phone: params.phone,
+      counterparty_id: params.counterpartyId,
+      search: params.search,
     },
   });
 
@@ -598,12 +690,7 @@ export async function fetchClientDebtFromErp(params: { phone?: string; counterpa
  * Получение полного пакета синхронизации всех клиентов, балансов и РМ.
  */
 export async function fetchSyncBundleFromErp() {
-  const response = await fetch(`${ERP_API_URL}?action=sync_bundle&portal_key=${encodeURIComponent(ERP_API_KEY)}`, {
-    method: 'GET',
-    headers: {
-      'X-Portal-Key': ERP_API_KEY,
-    },
-  });
+  const response = await erpFetch('sync_bundle', { method: 'GET' });
 
   if (!response.ok) {
     throw new Error(`Ошибка загрузки пакета синхронизации (${response.status})`);
@@ -660,17 +747,13 @@ export interface ErpOrdersResponse {
  * Получение истории заказов клиента из Synergy ERP (1C / WMS).
  */
 export async function fetchClientOrdersFromErp(params: { phone?: string; clientId?: number; status?: string; limit?: number } = {}): Promise<ErpOrdersResponse> {
-  const q = new URLSearchParams();
-  q.set('portal_key', ERP_API_KEY);
-  if (params.phone) q.set('phone', params.phone);
-  if (params.clientId) q.set('client_id', String(params.clientId));
-  if (params.status) q.set('status', params.status);
-  if (params.limit) q.set('limit', String(params.limit));
-
-  const response = await fetch(`${ERP_API_URL}?action=orders&${q.toString()}`, {
+  const response = await erpFetch('orders', {
     method: 'GET',
-    headers: {
-      'X-Portal-Key': ERP_API_KEY,
+    params: {
+      phone: params.phone,
+      client_id: params.clientId,
+      status: params.status,
+      limit: params.limit,
     },
   });
 
@@ -716,13 +799,9 @@ export async function submitLeadToErp(payload: LeadPayload): Promise<LeadRespons
   };
 
   try {
-    const response = await fetch(`${ERP_API_URL}?action=create_lead&portal_key=${encodeURIComponent(ERP_API_KEY)}`, {
+    const response = await erpFetch('create_lead', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Portal-Key': ERP_API_KEY,
-      },
-      body: JSON.stringify(normalized),
+      body: normalized,
     });
 
     const data = await response.json().catch(() => null);
@@ -749,18 +828,14 @@ export interface UpdateOrderStatusParams {
  */
 export async function updateOrderStatusInErp(params: UpdateOrderStatusParams): Promise<{ success: boolean; message?: string }> {
   const numOrderId = Number(String(params.orderId).replace(/\D+/g, '')) || params.orderId;
-  const response = await fetch(`${ERP_API_URL}?action=update_order_status&portal_key=${encodeURIComponent(ERP_API_KEY)}`, {
+  const response = await erpFetch('update_order_status', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Portal-Key': ERP_API_KEY,
-    },
-    body: JSON.stringify({
+    body: {
       order_id: numOrderId,
       status: params.status,
       comment: params.comment || '',
       track_code: params.trackCode || '',
-    }),
+    },
   });
 
   const data = await response.json().catch(() => null);
@@ -775,13 +850,7 @@ export async function updateOrderStatusInErp(params: UpdateOrderStatusParams): P
  */
 export async function fetchSuppliersFromErp(): Promise<SupplierInfo[]> {
   try {
-    const response = await fetch(`${ERP_API_URL}?action=suppliers&portal_key=${encodeURIComponent(ERP_API_KEY)}`, {
-      method: 'GET',
-      headers: {
-        'X-Portal-Key': ERP_API_KEY,
-      },
-    });
-
+    const response = await erpFetch('suppliers', { method: 'GET' });
     if (!response.ok) {
       throw new Error(`Ошибка загрузки фабрик (${response.status})`);
     }
@@ -803,16 +872,12 @@ export async function fetchSuppliersFromErp(): Promise<SupplierInfo[]> {
 export async function updateClientAccessInErp(clientId: number | string, accessEnabled: boolean | number): Promise<{ success: boolean }> {
   const numClientId = Number(String(clientId).replace(/\D+/g, '')) || clientId;
   const isEnabled = typeof accessEnabled === 'boolean' ? (accessEnabled ? 1 : 0) : accessEnabled;
-  const response = await fetch(`${ERP_API_URL}?action=update_client_access&portal_key=${encodeURIComponent(ERP_API_KEY)}`, {
+  const response = await erpFetch('update_client_access', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Portal-Key': ERP_API_KEY,
-    },
-    body: JSON.stringify({
+    body: {
       client_id: numClientId,
       access_enabled: isEnabled,
-    }),
+    },
   });
 
   if (!response.ok) {
@@ -827,11 +892,9 @@ export async function updateClientAccessInErp(clientId: number | string, accessE
  */
 export async function fetchDisplaySettingsFromErp(): Promise<ErpDisplaySettings | null> {
   try {
-    const response = await fetch(`${ERP_API_URL}?action=display_settings&portal_key=${encodeURIComponent(ERP_API_KEY)}&_t=${Date.now()}`, {
+    const response = await erpFetch('display_settings', {
       method: 'GET',
-      headers: {
-        'X-Portal-Key': ERP_API_KEY,
-      },
+      params: { _t: Date.now() },
     });
     if (response.ok) {
       const data = await response.json();
@@ -850,13 +913,9 @@ export async function fetchDisplaySettingsFromErp(): Promise<ErpDisplaySettings 
  */
 export async function saveDisplaySettingsToErp(settings: Partial<ErpDisplaySettings>): Promise<boolean> {
   try {
-    const response = await fetch(`${ERP_API_URL}?action=display_settings&portal_key=${encodeURIComponent(ERP_API_KEY)}`, {
+    const response = await erpFetch('display_settings', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Portal-Key': ERP_API_KEY,
-      },
-      body: JSON.stringify({ settings }),
+      body: { settings },
     });
     if (response.ok) {
       const data = await response.json();

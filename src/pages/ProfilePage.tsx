@@ -2418,6 +2418,37 @@ function OrdersTab({
     fetchOrders();
   }, [fetchOrders]);
 
+  // Сквозная подписка на Realtime обновления статусов заказов со склада/WMS
+  useEffect(() => {
+    const channel = supabase
+      .channel('portal_order_live_sync')
+      .on('broadcast', { event: 'order_status_changed' }, (payload: any) => {
+        const data = payload?.payload;
+        if (!data || !data.order_id) return;
+        const targetId = String(data.order_id);
+        const newStatus = data.new_status;
+        const meta = ORDER_STATUS_MAP[newStatus] || { label: newStatus, color: 'bg-slate-100 text-slate-600 border-slate-200' };
+
+        setOrders(prev => prev.map(o => {
+          if (o.id === targetId || o.orderNumber === data.order_doc_number) {
+            return {
+              ...o,
+              status: meta.label,
+              statusRaw: newStatus,
+              statusColor: meta.color,
+              notes: data.comment || o.notes,
+            };
+          }
+          return o;
+        }));
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   const handleQuickStatusChange = async (orderId: string, newStatus: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setUpdatingId(orderId);
