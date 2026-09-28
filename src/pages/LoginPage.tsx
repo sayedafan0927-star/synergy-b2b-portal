@@ -216,7 +216,7 @@ export default function LoginPage({ onNavigate }: { onNavigate: (page: PageId) =
               </button>
             </div>
             <p className="text-[11px] text-slate-400 mt-2.5 text-center leading-relaxed">
-              🔐 Из 1С:ERP вход сотрудников выполняется автоматически по кнопке «Открыть B2B-портал». Либо введите рабочий Email и пароль в форме выше.
+              🔐 Из Synergy ERP вход сотрудников может выполняться автоматически по кнопке перехода в B2B-портал, либо выберите профиль сотрудника ниже.
             </p>
           </div>
         </div>

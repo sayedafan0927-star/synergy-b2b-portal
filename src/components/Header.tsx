@@ -139,12 +139,12 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
               className="hidden md:flex items-center gap-1.5 px-2 py-1 rounded-lg border border-slate-200/80 bg-slate-50 text-[11px] font-medium text-slate-600 cursor-help"
               title={
                 systemStatus === 'ok'
-                  ? 'Контур 1C:ERP и база данных синхронизированы в реальном времени'
+                  ? 'Контур Synergy ERP и база данных синхронизированы в реальном времени'
                   : systemStatus === 'degraded'
-                  ? 'Замедленный ответ 1C:ERP, активен стейджинг-кэш'
+                  ? 'Замедленный ответ Synergy ERP, активен стейджинг-кэш'
                   : systemStatus === 'down'
-                  ? 'Регламентные работы в 1С:ERP, активен защитный автономный режим'
-                  : 'Проверка доступности шлюза 1C...'
+                  ? 'Регламентные работы в Synergy ERP, активен защитный автономный режим'
+                  : 'Проверка доступности шлюза ERP...'
               }
             >
               <span className="relative flex h-2 w-2">
@@ -163,7 +163,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
                   }`}
                 ></span>
               </span>
-              <span className="hidden xl:inline text-[10px] text-slate-500 font-semibold">1С</span>
+              <span className="hidden xl:inline text-[10px] text-slate-500 font-semibold">ERP</span>
             </div>
 
             {/* Offline Orders Queue Badge */}
@@ -179,7 +179,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
                   }
                 }}
                 disabled={isSyncingOffline}
-                title="Есть сохраненные оффлайн-заказы. Нажмите для синхронизации с 1С"
+                title="Есть сохраненные оффлайн-заказы. Нажмите для синхронизации с ERP"
                 className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 text-[11px] font-semibold hover:bg-amber-100 transition-colors shadow-2xs cursor-pointer disabled:opacity-50"
               >
                 {isSyncingOffline ? (

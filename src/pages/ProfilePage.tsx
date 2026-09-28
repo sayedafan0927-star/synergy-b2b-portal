@@ -1565,7 +1565,7 @@ function AdminErpSyncTab() {
       const res = await fetch('/api/outbox/sync', { method: 'POST' });
       const data = await res.json();
       if (data.success) {
-        setOutboxMessage(data.total_pending === 0 ? 'Буфер Outbox пуст: все заказы синхронизированы с 1С' : `Успешно выгружено ${data.succeeded} из ${data.total_pending} заказов в 1С`);
+        setOutboxMessage(data.total_pending === 0 ? 'Буфер Outbox пуст: все заказы синхронизированы с ERP' : `Успешно выгружено ${data.succeeded} из ${data.total_pending} заказов в ERP`);
         if (data.succeeded > 0) fetchAuditLogs();
       } else {
         setOutboxMessage(data.error || 'Ошибка синхронизации буфера');
@@ -1730,7 +1730,7 @@ function AdminErpSyncTab() {
             onClick={runOutboxSync}
             disabled={outboxLoading}
             className="btn-secondary flex items-center justify-center gap-1.5 text-xs py-2 px-3 shadow-xs border border-slate-200"
-            title="Принудительно отправить буферизованные заказы в 1С"
+            title="Принудительно отправить буферизованные заказы в ERP"
           >
             <Send className={`h-3.5 w-3.5 ${outboxLoading ? 'animate-spin' : ''}`} />
             {outboxLoading ? 'Выгрузка...' : 'Сброс буфера Outbox'}
@@ -2858,7 +2858,7 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
                   className="w-full mt-2 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 transition-colors shadow-2xs cursor-pointer"
                 >
                   <FileText className="h-3.5 w-3.5 text-brand-600" />
-                  Акт сверки с 1С
+                  Акт сверки взаиморасчетов
                 </button>
               </div>
             </div>
@@ -3081,7 +3081,7 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
               {reconciliationLoading ? (
                 <div className="py-16 text-center">
                   <RefreshCw className="h-7 w-7 animate-spin text-brand-600 mx-auto mb-2" />
-                  <p className="text-xs text-slate-500">Запрос проводок и актов из 1С:ERP...</p>
+                  <p className="text-xs text-slate-500">Запрос проводок и актов из Synergy ERP...</p>
                 </div>
               ) : reconciliationData ? (
                 <div className="space-y-4">
@@ -3135,7 +3135,7 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
                         ) : (
                           <tr>
                             <td colSpan={5} className="py-8 text-center text-slate-400">
-                              За выбранный период проводок в 1С не зафиксировано
+                              За выбранный период проводок в ERP не зафиксировано
                             </td>
                           </tr>
                         )}
