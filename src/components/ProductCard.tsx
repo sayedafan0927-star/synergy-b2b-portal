@@ -4,7 +4,7 @@ import { parseSizeDimensions } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/contexts/CartContext';
 import { useUserPricing } from '@/hooks/usePricing';
-import { Check, Layers, Lock, ShoppingCart } from 'lucide-react';
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Lock, ShoppingCart } from 'lucide-react';
 import ProductImage from '@/components/ProductImage';
 
 interface ProductCardProps {
@@ -33,12 +33,6 @@ function getAvailableWarehouse(variant: ProductVariant) {
   };
 }
 
-function sizeLabel(count: number) {
-  if (count === 1) return 'размер';
-  if (count > 1 && count < 5) return 'размера';
-  return 'размеров';
-}
-
 export default function ProductCard({ product, onNavigate }: ProductCardProps) {
   const { user, profile } = useAuth();
   const { addItem } = useCart();
@@ -47,9 +41,31 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [addedSku, setAddedSku] = useState<string | null>(null);
 
-  const imageSource = product.image_thumb || product.images[0];
+  // Изображения для карусели
+  const validImages = (product.images || []).filter(img => typeof img === 'string' && img.trim().length > 0 && !img.includes('unsplash.com'));
+  const allImages = validImages.length > 0 ? validImages : (product.image_thumb ? [product.image_thumb] : []);
+  const [currentImgIndex, setCurrentImgIndex] = useState(0);
+
+  const activeImage = allImages[currentImgIndex] || allImages[0] || product.image_thumb || '';
+
+  const handlePrevImage = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCurrentImgIndex(idx => (idx === 0 ? allImages.length - 1 : idx - 1));
+  };
+
+  const handleNextImage = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setCurrentImgIndex(idx => (idx === allImages.length - 1 ? 0 : idx + 1));
+  };
+
   const sizeCount = product.variants.length;
   const pricePerSqm = getMinPricePerSqm(product);
+
+  // Определяем ходовой размер для превью
+  const primarySize = product.variants.find(v => v.size === '1.6 × 2.3' || v.size === '1.6*2.3')?.size
+    || product.variants.find(v => v.size === '2 × 3' || v.size === '2*3')?.size
+    || product.variants[0]?.size
+    || 'Стандарт';
 
   const setQuantity = (sku: string, value: number) => {
     setQuantities(previous => ({ ...previous, [sku]: Math.max(1, value || 1) }));
@@ -68,7 +84,7 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
       item_id: (variant as any).item_id || (Number(variant.id) > 0 ? Number(variant.id) : (Number(product.id) > 0 ? Number(product.id) : undefined)),
       productName: product.name,
       collection: product.collection,
-      image: imageSource,
+      image: activeImage,
       size: variant.size,
       sku: variant.sku,
       warehouse: warehouse.warehouse_name || warehouse.city,
@@ -106,27 +122,73 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
   return (
     <div
       onClick={() => onNavigate('product', product.id)}
-      className={`group card relative flex flex-col overflow-visible text-left cursor-pointer ${sizesOpen ? 'z-30' : ''}`}
+      className={`group card relative flex flex-col overflow-visible text-left cursor-pointer transition-shadow hover:shadow-lg ${sizesOpen ? 'z-30' : ''}`}
     >
-      <div className="relative aspect-[4/3] overflow-hidden rounded-t-xl bg-slate-100">
+      {/* Превью фото с возможностью листать */}
+      <div className="relative aspect-[4/3] overflow-hidden rounded-t-xl bg-slate-100 select-none">
         <ProductImage
-          src={imageSource}
+          src={activeImage}
           alt={product.name}
           loading="lazy"
           decoding="async"
           width={400}
           className="h-full w-full object-cover transition-transform duration-500 ease-apple group-hover:scale-105"
         />
+
+        {/* Бейдж наличия */}
         {hasDealerStock && totalShowroomQty > 0 && (
-          <div className="absolute top-2.5 left-2.5 z-10">
+          <div className="absolute top-2.5 left-2.5 z-10 pointer-events-none">
             <span className="inline-flex items-center gap-1 rounded-md bg-emerald-600/90 backdrop-blur-sm px-2 py-0.5 text-[11px] font-bold text-white shadow-sm">
               🏪 В наличии: {totalShowroomQty} шт
             </span>
           </div>
         )}
+
+        {/* Кнопки перелистывания фото при наведении */}
+        {allImages.length > 1 && (
+          <>
+            <button
+              type="button"
+              onClick={handlePrevImage}
+              aria-label="Предыдущее фото"
+              className="absolute left-2 top-1/2 -translate-y-1/2 z-20 flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full bg-white/90 text-slate-700 shadow-md backdrop-blur-sm border border-slate-200/80 transition-all hover:bg-white hover:scale-110 opacity-0 group-hover:opacity-100"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={handleNextImage}
+              aria-label="Следующее фото"
+              className="absolute right-2 top-1/2 -translate-y-1/2 z-20 flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full bg-white/90 text-slate-700 shadow-md backdrop-blur-sm border border-slate-200/80 transition-all hover:bg-white hover:scale-110 opacity-0 group-hover:opacity-100"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+
+            {/* Точки-индикаторы снизу (dots) */}
+            <div className="absolute bottom-2 left-0 right-0 z-20 flex items-center justify-center gap-1 pointer-events-auto">
+              {allImages.slice(0, 6).map((_, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setCurrentImgIndex(idx);
+                  }}
+                  className={`h-1.5 rounded-full transition-all ${
+                    idx === currentImgIndex
+                      ? 'w-3.5 bg-slate-900 shadow'
+                      : 'w-1.5 bg-white/90 border border-slate-300 hover:bg-slate-400'
+                  }`}
+                  aria-label={`Фото ${idx + 1}`}
+                />
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       <div className="flex flex-col p-3 sm:p-4">
+        {/* Артикул и категория */}
         <div className="flex items-center justify-between text-[11px] text-slate-500 mb-1">
           <span className="font-medium text-slate-700">Арт: {product.article || product.name.split(' ')[2] || '—'}</span>
           {product.category && (
@@ -136,23 +198,26 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
           )}
         </div>
 
-        <h3 className="text-sm font-semibold text-slate-900 leading-snug line-clamp-2 group-hover:text-brand-700 transition-colors">
+        {/* Название товара */}
+        <h3 className="text-sm font-semibold text-slate-900 leading-snug line-clamp-1 group-hover:text-brand-700 transition-colors">
           {product.name}
         </h3>
+
+        {/* Коллекция */}
         <button
+          type="button"
           onClick={(event) => {
             event.stopPropagation();
             onNavigate('catalog', product.collection);
           }}
-          className="mt-1 inline-flex items-center gap-1 text-xs text-brand-600 hover:text-brand-800 hover:underline transition-colors w-fit"
+          className="mt-0.5 inline-flex items-center gap-1 text-xs text-brand-600 hover:text-brand-800 hover:underline transition-colors w-fit font-medium"
         >
           {product.collection}
         </button>
 
-        <p className="mt-2 text-xs text-slate-400">{product.manufacturer}</p>
-
+        {/* Остатки дилера (если есть) */}
         {hasDealerStock && (
-          <div className="mt-2.5 flex flex-col gap-1 border-t border-slate-100 pt-2">
+          <div className="mt-2 flex flex-col gap-1 border-t border-slate-100 pt-2">
             <div className="flex items-center justify-between text-xs">
               <span className="inline-flex items-center gap-1 font-semibold text-emerald-700">
                 🏪 В наличии:
@@ -182,28 +247,50 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
           </div>
         )}
 
-        <div className="mt-2 border-t border-slate-100 pt-2">
-          {user ? (
-            <p className="text-sm font-bold text-slate-900">
-              ${pricePerSqm.toFixed(2)} / м²
-            </p>
-          ) : (
-            <p className="flex items-center gap-1 text-xs text-slate-400">
-              <Lock className="h-3 w-3" />
-              Войдите для цен
-            </p>
-          )}
+        {/* Блок цены и размера в одной компактной строке напротив друг друга */}
+        <div className="mt-3 border-t border-slate-100 pt-2.5 flex items-center justify-between gap-2">
+          <div>
+            <span className="text-[10px] font-medium text-slate-400 block leading-none mb-0.5">
+              Цена за м²
+            </span>
+            {user ? (
+              <p className="text-sm sm:text-base font-bold text-slate-900 leading-tight">
+                ${pricePerSqm.toFixed(2)} <span className="text-[11px] font-normal text-slate-400">/ м²</span>
+              </p>
+            ) : (
+              <p className="flex items-center gap-1 text-xs text-slate-400 font-medium">
+                <Lock className="h-3 w-3" />
+                Войдите для цен
+              </p>
+            )}
+          </div>
 
-          <button
-            onClick={(event) => {
-              event.stopPropagation();
-              setSizesOpen(open => !open);
-            }}
-            className="mt-2 flex items-center gap-2 rounded-full bg-slate-100 px-3.5 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-200"
-          >
-            <Layers className="h-4 w-4 text-slate-500" />
-            {sizeCount} {sizeLabel(sizeCount)}
-          </button>
+          <div className="flex flex-col items-end">
+            <span className="text-[10px] font-medium text-slate-400 block leading-none mb-0.5">
+              Размер
+            </span>
+            {sizeCount > 1 ? (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setSizesOpen(open => !open);
+                }}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-800 hover:bg-slate-100 hover:border-slate-300 transition-colors shadow-2xs"
+                title="Показать все доступные размеры"
+              >
+                <span>{primarySize}</span>
+                <span className="text-[10px] font-bold text-brand-700 bg-brand-50 px-1 py-0.2 rounded">
+                  +{sizeCount - 1}
+                </span>
+                <ChevronDown className={`h-3 w-3 text-slate-400 transition-transform duration-200 ${sizesOpen ? 'rotate-180 text-brand-600' : ''}`} />
+              </button>
+            ) : (
+              <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-800">
+                {primarySize}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
