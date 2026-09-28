@@ -16,9 +16,15 @@ interface ProductCardProps {
 function getMainWarehouseStock(variant: ProductVariant) {
   const mainHub = variant.warehouses.find(w =>
     w.warehouse_id === 81 ||
+    w.is_hub ||
     (w.warehouse_name && (w.warehouse_name.includes('Астана') || w.warehouse_name.toLowerCase().includes('основной')))
   );
-  return mainHub ? mainHub.stock : 0;
+  if (mainHub) {
+    if (typeof mainHub.free_stock === 'number') return Math.max(0, mainHub.free_stock);
+    return Math.max(0, mainHub.stock ?? 0);
+  }
+  if (typeof variant.free_stock === 'number') return Math.max(0, variant.free_stock);
+  return Math.max(0, variant.stock ?? 0);
 }
 
 function getTotalStock(variant: ProductVariant) {

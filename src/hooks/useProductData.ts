@@ -133,9 +133,12 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
           // Ищем центральный хаб (ID 81 / Основной Склад Астана)
           const hubWh = (v.warehouses || []).find(w => w.warehouse_id === 81)
             || (v.warehouses || []).find(w => (w.warehouse_name && w.warehouse_name.includes('Астана')) || (w.city && w.city.includes('Астана')))
-            || (v.warehouses || []).find(w => w.is_hub && w.stock > 0);
+            || (v.warehouses || []).find(w => w.is_hub && ((w.free_stock ?? w.stock ?? 0) > 0));
 
-          const hubStock = hubWh ? Number(hubWh.stock) || 0 : 0;
+          const freeStock = hubWh?.free_stock !== undefined
+            ? Number(hubWh.free_stock)
+            : (v.free_stock !== undefined ? Number(v.free_stock) : Number(hubWh?.stock ?? v.stock ?? 0));
+          const hubStock = freeStock;
 
           // Партнерские шоурумы сохраняем только с реальным ненулевым остатком
           const otherWarehouses = (v.warehouses || []).filter(w =>
@@ -144,7 +147,7 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
             w.warehouse_id !== 46 &&
             !(w.warehouse_name && w.warehouse_name.includes('Астана')) &&
             !(w.city && w.city.includes('Астана')) &&
-            Number(w.stock) > 0
+            Number(w.free_stock ?? w.stock ?? 0) > 0
           );
 
           const cleanedWarehouses: Warehouse[] = [];
@@ -155,12 +158,17 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
               city: 'Основной Склад Астана',
               is_hub: true,
               stock: hubStock,
+              free_stock: freeStock,
+              reserved_stock: hubWh?.reserved_stock !== undefined ? Number(hubWh.reserved_stock) : (v.reserved_stock !== undefined ? Number(v.reserved_stock) : 0),
+              total_stock: hubWh?.total_stock !== undefined ? Number(hubWh.total_stock) : (v.total_stock !== undefined ? Number(v.total_stock) : hubStock),
             });
           }
           for (const w of otherWarehouses) {
-            if (Number(w.stock) > 0) {
+            if (Number(w.free_stock ?? w.stock ?? 0) > 0) {
               cleanedWarehouses.push({
                 ...w,
+                stock: Number(w.free_stock ?? w.stock ?? 0),
+                free_stock: w.free_stock !== undefined ? Number(w.free_stock) : Number(w.stock),
                 is_hub: false,
               });
             }
@@ -178,6 +186,12 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
             article: varArticle,
             barcode: varBarcode,
             code: varCode,
+            free_stock: freeStock,
+            reserved_stock: v.reserved_stock !== undefined ? Number(v.reserved_stock) : 0,
+            total_stock: v.total_stock !== undefined ? Number(v.total_stock) : hubStock,
+            stock: freeStock,
+            showroom_qty: v.showroom_qty !== undefined ? Number(v.showroom_qty) : (v.dealer_stock?.in_showroom_qty || 0),
+            showroom_sqm: v.showroom_sqm !== undefined ? Number(v.showroom_sqm) : (v.dealer_stock?.in_showroom_sqm || 0),
             price_per_sqm: vPricePerSqm,
             price: rawVariantPrice,
             piece_price: (v as any).piece_price || rawVariantPrice,

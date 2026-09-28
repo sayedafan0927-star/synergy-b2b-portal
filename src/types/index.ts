@@ -1,6 +1,9 @@
 export interface Warehouse {
   city: string;
   stock: number;
+  free_stock?: number;
+  reserved_stock?: number;
+  total_stock?: number;
   warehouse_name?: string;
   warehouse_id?: number;
   is_hub?: boolean;
@@ -38,6 +41,12 @@ export interface ProductVariant {
   piece_price?: number;
   base_price: number;
   currency?: string;
+  free_stock?: number;
+  reserved_stock?: number;
+  total_stock?: number;
+  stock?: number;
+  showroom_qty?: number;
+  showroom_sqm?: number;
   warehouses: Warehouse[];
   dealer_stock?: DealerStock;
 }
