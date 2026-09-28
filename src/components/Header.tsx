@@ -3,6 +3,7 @@ import { Menu, X, ShoppingCart, User, Shield, Phone } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { checkSystemHealth } from '@/lib/erpApi';
 import type { PageId } from '@/types';
 
 interface HeaderProps {
@@ -13,9 +14,22 @@ interface HeaderProps {
 export default function Header({ currentPage, onNavigate }: HeaderProps) {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [systemStatus, setSystemStatus] = useState<'ok' | 'degraded' | 'down' | 'loading'>('loading');
   const { totalItems } = useCart();
   const { user, profile, isAdmin } = useAuth();
   const { language, setLanguage, t } = useLanguage();
+
+  useEffect(() => {
+    let mounted = true;
+    checkSystemHealth()
+      .then(res => {
+        if (mounted) setSystemStatus(res.status);
+      })
+      .catch(() => {
+        if (mounted) setSystemStatus('down');
+      });
+    return () => { mounted = false; };
+  }, []);
 
   const navLinks: { label: string; page: PageId }[] = [
     { label: t('nav.home'), page: 'home' },
@@ -107,6 +121,38 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
               >
                 RU
               </button>
+            </div>
+
+            {/* 1C:ERP Gateway Health Badge */}
+            <div
+              className="hidden md:flex items-center gap-1.5 px-2 py-1 rounded-lg border border-slate-200/80 bg-slate-50 text-[11px] font-medium text-slate-600 cursor-help"
+              title={
+                systemStatus === 'ok'
+                  ? 'Контур 1C:ERP и база данных синхронизированы в реальном времени'
+                  : systemStatus === 'degraded'
+                  ? 'Замедленный ответ 1C:ERP, активен стейджинг-кэш'
+                  : systemStatus === 'down'
+                  ? 'Регламентные работы в 1С:ERP, активен защитный автономный режим'
+                  : 'Проверка доступности шлюза 1C...'
+              }
+            >
+              <span className="relative flex h-2 w-2">
+                {systemStatus === 'ok' && (
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                )}
+                <span
+                  className={`relative inline-flex rounded-full h-2 w-2 ${
+                    systemStatus === 'ok'
+                      ? 'bg-emerald-500'
+                      : systemStatus === 'degraded'
+                      ? 'bg-amber-500'
+                      : systemStatus === 'down'
+                      ? 'bg-rose-500'
+                      : 'bg-slate-300'
+                  }`}
+                ></span>
+              </span>
+              <span className="hidden xl:inline text-[10px] text-slate-500 font-semibold">1С</span>
             </div>
 
             <button

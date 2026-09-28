@@ -336,6 +336,73 @@ export async function fetchSingleProductFromErp(id: string) {
   return data?.product || null;
 }
 
+export interface PaginatedCatalogParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  category?: string;
+  collection?: string;
+  inStockOnly?: boolean;
+}
+
+export interface PaginatedCatalogResult {
+  success: boolean;
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+  items: any[];
+  source?: string;
+  error?: string;
+}
+
+/**
+ * Серверная пагинация, фильтрация и поиск каталога (масштабирование до 50k+ SKU)
+ */
+export async function fetchPaginatedCatalogFromErp(params: PaginatedCatalogParams = {}): Promise<PaginatedCatalogResult> {
+  const response = await erpFetch('catalog_paginated', {
+    method: 'GET',
+    params: {
+      page: params.page ? String(params.page) : '1',
+      limit: params.limit ? String(params.limit) : '24',
+      search: params.search || undefined,
+      category: params.category || undefined,
+      collection: params.collection || undefined,
+      in_stock: params.inStockOnly ? 'true' : undefined,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Ошибка загрузки каталога (${response.status})`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Проверка здоровья контуров интеграции (PostgreSQL, 1C:ERP)
+ */
+export async function checkSystemHealth(): Promise<{
+  status: 'ok' | 'degraded' | 'down';
+  timestamp?: string;
+  totalLatencyMs?: number;
+  checks?: {
+    database: { status: string; latencyMs?: number; error?: string };
+    erp_gateway: { status: string; latencyMs?: number; error?: string };
+  };
+}> {
+  try {
+    const res = await fetch('/api/health');
+    if (!res.ok) {
+      return { status: 'degraded' };
+    }
+    return await res.json();
+  } catch (err: any) {
+    return { status: 'down' };
+  }
+}
+
+
 /**
  * Запрос данных личного кабинета фабрики / поставщика (Merinos и др.)
  * subAction = 'stock' (география распределения остатков)
