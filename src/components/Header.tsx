@@ -111,15 +111,30 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
 
             <button
               onClick={() => onNavigate(user ? 'profile' : 'login')}
-              className={`hidden sm:flex h-9 items-center gap-1.5 rounded-lg px-2.5 transition-colors ${
-                user ? 'text-brand-700 bg-brand-50 hover:bg-brand-100' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+              className={`hidden sm:flex h-9 items-center gap-2 rounded-lg px-2.5 transition-colors border ${
+                user
+                  ? 'border-slate-200 bg-slate-50/80 hover:bg-slate-100 text-slate-900 shadow-2xs'
+                  : 'border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700'
               }`}
             >
-              {isAdmin ? <Shield className="h-[18px] w-[18px]" /> : <User className="h-[18px] w-[18px]" />}
-              {user && profile && (
-                <span className="text-xs font-medium max-w-[80px] truncate hidden lg:block">
-                  {profile.full_name || user.email?.split('@')[0]}
-                </span>
+              {isAdmin ? (
+                <Shield className="h-4 w-4 text-brand-700 shrink-0" />
+              ) : (
+                <User className="h-4 w-4 text-slate-500 shrink-0" />
+              )}
+              {user && profile ? (
+                <div className="flex items-center gap-1.5 text-left">
+                  {/* Деликатный ID пользователя */}
+                  <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-white text-slate-700 border border-slate-200/90 shadow-2xs">
+                    ID {profile.partner_id || (profile as any).erp_id || (profile.id.length < 8 ? profile.id : profile.id.slice(0, 5))}
+                  </span>
+                  {/* Имя */}
+                  <span className="text-xs font-semibold text-slate-800 max-w-[100px] xl:max-w-[140px] truncate hidden md:block">
+                    {profile.full_name || profile.company_name || user.email?.split('@')[0]}
+                  </span>
+                </div>
+              ) : (
+                <span className="text-xs font-semibold">{t('nav.login')}</span>
               )}
             </button>
 
@@ -143,7 +158,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
 
       <div
         className={`lg:hidden overflow-hidden transition-all duration-300 ease-apple ${
-          mobileOpen ? 'max-h-80 border-b border-slate-100' : 'max-h-0'
+          mobileOpen ? 'max-h-96 border-b border-slate-100' : 'max-h-0'
         }`}
       >
         <nav className="container-w flex flex-col gap-1 pb-4">
@@ -167,12 +182,27 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
             <Phone className="h-4 w-4 text-brand-600" />
             <span>+7 (778) 580-68-66</span>
           </a>
-          <button
-            onClick={() => onNavigate('profile')}
-            className="sm:hidden w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50"
-          >
-            {t('nav.profile')}
-          </button>
+          {user && profile ? (
+            <button
+              onClick={() => onNavigate('profile')}
+              className="sm:hidden w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium bg-slate-50 border border-slate-200/80 flex items-center justify-between text-slate-800"
+            >
+              <div className="flex items-center gap-2">
+                {isAdmin ? <Shield className="h-4 w-4 text-brand-700" /> : <User className="h-4 w-4 text-slate-500" />}
+                <span className="font-semibold">{profile.full_name || profile.company_name || user.email}</span>
+              </div>
+              <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-600">
+                ID {profile.partner_id || (profile as any).erp_id || profile.id.slice(0, 5)}
+              </span>
+            </button>
+          ) : (
+            <button
+              onClick={() => onNavigate('login')}
+              className="sm:hidden w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50"
+            >
+              {t('nav.login')}
+            </button>
+          )}
         </nav>
       </div>
     </header>
