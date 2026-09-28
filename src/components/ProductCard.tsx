@@ -75,7 +75,8 @@ export function formatProductTitle(product: { name: string; article?: string; co
       .replace(/^дорожка\s+/i, '')
       .replace(new RegExp(`^${product.collection}\\s+`, 'i'), '')
       .trim() || product.name;
-  }
+  // Очистка повторов в названии вида "L.VİZON / L.VİZON" или "CREAM / CREAM"
+  base = base.replace(/([^\s/]+(?:\s+[^\s/]+)*)\s*\/\s*\1\b/gi, '$1').trim();
 
   const prefix = lang === 'kz' ? 'Жол кілем' : 'Дорожка';
   return isRunner ? `${prefix} ${base}` : base;
@@ -275,56 +276,58 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
         )}
       </div>
 
-      <div className="flex flex-col p-3 sm:p-4">
-        {/* Название товара: Артикул — Цвет (для дорожек с приставкой Дорожка / Жол кілем) */}
+      <div className="flex-1 flex flex-col p-3 sm:p-4">
+        {/* Название товара: Артикул — Цвет (фиксированная 2-строчная высота для идеального выравнивания) */}
         <h3 
           onClick={() => onNavigate('product', product.id)}
-          className="text-sm font-bold text-slate-900 leading-snug line-clamp-2 group-hover:text-brand-700 transition-colors cursor-pointer"
+          className="text-xs sm:text-sm font-bold text-slate-900 leading-snug line-clamp-2 min-h-[2.5rem] sm:min-h-[2.75rem] flex items-center group-hover:text-brand-700 transition-colors cursor-pointer"
         >
           {formatProductTitle(product, language)}
         </h3>
 
         {/* Коллекция */}
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation();
-            onNavigate('catalog', product.collection);
-          }}
-          className="mt-1 inline-flex items-center text-xs text-brand-700 hover:text-brand-900 hover:underline transition-colors w-fit font-bold uppercase tracking-wider"
-        >
-          {product.collection}
-        </button>
+        <div className="mt-1 min-h-[1.25rem] flex items-center">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onNavigate('catalog', product.collection);
+            }}
+            className="inline-flex items-center text-xs text-brand-700 hover:text-brand-900 hover:underline transition-colors w-fit font-bold uppercase tracking-wider"
+          >
+            {product.collection}
+          </button>
+        </div>
 
         {/* Склады: свой склад (если привязан) + центральный склад Астана */}
         {user && (
-          <div className="mt-2 flex flex-col gap-1 border-t border-slate-100 pt-2">
+          <div className="mt-2 flex flex-col gap-1 border-t border-slate-100 pt-2 min-h-[38px] justify-center">
             {hasShowroom && totalShowroomQty > 0 && (
-              <div className="flex items-center justify-between text-xs">
-                <span className="inline-flex items-center gap-1 font-semibold text-emerald-700">
+              <div className="flex items-center justify-between text-xs gap-1">
+                <span className="inline-flex items-center gap-1 font-semibold text-emerald-700 truncate max-w-[105px] sm:max-w-[130px]" title={myShowroomName}>
                   🏪 {myShowroomName}:
                 </span>
-                <span className="font-bold text-emerald-800">
-                  {totalShowroomQty} шт <span className="font-normal text-emerald-600">({totalShowroomSqm} м²)</span>
+                <span className="font-bold text-emerald-800 shrink-0">
+                  {totalShowroomQty} шт <span className="font-normal text-emerald-600 hidden sm:inline">({totalShowroomSqm} м²)</span>
                 </span>
               </div>
             )}
             {hasShowroom && totalInTransitQty > 0 && (
-              <div className="flex items-center justify-between text-xs">
-                <span className="inline-flex items-center gap-1 font-medium text-indigo-700">
+              <div className="flex items-center justify-between text-xs gap-1">
+                <span className="inline-flex items-center gap-1 font-medium text-indigo-700 truncate max-w-[105px] sm:max-w-[130px]">
                   🚚 {t('product.in_transit')}:
                 </span>
-                <span className="font-semibold text-indigo-800">
-                  {totalInTransitQty} шт <span className="font-normal text-indigo-500">({totalInTransitSqm} м²)</span>
+                <span className="font-semibold text-indigo-800 shrink-0">
+                  {totalInTransitQty} шт <span className="font-normal text-indigo-500 hidden sm:inline">({totalInTransitSqm} м²)</span>
                 </span>
               </div>
             )}
             {showHub && (
-              <div className="flex items-center justify-between text-xs">
-                <span className="inline-flex items-center gap-1 text-slate-500">
-                  🏢 {language === 'kz' ? 'Негізгі қойма (Астана)' : 'Основной Склад Астана'}:
+              <div className="flex items-center justify-between text-xs gap-1">
+                <span className="inline-flex items-center gap-1 text-slate-500 truncate max-w-[105px] sm:max-w-[130px]" title="Основной Склад Астана">
+                  🏢 {language === 'kz' ? 'Астана қоймасы' : 'Склад Астана'}:
                 </span>
-                <span className={`font-semibold ${totalHubQty > 0 ? 'text-slate-800' : 'text-slate-400'}`}>
+                <span className={`font-semibold shrink-0 ${totalHubQty > 0 ? 'text-slate-800' : 'text-slate-400'}`}>
                   {totalHubQty > 0 ? `${totalHubQty} шт` : 'под заказ'}
                 </span>
               </div>
@@ -332,20 +335,20 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
           </div>
         )}
 
-        {/* Блок цены и размера в одной компактной строке напротив друг друга без серых подписей */}
-        <div className="mt-3 border-t border-slate-100 pt-2.5 flex items-center justify-between">
+        {/* Блок цены и размера ВСЕГДА зафиксирован по единой нижней линии (mt-auto) */}
+        <div className="mt-auto border-t border-slate-100 pt-2.5 flex items-center justify-between">
           <div>
             {user ? (
-              <div className="flex items-baseline gap-1.5 leading-tight">
+              <div className="flex items-baseline gap-1 leading-tight">
                 <span className={`text-sm sm:text-base font-bold ${isOnSale ? 'text-red-600' : 'text-slate-900'}`}>
                   ${pricePerSqm.toFixed(2)}
                 </span>
                 {isOnSale && oldPricePerSqm && (
-                  <span className="text-xs text-slate-400 line-through">
+                  <span className="text-[11px] text-slate-400 line-through">
                     ${oldPricePerSqm.toFixed(2)}
                   </span>
                 )}
-                <span className="text-[11px] font-normal text-slate-400">/ м²</span>
+                <span className="text-[10px] sm:text-[11px] font-normal text-slate-400">/ м²</span>
               </div>
             ) : (
               <p className="flex items-center gap-1 text-xs text-slate-400 font-medium">
@@ -361,7 +364,7 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
               event.stopPropagation();
               setSizesOpen(open => !open);
             }}
-            className="flex items-center gap-1.5 rounded-full bg-slate-100 hover:bg-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors cursor-pointer"
+            className="flex items-center gap-1 rounded-full bg-slate-100 hover:bg-slate-200 px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs font-semibold text-slate-700 transition-colors cursor-pointer shrink-0"
             title="Показать все размеры"
           >
             <span>
