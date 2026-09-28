@@ -56,7 +56,9 @@ export function formatProductTitle(product: { name: string; article?: string; co
 }
 
 export default function ProductCard({ product, onNavigate }: ProductCardProps) {
-  const { user, profile, isAdmin } = useAuth();
+  const { user, profile, isAdmin, isImpersonating } = useAuth();
+  const isEffectiveAdmin = isAdmin && !isImpersonating;
+  const clientContext = isEffectiveAdmin ? true : profile;
   const { settings: displaySettings } = useDisplaySettings();
   const { addItem } = useCart();
   const { language, t } = useLanguage();
@@ -67,8 +69,8 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
 
   const myShowroomId = profile?.showroom_warehouse_id;
   const myShowroomName = profile?.showroom_warehouse_name || 'В моем магазине';
-  const showHub = displaySettings?.show_hub_warehouse !== false;
-  const showShowroom = displaySettings?.show_showroom_warehouse !== false;
+  const showHub = isEffectiveAdmin || isWarehouseVisibleForClient({ warehouse_id: 81, warehouse_name: 'Основной Склад Астана' }, profile);
+  const showShowroom = isEffectiveAdmin || Boolean(myShowroomId && isWarehouseVisibleForClient({ warehouse_id: myShowroomId, warehouse_name: myShowroomName }, profile));
   const hasShowroom = Boolean(user && myShowroomId && showShowroom);
 
   // Изображения для карусели
@@ -105,12 +107,12 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
   };
 
   const getVariantClientStock = (variant: ProductVariant) => {
-    const rows = filterClientWarehouses(variant.warehouses, myShowroomId, myShowroomName, isAdmin, displaySettings);
+    const rows = filterClientWarehouses(variant.warehouses, myShowroomId, myShowroomName, clientContext, displaySettings);
     return rows.reduce((sum, w) => sum + w.stock, 0);
   };
 
   const getVariantClientWarehouse = (variant: ProductVariant) => {
-    const rows = filterClientWarehouses(variant.warehouses, myShowroomId, myShowroomName, isAdmin, displaySettings);
+    const rows = filterClientWarehouses(variant.warehouses, myShowroomId, myShowroomName, clientContext, displaySettings);
     return rows.find(w => w.stock > 0) || rows[0] || null;
   };
 
@@ -120,7 +122,7 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
 
     const stock = getVariantClientStock(variant);
     if (stock <= 0) {
-      alert('Данного размера нет в наличии на складе в Астане');
+      alert('Данного размера нет в наличии на доступных складах');
       return;
     }
 
@@ -412,7 +414,7 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
                 })
             ) : (
               <div className="py-3 px-2 text-center text-xs text-slate-500 font-medium">
-                Нет в наличии на складе в Астане
+                Нет в наличии на доступных складах
               </div>
             )}
           </div>

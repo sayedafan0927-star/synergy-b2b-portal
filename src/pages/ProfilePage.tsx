@@ -41,10 +41,34 @@ import { calcSqm, parseSizeDimensions } from '@/types';
 import { useAuth, type UserRole } from '@/contexts/AuthContext';
 import { useCart } from '@/contexts/CartContext';
 import { supabase } from '@/lib/supabase';
-import { syncAllErpData, type ErpSyncReport, ERP_API_URL, fetchClientDebtFromErp, type ClientDebtReport, fetchClientOrdersFromErp, fetchCounterpartiesFromErp, fetchCatalogFromErp } from '@/lib/erpApi';
+import {
+  syncAllErpData,
+  type ErpSyncReport,
+  ERP_API_URL,
+  fetchClientDebtFromErp,
+  type ClientDebtReport,
+  fetchClientOrdersFromErp,
+  fetchCounterpartiesFromErp,
+  fetchCatalogFromErp,
+  updateOrderStatusInErp,
+  updateClientAccessInErp,
+  fetchDisplaySettingsFromErp,
+  saveDisplaySettingsToErp,
+  broadcastClientDeactivated
+} from '@/lib/erpApi';
 import SupplierCabinet from '@/components/SupplierCabinet';
 import { triggerCatalogReload, mergeProducts } from '@/hooks/useProductData';
 import { triggerDisplaySettingsReload } from '@/hooks/useDisplaySettings';
+import {
+  getClientWarehouseSettings,
+  saveClientWarehouseSettings,
+  resetClientWarehouseSettings,
+  getAllClientWarehouseRules,
+  CENTRAL_WAREHOUSE_ID,
+  CENTRAL_WAREHOUSE_NAME,
+  triggerWarehouseSettingsReload,
+  type ClientWarehouseSettings
+} from '@/lib/warehouseVisibility';
 
 /* ─── Types ─── */
 interface OrderItem {
@@ -162,6 +186,18 @@ function OrderDetail({
 
   const handleStatusChange = async (newStatus: string) => {
     setUpdatingStatus(true);
+    // 1. Синхронизируем статус в ERP (при 'cancelled' ERP автоматически расформировывает бронь free_stock)
+    try {
+      await updateOrderStatusInErp({
+        orderId: order.id,
+        status: newStatus,
+        comment: `Статус изменен администратором портала на "${newStatus}"`,
+      });
+    } catch (erpErr) {
+      console.warn('[OrderDetailModal] ERP update_order_status warning:', erpErr);
+    }
+
+    // 2. Обновляем статус в Supabase
     try {
       await supabase
         .from('orders')
@@ -372,6 +408,38 @@ function AdminDisplaySettings() {
 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [clients, setClients] = useState<any[]>([]);
+  const [clientSearch, setClientSearch] = useState('');
+  const [quickModalClient, setQuickModalClient] = useState<any | null>(null);
+
+  useEffect(() => {
+    fetchCounterpartiesFromErp({ limit: 100 })
+      .then(res => {
+        if (res?.counterparties && Array.isArray(res.counterparties)) {
+          setClients(res.counterparties.map((cp: any) => ({
+            id: String(cp.id),
+            full_name: cp.name,
+            company_name: cp.name,
+            phone: cp.phone || '',
+            partner_id: String(cp.id),
+            showroom_warehouse_id: cp.showroom_warehouse_id ?? cp.warehouse_id ?? (cp.id === 2833 ? 2833 : null),
+            showroom_warehouse_name: cp.showroom_warehouse_name ?? cp.warehouse_name ?? (cp.id === 2833 ? 'Aya Home Store (Шымкент)' : null),
+          })));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const filteredClients = useMemo(() => {
+    if (!clientSearch.trim()) return clients;
+    const q = clientSearch.toLowerCase().trim();
+    return clients.filter(c =>
+      (c.full_name || '').toLowerCase().includes(q) ||
+      (c.company_name || '').toLowerCase().includes(q) ||
+      (c.partner_id || '').toLowerCase().includes(q) ||
+      (c.phone || '').toLowerCase().includes(q)
+    );
+  }, [clients, clientSearch]);
 
   const toggle = (role: string, field: keyof DisplaySettings) => {
     setSettings(prev => ({
@@ -480,7 +548,315 @@ function AdminDisplaySettings() {
           </div>
           <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
             <p className="font-bold text-slate-800 mb-1">3. Управление админом</p>
-            <p>В таблице выше администратор может в любой момент снять галочку «Склад Астана» или «Свой склад», полностью отключив их отображение у клиентов.</p>
+            <p>В любой момент администратор может индивидуально скрыть или включить видимость складов для любого клиента во вкладке «Мои клиенты» по кнопке «Склады» или ниже.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Быстрая настройка складов по клиентам прямо из вкладки Видимость */}
+      <div className="card p-5 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-slate-900 font-bold text-sm">
+            <Users className="h-4 w-4 text-brand-700" />
+            <span>Индивидуальная настройка складов для клиентов</span>
+          </div>
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+            <input
+              type="text"
+              value={clientSearch}
+              onChange={e => setClientSearch(e.target.value)}
+              placeholder="Поиск клиента..."
+              className="input-field pl-9 py-1 text-xs"
+            />
+          </div>
+        </div>
+
+        <p className="text-xs text-slate-500">
+          Нажмите «Настроить» напротив клиента, чтобы включить/отключить видимость центрального склада Астана или персонального склада шоурума:
+        </p>
+
+        <div className="divide-y divide-slate-100 max-h-64 overflow-y-auto pr-1">
+          {filteredClients.slice(0, 10).map(c => {
+            const s = getClientWarehouseSettings(c.partner_id || c.id);
+            const isCustom = s.mode === 'custom';
+            return (
+              <div key={c.id} className="py-2.5 flex items-center justify-between gap-3 hover:bg-slate-25 px-2 rounded-lg transition-colors">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-bold text-slate-900 truncate">{c.company_name || c.full_name}</p>
+                    {isCustom ? (
+                      <span className="badge bg-amber-50 text-amber-700 border border-amber-200 text-[10px]">
+                        ⚙️ Ручной режим
+                      </span>
+                    ) : (
+                      <span className="badge bg-emerald-50 text-emerald-700 text-[10px]">
+                        🏢 Авто-режим
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    ID: {c.partner_id || c.id} • {c.phone || 'без телефона'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setQuickModalClient(c)}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors shadow-2xs cursor-pointer shrink-0"
+                >
+                  Настроить
+                </button>
+              </div>
+            );
+          })}
+          {filteredClients.length === 0 && (
+            <p className="py-4 text-center text-xs text-slate-400">Клиенты не найдены</p>
+          )}
+        </div>
+      </div>
+
+      {quickModalClient && (
+        <ClientWarehouseModal
+          client={quickModalClient}
+          onClose={() => setQuickModalClient(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ─── Client Warehouse Visibility Management Modal ─── */
+function ClientWarehouseModal({
+  client,
+  onClose,
+}: {
+  client: {
+    id: string;
+    full_name: string;
+    company_name: string;
+    phone: string;
+    partner_id: string | null;
+    showroom_warehouse_id?: number | null;
+    showroom_warehouse_name?: string | null;
+  };
+  onClose: () => void;
+}) {
+  const clientId = client.partner_id || client.id;
+  const initialSettings = useMemo(() => getClientWarehouseSettings(clientId), [clientId]);
+
+  const [mode, setMode] = useState<'auto' | 'custom'>(initialSettings.mode || 'auto');
+  const [showCentral, setShowCentral] = useState<boolean>(initialSettings.showCentralWarehouse !== false);
+  const [showShowroom, setShowShowroom] = useState<boolean>(initialSettings.showShowroomWarehouse !== false);
+  const [saved, setSaved] = useState(false);
+
+  const showroomId = client.showroom_warehouse_id;
+  const showroomName = client.showroom_warehouse_name || (showroomId ? `Склад шоурума (ID: ${showroomId})` : null);
+
+  const handleSave = () => {
+    saveClientWarehouseSettings(clientId, {
+      mode,
+      showCentralWarehouse: showCentral,
+      showShowroomWarehouse: showShowroom,
+    });
+    setSaved(true);
+    setTimeout(() => {
+      setSaved(false);
+      onClose();
+    }, 700);
+  };
+
+  const handleResetToAuto = () => {
+    resetClientWarehouseSettings(clientId);
+    setMode('auto');
+    setShowCentral(true);
+    setShowShowroom(true);
+    setSaved(true);
+    setTimeout(() => {
+      setSaved(false);
+      onClose();
+    }, 700);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150">
+      <div className="relative w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-slate-100 p-6 space-y-5" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-50 text-brand-700 shrink-0">
+              <Building2 className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900 leading-snug">Видимость складов для клиента</h3>
+              <p className="text-xs text-slate-500 font-medium">
+                {client.company_name || client.full_name} {client.partner_id ? `(ID: ${client.partner_id})` : ''}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Mode switcher tabs */}
+        <div className="flex rounded-xl bg-slate-100 p-1 text-xs font-semibold">
+          <button
+            type="button"
+            onClick={() => setMode('auto')}
+            className={`flex-1 py-2 rounded-lg transition-all cursor-pointer ${
+              mode === 'auto'
+                ? 'bg-white text-slate-900 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            Автоматический режим
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode('custom')}
+            className={`flex-1 py-2 rounded-lg transition-all cursor-pointer ${
+              mode === 'custom'
+                ? 'bg-white text-brand-700 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            Индивидуальная настройка
+          </button>
+        </div>
+
+        {/* Mode content */}
+        {mode === 'auto' ? (
+          <div className="rounded-xl bg-emerald-50/60 border border-emerald-100/80 p-4 space-y-2.5 text-xs text-emerald-950">
+            <p className="font-semibold text-emerald-900 flex items-center gap-1.5">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+              Стандартное автоматическое правило:
+            </p>
+            <ul className="space-y-1.5 pl-5 list-disc text-emerald-800">
+              <li>
+                <strong>Центральный склад («Основной Склад Астана», ID 81)</strong>: виден клиенту по умолчанию.
+              </li>
+              <li>
+                <strong>Свой персональный склад</strong>:{' '}
+                {showroomId ? (
+                  <span className="text-emerald-900 font-semibold">{showroomName} (виден клиенту)</span>
+                ) : (
+                  <span className="text-slate-600 italic">не назначен (клиент видит только центральный склад Астана)</span>
+                )}
+              </li>
+              <li>
+                <span className="text-slate-600">Все чужие партнерские склады других городов автоматически скрыты.</span>
+              </li>
+            </ul>
+            <p className="text-[11px] text-emerald-700/80 pt-1">
+              Чтобы скрыть склад Астана или персональный склад для этого клиента, выберите «Индивидуальная настройка».
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-xs text-slate-500">
+              Переключайте видимость складов для данного клиента:
+            </p>
+
+            {/* Warehouse 1: Central Astana */}
+            <div className="card p-3.5 flex items-center justify-between gap-3 border-slate-200">
+              <div className="flex items-center gap-3">
+                <div className={`flex h-9 w-9 items-center justify-center rounded-lg shrink-0 ${showCentral ? 'bg-blue-50 text-blue-700' : 'bg-slate-100 text-slate-400'}`}>
+                  <Building2 className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-slate-900">Основной Склад Астана (ID: 81)</p>
+                  <p className="text-[11px] text-slate-500">Центральный склад компании для оптовых поставок</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCentral(v => !v)}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                  showCentral ? 'bg-brand-600' : 'bg-slate-200'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                    showCentral ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* Warehouse 2: Own showroom */}
+            <div className={`card p-3.5 flex items-center justify-between gap-3 border-slate-200 ${!showroomId ? 'opacity-60 bg-slate-50' : ''}`}>
+              <div className="flex items-center gap-3">
+                <div className={`flex h-9 w-9 items-center justify-center rounded-lg shrink-0 ${showShowroom && showroomId ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-400'}`}>
+                  <Boxes className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-slate-900">
+                    {showroomName || 'Собственный склад шоурума'}
+                  </p>
+                  <p className="text-[11px] text-slate-500">
+                    {showroomId
+                      ? `Персональный склад дилера (ID: ${showroomId})`
+                      : 'У данного клиента нет закреплённого склада в ERP'}
+                  </p>
+                </div>
+              </div>
+              {showroomId ? (
+                <button
+                  type="button"
+                  onClick={() => setShowShowroom(v => !v)}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    showShowroom ? 'bg-brand-600' : 'bg-slate-200'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      showShowroom ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              ) : (
+                <span className="text-[10px] text-slate-400 font-medium bg-slate-100 px-2 py-1 rounded">Не назначен</span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Footer actions */}
+        <div className="border-t border-slate-100 pt-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            {mode === 'custom' && (
+              <button
+                type="button"
+                onClick={handleResetToAuto}
+                className="text-xs font-medium text-slate-500 hover:text-brand-700 hover:underline transition-colors cursor-pointer"
+              >
+                Сбросить на авто-режим
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2 ml-auto">
+            {saved && (
+              <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1 animate-in fade-in">
+                <Check className="h-4 w-4" /> Сохранено!
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+            >
+              Отмена
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              className="btn-primary text-xs px-4 py-2 cursor-pointer"
+            >
+              Сохранить
+            </button>
           </div>
         </div>
       </div>
@@ -503,10 +879,20 @@ function AdminUsersTab({ onNavigate }: { onNavigate: (page: PageId) => void }) {
     price_type: string;
     manager_id: string | null;
     impersonation_enabled: boolean;
+    showroom_warehouse_id?: number | null;
+    showroom_warehouse_name?: string | null;
   }>>([]);
   const [userSearch, setUserSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [warehouseModalUser, setWarehouseModalUser] = useState<typeof users[0] | null>(null);
+  const [warehouseVersion, setWarehouseVersion] = useState(0);
+
+  useEffect(() => {
+    const handler = () => setWarehouseVersion(v => v + 1);
+    window.addEventListener('synergy:reload-warehouse-settings', handler);
+    return () => window.removeEventListener('synergy:reload-warehouse-settings', handler);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -526,6 +912,8 @@ function AdminUsersTab({ onNavigate }: { onNavigate: (page: PageId) => void }) {
             price_type: cp.cooperation_type === 'комиссия' ? 'commission' : 'wholesale',
             manager_id: String(cp.manager_id || ''),
             impersonation_enabled: true,
+            showroom_warehouse_id: cp.showroom_warehouse_id ?? cp.warehouse_id ?? (cp.id === 2833 ? 2833 : null),
+            showroom_warehouse_name: cp.showroom_warehouse_name ?? cp.warehouse_name ?? (cp.id === 2833 ? 'Aya Home Store (Шымкент)' : null),
           }));
           setUsers(mappedUsers);
           setLoading(false);
@@ -539,7 +927,7 @@ function AdminUsersTab({ onNavigate }: { onNavigate: (page: PageId) => void }) {
       try {
         const { data } = await supabase
           .from('profiles')
-          .select('id, full_name, company_name, phone, role, partner_id, price_type, manager_id, impersonation_enabled')
+          .select('id, full_name, company_name, phone, role, partner_id, price_type, manager_id, impersonation_enabled, showroom_warehouse_id, showroom_warehouse_name')
           .order('created_at', { ascending: false });
         if (!cancelled && data) setUsers(data as typeof users);
       } catch (err) {
@@ -622,13 +1010,45 @@ function AdminUsersTab({ onNavigate }: { onNavigate: (page: PageId) => void }) {
                   {u.phone && <span className="font-mono">{u.phone}</span>}
                   {u.price_type && <span className="text-brand-600 font-medium">Прайс: {u.price_type}</span>}
                   {u.partner_id && <span className="font-mono">ID: {u.partner_id}</span>}
+                  {(() => {
+                    const s = getClientWarehouseSettings(u.partner_id || u.id);
+                    if (s.mode === 'custom') {
+                      const count = (s.showCentralWarehouse ? 1 : 0) + (s.showShowroomWarehouse && u.showroom_warehouse_id ? 1 : 0);
+                      return (
+                        <span className="badge bg-amber-50 text-amber-700 border border-amber-200 text-[10px]" title="Настроено индивидуально администратором">
+                          ⚙️ Склады: индив. ({count})
+                        </span>
+                      );
+                    }
+                    if (u.showroom_warehouse_id) {
+                      return (
+                        <span className="badge bg-emerald-50 text-emerald-700 text-[10px]" title="Автоматический режим: склад Астана + собственный склад">
+                          🏢 Склады: Астана + Шоурум
+                        </span>
+                      );
+                    }
+                    return (
+                      <span className="badge bg-slate-100 text-slate-600 text-[10px]" title="Автоматический режим: только склад Астана">
+                        🏢 Склады: Только Астана
+                      </span>
+                    );
+                  })()}
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
                 <button
+                  onClick={() => setWarehouseModalUser(u)}
+                  className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors shadow-xs cursor-pointer"
+                  title="Настроить видимость складов для этого клиента"
+                >
+                  <Building2 className="h-3.5 w-3.5 text-slate-500" />
+                  Склады
+                </button>
+
+                <button
                   onClick={() => handleToggleImpersonation(u.id, u.impersonation_enabled)}
-                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
                     u.impersonation_enabled
                       ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
                       : 'bg-slate-50 text-slate-400 border border-slate-200 hover:bg-slate-100'
@@ -641,7 +1061,7 @@ function AdminUsersTab({ onNavigate }: { onNavigate: (page: PageId) => void }) {
 
                 <button
                   onClick={() => setExpandedId(expandedId === u.id ? null : u.id)}
-                  className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+                  className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer"
                 >
                   <FileText className="h-3.5 w-3.5" />
                   Демо
@@ -655,7 +1075,7 @@ function AdminUsersTab({ onNavigate }: { onNavigate: (page: PageId) => void }) {
                   }}
                   disabled={!u.impersonation_enabled || u.id === currentUser?.id}
                   title={!u.impersonation_enabled ? 'Сначала включите доступ для этого клиента' : `Войти как ${u.full_name || u.company_name || 'клиент'}`}
-                  className="flex items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100 hover:border-brand-300 transition-colors disabled:opacity-40 disabled:pointer-events-none shadow-sm"
+                  className="flex items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100 hover:border-brand-300 transition-colors disabled:opacity-40 disabled:pointer-events-none shadow-sm cursor-pointer"
                 >
                   <UserCog className="h-3.5 w-3.5" />
                   Войти под клиентом
@@ -672,6 +1092,13 @@ function AdminUsersTab({ onNavigate }: { onNavigate: (page: PageId) => void }) {
           <p className="py-8 text-center text-sm text-slate-400">Клиенты не найдены</p>
         )}
       </div>
+
+      {warehouseModalUser && (
+        <ClientWarehouseModal
+          client={warehouseModalUser}
+          onClose={() => setWarehouseModalUser(null)}
+        />
+      )}
     </div>
   );
 }
@@ -1709,7 +2136,7 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
               )
             )}
             {activeTab === 'supplier-portal' && (isSupplier || adminAccess) && (
-              <SupplierCabinet profile={profile} />
+              <SupplierCabinet profile={profile} isAdmin={adminAccess} />
             )}
             {activeTab === 'admin-erp' && adminAccess && <AdminErpSyncTab />}
             {activeTab === 'admin-users' && clientsAccess && <AdminUsersTab onNavigate={onNavigate} />}
@@ -1917,6 +2344,18 @@ function OrdersTab({
   const handleQuickStatusChange = async (orderId: string, newStatus: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setUpdatingId(orderId);
+    // 1. Синхронизируем статус в ERP (при 'cancelled' ERP автоматически расформировывает бронь free_stock)
+    try {
+      await updateOrderStatusInErp({
+        orderId,
+        status: newStatus,
+        comment: `Быстрая смена статуса на "${newStatus}"`,
+      });
+    } catch (erpErr) {
+      console.warn('[handleQuickStatusChange] ERP update_order_status warning:', erpErr);
+    }
+
+    // 2. Обновляем статус в Supabase
     try {
       await supabase
         .from('orders')

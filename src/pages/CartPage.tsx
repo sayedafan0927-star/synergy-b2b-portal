@@ -18,6 +18,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import type { PageId, CartItem } from '@/types';
 import { calcSqm, parseSizeDimensions } from '@/types';
 import { submitOrderToErp } from '@/lib/erpApi';
+import { triggerCatalogReload } from '@/hooks/useProductData';
 import ProductImage from '@/components/ProductImage';
 
 function sizeArea(size: string): number {
@@ -74,6 +75,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
   const [sizeAsc, setSizeAsc] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [stockConflictDetails, setStockConflictDetails] = useState<{ available_qty?: number; requested_qty?: number; sku?: string } | null>(null);
 
   const [clientName, setClientName] = useState(profile?.full_name ?? '');
   const [clientPhone, setClientPhone] = useState(profile?.phone ?? '');
@@ -182,12 +184,18 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
       if (data.success && data.order?.doc_number) {
         clearCart();
         setOrderDocNumber(data.order.doc_number);
+        setStockConflictDetails(null);
         window.scrollTo({ top: 0, behavior: 'smooth' });
       } else {
         throw new Error(data.error || 'Не удалось создать заказ');
       }
-    } catch (err) {
-      setSubmitError((err as Error).message);
+    } catch (err: any) {
+      setSubmitError(err.message || 'Ошибка оформления заказа');
+      if (err.code === 'INSUFFICIENT_STOCK' || err.details?.code === 'INSUFFICIENT_STOCK') {
+        setStockConflictDetails(err.details || {});
+      } else {
+        setStockConflictDetails(null);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -424,9 +432,34 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
               </div>
 
               {submitError && (
-                <div className="mt-4 flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2.5 text-xs text-red-700">
-                  <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                  <span>{submitError}</span>
+                <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs text-red-800 space-y-2.5">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="h-4 w-4 mt-0.5 shrink-0 text-red-600" />
+                    <div>
+                      <p className="font-semibold text-red-900">
+                        {stockConflictDetails ? 'Остаток изменился в ERP' : 'Ошибка оформления заказа'}
+                      </p>
+                      <p className="mt-0.5 text-red-700 leading-relaxed">{submitError}</p>
+                    </div>
+                  </div>
+                  {stockConflictDetails && (
+                    <div className="pt-2 border-t border-red-200/60 flex items-center justify-between">
+                      <span className="text-[11px] text-red-600">
+                        Доступно: <strong>{stockConflictDetails.available_qty ?? 0} шт.</strong>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          triggerCatalogReload();
+                          setSubmitError(null);
+                          setStockConflictDetails(null);
+                        }}
+                        className="text-[11px] font-semibold text-red-800 bg-white border border-red-300 rounded px-2.5 py-1 hover:bg-red-100 transition-colors cursor-pointer"
+                      >
+                        Обновить остатки
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 

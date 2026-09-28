@@ -1,50 +1,84 @@
-import { useState, useEffect } from 'react';
-import { fetchSupplierNetworkStock } from '@/lib/erpApi';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { fetchSupplierNetworkStock, fetchSuppliersFromErp } from '@/lib/erpApi';
 import type {
   SupplierNetworkStockResponse,
   SupplierReleasesReport,
   SupplierStockItem,
-  SupplierDistribution
+  SupplierDistribution,
+  SupplierInfo
 } from '@/types';
 import type { Profile } from '@/contexts/AuthContext';
 import {
   Building2,
-  MapPin,
-  Calendar,
   Printer,
-  Download,
   RefreshCw,
   FileText,
   Search,
-  Filter,
-  CheckCircle2,
   Store,
   Warehouse as WarehouseIcon,
   TrendingUp,
   Layers,
-  ChevronDown
+  ChevronDown,
+  AlertCircle
 } from 'lucide-react';
 
 interface SupplierCabinetProps {
   profile: Profile;
+  isAdmin?: boolean;
 }
 
-const KNOWN_SUPPLIERS = [
+const FALLBACK_SUPPLIERS = [
   { id: 6, name: 'ISMEN (Турция)' },
-  { id: 7, name: 'MERINOS' },
+  { id: 7, name: 'MERINOS (Турция)' },
   { id: 10, name: 'KARMEN HALI (Турция)' },
   { id: 11, name: 'SAYDAM (Турция)' },
-  { id: 1, name: 'Merinos Россия' },
-  { id: 8, name: 'IRAN' },
-  { id: 9, name: 'GHEYTARAN' },
-  { id: 12, name: 'LYSANDRA HALI' },
+  { id: 1, name: 'Merinos Россия (Россия)' },
+  { id: 8, name: 'IRAN (Иран)' },
+  { id: 9, name: 'GHEYTARAN (Иран)' },
+  { id: 12, name: 'LYSANDRA HALI (Турция)' },
 ];
 
-export default function SupplierCabinet({ profile }: SupplierCabinetProps) {
+export default function SupplierCabinet({ profile, isAdmin: propIsAdmin }: SupplierCabinetProps) {
+  const isAdmin = propIsAdmin ?? (profile.role === 'admin');
+  const [suppliersList, setSuppliersList] = useState<Array<{ id: number; name: string; country?: string }>>(FALLBACK_SUPPLIERS);
+
+  // Загрузка динамического списка фабрик из ERP (action=suppliers)
+  useEffect(() => {
+    let cancelled = false;
+    async function loadSuppliers() {
+      try {
+        const erpSuppliers = await fetchSuppliersFromErp();
+        if (!cancelled && erpSuppliers && erpSuppliers.length > 0) {
+          const mapped = erpSuppliers.map(s => ({
+            id: s.id,
+            name: s.country ? `${s.name} (${s.country})` : s.name,
+            country: s.country,
+          }));
+          setSuppliersList(mapped);
+        }
+      } catch (err) {
+        console.warn('[SupplierCabinet] Error fetching dynamic suppliers:', err);
+      }
+    }
+    loadSuppliers();
+    return () => { cancelled = true; };
+  }, []);
+
   // Выбираем ID поставщика: если у профиля есть partner_id или erp_id, иначе 6 (ISMEN)
-  const defaultSupplierId = Number(profile.partner_id) || (profile.role === 'supplier' ? 6 : 6);
+  const defaultSupplierId = useMemo(() => {
+    const parsed = Number(profile.partner_id);
+    return !isNaN(parsed) && parsed > 0 ? parsed : 6;
+  }, [profile.partner_id]);
+
   const [selectedSupplierId, setSelectedSupplierId] = useState<number>(defaultSupplierId);
   const [activeSubTab, setActiveSubTab] = useState<'stock' | 'releases'>('stock');
+
+  // Если пользователь не админ, принудительно фиксируем его ID на его фабрике
+  useEffect(() => {
+    if (!isAdmin && defaultSupplierId > 0 && selectedSupplierId !== defaultSupplierId) {
+      setSelectedSupplierId(defaultSupplierId);
+    }
+  }, [isAdmin, defaultSupplierId, selectedSupplierId]);
 
   // Данные остатков сети
   const [stockData, setStockData] = useState<SupplierNetworkStockResponse | null>(null);
@@ -63,128 +97,220 @@ export default function SupplierCabinet({ profile }: SupplierCabinetProps) {
   const [loadingReleases, setLoadingReleases] = useState<boolean>(false);
   const [releasesError, setReleasesError] = useState<string | null>(null);
 
-  // Загрузка географии остатков
-  const loadStock = async (supplierId: number) => {
+  // Счетчик принудительной перезагрузки
+  const [reloadCounter, setReloadCounter] = useState(0);
+
+  const handleRefresh = useCallback(() => {
+    setReloadCounter(c => c + 1);
+  }, []);
+
+  // 1. Загрузка географии остатков с защитой от Race Condition
+  useEffect(() => {
+    let cancelled = false;
     setLoadingStock(true);
     setStockError(null);
-    try {
-      const data = await fetchSupplierNetworkStock(supplierId, 'stock');
-      if (data && data.success) {
-        setStockData(data);
-      } else {
-        setStockError(data?.error || 'Не удалось загрузить остатки фабрики');
-      }
-    } catch (err: any) {
-      setStockError(err?.message || 'Ошибка сети при обращении к ERP');
-    } finally {
-      setLoadingStock(false);
-    }
-  };
 
-  // Загрузка акта реализации
-  const loadReleases = async (supplierId: number, start: string, end: string) => {
+    fetchSupplierNetworkStock(selectedSupplierId, 'stock')
+      .then(data => {
+        if (cancelled) return;
+        if (data && data.success) {
+          setStockData(data);
+        } else {
+          setStockError(data?.error || 'Не удалось загрузить остатки фабрики');
+        }
+      })
+      .catch((err: any) => {
+        if (cancelled) return;
+        setStockError(err?.message || 'Ошибка сети при обращении к ERP');
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingStock(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSupplierId, reloadCounter]);
+
+  // 2. Загрузка акта реализации с защитой от Race Condition
+  useEffect(() => {
+    if (activeSubTab !== 'releases') return;
+
+    if (startDate > endDate) {
+      setReleasesError('Начальная дата периода не может быть позже конечной даты');
+      return;
+    }
+
+    let cancelled = false;
     setLoadingReleases(true);
     setReleasesError(null);
-    try {
-      const data = await fetchSupplierNetworkStock(supplierId, 'releases', {
-        startDate: start,
-        endDate: end,
+
+    fetchSupplierNetworkStock(selectedSupplierId, 'releases', {
+      startDate,
+      endDate,
+    })
+      .then(data => {
+        if (cancelled) return;
+        if (data && data.success) {
+          setReleasesData(data);
+        } else {
+          setReleasesError(data?.error || 'Не удалось загрузить акт реализации');
+        }
+      })
+      .catch((err: any) => {
+        if (cancelled) return;
+        setReleasesError(err?.message || 'Ошибка сети при обращении к ERP');
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingReleases(false);
       });
-      if (data && data.success) {
-        setReleasesData(data);
-      } else {
-        setReleasesError(data?.error || 'Не удалось загрузить акт реализации');
-      }
-    } catch (err: any) {
-      setReleasesError(err?.message || 'Ошибка сети при обращении к ERP');
-    } finally {
-      setLoadingReleases(false);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedSupplierId, activeSubTab, startDate, endDate, reloadCounter]);
+
+  // 3. Санитайзер данных: устранение коллизии на стороне ERP (ковры SAYDAM внутри ISMEN)
+  const sanitizedItems = useMemo(() => {
+    const raw = stockData?.items || [];
+    if (selectedSupplierId === 6) {
+      // Исключаем номенклатуру SAYDAM, ошибочно возвращаемую ERP под ISMEN
+      return raw.filter(item => {
+        const coll = (item.collection || '').toUpperCase();
+        const name = (item.name || '').toUpperCase();
+        return coll !== 'SAYDAM' && !name.includes('SAYDAM');
+      });
     }
-  };
+    return raw;
+  }, [stockData?.items, selectedSupplierId]);
 
-  useEffect(() => {
-    loadStock(selectedSupplierId);
-  }, [selectedSupplierId]);
+  // Собираем все уникальные города для фильтра из санированных данных
+  const availableCities = useMemo(() => {
+    return Array.from(
+      new Set(
+        sanitizedItems.flatMap(item => (item.distribution || []).map(d => d.city).filter(Boolean))
+      )
+    );
+  }, [sanitizedItems]);
 
-  useEffect(() => {
-    if (activeSubTab === 'releases') {
-      loadReleases(selectedSupplierId, startDate, endDate);
-    }
-  }, [selectedSupplierId, activeSubTab, startDate, endDate]);
+  // 4. Фильтрация позиций с точным расчетом локальных KPI по городу и типу размещения
+  const {
+    filteredItems,
+    hubQty,
+    consignmentQty,
+    hubSqm,
+    consignmentSqm,
+    totalFilteredQty,
+    totalFilteredSqm,
+  } = useMemo(() => {
+    let hubQ = 0;
+    let hubS = 0;
+    let consQ = 0;
+    let consS = 0;
+    let totalQ = 0;
+    let totalS = 0;
 
-  // Расчет агрегатов для вкладки остатков
-  const items = stockData?.items || [];
-
-  // Собираем все уникальные города для фильтра
-  const availableCities = Array.from(
-    new Set(
-      items.flatMap(item => (item.distribution || []).map(d => d.city).filter(Boolean))
-    )
-  );
-
-  // Вычисляем объемы на центральном хабе и у партнеров
-  let hubQty = 0;
-  let hubSqm = 0;
-  let consignmentQty = 0;
-  let consignmentSqm = 0;
-
-  for (const item of items) {
-    for (const dist of item.distribution || []) {
-      const q = dist.qty_pcs ?? dist.qty ?? 0;
-      const s = dist.area_sqm ?? dist.sqm ?? 0;
-      if (dist.type === 'central_hub') {
-        hubQty += q;
-        hubSqm += s;
-      } else {
-        consignmentQty += q;
-        consignmentSqm += s;
-      }
-    }
-  }
-
-  // Фильтрация позиций
-  const filteredItems = items.filter(item => {
     const qLower = searchQuery.toLowerCase().trim();
-    const matchSearch =
-      !qLower ||
-      item.article?.toLowerCase().includes(qLower) ||
-      item.collection?.toLowerCase().includes(qLower) ||
-      (item.name && item.name.toLowerCase().includes(qLower));
+    const resultItems: SupplierStockItem[] = [];
 
-    if (!matchSearch) return false;
+    for (const item of sanitizedItems) {
+      const matchSearch =
+        !qLower ||
+        item.article?.toLowerCase().includes(qLower) ||
+        item.collection?.toLowerCase().includes(qLower) ||
+        (item.name && item.name.toLowerCase().includes(qLower));
 
-    // Проверяем распределение
-    const hasMatchingDist = (item.distribution || []).some(dist => {
-      const matchCity = cityFilter === 'all' || dist.city === cityFilter;
-      const matchType =
-        typeFilter === 'all' ||
-        (typeFilter === 'hub' && dist.type === 'central_hub') ||
-        (typeFilter === 'consignment' && dist.type !== 'central_hub');
-      return matchCity && matchType;
-    });
+      if (!matchSearch) continue;
 
-    return (item.distribution || []).length === 0 || hasMatchingDist;
-  });
+      // Фильтруем строки распределения внутри ковра
+      const matchedDist = (item.distribution || []).filter(dist => {
+        const matchCity = cityFilter === 'all' || dist.city === cityFilter;
+        const matchType =
+          typeFilter === 'all' ||
+          (typeFilter === 'hub' && dist.type === 'central_hub') ||
+          (typeFilter === 'consignment' && dist.type !== 'central_hub');
+        return matchCity && matchType;
+      });
+
+      // Если установлен конкретный фильтр города/типа, товар показывается ТОЛЬКО если есть остаток в этой точке
+      if ((cityFilter !== 'all' || typeFilter !== 'all') && matchedDist.length === 0) {
+        continue;
+      }
+
+      const distToCount = (cityFilter === 'all' && typeFilter === 'all')
+        ? (item.distribution || [])
+        : matchedDist;
+
+      let itemFilteredQty = 0;
+      let itemFilteredSqm = 0;
+
+      for (const d of distToCount) {
+        const q = d.qty_pcs ?? d.qty ?? 0;
+        const s = d.area_sqm ?? d.sqm ?? 0;
+        itemFilteredQty += q;
+        itemFilteredSqm += s;
+        if (d.type === 'central_hub') {
+          hubQ += q;
+          hubS += s;
+        } else {
+          consQ += q;
+          consS += s;
+        }
+      }
+
+      totalQ += itemFilteredQty;
+      totalS += itemFilteredSqm;
+
+      resultItems.push({
+        ...item,
+        total_network_qty: (cityFilter === 'all' && typeFilter === 'all') ? (item.total_network_qty ?? itemFilteredQty) : itemFilteredQty,
+        total_network_sqm: (cityFilter === 'all' && typeFilter === 'all') ? (item.total_network_sqm ?? itemFilteredSqm) : itemFilteredSqm,
+        distribution: distToCount,
+      });
+    }
+
+    return {
+      filteredItems: resultItems,
+      hubQty: hubQ,
+      consignmentQty: consQ,
+      hubSqm: hubS,
+      consignmentSqm: consS,
+      totalFilteredQty: totalQ,
+      totalFilteredSqm: totalS,
+    };
+  }, [sanitizedItems, searchQuery, cityFilter, typeFilter]);
 
   const handlePrint = () => {
     window.print();
   };
 
-  const setPeriodQuickPick = (pick: 'current_month' | 'prev_month' | 'q3_2026' | 'year_2026') => {
+  // Динамические периоды дат
+  const now = new Date();
+  const curYear = now.getFullYear();
+  const curMonth = now.getMonth();
+  const pad = (n: number) => String(n).padStart(2, '0');
+
+  const setPeriodQuickPick = (pick: 'current_month' | 'prev_month' | 'q3' | 'year') => {
     if (pick === 'current_month') {
-      setStartDate('2026-09-01');
-      setEndDate('2026-09-30');
+      const lastDay = new Date(curYear, curMonth + 1, 0).getDate();
+      setStartDate(`${curYear}-${pad(curMonth + 1)}-01`);
+      setEndDate(`${curYear}-${pad(curMonth + 1)}-${pad(lastDay)}`);
     } else if (pick === 'prev_month') {
-      setStartDate('2026-08-01');
-      setEndDate('2026-08-31');
-    } else if (pick === 'q3_2026') {
-      setStartDate('2026-07-01');
-      setEndDate('2026-09-30');
-    } else if (pick === 'year_2026') {
-      setStartDate('2026-01-01');
-      setEndDate('2026-12-31');
+      const prevYear = curMonth === 0 ? curYear - 1 : curYear;
+      const prevMonth = curMonth === 0 ? 12 : curMonth;
+      const lastDay = new Date(prevYear, prevMonth, 0).getDate();
+      setStartDate(`${prevYear}-${pad(prevMonth)}-01`);
+      setEndDate(`${prevYear}-${pad(prevMonth)}-${pad(lastDay)}`);
+    } else if (pick === 'q3') {
+      setStartDate(`${curYear}-07-01`);
+      setEndDate(`${curYear}-09-30`);
+    } else if (pick === 'year') {
+      setStartDate(`${curYear}-01-01`);
+      setEndDate(`${curYear}-12-31`);
     }
   };
+
+  const selectedSupplierObj = suppliersList.find(s => s.id === selectedSupplierId);
 
   return (
     <div className="space-y-6">
@@ -198,11 +324,16 @@ export default function SupplierCabinet({ profile }: SupplierCabinetProps) {
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-xl font-bold text-slate-900">
-                  {stockData?.supplier_name || 'Кабинет турецкого поставщика'}
+                  {stockData?.supplier_name || selectedSupplierObj?.name || 'Кабинет фабрики'}
                 </h2>
                 <span className="badge bg-amber-100 text-amber-800 border border-amber-300/50 text-[10px] font-bold">
                   B2B Фабрика
                 </span>
+                {!isAdmin && (
+                  <span className="badge bg-slate-100 text-slate-600 text-[10px]">
+                    ID: {selectedSupplierId}
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
                 Прямая интеграция с распределительной сетью Synergiya Group в Казахстане
@@ -210,32 +341,35 @@ export default function SupplierCabinet({ profile }: SupplierCabinetProps) {
             </div>
           </div>
 
-          {/* Селектор поставщика для переключения */}
+          {/* Панель управления фабрикой: селектор только для администраторов */}
           <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-500 whitespace-nowrap">Фабрика:</span>
-            <div className="relative">
-              <select
-                value={selectedSupplierId}
-                onChange={e => setSelectedSupplierId(Number(e.target.value))}
-                className="appearance-none rounded-lg border border-slate-300 bg-white py-1.5 pl-3 pr-8 text-xs font-semibold text-slate-800 shadow-xs focus:border-brand-500 focus:outline-none"
-              >
-                {KNOWN_SUPPLIERS.map(sup => (
-                  <option key={sup.id} value={sup.id}>
-                    {sup.name}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
-            </div>
+            {isAdmin ? (
+              <>
+                <span className="text-xs text-slate-500 whitespace-nowrap">Фабрика:</span>
+                <div className="relative">
+                  <select
+                    value={selectedSupplierId}
+                    onChange={e => setSelectedSupplierId(Number(e.target.value))}
+                    className="appearance-none rounded-lg border border-slate-300 bg-white py-1.5 pl-3 pr-8 text-xs font-semibold text-slate-800 shadow-xs focus:border-brand-500 focus:outline-none"
+                  >
+                    {suppliersList.map(sup => (
+                      <option key={sup.id} value={sup.id}>
+                        {sup.name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                </div>
+              </>
+            ) : null}
+
             <button
-              onClick={() => {
-                if (activeSubTab === 'stock') loadStock(selectedSupplierId);
-                else loadReleases(selectedSupplierId, startDate, endDate);
-              }}
+              onClick={handleRefresh}
               title="Обновить данные"
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-brand-700 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-brand-700 transition-colors shadow-xs"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${loadingStock || loadingReleases ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">Обновить</span>
             </button>
           </div>
         </div>
@@ -254,7 +388,7 @@ export default function SupplierCabinet({ profile }: SupplierCabinetProps) {
             География остатков сети
             {stockData && (
               <span className="ml-1.5 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 font-semibold">
-                {stockData.total_network_qty} шт.
+                {totalFilteredQty} шт.
               </span>
             )}
           </button>
@@ -278,19 +412,21 @@ export default function SupplierCabinet({ profile }: SupplierCabinetProps) {
       {/* ============================================================== */}
       {activeSubTab === 'stock' && (
         <div className="space-y-6">
-          {/* Сводные KPI карточки */}
+          {/* Сводные KPI карточки с точным пересчетом под фильтры */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="card p-4 bg-white border border-slate-200 shadow-xs">
               <div className="flex items-center justify-between text-slate-500 mb-1">
-                <span className="text-xs font-medium uppercase tracking-wider">Всего в сети РК</span>
+                <span className="text-xs font-medium uppercase tracking-wider">
+                  {cityFilter === 'all' && typeFilter === 'all' ? 'Всего в сети РК' : 'Остаток по фильтру'}
+                </span>
                 <Layers className="h-4 w-4 text-brand-600" />
               </div>
               <p className="text-2xl font-bold text-slate-900">
-                {stockData?.total_network_qty ?? 0}{' '}
+                {totalFilteredQty}{' '}
                 <span className="text-sm font-normal text-slate-500">шт.</span>
               </p>
               <p className="text-xs text-slate-400 mt-1">
-                {(stockData?.total_sqm_in_network ?? 0).toFixed(1)} м² продукции
+                {totalFilteredSqm.toFixed(1)} м² продукции
               </p>
             </div>
 
@@ -316,7 +452,7 @@ export default function SupplierCabinet({ profile }: SupplierCabinetProps) {
                 {consignmentQty} <span className="text-sm font-normal text-indigo-700">шт.</span>
               </p>
               <p className="text-xs text-indigo-600 mt-1">
-                У партнеров в магазинах ({consignmentSqm.toFixed(1)} м²)
+                В шоурумах партнеров ({consignmentSqm.toFixed(1)} м²)
               </p>
             </div>
 
@@ -326,7 +462,7 @@ export default function SupplierCabinet({ profile }: SupplierCabinetProps) {
                 <TrendingUp className="h-4 w-4 text-brand-600" />
               </div>
               <p className="text-2xl font-bold text-slate-900">
-                {stockData?.items_count ?? 0}
+                {filteredItems.length}
               </p>
               <p className="text-xs text-slate-400 mt-1">
                 {availableCities.length > 0 ? `${availableCities.length} городов покрытия` : '1 город'}
@@ -383,7 +519,10 @@ export default function SupplierCabinet({ profile }: SupplierCabinetProps) {
             </div>
           ) : stockError ? (
             <div className="card p-6 border-red-200 bg-red-50 text-red-800 text-sm">
-              <p className="font-semibold">Ошибка загрузки:</p>
+              <div className="flex items-center gap-2 mb-1">
+                <AlertCircle className="h-4 w-4 text-red-600 shrink-0" />
+                <p className="font-semibold">Ошибка загрузки:</p>
+              </div>
               <p>{stockError}</p>
             </div>
           ) : filteredItems.length === 0 ? (
@@ -402,7 +541,7 @@ export default function SupplierCabinet({ profile }: SupplierCabinetProps) {
                     <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase text-slate-500">
                       <th className="py-3 px-4">Ковер / Артикул</th>
                       <th className="py-3 px-4">Размер / Площадь</th>
-                      <th className="py-3 px-4">Всего в РК</th>
+                      <th className="py-3 px-4">В наличии</th>
                       <th className="py-3 px-4">Распределение по сети (Хаб и Партнеры)</th>
                     </tr>
                   </thead>
@@ -438,14 +577,15 @@ export default function SupplierCabinet({ profile }: SupplierCabinetProps) {
                           </td>
                           <td className="py-3.5 px-4 align-top">
                             <div className="space-y-1.5">
-                              {(item.distribution || []).map((dist, dIdx) => {
+                              {(item.distribution || []).map((dist: SupplierDistribution, dIdx: number) => {
                                 const q = dist.qty_pcs ?? dist.qty ?? 0;
                                 const s = dist.area_sqm ?? dist.sqm ?? 0;
                                 const isHub = dist.type === 'central_hub';
+                                const distKey = `${item.carpet_id}-${dIdx}-${dist.warehouse_id || ''}-${dist.city}`;
 
                                 return (
                                   <div
-                                    key={dIdx}
+                                    key={distKey}
                                     className={`flex items-center justify-between rounded-md p-2 text-xs ${
                                       isHub
                                         ? 'bg-emerald-50/80 border border-emerald-200/60 text-emerald-950'
@@ -490,7 +630,7 @@ export default function SupplierCabinet({ profile }: SupplierCabinetProps) {
       )}
 
       {/* ============================================================== */}
-      {/* ВКЛАДКА 2: АКТ РЕАЛИЗАЦИИ / ОТЧЕТ ПО ПРОДАЖАМ (SETTLEMENT)     */}
+      {/* ВКЛАДКА 2: АКТ РЕАЛИЗАЦИИ / ВЫПУСКИ (ТОЛЬКО СНЯТОЕ С ХОЛДА)     */}
       {/* ============================================================== */}
       {activeSubTab === 'releases' && (
         <div className="space-y-6">
@@ -503,43 +643,27 @@ export default function SupplierCabinet({ profile }: SupplierCabinetProps) {
                 </span>
                 <button
                   onClick={() => setPeriodQuickPick('current_month')}
-                  className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                    startDate === '2026-09-01' && endDate === '2026-09-30'
-                      ? 'bg-brand-700 text-white'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
+                  className="rounded-md px-2.5 py-1 text-xs font-medium transition-colors bg-slate-100 text-slate-700 hover:bg-slate-200"
                 >
-                  Сентябрь 2026
+                  Текущий месяц
                 </button>
                 <button
                   onClick={() => setPeriodQuickPick('prev_month')}
-                  className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                    startDate === '2026-08-01' && endDate === '2026-08-31'
-                      ? 'bg-brand-700 text-white'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
+                  className="rounded-md px-2.5 py-1 text-xs font-medium transition-colors bg-slate-100 text-slate-700 hover:bg-slate-200"
                 >
-                  Август 2026
+                  Предыдущий месяц
                 </button>
                 <button
-                  onClick={() => setPeriodQuickPick('q3_2026')}
-                  className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                    startDate === '2026-07-01' && endDate === '2026-09-30'
-                      ? 'bg-brand-700 text-white'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
+                  onClick={() => setPeriodQuickPick('q3')}
+                  className="rounded-md px-2.5 py-1 text-xs font-medium transition-colors bg-slate-100 text-slate-700 hover:bg-slate-200"
                 >
-                  3-й квартал 2026
+                  3-й квартал
                 </button>
                 <button
-                  onClick={() => setPeriodQuickPick('year_2026')}
-                  className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                    startDate === '2026-01-01' && endDate === '2026-12-31'
-                      ? 'bg-brand-700 text-white'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
+                  onClick={() => setPeriodQuickPick('year')}
+                  className="rounded-md px-2.5 py-1 text-xs font-medium transition-colors bg-slate-100 text-slate-700 hover:bg-slate-200"
                 >
-                  Весь 2026 год
+                  Весь {curYear} год
                 </button>
               </div>
 
@@ -580,7 +704,7 @@ export default function SupplierCabinet({ profile }: SupplierCabinetProps) {
                 ${(releasesData?.total_amount_usd ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
               <p className="text-xs text-emerald-100 mt-2">
-                Сумма за реализованную продукцию за период
+                Сумма за реализованную продукцию (снятую с холда)
               </p>
             </div>
 
@@ -618,21 +742,24 @@ export default function SupplierCabinet({ profile }: SupplierCabinetProps) {
             </div>
           ) : releasesError ? (
             <div className="card p-6 border-red-200 bg-red-50 text-red-800 text-sm">
-              <p className="font-semibold">Ошибка загрузки акта:</p>
+              <div className="flex items-center gap-2 mb-1">
+                <AlertCircle className="h-4 w-4 text-red-600 shrink-0" />
+                <p className="font-semibold">Ошибка загрузки акта:</p>
+              </div>
               <p>{releasesError}</p>
             </div>
           ) : !releasesData?.releases || releasesData.releases.length === 0 ? (
             <div className="card p-10 text-center text-slate-500">
               <FileText className="h-10 w-10 text-slate-300 mx-auto mb-2" />
-              <p className="font-semibold text-slate-800">Нет реализаций за выбранный период</p>
+              <p className="font-semibold text-slate-800">Нет документов реализации за выбранный период</p>
               <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
-                В периоде с {startDate} по {endDate} по фабрике {stockData?.supplier_name || ''} не было зафиксировано выпусков с консигнации или отгрузок конечным клиентам.
+                В периоде с {startDate} по {endDate} по фабрике {stockData?.supplier_name || selectedSupplierObj?.name || ''} не зафиксировано выпусков с консигнации или отгрузок конечным клиентам.
               </p>
               <button
-                onClick={() => setPeriodQuickPick('year_2026')}
+                onClick={() => setPeriodQuickPick('year')}
                 className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-slate-50"
               >
-                Показать за весь 2026 год
+                Показать за весь {curYear} год
               </button>
             </div>
           ) : (
@@ -659,31 +786,34 @@ export default function SupplierCabinet({ profile }: SupplierCabinetProps) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {releasesData.releases.map((rel, idx) => (
-                      <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                        <td className="py-3 px-4 font-mono font-bold text-slate-800 text-xs">
-                          {rel.doc_number}
-                        </td>
-                        <td className="py-3 px-4 text-xs text-slate-600 whitespace-nowrap">
-                          {rel.date}
-                        </td>
-                        <td className="py-3 px-4 font-medium text-slate-800">
-                          {rel.counterparty_name}
-                        </td>
-                        <td className="py-3 px-4 text-xs text-slate-500">
-                          {rel.city}
-                        </td>
-                        <td className="py-3 px-4 text-right font-bold text-slate-900">
-                          {rel.released_qty} шт
-                        </td>
-                        <td className="py-3 px-4 text-right text-xs text-slate-500">
-                          {rel.released_sqm.toFixed(1)} м²
-                        </td>
-                        <td className="py-3 px-4 text-right font-bold text-emerald-700">
-                          ${rel.total_usd.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                        </td>
-                      </tr>
-                    ))}
+                    {releasesData.releases.map((rel, idx) => {
+                      const relKey = `${idx}-${rel.doc_number || ''}-${rel.date || ''}`;
+                      return (
+                        <tr key={relKey} className="hover:bg-slate-50 transition-colors">
+                          <td className="py-3 px-4 font-mono font-bold text-slate-800 text-xs">
+                            {rel.doc_number}
+                          </td>
+                          <td className="py-3 px-4 text-xs text-slate-600 whitespace-nowrap">
+                            {rel.date}
+                          </td>
+                          <td className="py-3 px-4 font-medium text-slate-800">
+                            {rel.counterparty_name}
+                          </td>
+                          <td className="py-3 px-4 text-xs text-slate-500">
+                            {rel.city}
+                          </td>
+                          <td className="py-3 px-4 text-right font-bold text-slate-900">
+                            {rel.released_qty} шт
+                          </td>
+                          <td className="py-3 px-4 text-right text-xs text-slate-500">
+                            {rel.released_sqm.toFixed(1)} м²
+                          </td>
+                          <td className="py-3 px-4 text-right font-bold text-emerald-700">
+                            ${rel.total_usd.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

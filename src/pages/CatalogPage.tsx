@@ -25,6 +25,7 @@ import StockSummaryBar from '@/components/StockSummaryBar';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
+import { filterWarehousesForClient } from '@/lib/warehouseVisibility';
 import ProductImage from '@/components/ProductImage';
 
 type SortOption = 'popular' | 'price-asc' | 'price-desc' | 'name';
@@ -459,7 +460,8 @@ function StockGridView({ filteredProducts, selectedWarehouse, onNavigate }: { fi
 export default function CatalogPage({ onNavigate, initialCollection, initialCountry }: { onNavigate: (page: PageId, productId?: string) => void; initialCollection?: string; initialCountry?: string }) {
   const { products, summary: serverSummary, loading, error: loadError } = useProducts();
   const pricing = useUserPricing();
-  const { user, profile, isAdmin } = useAuth();
+  const { user, profile, isAdmin, isImpersonating } = useAuth();
+  const isEffectiveAdmin = isAdmin && !isImpersonating;
   const { settings: displaySettings } = useDisplaySettings();
   const myShowroomId = profile?.showroom_warehouse_id;
   const myShowroomName = profile?.showroom_warehouse_name || 'В моем магазине';
@@ -482,18 +484,26 @@ export default function CatalogPage({ onNavigate, initialCollection, initialCoun
   const allManufacturers = useMemo(() => [...new Set(products.map(p => p.manufacturer))].sort(), [products]);
   const allCountries = useMemo(() => [...new Set(products.map(p => p.country))].sort(), [products]);
   const allWarehouses = useMemo(() => {
-    if (isAdmin) {
+    if (isEffectiveAdmin) {
       return [...new Set(products.flatMap(p => p.variants.flatMap(v => v.warehouses.map(w => w.warehouse_name || w.city))))].sort();
     }
-    const clientWhs: string[] = [];
-    if (displaySettings?.show_hub_warehouse !== false) {
-      clientWhs.push('Основной Склад Астана');
+    const uniqueRawWarehouses: Warehouse[] = [];
+    const seenKeys = new Set<string>();
+    for (const p of products) {
+      for (const v of p.variants) {
+        for (const w of v.warehouses) {
+          const key = `${w.warehouse_id}::${w.warehouse_name || w.city}`;
+          if (!seenKeys.has(key)) {
+            seenKeys.add(key);
+            uniqueRawWarehouses.push(w);
+          }
+        }
+      }
     }
-    if (myShowroomId && displaySettings?.show_showroom_warehouse !== false) {
-      clientWhs.push(myShowroomName);
-    }
-    return clientWhs.length > 0 ? clientWhs : ['Основной Склад Астана'];
-  }, [products, isAdmin, myShowroomId, myShowroomName, displaySettings]);
+    const visible = filterWarehousesForClient(uniqueRawWarehouses, profile, myShowroomName);
+    const names = [...new Set(visible.map(w => w.warehouse_name || w.city))].filter(Boolean);
+    return names.length > 0 ? names.sort() : ['Основной Склад Астана'];
+  }, [products, isEffectiveAdmin, profile, myShowroomName]);
   const allSizes = useMemo(() => [...new Set(products.flatMap(p => p.variants.map(v => v.size)))].sort((a, b) => sizeArea(a) - sizeArea(b)), [products]);
 
   useEffect(() => {

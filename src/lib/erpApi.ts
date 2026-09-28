@@ -3,7 +3,7 @@
  * API-клиент для защищенной связки B2B-портала с бэкендом Synergy ERP.
  */
 
-import type { SupplierNetworkStockResponse, SupplierReleasesReport } from '@/types';
+import type { SupplierNetworkStockResponse, SupplierReleasesReport, SupplierInfo, ErpDisplaySettings } from '@/types';
 
 export const ERP_API_URL = import.meta.env.VITE_ERP_API_URL || 'https://kilem-khan.kz/api/sin/public/api_portal.php';
 export const ERP_API_KEY = import.meta.env.VITE_ERP_API_KEY || '138d1bdaf9402600c8f5d5763e2e1573c1e45d32401e62e4981cd7e898bf0544';
@@ -112,6 +112,13 @@ export async function submitOrderToErp(payload: CreateOrderPayload): Promise<Erp
   }
 
   if (!response.ok || !data.success) {
+    const errorData = data as any;
+    if (response.status === 409 || errorData?.error_code === 'INSUFFICIENT_STOCK' || errorData?.code === 'INSUFFICIENT_STOCK' || errorData?.details?.code === 'INSUFFICIENT_STOCK') {
+      const err = new Error(errorData?.error || 'Недостаточно свободного остатка на складе. Товар только что был зарезервирован другим покупателем.');
+      (err as any).code = 'INSUFFICIENT_STOCK';
+      (err as any).details = errorData?.details;
+      throw err;
+    }
     throw new Error(data.error || `Ошибка сервера (${response.status})`);
   }
 
@@ -727,6 +734,138 @@ export async function submitLeadToErp(payload: LeadPayload): Promise<LeadRespons
   }
 
   return { success: true, message: 'Заявка успешно принята' };
+}
+
+export interface UpdateOrderStatusParams {
+  orderId: number | string;
+  status: 'pending' | 'confirmed' | 'picking' | 'assembled' | 'shipped' | 'delivered' | 'cancelled' | string;
+  comment?: string;
+  trackCode?: string;
+}
+
+/**
+ * 1. Смена статуса заказа в ERP (action=update_order_status).
+ * При статусе 'cancelled' ERP автоматически расформировывает бронь (free_stock восстанавливается).
+ */
+export async function updateOrderStatusInErp(params: UpdateOrderStatusParams): Promise<{ success: boolean; message?: string }> {
+  const numOrderId = Number(String(params.orderId).replace(/\D+/g, '')) || params.orderId;
+  const response = await fetch(`${ERP_API_URL}?action=update_order_status&portal_key=${encodeURIComponent(ERP_API_KEY)}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Portal-Key': ERP_API_KEY,
+    },
+    body: JSON.stringify({
+      order_id: numOrderId,
+      status: params.status,
+      comment: params.comment || '',
+      track_code: params.trackCode || '',
+    }),
+  });
+
+  const data = await response.json().catch(() => null);
+  if (!response.ok || !data?.success) {
+    throw new Error(data?.error || `Ошибка смены статуса заказа в ERP (${response.status})`);
+  }
+  return data;
+}
+
+/**
+ * 2. Получение динамического списка фабрик и производителей из ERP (action=suppliers).
+ */
+export async function fetchSuppliersFromErp(): Promise<SupplierInfo[]> {
+  try {
+    const response = await fetch(`${ERP_API_URL}?action=suppliers&portal_key=${encodeURIComponent(ERP_API_KEY)}`, {
+      method: 'GET',
+      headers: {
+        'X-Portal-Key': ERP_API_KEY,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Ошибка загрузки фабрик (${response.status})`);
+    }
+
+    const data = await response.json();
+    if (data?.success && Array.isArray(data.suppliers)) {
+      return data.suppliers;
+    }
+  } catch (err) {
+    console.warn('[fetchSuppliersFromErp] Fallback on error:', err);
+  }
+  return [];
+}
+
+/**
+ * 3. Управление доступом дилера к порталу в ERP (action=update_client_access).
+ * При отключении дилер мгновенно блокируется (CLIENT_DEACTIVATED).
+ */
+export async function updateClientAccessInErp(clientId: number | string, accessEnabled: boolean | number): Promise<{ success: boolean }> {
+  const numClientId = Number(String(clientId).replace(/\D+/g, '')) || clientId;
+  const isEnabled = typeof accessEnabled === 'boolean' ? (accessEnabled ? 1 : 0) : accessEnabled;
+  const response = await fetch(`${ERP_API_URL}?action=update_client_access&portal_key=${encodeURIComponent(ERP_API_KEY)}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Portal-Key': ERP_API_KEY,
+    },
+    body: JSON.stringify({
+      client_id: numClientId,
+      access_enabled: isEnabled,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Ошибка изменения доступа клиента в ERP (${response.status})`);
+  }
+
+  return { success: true };
+}
+
+/**
+ * 4. Получение глобальных настроек видимости из ERP (action=display_settings).
+ */
+export async function fetchDisplaySettingsFromErp(): Promise<ErpDisplaySettings | null> {
+  try {
+    const response = await fetch(`${ERP_API_URL}?action=display_settings&portal_key=${encodeURIComponent(ERP_API_KEY)}&_t=${Date.now()}`, {
+      method: 'GET',
+      headers: {
+        'X-Portal-Key': ERP_API_KEY,
+      },
+    });
+    if (response.ok) {
+      const data = await response.json();
+      if (data?.success && data?.settings) {
+        return data.settings;
+      }
+    }
+  } catch (err) {
+    console.warn('[fetchDisplaySettingsFromErp] Error fetching display settings from ERP:', err);
+  }
+  return null;
+}
+
+/**
+ * 4. Сохранение глобальных настроек видимости в ERP (action=display_settings).
+ */
+export async function saveDisplaySettingsToErp(settings: Partial<ErpDisplaySettings>): Promise<boolean> {
+  try {
+    const response = await fetch(`${ERP_API_URL}?action=display_settings&portal_key=${encodeURIComponent(ERP_API_KEY)}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Portal-Key': ERP_API_KEY,
+      },
+      body: JSON.stringify({ settings }),
+    });
+    if (response.ok) {
+      const data = await response.json();
+      return !!data?.success;
+    }
+  } catch (err) {
+    console.warn('[saveDisplaySettingsToErp] Error saving display settings to ERP:', err);
+  }
+  return false;
 }
 
 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { fetchDisplaySettingsFromErp } from '@/lib/erpApi';
 
 export interface DisplaySettings {
   show_stock: boolean;
@@ -58,6 +59,25 @@ export function useDisplaySettings() {
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
+
+  // Серверная синхронизация с ERP (portal_settings)
+  useEffect(() => {
+    let cancelled = false;
+    fetchDisplaySettingsFromErp().then(erpSettings => {
+      if (!cancelled && erpSettings) {
+        setSettings(prev => ({
+          ...prev,
+          show_stock: erpSettings.show_free_stock ?? prev.show_stock,
+          show_reserve: erpSettings.show_reserved_stock ?? prev.show_reserve,
+          show_total_pcs: erpSettings.show_total_stock ?? prev.show_total_pcs,
+          show_price: erpSettings.show_prices ?? prev.show_price,
+          show_sqm: erpSettings.show_price_per_sqm ?? prev.show_sqm,
+          show_showroom_warehouse: erpSettings.show_dealer_showroom ?? prev.show_showroom_warehouse,
+        }));
+      }
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     const handler = () => {

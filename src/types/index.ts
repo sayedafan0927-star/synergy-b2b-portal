@@ -242,3 +242,23 @@ export function calcPriceFromSqm(size: string, pricePerSqm: number): number {
   const { w, h } = parseSizeDimensions(size);
   return w * h * pricePerSqm;
 }
+
+export interface SupplierInfo {
+  id: number;
+  name: string;
+  country: string;
+  bin?: string | null;
+  cooperation_type?: string;
+}
+
+export interface ErpDisplaySettings {
+  show_free_stock: boolean;
+  show_reserved_stock: boolean;
+  show_to_ship_stock: boolean;
+  show_total_stock: boolean;
+  show_prices: boolean;
+  show_price_per_sqm: boolean;
+  show_discounts: boolean;
+  show_dealer_showroom: boolean;
+  allow_orders_when_zero_stock: boolean;
+}
