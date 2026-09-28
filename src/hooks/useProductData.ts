@@ -1,7 +1,14 @@
 import { useState, useEffect, useContext } from 'react';
 import { fetchCatalogFromErp } from '@/lib/erpApi';
-import { AuthContext } from '@/contexts/AuthContext';
+import { AuthContext, type Profile } from '@/contexts/AuthContext';
 import type { Product, ProductVariant, Warehouse, StockSummary } from '@/types';
+import {
+  filterWarehousesForClient,
+  getClientWarehouseSettings,
+  isCentralWarehouse,
+  CENTRAL_WAREHOUSE_ID,
+  CENTRAL_WAREHOUSE_NAME
+} from '@/lib/warehouseVisibility';
 
 export const STANDARD_SIZES = ['0.8 × 1.5', '1.6 × 2.3', '2 × 3', '2.5 × 3.5', '3 × 4'];
 
@@ -367,50 +374,42 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
 /**
  * Склад для клиентов:
  * 1. В ответе ERP приходят только склады, где товар реально есть в наличии (stock > 0).
- * 2. Если variant.warehouses.length === 0: выводим одну строку/бейдж «Нет на складах».
- * 3. Если variant.warehouses.length > 0: выводим строки только для тех складов, которые реально пришли.
+ * 2. Автоматический режим: клиент видит свой склад и центральный склад Астана (ID 81).
+ *    Если своего склада нет — видит ТОЛЬКО центральный склад Астана.
+ * 3. Администратор может в любой момент скрыть или включить видимость любых складов для клиента.
  */
 export function filterClientWarehouses(
   warehouses: Warehouse[] = [],
   showroomWarehouseId?: number | null,
-  showroomWarehouseName?: string | null
+  showroomWarehouseName?: string | null,
+  clientOrIsAdmin?: boolean | Partial<Profile> | string | number | null,
+  displaySettings?: { show_hub_warehouse?: boolean; show_showroom_warehouse?: boolean; hidden_warehouses?: string[] } | null
 ): Warehouse[] {
   if (!warehouses || warehouses.length === 0) {
     return [];
   }
 
-  const result: Warehouse[] = [];
-
-  // 1. Центральный склад компании — СТРОГО ID 81 («Основной Склад Астана»)
-  const mainHub = warehouses.find(w => w.warehouse_id === 81)
-    || warehouses.find(w => (w.warehouse_name && w.warehouse_name.includes('Астана')) || (w.city && w.city.includes('Астана')))
-    || warehouses.find(w => w.is_hub && Number(w.stock) > 0);
-
-  if (mainHub && Number(mainHub.stock) > 0) {
-    result.push({
-      warehouse_id: 81,
-      warehouse_name: 'Основной Склад Астана',
-      city: 'Основной Склад Астана',
-      is_hub: true,
-      stock: Number(mainHub.stock),
+  // Если явно указано isAdmin === true
+  const isAdmin = clientOrIsAdmin === true;
+  if (isAdmin) {
+    const hidden = new Set(displaySettings?.hidden_warehouses || []);
+    return warehouses.filter(w => {
+      const name = w.warehouse_name || w.city;
+      return !hidden.has(name) && !hidden.has(String(w.warehouse_id)) && (Number(w.stock) > 0 || Number(w.free_stock ?? 0) > 0);
     });
   }
 
-  // 2. Персональный склад шоурума авторизованного дилера
-  if (showroomWarehouseId && showroomWarehouseId !== 81) {
-    const showroom = warehouses.find(w => w.warehouse_id === showroomWarehouseId);
-    if (showroom && Number(showroom.stock) > 0) {
-      result.push({
-        warehouse_id: showroomWarehouseId,
-        warehouse_name: showroomWarehouseName || showroom.warehouse_name || 'В моем магазине',
-        city: showroomWarehouseName || showroom.warehouse_name || 'В моем магазине',
-        is_hub: false,
-        stock: Number(showroom.stock),
-      });
-    }
+  // Определяем ID клиента, если передан профиль или строка/число
+  let clientProfile: Partial<Profile> | null = null;
+  if (clientOrIsAdmin && typeof clientOrIsAdmin === 'object') {
+    clientProfile = clientOrIsAdmin as Partial<Profile>;
+  } else if (typeof clientOrIsAdmin === 'string' || typeof clientOrIsAdmin === 'number') {
+    clientProfile = { partner_id: String(clientOrIsAdmin), showroom_warehouse_id: showroomWarehouseId };
+  } else if (showroomWarehouseId) {
+    clientProfile = { showroom_warehouse_id: showroomWarehouseId, showroom_warehouse_name: showroomWarehouseName };
   }
 
-  return result;
+  return filterWarehousesForClient(warehouses, clientProfile, showroomWarehouseName);
 }
 
 export function triggerCatalogReload() {
@@ -435,7 +434,11 @@ export function useProducts(customDealerId?: string | number) {
       setReloadCounter(c => c + 1);
     };
     window.addEventListener('synergy:reload-catalog', handler);
-    return () => window.removeEventListener('synergy:reload-catalog', handler);
+    window.addEventListener('synergy:reload-warehouse-settings', handler);
+    return () => {
+      window.removeEventListener('synergy:reload-catalog', handler);
+      window.removeEventListener('synergy:reload-warehouse-settings', handler);
+    };
   }, []);
 
   // Слушатель событий реального времени по вебхуку (списание остатка дилера)

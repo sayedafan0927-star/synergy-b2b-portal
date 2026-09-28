@@ -5,6 +5,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/contexts/CartContext';
 import { useUserPricing } from '@/hooks/usePricing';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useDisplaySettings } from '@/hooks/useDisplaySettings';
+import { filterClientWarehouses } from '@/hooks/useProductData';
+import { isWarehouseVisibleForClient } from '@/lib/warehouseVisibility';
 import { Check, ChevronDown, ChevronLeft, ChevronRight, Lock, ShoppingCart } from 'lucide-react';
 import ProductImage from '@/components/ProductImage';
 
@@ -53,13 +56,20 @@ export function formatProductTitle(product: { name: string; article?: string; co
 }
 
 export default function ProductCard({ product, onNavigate }: ProductCardProps) {
-  const { user, profile } = useAuth();
+  const { user, profile, isAdmin } = useAuth();
+  const { settings: displaySettings } = useDisplaySettings();
   const { addItem } = useCart();
   const { language, t } = useLanguage();
   const { getMinPricePerSqm, getVariantPrice, getPricePerSqm } = useUserPricing();
   const [sizesOpen, setSizesOpen] = useState(false);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [addedSku, setAddedSku] = useState<string | null>(null);
+
+  const myShowroomId = profile?.showroom_warehouse_id;
+  const myShowroomName = profile?.showroom_warehouse_name || 'В моем магазине';
+  const showHub = displaySettings?.show_hub_warehouse !== false;
+  const showShowroom = displaySettings?.show_showroom_warehouse !== false;
+  const hasShowroom = Boolean(user && myShowroomId && showShowroom);
 
   // Изображения для карусели
   const validImages = (product.images || []).filter(img => typeof img === 'string' && img.trim().length > 0 && !img.includes('unsplash.com'));
@@ -94,11 +104,21 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
     setQuantities(previous => ({ ...previous, [sku]: Math.max(1, value || 1) }));
   };
 
+  const getVariantClientStock = (variant: ProductVariant) => {
+    const rows = filterClientWarehouses(variant.warehouses, myShowroomId, myShowroomName, isAdmin, displaySettings);
+    return rows.reduce((sum, w) => sum + w.stock, 0);
+  };
+
+  const getVariantClientWarehouse = (variant: ProductVariant) => {
+    const rows = filterClientWarehouses(variant.warehouses, myShowroomId, myShowroomName, isAdmin, displaySettings);
+    return rows.find(w => w.stock > 0) || rows[0] || null;
+  };
+
   const handleAdd = (variant: ProductVariant) => {
-    const warehouse = getAvailableWarehouse(variant);
+    const warehouse = getVariantClientWarehouse(variant);
     if (!warehouse) return;
 
-    const stock = getTotalStock(variant);
+    const stock = getVariantClientStock(variant);
     if (stock <= 0) {
       alert('Данного размера нет в наличии на складе в Астане');
       return;
@@ -126,27 +146,25 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
     window.setTimeout(() => setAddedSku(current => current === variant.sku ? null : current), 1400);
   };
 
-  const myShowroomId = profile?.showroom_warehouse_id;
-  const hasDealerStock = Boolean(user && (product.variants.some(v => v.dealer_stock) || myShowroomId));
-  const totalShowroomQty = product.variants.reduce((sum, v) => {
-    if (myShowroomId) {
-      const wh = v.warehouses.find(w => w.warehouse_id === myShowroomId);
-      return sum + (wh?.stock || 0);
-    }
-    return sum + (v.dealer_stock?.in_showroom_qty || 0);
-  }, 0);
-  const totalShowroomSqm = Math.round(product.variants.reduce((sum, v) => {
-    if (myShowroomId) {
-      const wh = v.warehouses.find(w => w.warehouse_id === myShowroomId);
-      const { w, h } = parseSizeDimensions(v.size);
-      const area = v.area_sqm || (w * h) || 1;
-      return sum + ((wh?.stock || 0) * area);
-    }
-    return sum + (v.dealer_stock?.in_showroom_sqm || 0);
-  }, 0) * 10) / 10;
-  const totalInTransitQty = product.variants.reduce((sum, v) => sum + (v.dealer_stock?.in_transit_qty || 0), 0);
-  const totalInTransitSqm = Math.round(product.variants.reduce((sum, v) => sum + (v.dealer_stock?.in_transit_sqm || 0), 0) * 10) / 10;
-  const totalHubQty = product.variants.reduce((sum, v) => sum + getMainWarehouseStock(v), 0);
+  const totalShowroomQty = hasShowroom
+    ? product.variants.reduce((sum, v) => {
+        const wh = v.warehouses.find(w => w.warehouse_id === myShowroomId);
+        return sum + (wh?.stock || 0);
+      }, 0)
+    : 0;
+
+  const totalShowroomSqm = hasShowroom
+    ? Math.round(product.variants.reduce((sum, v) => {
+        const wh = v.warehouses.find(w => w.warehouse_id === myShowroomId);
+        const { w, h } = parseSizeDimensions(v.size);
+        const area = v.area_sqm || (w * h) || 1;
+        return sum + ((wh?.stock || 0) * area);
+      }, 0) * 10) / 10
+    : 0;
+
+  const totalInTransitQty = hasShowroom ? product.variants.reduce((sum, v) => sum + (v.dealer_stock?.in_transit_qty || 0), 0) : 0;
+  const totalInTransitSqm = hasShowroom ? Math.round(product.variants.reduce((sum, v) => sum + (v.dealer_stock?.in_transit_sqm || 0), 0) * 10) / 10 : 0;
+  const totalHubQty = showHub ? product.variants.reduce((sum, v) => sum + getMainWarehouseStock(v), 0) : 0;
 
   return (
     <div
@@ -236,18 +254,20 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
           {product.collection}
         </button>
 
-        {/* Остатки дилера (если есть) */}
-        {hasDealerStock && (
+        {/* Склады: свой склад (если привязан) + центральный склад Астана */}
+        {user && (
           <div className="mt-2 flex flex-col gap-1 border-t border-slate-100 pt-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="inline-flex items-center gap-1 font-semibold text-emerald-700">
-                🏪 {t('product.in_showroom')}:
-              </span>
-              <span className="font-bold text-emerald-800">
-                {totalShowroomQty} шт <span className="font-normal text-emerald-600">({totalShowroomSqm} м²)</span>
-              </span>
-            </div>
-            {totalInTransitQty > 0 && (
+            {hasShowroom && totalShowroomQty > 0 && (
+              <div className="flex items-center justify-between text-xs">
+                <span className="inline-flex items-center gap-1 font-semibold text-emerald-700">
+                  🏪 {myShowroomName}:
+                </span>
+                <span className="font-bold text-emerald-800">
+                  {totalShowroomQty} шт <span className="font-normal text-emerald-600">({totalShowroomSqm} м²)</span>
+                </span>
+              </div>
+            )}
+            {hasShowroom && totalInTransitQty > 0 && (
               <div className="flex items-center justify-between text-xs">
                 <span className="inline-flex items-center gap-1 font-medium text-indigo-700">
                   🚚 {t('product.in_transit')}:
@@ -257,14 +277,16 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
                 </span>
               </div>
             )}
-            <div className="flex items-center justify-between text-xs">
-              <span className="inline-flex items-center gap-1 text-slate-500">
-                🏢 {language === 'kz' ? 'Негізгі қойма (Астана)' : 'Основной Склад Астана'}:
-              </span>
-              <span className="font-medium text-slate-700">
-                {totalHubQty} шт
-              </span>
-            </div>
+            {showHub && (
+              <div className="flex items-center justify-between text-xs">
+                <span className="inline-flex items-center gap-1 text-slate-500">
+                  🏢 {language === 'kz' ? 'Негізгі қойма (Астана)' : 'Основной Склад Астана'}:
+                </span>
+                <span className={`font-semibold ${totalHubQty > 0 ? 'text-slate-800' : 'text-slate-400'}`}>
+                  {totalHubQty > 0 ? `${totalHubQty} шт` : 'под заказ'}
+                </span>
+              </div>
+            )}
           </div>
         )}
 
@@ -320,11 +342,11 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
           onClick={event => event.stopPropagation()}
         >
           <div className="space-y-1.5 max-h-60 overflow-y-auto overflow-x-hidden pr-0.5 select-none">
-            {product.variants.filter(v => getTotalStock(v) > 0).length > 0 ? (
+            {product.variants.filter(v => getVariantClientStock(v) > 0).length > 0 ? (
               product.variants
-                .filter(v => getTotalStock(v) > 0)
+                .filter(v => getVariantClientStock(v) > 0)
                 .map(variant => {
-                  const stock = getTotalStock(variant);
+                  const stock = getVariantClientStock(variant);
                   const quantity = quantities[variant.sku] ?? 1;
                   const isAdded = addedSku === variant.sku;
 

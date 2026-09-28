@@ -459,6 +459,10 @@ function StockGridView({ filteredProducts, selectedWarehouse, onNavigate }: { fi
 export default function CatalogPage({ onNavigate, initialCollection, initialCountry }: { onNavigate: (page: PageId, productId?: string) => void; initialCollection?: string; initialCountry?: string }) {
   const { products, summary: serverSummary, loading, error: loadError } = useProducts();
   const pricing = useUserPricing();
+  const { user, profile, isAdmin } = useAuth();
+  const { settings: displaySettings } = useDisplaySettings();
+  const myShowroomId = profile?.showroom_warehouse_id;
+  const myShowroomName = profile?.showroom_warehouse_name || 'В моем магазине';
 
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -477,7 +481,19 @@ export default function CatalogPage({ onNavigate, initialCollection, initialCoun
   const allCollections = useMemo(() => [...new Set(products.map(p => p.collection))].sort(), [products]);
   const allManufacturers = useMemo(() => [...new Set(products.map(p => p.manufacturer))].sort(), [products]);
   const allCountries = useMemo(() => [...new Set(products.map(p => p.country))].sort(), [products]);
-  const allWarehouses = useMemo(() => [...new Set(products.flatMap(p => p.variants.flatMap(v => v.warehouses.map(w => w.warehouse_name || w.city))))].sort(), [products]);
+  const allWarehouses = useMemo(() => {
+    if (isAdmin) {
+      return [...new Set(products.flatMap(p => p.variants.flatMap(v => v.warehouses.map(w => w.warehouse_name || w.city))))].sort();
+    }
+    const clientWhs: string[] = [];
+    if (displaySettings?.show_hub_warehouse !== false) {
+      clientWhs.push('Основной Склад Астана');
+    }
+    if (myShowroomId && displaySettings?.show_showroom_warehouse !== false) {
+      clientWhs.push(myShowroomName);
+    }
+    return clientWhs.length > 0 ? clientWhs : ['Основной Склад Астана'];
+  }, [products, isAdmin, myShowroomId, myShowroomName, displaySettings]);
   const allSizes = useMemo(() => [...new Set(products.flatMap(p => p.variants.map(v => v.size)))].sort((a, b) => sizeArea(a) - sizeArea(b)), [products]);
 
   useEffect(() => {

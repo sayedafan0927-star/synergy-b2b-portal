@@ -351,11 +351,11 @@ function OrderItemRow({ item }: { item: OrderItem }) {
 function AdminDisplaySettings() {
   const roles: UserRole[] = ['admin', 'manager_rm', 'manager_lm', 'supplier', 'client'];
   const defaultMap: Record<string, DisplaySettings> = {
-    admin: { show_stock: true, show_reserve: true, show_total_pcs: true, show_sqm: true, show_price: true },
-    manager_rm: { show_stock: true, show_reserve: true, show_total_pcs: true, show_sqm: true, show_price: true },
-    manager_lm: { show_stock: true, show_reserve: false, show_total_pcs: true, show_sqm: true, show_price: true },
-    supplier: { show_stock: true, show_reserve: false, show_total_pcs: true, show_sqm: true, show_price: false },
-    client: { show_stock: true, show_reserve: false, show_total_pcs: true, show_sqm: true, show_price: true },
+    admin: { show_stock: true, show_reserve: true, show_total_pcs: true, show_sqm: true, show_price: true, show_hub_warehouse: true, show_showroom_warehouse: true, hidden_warehouses: [] },
+    manager_rm: { show_stock: true, show_reserve: true, show_total_pcs: true, show_sqm: true, show_price: true, show_hub_warehouse: true, show_showroom_warehouse: true, hidden_warehouses: [] },
+    manager_lm: { show_stock: true, show_reserve: false, show_total_pcs: true, show_sqm: true, show_price: true, show_hub_warehouse: true, show_showroom_warehouse: true, hidden_warehouses: [] },
+    supplier: { show_stock: true, show_reserve: false, show_total_pcs: true, show_sqm: true, show_price: false, show_hub_warehouse: true, show_showroom_warehouse: false, hidden_warehouses: [] },
+    client: { show_stock: true, show_reserve: false, show_total_pcs: true, show_sqm: true, show_price: true, show_hub_warehouse: true, show_showroom_warehouse: true, hidden_warehouses: [] },
   };
 
   const [settings, setSettings] = useState<Record<string, DisplaySettings>>(() => {
@@ -398,6 +398,8 @@ function AdminDisplaySettings() {
     { key: 'show_total_pcs' as const, label: 'Всего шт.' },
     { key: 'show_sqm' as const, label: 'М²' },
     { key: 'show_price' as const, label: 'Цена' },
+    { key: 'show_hub_warehouse' as const, label: 'Склад Астана' },
+    { key: 'show_showroom_warehouse' as const, label: 'Свой склад' },
   ];
 
   return (
@@ -405,8 +407,8 @@ function AdminDisplaySettings() {
       <div className="flex items-center gap-3">
         <Eye className="h-5 w-5 text-slate-500" />
         <div>
-          <h2 className="text-lg font-bold text-slate-900">Видимость столбцов</h2>
-          <p className="text-sm text-slate-500">Настройте, что видит каждая роль в сетке остатков каталога</p>
+          <h2 className="text-lg font-bold text-slate-900">Видимость данных и складов</h2>
+          <p className="text-sm text-slate-500">Настройте, что видит каждая роль в каталоге, карточках товаров и сетке остатков</p>
         </div>
       </div>
 
@@ -432,10 +434,10 @@ function AdminDisplaySettings() {
                       <button
                         onClick={() => toggle(role, c.key)}
                         className={`h-5 w-5 rounded border transition-colors inline-flex items-center justify-center ${
-                          settings[role]?.[c.key] ? 'bg-brand-600 border-brand-600' : 'bg-white border-slate-300'
+                          settings[role]?.[c.key] !== false ? 'bg-brand-600 border-brand-600' : 'bg-white border-slate-300'
                         }`}
                       >
-                        {settings[role]?.[c.key] && (
+                        {settings[role]?.[c.key] !== false && (
                           <svg className="h-3 w-3 text-white" viewBox="0 0 12 12" fill="none">
                             <path d="M2.5 6L5 8.5L9.5 3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                           </svg>
@@ -455,9 +457,31 @@ function AdminDisplaySettings() {
           {saved && (
             <span className="text-xs text-emerald-600 font-medium flex items-center gap-1.5">
               <CheckCircle2 className="h-4 w-4" />
-              Настройки сохранены и применены в каталоге!
+              Настройки сохранены и немедленно применены!
             </span>
           )}
+        </div>
+      </div>
+
+      {/* Информационный блок правил складов */}
+      <div className="card p-5 space-y-3">
+        <div className="flex items-center gap-2 text-slate-900 font-bold text-sm">
+          <Building2 className="h-4 w-4 text-brand-700" />
+          <span>Правила распределения видимости складов:</span>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3 text-xs text-slate-600">
+          <div className="p-3 rounded-lg bg-emerald-50/60 border border-emerald-100">
+            <p className="font-bold text-emerald-900 mb-1">1. Свой склад (Шоурум)</p>
+            <p>Подтягивается автоматически из ERP для авторизованного дилера. Если своего склада нет — отображается только центральный склад.</p>
+          </div>
+          <div className="p-3 rounded-lg bg-blue-50/60 border border-blue-100">
+            <p className="font-bold text-blue-900 mb-1">2. Центральный склад Астана</p>
+            <p>Основной склад компании (ID 81). Доступен клиентам по умолчанию для добавления в корзину и отгрузок.</p>
+          </div>
+          <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+            <p className="font-bold text-slate-800 mb-1">3. Управление админом</p>
+            <p>В таблице выше администратор может в любой момент снять галочку «Склад Астана» или «Свой склад», полностью отключив их отображение у клиентов.</p>
+          </div>
         </div>
       </div>
     </div>

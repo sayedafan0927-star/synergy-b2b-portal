@@ -8,14 +8,17 @@ export interface DisplaySettings {
   show_total_pcs: boolean;
   show_sqm: boolean;
   show_price: boolean;
+  show_hub_warehouse?: boolean;
+  show_showroom_warehouse?: boolean;
+  hidden_warehouses?: string[];
 }
 
 const DEFAULT_SETTINGS: Record<string, DisplaySettings> = {
-  admin: { show_stock: true, show_reserve: true, show_total_pcs: true, show_sqm: true, show_price: true },
-  manager_rm: { show_stock: true, show_reserve: true, show_total_pcs: true, show_sqm: true, show_price: true },
-  manager_lm: { show_stock: true, show_reserve: false, show_total_pcs: true, show_sqm: true, show_price: true },
-  supplier: { show_stock: true, show_reserve: false, show_total_pcs: true, show_sqm: true, show_price: false },
-  client: { show_stock: true, show_reserve: false, show_total_pcs: true, show_sqm: true, show_price: true },
+  admin: { show_stock: true, show_reserve: true, show_total_pcs: true, show_sqm: true, show_price: true, show_hub_warehouse: true, show_showroom_warehouse: true, hidden_warehouses: [] },
+  manager_rm: { show_stock: true, show_reserve: true, show_total_pcs: true, show_sqm: true, show_price: true, show_hub_warehouse: true, show_showroom_warehouse: true, hidden_warehouses: [] },
+  manager_lm: { show_stock: true, show_reserve: false, show_total_pcs: true, show_sqm: true, show_price: true, show_hub_warehouse: true, show_showroom_warehouse: true, hidden_warehouses: [] },
+  supplier: { show_stock: true, show_reserve: false, show_total_pcs: true, show_sqm: true, show_price: false, show_hub_warehouse: true, show_showroom_warehouse: false, hidden_warehouses: [] },
+  client: { show_stock: true, show_reserve: false, show_total_pcs: true, show_sqm: true, show_price: true, show_hub_warehouse: true, show_showroom_warehouse: true, hidden_warehouses: [] },
 };
 
 export function triggerDisplaySettingsReload() {
