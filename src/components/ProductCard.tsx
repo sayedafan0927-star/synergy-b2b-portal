@@ -75,6 +75,7 @@ export function formatProductTitle(product: { name: string; article?: string; co
       .replace(/^дорожка\s+/i, '')
       .replace(new RegExp(`^${product.collection}\\s+`, 'i'), '')
       .trim() || product.name;
+  }
   // Очистка повторов в названии вида "L.VİZON / L.VİZON" или "CREAM / CREAM"
   base = base.replace(/([^\s/]+(?:\s+[^\s/]+)*)\s*\/\s*\1\b/gi, '$1').trim();
 
