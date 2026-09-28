@@ -1,5 +1,5 @@
-import { useState, useEffect, useContext } from 'react';
-import { fetchCatalogFromErp, fetchSingleProductFromErp } from '@/lib/erpApi';
+import { useState, useEffect, useContext, useCallback } from 'react';
+import { fetchCatalogFromErp, fetchSingleProductFromErp, fetchPaginatedCatalogFromErp, type PaginatedCatalogParams } from '@/lib/erpApi';
 import { AuthContext, type Profile } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import type { Product, ProductVariant, Warehouse, StockSummary } from '@/types';
@@ -618,6 +618,63 @@ export function useProducts(customDealerId?: string | number) {
   }, [reloadCounter, effectiveDealerId]);
 
   return { products, summary, loading, error };
+}
+
+/**
+ * Хук для высоконагруженной серверной пагинации, фильтрации и поиска по каталогу
+ */
+export function usePaginatedProducts(initialParams: PaginatedCatalogParams = {}) {
+  const [params, setParams] = useState<PaginatedCatalogParams>(initialParams);
+  const [items, setItems] = useState<any[]>([]);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [page, setPage] = useState(initialParams.page || 1);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadData = useCallback(async (currentParams: PaginatedCatalogParams) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetchPaginatedCatalogFromErp(currentParams);
+      if (res && res.success) {
+        setItems(res.items || []);
+        setTotal(res.total || 0);
+        setTotalPages(res.totalPages || 1);
+        setPage(res.page || 1);
+      } else {
+        throw new Error(res?.error || 'Не удалось загрузить каталог');
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Ошибка соединения');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData(params);
+  }, [params, loadData]);
+
+  const updateFilters = useCallback((newParams: Partial<PaginatedCatalogParams>) => {
+    setParams(prev => ({ ...prev, ...newParams, page: newParams.page ?? 1 }));
+  }, []);
+
+  const goToPage = useCallback((newPage: number) => {
+    setParams(prev => ({ ...prev, page: newPage }));
+  }, []);
+
+  return {
+    items,
+    total,
+    totalPages,
+    page,
+    loading,
+    error,
+    updateFilters,
+    goToPage,
+    reload: () => loadData(params),
+  };
 }
 
 export function useProduct(id: string | undefined, customDealerId?: string | number) {
