@@ -21,6 +21,7 @@ import { useProduct, filterClientWarehouses } from '@/hooks/useProductData';
 import { useUserPricing } from '@/hooks/usePricing';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import ProductImage, { CarpetPlaceholderIcon } from '@/components/ProductImage';
 
 
@@ -61,6 +62,7 @@ export default function ProductPage({
   const { product, loading } = useProduct(productId);
   const { addItem, items } = useCart();
   const { user, profile } = useAuth();
+  const { language, t } = useLanguage();
   const pricing = useUserPricing();
 
   const [selectedImage, setSelectedImage] = useState(0);
@@ -384,10 +386,10 @@ export default function ProductPage({
         }`}
       >
         {added ? (
-          <><Check className="h-3.5 w-3.5" /> Добавлено</>
+          <><Check className="h-3.5 w-3.5" /> {t('product.added')}</>
         ) : (
           <>
-            <ShoppingCart className="h-3.5 w-3.5" /> В корзину
+            <ShoppingCart className="h-3.5 w-3.5" /> {t('product.add_to_cart')}
             {inCart > 0 && <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-white/30 px-1 text-[9px] font-bold">{inCart}</span>}
           </>
         )}
@@ -412,10 +414,10 @@ export default function ProductPage({
         }`}
       >
         {added ? (
-          <><Check className="h-4 w-4" /> Добавлено</>
+          <><Check className="h-4 w-4" /> {t('product.added')}</>
         ) : (
           <>
-            <ShoppingCart className="h-4 w-4" /> В корзину
+            <ShoppingCart className="h-4 w-4" /> {t('product.add_to_cart')}
             {inCart > 0 && <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-white/30 px-1.5 text-[10px] font-bold">{inCart}</span>}
           </>
         )}
@@ -430,7 +432,8 @@ export default function ProductPage({
   const baseTitle = (product.article && product.color)
     ? `${product.article} — ${product.color}`
     : product.name.replace(/^ковер\s+/i, '').replace(/^дорожка\s+/i, '').replace(new RegExp(`^${product.collection}\\s+`, 'i'), '').trim() || product.name;
-  const cleanTitle = isRunner ? `Дорожка ${baseTitle}` : baseTitle;
+  const runnerPrefix = language === 'kz' ? 'Жол кілем' : 'Дорожка';
+  const cleanTitle = isRunner ? `${runnerPrefix} ${baseTitle}` : baseTitle;
 
   return (
     <section className="pt-20 pb-24 lg:pb-8 bg-white min-h-screen">
@@ -443,11 +446,11 @@ export default function ProductPage({
             className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 shadow-2xs transition-all cursor-pointer group"
           >
             <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
-            <span>Назад в каталог</span>
+            <span>{t('product.back_catalog')}</span>
           </button>
           <span className="text-slate-300">/</span>
           <nav className="flex items-center gap-1.5 text-xs text-slate-400">
-            <button onClick={() => onNavigate('catalog')} className="hover:text-brand-600 transition-colors">Каталог</button>
+            <button onClick={() => onNavigate('catalog')} className="hover:text-brand-600 transition-colors">{t('nav.catalog')}</button>
             <ChevronRight className="h-3 w-3 shrink-0" />
             <button onClick={() => onNavigate('catalog', product.collection)} className="hover:text-brand-600 transition-colors font-medium text-slate-600">{product.collection}</button>
           </nav>
@@ -547,7 +550,7 @@ export default function ProductPage({
               <div className="flex flex-wrap items-baseline justify-between gap-3 pb-5 border-b border-slate-100">
                 <div>
                   <span className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 block mb-0.5">
-                    Цена за 1 м²
+                    {t('product.sqm_price')}
                   </span>
                   {user ? (
                     <div className="flex items-baseline gap-2">
@@ -563,7 +566,7 @@ export default function ProductPage({
                       className="flex items-center gap-2 text-sm text-slate-500 hover:text-brand-700 transition-colors font-medium"
                     >
                       <Lock className="h-4 w-4" />
-                      Войдите, чтобы увидеть оптовые цены
+                      {t('product.login_view_prices')}
                     </button>
                   )}
                 </div>
@@ -571,7 +574,7 @@ export default function ProductPage({
                 {user && activeVariant && (
                   <div className="text-right">
                     <span className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 block mb-0.5">
-                      Итого за штуку ({activeVariant.size})
+                      {t('product.total_price')} ({activeVariant.size})
                     </span>
                     <span className="text-xl font-bold text-slate-900">
                       {fmtPrice(pricing.getVariantPrice(product.collection, activeVariant.size, activeVariant.base_price, activeVariant.price_per_sqm))}
@@ -588,11 +591,15 @@ export default function ProductPage({
               {/* 2. ВЫБОР ФОРМЫ (КЛИКАБЕЛЬНЫЕ БЛОКИ ФОРМ) */}
               <div className="pt-4 pb-4 border-b border-slate-100">
                 <p className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-2.5">
-                  Форма: <span className="text-brand-700 font-semibold">{activeShape}</span>
+                  {t('product.shape')}: <span className="text-brand-700 font-semibold">{activeShape}</span>
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {availableShapes.map(shape => {
                     const isShapeActive = shape === activeShape;
+                    const shapeDisplay = language === 'kz'
+                      ? (shape.toLowerCase().includes('дорожк') ? 'Жол кілем' : (shape.toLowerCase().includes('прямоуг') ? 'Тікбұрышты' : (shape.toLowerCase().includes('овал') ? 'Сопақша' : (shape.toLowerCase().includes('круг') ? 'Дөңгелек' : shape))))
+                      : shape;
+
                     return (
                       <button
                         key={shape}
@@ -608,7 +615,7 @@ export default function ProductPage({
                             : 'bg-slate-50 border border-slate-200 text-slate-700 hover:border-slate-400 hover:bg-white'
                         }`}
                       >
-                        {shape}
+                        {shapeDisplay}
                       </button>
                     );
                   })}
@@ -620,11 +627,11 @@ export default function ProductPage({
                 <div className="flex items-center justify-between mb-2.5">
                   <p className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
                     <Ruler className="h-4 w-4 text-brand-600" />
-                    Размеры ({variantsForShape.length})
+                    {t('product.sizes')} ({variantsForShape.length})
                   </p>
                   {activeVariant?.area_sqm && (
                     <span className="text-xs font-medium text-slate-500">
-                      Площадь: {activeVariant.area_sqm} м²
+                      {language === 'kz' ? 'Ауданы' : 'Площадь'}: {activeVariant.area_sqm} м²
                     </span>
                   )}
                 </div>
@@ -660,12 +667,12 @@ export default function ProductPage({
                   })}
                 </div>
 
-                {/* Артикул и штрихкод выбранного размера */}
+                {/* Артикул выбранного размера */}
                 {activeVariant && (
                   <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
                     <div className="flex flex-wrap gap-x-3 gap-y-1">
                       {(activeVariant.article || product.article) && (
-                        <span>Артикул: <strong className="text-slate-800">{activeVariant.article || product.article}</strong></span>
+                        <span>{t('product.article')}: <strong className="text-slate-800">{activeVariant.article || product.article}</strong></span>
                       )}
                     </div>
                     <button
@@ -676,7 +683,7 @@ export default function ProductPage({
                       }}
                       className="text-brand-700 hover:text-brand-800 font-semibold inline-flex items-center gap-1 hover:underline text-xs"
                     >
-                      Наличие на складах ↓
+                      {t('product.stock_table')} ↓
                     </button>
                   </div>
                 )}

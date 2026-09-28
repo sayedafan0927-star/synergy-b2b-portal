@@ -1,6 +1,8 @@
 import { useState, useCallback, useEffect } from 'react';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { CartProvider } from '@/contexts/CartContext';
+import { LanguageProvider } from '@/contexts/LanguageContext';
+import WhatsAppWidget from '@/components/WhatsAppWidget';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import MobileNav from '@/components/MobileNav';
@@ -93,6 +95,7 @@ function MainLayout({ children, page, navigate, showFooter }: { children: React.
       <main className="flex-1">{children}</main>
       {showFooter && <Footer onNavigate={navigate} />}
       <MobileNav currentPage={page} onNavigate={navigate} />
+      <WhatsAppWidget />
     </div>
   );
 }
@@ -201,7 +204,7 @@ export default function App() {
       catalog: 'Каталог ковров оптом — Synergy-Group',
       product: 'Товар — Synergy-Group',
       cart: 'Корзина — Synergy-Group',
-      contacts: 'Контакты — Synergy-Group | Склады в Астане, Алматы, Шымкенте',
+      contacts: 'Контакты — Synergy-Group | Склад в Астане',
       login: 'Вход в личный кабинет — Synergy-Group',
       profile: 'Личный кабинет — Synergy-Group',
     };
@@ -226,13 +229,15 @@ export default function App() {
   const showFooter = page !== 'login';
 
   return (
-    <AuthProvider>
-      <CartProvider>
-        {!preloaderDone && <Preloader onFinished={handlePreloaderFinished} />}
-        <MainLayout page={page} navigate={navigate} showFooter={showFooter}>
-          {renderPage()}
-        </MainLayout>
-      </CartProvider>
-    </AuthProvider>
+    <LanguageProvider>
+      <AuthProvider>
+        <CartProvider>
+          {!preloaderDone && <Preloader onFinished={handlePreloaderFinished} />}
+          <MainLayout page={page} navigate={navigate} showFooter={showFooter}>
+            {renderPage()}
+          </MainLayout>
+        </CartProvider>
+      </AuthProvider>
+    </LanguageProvider>
   );
 }

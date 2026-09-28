@@ -4,6 +4,7 @@ import { parseSizeDimensions } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/contexts/CartContext';
 import { useUserPricing } from '@/hooks/usePricing';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { Check, ChevronDown, ChevronLeft, ChevronRight, Lock, ShoppingCart } from 'lucide-react';
 import ProductImage from '@/components/ProductImage';
 
@@ -33,7 +34,7 @@ function getAvailableWarehouse(variant: ProductVariant) {
   };
 }
 
-export function formatProductTitle(product: { name: string; article?: string; color?: string; category?: string; collection: string }): string {
+export function formatProductTitle(product: { name: string; article?: string; color?: string; category?: string; collection: string }, lang: 'ru' | 'kz' = 'ru'): string {
   const isRunner = Boolean(
     (product.category && product.category.toLowerCase().includes('дорожк')) ||
     (product.name && product.name.toLowerCase().includes('дорожк'))
@@ -41,12 +42,14 @@ export function formatProductTitle(product: { name: string; article?: string; co
   const base = (product.article && product.color)
     ? `${product.article} — ${product.color}`
     : product.name.replace(/^ковер\s+/i, '').replace(/^дорожка\s+/i, '').replace(new RegExp(`^${product.collection}\\s+`, 'i'), '').trim() || product.name;
-  return isRunner ? `Дорожка ${base}` : base;
+  const prefix = lang === 'kz' ? 'Жол кілем' : 'Дорожка';
+  return isRunner ? `${prefix} ${base}` : base;
 }
 
 export default function ProductCard({ product, onNavigate }: ProductCardProps) {
   const { user, profile } = useAuth();
   const { addItem } = useCart();
+  const { language, t } = useLanguage();
   const { getMinPricePerSqm, getVariantPrice, getPricePerSqm } = useUserPricing();
   const [sizesOpen, setSizesOpen] = useState(false);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
@@ -199,9 +202,9 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
       </div>
 
       <div className="flex flex-col p-3 sm:p-4">
-        {/* Название товара: Артикул — Цвет (для дорожек с приставкой Дорожка) */}
+        {/* Название товара: Артикул — Цвет (для дорожек с приставкой Дорожка / Жол кілем) */}
         <h3 className="text-sm font-bold text-slate-900 leading-snug line-clamp-2 group-hover:text-brand-700 transition-colors">
-          {formatProductTitle(product)}
+          {formatProductTitle(product, language)}
         </h3>
 
         {/* Коллекция */}
@@ -221,7 +224,7 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
           <div className="mt-2 flex flex-col gap-1 border-t border-slate-100 pt-2">
             <div className="flex items-center justify-between text-xs">
               <span className="inline-flex items-center gap-1 font-semibold text-emerald-700">
-                🏪 В наличии:
+                🏪 {t('product.in_showroom')}:
               </span>
               <span className="font-bold text-emerald-800">
                 {totalShowroomQty} шт <span className="font-normal text-emerald-600">({totalShowroomSqm} м²)</span>
@@ -230,7 +233,7 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
             {totalInTransitQty > 0 && (
               <div className="flex items-center justify-between text-xs">
                 <span className="inline-flex items-center gap-1 font-medium text-indigo-700">
-                  🚚 В пути:
+                  🚚 {t('product.in_transit')}:
                 </span>
                 <span className="font-semibold text-indigo-800">
                   {totalInTransitQty} шт <span className="font-normal text-indigo-500">({totalInTransitSqm} м²)</span>
@@ -239,7 +242,7 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
             )}
             <div className="flex items-center justify-between text-xs">
               <span className="inline-flex items-center gap-1 text-slate-500">
-                🏢 Основной Склад Астана:
+                🏢 {language === 'kz' ? 'Негізгі қойма (Астана)' : 'Основной Склад Астана'}:
               </span>
               <span className="font-medium text-slate-700">
                 {totalHubQty} шт
@@ -258,7 +261,7 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
             ) : (
               <p className="flex items-center gap-1 text-xs text-slate-400 font-medium">
                 <Lock className="h-3 w-3" />
-                Войдите для цен
+                {t('product.login_for_prices')}
               </p>
             )}
           </div>
@@ -272,7 +275,16 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
             className="flex items-center gap-1.5 rounded-full bg-slate-100 hover:bg-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 transition-colors cursor-pointer"
             title="Показать все размеры"
           >
-            <span>{sizeCount} {sizeCount === 1 ? 'размер' : (sizeCount > 1 && sizeCount < 5 ? 'размера' : 'размеров')}</span>
+            <span>
+              {sizeCount}{' '}
+              {language === 'kz'
+                ? 'өлшем'
+                : sizeCount === 1
+                ? 'размер'
+                : sizeCount > 1 && sizeCount < 5
+                ? 'размера'
+                : 'размеров'}
+            </span>
           </button>
         </div>
       </div>

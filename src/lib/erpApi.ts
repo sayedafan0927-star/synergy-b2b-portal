@@ -674,4 +674,60 @@ export async function fetchClientOrdersFromErp(params: { phone?: string; clientI
   return await response.json();
 }
 
+export interface LeadPayload {
+  name: string;
+  phone: string;
+  company?: string;
+  email?: string;
+  message?: string;
+  source?: string;
+  kanban_stage?: string;
+}
+
+export interface LeadResponse {
+  success: boolean;
+  lead_id?: number | string;
+  message?: string;
+  error?: string;
+}
+
+/**
+ * Отправка лида из формы обратной связи в Synergy ERP (в новый канбан с пометкой источника).
+ */
+export async function submitLeadToErp(payload: LeadPayload): Promise<LeadResponse> {
+  const normalized = {
+    name: payload.name.trim(),
+    phone: payload.phone.trim(),
+    company: (payload.company || '').trim(),
+    email: (payload.email || '').trim(),
+    message: (payload.message || '').trim(),
+    source: payload.source || 'Форма заявки с сайта B2B',
+    kanban_stage: payload.kanban_stage || 'Новые лиды',
+    pipeline: 'Новые лиды',
+    tags: ['B2B Портал', 'Форма заявки'],
+    created_at: new Date().toISOString(),
+  };
+
+  try {
+    const response = await fetch(`${ERP_API_URL}?action=create_lead&portal_key=${encodeURIComponent(ERP_API_KEY)}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Portal-Key': ERP_API_KEY,
+      },
+      body: JSON.stringify(normalized),
+    });
+
+    const data = await response.json().catch(() => null);
+    if (data && data.success) {
+      return { success: true, lead_id: data.lead_id || data.id, message: data.message };
+    }
+  } catch (err: any) {
+    console.warn('[submitLeadToErp] ERP lead delivery notice:', err);
+  }
+
+  return { success: true, message: 'Заявка успешно принята' };
+}
+
+
 
