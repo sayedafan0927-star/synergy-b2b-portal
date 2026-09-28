@@ -25,6 +25,7 @@ import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
 import ProductImage from '@/components/ProductImage';
+import RockArtChase from '@/components/RockArtChase';
 
 type SortOption = 'popular' | 'price-asc' | 'price-desc' | 'name';
 type ViewMode = 'grid' | 'stock';
@@ -665,7 +666,9 @@ export default function CatalogPage({ onNavigate, initialCollection, initialCoun
             </button>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="hidden lg:flex items-center gap-3">
+            <RockArtChase />
+            <div className="flex items-center gap-3">
             <div className="flex rounded-lg border border-slate-200 bg-white p-0.5">
               <button onClick={() => setViewMode('grid')} className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${viewMode === 'grid' ? 'bg-brand-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
                 <LayoutGrid className="h-3.5 w-3.5" />
@@ -704,6 +707,7 @@ export default function CatalogPage({ onNavigate, initialCollection, initialCoun
                 <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
               </div>
             )}
+            </div>
           </div>
         </div>
 
