@@ -80,6 +80,9 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
 
   const sizeCount = product.variants.length;
   const pricePerSqm = getMinPricePerSqm(product);
+  const activeVariantForSale = product.variants.find(v => (v.price_per_sqm ?? 0) === pricePerSqm) || product.variants[0];
+  const isOnSale = Boolean(activeVariantForSale?.is_on_sale || product.is_on_sale);
+  const oldPricePerSqm = activeVariantForSale?.old_price_per_sqm || product.old_price_per_sqm || null;
 
   // Определяем ходовой размер для превью
   const primarySize = product.variants.find(v => v.size === '1.6 × 2.3' || v.size === '1.6*2.3')?.size
@@ -269,9 +272,17 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
         <div className="mt-3 border-t border-slate-100 pt-2.5 flex items-center justify-between">
           <div>
             {user ? (
-              <p className="text-sm sm:text-base font-bold text-slate-900 leading-tight">
-                ${pricePerSqm.toFixed(2)} <span className="text-[11px] font-normal text-slate-400">/ м²</span>
-              </p>
+              <div className="flex items-baseline gap-1.5 leading-tight">
+                <span className={`text-sm sm:text-base font-bold ${isOnSale ? 'text-red-600' : 'text-slate-900'}`}>
+                  ${pricePerSqm.toFixed(2)}
+                </span>
+                {isOnSale && oldPricePerSqm && (
+                  <span className="text-xs text-slate-400 line-through">
+                    ${oldPricePerSqm.toFixed(2)}
+                  </span>
+                )}
+                <span className="text-[11px] font-normal text-slate-400">/ м²</span>
+              </div>
             ) : (
               <p className="flex items-center gap-1 text-xs text-slate-400 font-medium">
                 <Lock className="h-3 w-3" />

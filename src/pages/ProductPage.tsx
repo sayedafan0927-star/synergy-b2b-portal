@@ -554,9 +554,14 @@ export default function ProductPage({
                   </span>
                   {user ? (
                     <div className="flex items-baseline gap-2">
-                      <span className="text-3xl font-extrabold text-brand-700 tracking-tight">
+                      <span className={`text-3xl font-extrabold tracking-tight ${activeVariant?.is_on_sale ? 'text-red-600' : 'text-brand-700'}`}>
                         {fmtPrice(mainPricePerSqm)}
                       </span>
+                      {activeVariant?.is_on_sale && activeVariant.old_price_per_sqm && (
+                        <span className="text-lg text-gray-400 line-through">
+                          {fmtPrice(activeVariant.old_price_per_sqm)}
+                        </span>
+                      )}
                       <span className="text-sm font-semibold text-slate-400">/ м²</span>
                     </div>
                   ) : (
@@ -576,14 +581,21 @@ export default function ProductPage({
                     <span className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 block mb-0.5">
                       {t('product.total_price')} ({activeVariant.size})
                     </span>
-                    <span className="text-xl font-bold text-slate-900">
-                      {fmtPrice(pricing.getVariantPrice(product.collection, activeVariant.size, activeVariant.base_price, activeVariant.price_per_sqm))}
-                    </span>
-                    {activeVariant.area_sqm && (
-                      <span className="text-xs text-slate-400 ml-1.5 font-normal">
-                        ({activeVariant.area_sqm} м²)
+                    <div className="flex items-baseline justify-end gap-2">
+                      <span className={`text-2xl font-bold ${activeVariant.is_on_sale ? 'text-red-600' : 'text-slate-900'}`}>
+                        {fmtPrice(pricing.getVariantPrice(product.collection, activeVariant.size, activeVariant.base_price, activeVariant.price_per_sqm))}
                       </span>
-                    )}
+                      {activeVariant.is_on_sale && activeVariant.old_price && (
+                        <span className="text-base text-gray-400 line-through">
+                          {fmtPrice(activeVariant.old_price)}
+                        </span>
+                      )}
+                      {activeVariant.area_sqm && (
+                        <span className="text-xs text-slate-400 ml-1 font-normal">
+                          ({activeVariant.area_sqm} м²)
+                        </span>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -838,13 +850,35 @@ export default function ProductPage({
                             </span>
                           </td>
                           {user && (
-                            <td className="py-3 pr-3 text-sm text-slate-500 whitespace-nowrap">
-                              {pricePerSqm > 0 ? `$${pricePerSqm.toFixed(2)}` : '—'}
+                            <td className="py-3 pr-3 text-sm whitespace-nowrap">
+                              {pricePerSqm > 0 ? (
+                                <div className="flex items-center gap-1.5">
+                                  <span className={variant.is_on_sale ? 'font-bold text-red-600' : 'text-slate-500'}>
+                                    ${pricePerSqm.toFixed(2)}
+                                  </span>
+                                  {variant.is_on_sale && variant.old_price_per_sqm && (
+                                    <span className="text-xs text-gray-400 line-through">
+                                      ${variant.old_price_per_sqm.toFixed(2)}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : '—'}
                             </td>
                           )}
                           {user && (
-                            <td className="py-3 pr-3 font-bold text-slate-900 whitespace-nowrap">
-                              {isFirstRow ? fmtPrice(variantPrice) : ''}
+                            <td className="py-3 pr-3 font-bold whitespace-nowrap">
+                              {isFirstRow ? (
+                                <div className="flex items-center gap-1.5">
+                                  <span className={variant.is_on_sale ? 'text-red-600' : 'text-slate-900'}>
+                                    {fmtPrice(variantPrice)}
+                                  </span>
+                                  {variant.is_on_sale && variant.old_price && (
+                                    <span className="text-xs text-gray-400 line-through font-normal">
+                                      {fmtPrice(variant.old_price)}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : ''}
                             </td>
                           )}
                           <td className="py-3 pr-3">

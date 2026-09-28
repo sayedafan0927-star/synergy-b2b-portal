@@ -41,6 +41,10 @@ export interface ProductVariant {
   piece_price?: number;
   base_price: number;
   currency?: string;
+  is_on_sale?: boolean;
+  old_price?: number | null;
+  old_price_per_sqm?: number | null;
+  sale_discount_percent?: number;
   free_stock?: number;
   reserved_stock?: number;
   total_stock?: number;
@@ -146,6 +150,8 @@ export interface Product {
   density: string;
   pile_height: string;
   price_per_sqm?: number;
+  old_price_per_sqm?: number | null;
+  is_on_sale?: boolean;
   price?: number;
   min_price?: number;
   max_price?: number;

@@ -178,6 +178,11 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
           const varBarcode = v.barcode || (v as any).barcode;
           const varCode = v.code || (v as any).code;
 
+          const isOnSale = Boolean(v.is_on_sale || (v.old_price && Number(v.old_price) > rawVariantPrice) || (v.old_price_per_sqm && Number(v.old_price_per_sqm) > vPricePerSqm));
+          const oldPrice = v.old_price ? Number(v.old_price) : null;
+          const oldPricePerSqm = v.old_price_per_sqm ? Number(v.old_price_per_sqm) : null;
+          const saleDiscountPercent = Number(v.sale_discount_percent) || 0;
+
           return {
             ...v,
             size: s,
@@ -186,6 +191,10 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
             article: varArticle,
             barcode: varBarcode,
             code: varCode,
+            is_on_sale: isOnSale,
+            old_price: oldPrice,
+            old_price_per_sqm: oldPricePerSqm,
+            sale_discount_percent: saleDiscountPercent,
             free_stock: freeStock,
             reserved_stock: v.reserved_stock !== undefined ? Number(v.reserved_stock) : 0,
             total_stock: v.total_stock !== undefined ? Number(v.total_stock) : hubStock,
@@ -235,6 +244,8 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
         color: color,
         currency: raw.currency || 'USD',
         price_per_sqm: baseSqmPrice,
+        old_price_per_sqm: itemVariants.find(iv => iv.is_on_sale && iv.old_price_per_sqm)?.old_price_per_sqm || (raw as any).old_price_per_sqm || null,
+        is_on_sale: itemVariants.some(iv => iv.is_on_sale) || Boolean((raw as any).is_on_sale),
         price: rawPrice,
         min_price: rawMinPrice,
         max_price: rawMaxPrice,
