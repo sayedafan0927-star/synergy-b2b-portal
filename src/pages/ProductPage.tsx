@@ -746,7 +746,6 @@ export default function ProductPage({
               </div>
             )}
 
-            </div>
           </div>
         </div>
 
@@ -913,6 +912,7 @@ export default function ProductPage({
                 </tbody>
               </table>
             </div>
+          </div>
         </div>
 
         {/* DESKTOP SPECIFICATIONS */}
