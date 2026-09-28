@@ -4,6 +4,8 @@ interface ProductImageProps {
   src?: string | null;
   alt?: string;
   className?: string;
+  imageClassName?: string;
+  fit?: 'cover' | 'contain';
   loading?: 'lazy' | 'eager';
   decoding?: 'async' | 'sync' | 'auto';
   width?: number;
@@ -58,6 +60,8 @@ export default function ProductImage({
   src,
   alt = 'Ковер',
   className = '',
+  imageClassName = '',
+  fit = 'cover',
   loading = 'lazy',
   decoding = 'async',
   width,
@@ -74,9 +78,10 @@ export default function ProductImage({
   }
 
   const optimizedSrc = getOptimizedImageUrl(src, { width, quality });
+  const fitClass = fit === 'contain' ? 'object-contain' : 'object-cover';
 
   return (
-    <div className={`relative overflow-hidden bg-slate-100 ${className}`}>
+    <div className={`relative overflow-hidden ${className.includes('bg-') ? '' : 'bg-slate-100'} ${className}`}>
       {!isLoaded && (
         <div className="absolute inset-0 bg-slate-200 animate-pulse" />
       )}
@@ -93,9 +98,9 @@ export default function ProductImage({
           setHasError(true);
           onError?.();
         }}
-        className={`w-full h-full object-cover transition-opacity duration-300 ${
+        className={`w-full h-full ${fitClass} transition-opacity duration-300 ${
           isLoaded ? 'opacity-100' : 'opacity-0'
-        }`}
+        } ${imageClassName}`}
       />
     </div>
   );
