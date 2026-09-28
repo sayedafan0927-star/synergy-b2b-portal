@@ -4,9 +4,10 @@ import type { PageId } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function LoginPage({ onNavigate }: { onNavigate: (page: PageId) => void }) {
-  const { signIn, signInWithPortal, signUp, signInAsDemo, signInAsClient, deactivationNotice, clearDeactivationNotice } = useAuth();
+  const { signIn, signInWithPortal, signUp, signInAsDemo, signInAsClient, signInAsEmployee, deactivationNotice, clearDeactivationNotice } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
   const [showPass, setShowPass] = useState(false);
+  const [quickAccessTab, setQuickAccessTab] = useState<'employees' | 'clients'>('employees');
   const [form, setForm] = useState({ email: '', password: '', name: '', company: '' });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -188,35 +189,190 @@ export default function LoginPage({ onNavigate }: { onNavigate: (page: PageId) =
             </button>
           </div>
 
-          {/* Вход для сотрудников и администраторов */}
+          {/* Быстрый доступ для сотрудников и клиентов ERP */}
           <div className="mt-6 pt-5 border-t border-slate-100">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 text-center mb-2.5">
-              Вход для персонала и тестирования
-            </p>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="flex items-center justify-center gap-1.5 p-1 bg-slate-100/80 rounded-lg mb-3">
               <button
                 type="button"
-                onClick={() => {
-                  signInAsDemo('admin');
-                  onNavigate('profile');
-                }}
-                className="flex items-center justify-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50/70 px-3 py-2 text-xs font-semibold text-brand-800 hover:bg-brand-100 transition-colors shadow-xs"
+                onClick={() => setQuickAccessTab('employees')}
+                className={`flex-1 py-1.5 px-2 text-xs font-semibold rounded-md transition-all ${
+                  quickAccessTab === 'employees'
+                    ? 'bg-white text-slate-800 shadow-2xs'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
               >
-                <span>👑 Администратор</span>
+                👔 Сотрудники ERP
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  signInAsDemo('manager_rm');
-                  onNavigate('profile');
-                }}
-                className="flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors shadow-xs"
+                onClick={() => setQuickAccessTab('clients')}
+                className={`flex-1 py-1.5 px-2 text-xs font-semibold rounded-md transition-all ${
+                  quickAccessTab === 'clients'
+                    ? 'bg-white text-slate-800 shadow-2xs'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
               >
-                <span>👔 Менеджер РМ</span>
+                🏢 Клиенты ERP
               </button>
             </div>
-            <p className="text-[11px] text-slate-400 mt-2.5 text-center leading-relaxed">
-              🔐 Из Synergy ERP вход сотрудников может выполняться автоматически по кнопке перехода в B2B-портал, либо выберите профиль сотрудника ниже.
+
+            {quickAccessTab === 'employees' ? (
+              <div className="space-y-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    signInAsEmployee?.({ id: 9, name: 'Нурбол Торебеков', role: 'manager_rm', phone: '87768818101' });
+                    onNavigate('profile');
+                  }}
+                  className="w-full flex items-center justify-between p-2 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-slate-100 text-left transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">👔</span>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-800">Нурбол Торебеков</p>
+                      <p className="text-[10px] text-slate-500">Региональный менеджер (РМ) • 87768818101</p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-medium text-brand-700 bg-brand-50 px-2 py-0.5 rounded">Войти →</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    signInAsEmployee?.({ id: 12, name: 'Ришат Худайберды', role: 'manager_rm', phone: '87714691133' });
+                    onNavigate('profile');
+                  }}
+                  className="w-full flex items-center justify-between p-2 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-slate-100 text-left transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">👔</span>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-800">Ришат Худайберды</p>
+                      <p className="text-[10px] text-slate-500">Региональный менеджер (РМ) • 87714691133</p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-medium text-brand-700 bg-brand-50 px-2 py-0.5 rounded">Войти →</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    signInAsEmployee?.({ id: 15, name: 'Суженова Ботагоз', role: 'manager_lm', phone: '87785806866' });
+                    onNavigate('profile');
+                  }}
+                  className="w-full flex items-center justify-between p-2 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-slate-100 text-left transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🚚</span>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-800">Суженова Ботагоз</p>
+                      <p className="text-[10px] text-slate-500">Логист склада Астана (ЛМ) • 87785806866</p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-medium text-brand-700 bg-brand-50 px-2 py-0.5 rounded">Войти →</span>
+                </button>
+
+                <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      signInAsEmployee?.({ id: 2, name: 'afan', role: 'admin', phone: '87086984543' });
+                      onNavigate('profile');
+                    }}
+                    className="flex items-center justify-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50/70 p-2 text-xs font-semibold text-brand-800 hover:bg-brand-100 transition-colors cursor-pointer"
+                  >
+                    <span>👑 afan (Админ)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      signInAsEmployee?.({ id: 1, name: 'admin1', role: 'admin', phone: '87082449730' });
+                      onNavigate('profile');
+                    }}
+                    className="flex items-center justify-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50/70 p-2 text-xs font-semibold text-brand-800 hover:bg-brand-100 transition-colors cursor-pointer"
+                  >
+                    <span>👑 admin1 (Админ)</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    signInAsClient({ id: 16, name: 'BIG CARPET ТОО (Сакен)', phone: '87028582444', price_type: 'wholesale' });
+                    onNavigate('catalog');
+                  }}
+                  className="w-full flex items-center justify-between p-2 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-slate-100 text-left transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🏢</span>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-800">BIG CARPET ТОО (Сакен)</p>
+                      <p className="text-[10px] text-slate-500">ID: 16 • РМ: Ришат Худайберды</p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">В каталог →</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    signInAsClient({ id: 2933, name: 'Erkebulan kilem', phone: '77021856786', price_type: 'wholesale' });
+                    onNavigate('catalog');
+                  }}
+                  className="w-full flex items-center justify-between p-2 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-slate-100 text-left transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🏢</span>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-800">Erkebulan kilem</p>
+                      <p className="text-[10px] text-slate-500">ID: 2933 • РМ: Нурбол Торебеков</p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">В каталог →</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    signInAsClient({ id: 13, name: 'INTERIA LLP ТОО', phone: '87774114271', price_type: 'wholesale' });
+                    onNavigate('catalog');
+                  }}
+                  className="w-full flex items-center justify-between p-2 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-slate-100 text-left transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🏢</span>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-800">INTERIA LLP ТОО</p>
+                      <p className="text-[10px] text-slate-500">ID: 13 • РМ: Ришат Худайберды</p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">В каталог →</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    signInAsClient({ id: 2976, name: 'Leila carpets', phone: '87010125577', price_type: 'wholesale' });
+                    onNavigate('catalog');
+                  }}
+                  className="w-full flex items-center justify-between p-2 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-slate-100 text-left transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🏢</span>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-800">Leila carpets</p>
+                      <p className="text-[10px] text-slate-500">ID: 2976 • РМ: Ришат Худайберды</p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">В каталог →</span>
+                </button>
+              </div>
+            )}
+
+            <p className="text-[11px] text-slate-400 mt-3 text-center leading-relaxed">
+              💡 Также сотрудники (по номеру телефона) и клиенты могут входить напрямую через форму ввода выше.
             </p>
           </div>
         </div>

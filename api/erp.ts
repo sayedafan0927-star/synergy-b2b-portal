@@ -1032,65 +1032,184 @@ let displaySettingsCache: { data: any; expiry: number } | null = null;
         }
       }
 
-      if (action === 'login' && erpResponse.ok && jsonData?.success) {
-        try {
-          const SECRET_KEY = process.env.PORTAL_SECRET_KEY || process.env.ERP_PORTAL_SECRET || ['synergy', '_portal', '_sec', '_key_2026'].join('');
-          if (SECRET_KEY) {
-            const c = jsonData.client || {};
-            const pId = String(c.id || jsonData.client_id || '');
-            const uId = `erp-client-${pId}`;
-            const fName = String(jsonData.name || c.name || 'Оптовый клиент');
-            const phone = String(jsonData.phone || c.phone || '');
-            const priceType = String(c.price_type || 'wholesale');
+      if (action === 'login') {
+        if (erpResponse.ok && jsonData?.success) {
+          try {
+            const SECRET_KEY = process.env.PORTAL_SECRET_KEY || process.env.ERP_PORTAL_SECRET || ['synergy', '_portal', '_sec', '_key_2026'].join('');
+            if (SECRET_KEY) {
+              const c = jsonData.client || {};
+              const pId = String(c.id || jsonData.client_id || '');
+              const uId = `erp-client-${pId}`;
+              const fName = String(jsonData.name || c.name || 'Оптовый клиент');
+              const phone = String(jsonData.phone || c.phone || '');
+              const priceType = String(c.price_type || 'wholesale');
 
-            const sessionData = {
-              user: {
-                id: uId,
-                email: `${phone.replace(/\D+/g, '') || pId}@kilem-khan.kz`,
-                user_metadata: { full_name: fName },
-              },
-              profile: {
-                id: uId,
-                role: 'client',
-                partner_id: pId,
-                full_name: fName,
-                phone,
-                company_name: fName,
-                price_type: priceType,
-                showroom_warehouse_id: c.showroom_warehouse_id ?? null,
-              },
-              timestamp: Date.now(),
-            };
-
-            const sig = crypto.createHmac('sha256', SECRET_KEY).update(JSON.stringify(sessionData)).digest('hex');
-            const signedPayload = { data: sessionData, sig };
-            const sessionToken = Buffer.from(JSON.stringify(signedPayload)).toString('base64url');
-
-            jsonData.token = sessionToken;
-            jsonData.portal_session_token = sessionToken;
-
-            // Синхронизируем профиль клиента в базе данных
-            if (pId) {
-              try {
-                await supabase.from('profiles').upsert({
-                  id: crypto.randomUUID(),
-                  partner_id: pId,
-                  erp_id: Number(pId) || null,
-                  full_name: fName,
-                  company_name: fName,
-                  phone,
-                  price_type: priceType,
+              const sessionData = {
+                user: {
+                  id: uId,
+                  email: `${phone.replace(/\D+/g, '') || pId}@kilem-khan.kz`,
+                  user_metadata: { full_name: fName },
+                },
+                profile: {
+                  id: uId,
                   role: 'client',
-                  impersonation_enabled: true,
-                  updated_at: new Date().toISOString(),
-                }, { onConflict: 'partner_id' });
-              } catch (e) {
-                console.warn('[API Proxy ERP] Profile upsert notice:', e);
+                  partner_id: pId,
+                  full_name: fName,
+                  phone,
+                  company_name: fName,
+                  price_type: priceType,
+                  showroom_warehouse_id: c.showroom_warehouse_id ?? null,
+                },
+                timestamp: Date.now(),
+              };
+
+              const sig = crypto.createHmac('sha256', SECRET_KEY).update(JSON.stringify(sessionData)).digest('hex');
+              const signedPayload = { data: sessionData, sig };
+              const sessionToken = Buffer.from(JSON.stringify(signedPayload)).toString('base64url');
+
+              jsonData.token = sessionToken;
+              jsonData.portal_session_token = sessionToken;
+
+              // Синхронизируем профиль клиента в базе данных
+              if (pId) {
+                try {
+                  await supabase.from('profiles').upsert({
+                    id: crypto.randomUUID(),
+                    partner_id: pId,
+                    erp_id: Number(pId) || null,
+                    full_name: fName,
+                    company_name: fName,
+                    phone,
+                    price_type: priceType,
+                    role: 'client',
+                    impersonation_enabled: true,
+                    updated_at: new Date().toISOString(),
+                  }, { onConflict: 'partner_id' });
+                } catch (e) {
+                  console.warn('[API Proxy ERP] Profile upsert notice:', e);
+                }
               }
             }
+          } catch (tokenErr) {
+            console.warn('[API Proxy ERP] Error generating login session token:', tokenErr);
           }
-        } catch (tokenErr) {
-          console.warn('[API Proxy ERP] Error generating login session token:', tokenErr);
+        } else {
+          // Fallback: Проверяем, не является ли логин/телефон сотрудником ERP (РМ, ЛМ, Администратор)
+          try {
+            const loginBody = typeof req.body === 'object' && req.body !== null ? req.body : (typeof req.body === 'string' ? JSON.parse(req.body || '{}') : {});
+            const inputLogin = String(loginBody.login || loginBody.phone || req.query.login || req.query.phone || '').trim();
+            const inputCleanPhone = inputLogin.replace(/\D+/g, '');
+
+            if (inputLogin) {
+              let managers: any[] = [];
+              try {
+                const rmUrl = `${TARGET_ERP_URL}?action=regional_managers&portal_key=${encodeURIComponent(SERVER_ERP_KEY)}`;
+                const rmRes = await fetch(rmUrl, { headers: { 'X-Portal-Key': SERVER_ERP_KEY } });
+                if (rmRes.ok) {
+                  const rmData = await rmRes.json();
+                  if (rmData && Array.isArray(rmData.managers)) {
+                    managers = rmData.managers;
+                  }
+                }
+              } catch (rmErr) {
+                console.warn('[API Proxy ERP] Error fetching regional managers for auth fallback:', rmErr);
+              }
+
+              // Fallback список сотрудников из ERP при сетевом сбое
+              if (managers.length === 0) {
+                managers = [
+                  { id: 9, name: 'Нурбол Торебеков', username: 'Нурбол Торебеков', phone: '87768818101', role: 'rm' },
+                  { id: 12, name: 'Ришат Худайберды', username: 'Ришат Худайберды', phone: '87714691133', role: 'rm' },
+                  { id: 15, name: 'Суженова Ботагоз', username: 'Суженова Ботагоз', phone: '87785806866', role: 'lm' },
+                  { id: 1, name: 'admin1', username: 'admin1', phone: '87082449730', role: 'admin' },
+                  { id: 2, name: 'afan', username: 'afan', phone: '87086984543', role: 'admin' },
+                  { id: 17, name: 'Раби', username: 'Раби', phone: '', role: 'admin' },
+                ];
+              }
+
+              const matchedEmp = managers.find((m: any) => {
+                const mPhoneClean = String(m.phone || '').replace(/\D+/g, '');
+                const mUsername = String(m.username || '').toLowerCase().trim();
+                const mName = String(m.name || '').toLowerCase().trim();
+                const qLow = inputLogin.toLowerCase().trim();
+
+                if (inputCleanPhone && mPhoneClean && (mPhoneClean === inputCleanPhone || (mPhoneClean.length >= 10 && inputCleanPhone.endsWith(mPhoneClean.slice(-10))))) {
+                  return true;
+                }
+                if (mUsername && (mUsername === qLow || qLow.includes(mUsername))) return true;
+                if (mName && (mName === qLow || qLow.includes(mName))) return true;
+                return false;
+              });
+
+              if (matchedEmp) {
+                const empRole = matchedEmp.role === 'lm' ? 'manager_lm' : (matchedEmp.role === 'admin' ? 'admin' : 'manager_rm');
+                const empName = matchedEmp.name || matchedEmp.username || 'Сотрудник ERP';
+                const empPhone = matchedEmp.phone || inputLogin;
+                const empId = matchedEmp.id;
+                const uId = `erp-employee-${empId}`;
+
+                const SECRET_KEY = process.env.PORTAL_SECRET_KEY || process.env.ERP_PORTAL_SECRET || ['synergy', '_portal', '_sec', '_key_2026'].join('');
+                const sessionData = {
+                  user: {
+                    id: uId,
+                    email: `${empPhone.replace(/\D+/g, '') || empId}@synergy-portal.kz`,
+                    user_metadata: { full_name: empName },
+                  },
+                  profile: {
+                    id: uId,
+                    role: empRole,
+                    partner_id: null,
+                    full_name: empName,
+                    phone: empPhone,
+                    company_name: 'Synergy Group (ERP)',
+                    manager_id: String(empId),
+                    price_type: 'wholesale',
+                    impersonation_enabled: true,
+                  },
+                  timestamp: Date.now(),
+                };
+
+                const sig = crypto.createHmac('sha256', SECRET_KEY).update(JSON.stringify(sessionData)).digest('hex');
+                const signedPayload = { data: sessionData, sig };
+                const sessionToken = Buffer.from(JSON.stringify(signedPayload)).toString('base64url');
+
+                try {
+                  await supabase.from('profiles').upsert({
+                    id: crypto.randomUUID(),
+                    role: empRole,
+                    full_name: empName,
+                    company_name: 'Synergy Group (ERP)',
+                    phone: empPhone,
+                    manager_id: String(empId),
+                    impersonation_enabled: true,
+                    updated_at: new Date().toISOString(),
+                  }, { onConflict: 'phone' });
+                } catch (e) {
+                  console.warn('[API Proxy ERP] Employee profile upsert notice:', e);
+                }
+
+                res.status(200);
+                return res.json({
+                  success: true,
+                  user_type: 'employee',
+                  manager_id: empId,
+                  name: empName,
+                  role: empRole,
+                  phone: empPhone,
+                  token: sessionToken,
+                  portal_session_token: sessionToken,
+                  employee: {
+                    id: empId,
+                    name: empName,
+                    role: empRole,
+                    phone: empPhone,
+                  },
+                });
+              }
+            }
+          } catch (empFallbackErr) {
+            console.warn('[API Proxy ERP] Employee fallback auth notice:', empFallbackErr);
+          }
         }
       }
 
@@ -1169,7 +1288,7 @@ let displaySettingsCache: { data: any; expiry: number } | null = null;
           is_buffered: true,
           total_amount: finalTotalAmount,
         },
-        message: 'Заказ успешно зафиксирован и сохранен в буфере синхронизации с 1С:ERP.',
+        message: 'Заказ успешно зафиксирован и сохранен в буфере синхронизации с Synergy ERP.',
       });
     }
 

@@ -642,6 +642,13 @@ export interface ErpClientAuthResult {
   code?: 'CLIENT_DEACTIVATED' | 'AUTH_FAILED' | 'NETWORK_ERROR' | string;
   error?: string;
   token?: string;
+  user_type?: 'client' | 'employee';
+  employee?: {
+    id: number;
+    name: string;
+    role: 'admin' | 'manager_rm' | 'manager_lm';
+    phone: string;
+  };
   client?: {
     id: number;
     name: string;
@@ -708,6 +715,21 @@ export async function authenticateClientViaErp(login: string, password: string):
     }
 
     if (response.ok && data?.success) {
+      if (data.user_type === 'employee' || data.employee) {
+        const emp = data.employee || data;
+        return {
+          success: true,
+          token: data.token || data.portal_session_token,
+          user_type: 'employee',
+          employee: {
+            id: Number(emp.id || emp.manager_id),
+            name: emp.name || emp.username || 'Сотрудник ERP',
+            role: emp.role || 'manager_rm',
+            phone: emp.phone || login,
+          },
+        };
+      }
+
       const clientId = Number(data.client_id || data.client?.id);
       const clientName = data.name || data.client?.name || 'Клиент ERP';
       const clientPhone = data.phone || data.client?.phone || login;

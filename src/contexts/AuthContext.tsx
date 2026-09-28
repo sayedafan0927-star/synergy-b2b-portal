@@ -34,6 +34,7 @@ interface AuthContextValue {
   signUp: (email: string, password: string, meta: { full_name: string; company_name: string }) => Promise<string | null>;
   signInAsDemo: (role?: UserRole) => void;
   signInAsClient: (client: { id: number | string; name: string; phone?: string; price_type?: string; showroom_warehouse_id?: number | null; showroom_warehouse_name?: string | null }) => void;
+  signInAsEmployee: (employee: { id: number | string; name: string; role: UserRole; phone?: string }) => void;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   deactivationNotice: string | null;
@@ -242,6 +243,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const signInAsEmployee = useCallback((employee: { id: number | string; name: string; role: UserRole; phone?: string }) => {
+    const employeeProfile: Profile = {
+      id: `erp-employee-${employee.id}`,
+      role: employee.role,
+      partner_id: null,
+      full_name: employee.name,
+      company_name: 'Synergy Group (ERP)',
+      phone: employee.phone || '',
+      manager_id: String(employee.id),
+      price_type: 'wholesale',
+      impersonation_enabled: true,
+    };
+    const mockUser: unknown = {
+      id: employeeProfile.id,
+      email: `${(employee.phone || '').replace(/\D+/g, '') || employee.id}@synergy-portal.kz`,
+      app_metadata: {},
+      user_metadata: { full_name: employeeProfile.full_name },
+      aud: 'authenticated',
+      created_at: new Date().toISOString(),
+    };
+    setUser(mockUser as User);
+    setProfile(employeeProfile);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('synergy:auth_session', JSON.stringify({ user: mockUser, profile: employeeProfile }));
+      sessionStorage.setItem('synergy:demo_auth', JSON.stringify({ user: mockUser, profile: employeeProfile }));
+    }
+  }, []);
+
   const [deactivationNotice, setDeactivationNotice] = useState<string | null>(() => {
     if (typeof window !== 'undefined') {
       return sessionStorage.getItem('synergy:deactivation_notice');
@@ -361,6 +390,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
       }
 
+      if (res.user_type === 'employee' && res.employee) {
+        const emp = res.employee;
+        const employeeProfile: Profile = {
+          id: `erp-employee-${emp.id}`,
+          role: emp.role as UserRole,
+          partner_id: null,
+          full_name: emp.name,
+          company_name: 'Synergy Group (ERP)',
+          phone: emp.phone || '',
+          manager_id: String(emp.id),
+          price_type: 'wholesale',
+          impersonation_enabled: true,
+        };
+
+        const mockUser: unknown = {
+          id: employeeProfile.id,
+          email: `${(emp.phone || '').replace(/\D+/g, '') || emp.id}@synergy-portal.kz`,
+          app_metadata: {},
+          user_metadata: { full_name: employeeProfile.full_name },
+          aud: 'authenticated',
+          created_at: new Date().toISOString(),
+        };
+
+        setUser(mockUser as User);
+        setProfile(employeeProfile);
+        setDeactivationNotice(null);
+
+        if (typeof window !== 'undefined') {
+          sessionStorage.removeItem('synergy:deactivation_notice');
+          sessionStorage.setItem('synergy:auth_session', JSON.stringify({
+            user: mockUser,
+            profile: employeeProfile,
+            token: res.token,
+          }));
+          sessionStorage.setItem('synergy:demo_auth', JSON.stringify({
+            user: mockUser,
+            profile: employeeProfile,
+          }));
+        }
+
+        setLoading(false);
+        return { success: true };
+      }
+
       const client = res.client!;
       const clientProfile: Profile = {
         id: `erp-client-${client.id}`,
@@ -462,6 +535,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signUp,
         signInAsDemo,
         signInAsClient,
+        signInAsEmployee,
         signOut: signOutFn,
         refreshProfile,
         deactivationNotice,
