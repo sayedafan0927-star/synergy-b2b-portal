@@ -1535,7 +1535,15 @@ function AdminErpSyncTab() {
   const fetchAuditLogs = async () => {
     setLogsLoading(true);
     try {
-      const res = await fetch('/api/audit/logs?limit=100');
+      const headers: Record<string, string> = {};
+      const sessionStr = sessionStorage.getItem('synergy:auth_session');
+      if (sessionStr) {
+        try {
+          const parsed = JSON.parse(sessionStr);
+          if (parsed?.token) headers['Authorization'] = `Bearer ${parsed.token}`;
+        } catch {}
+      }
+      const res = await fetch('/api/audit/logs?limit=100', { headers });
       const data = await res.json();
       if (data.success && Array.isArray(data.logs)) {
         setAuditLogs(data.logs);

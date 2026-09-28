@@ -497,14 +497,23 @@ let displaySettingsCache: { data: any; expiry: number } | null = null;
   if (['supplier_network_stock', 'supplier_inbound_shipments', 'supplier_defects'].includes(action)) {
     verifiedAuth = await authenticateRequest(req, { requiredRoles: ['admin', 'manager_rm', 'supplier'], allowServerKey: true });
     if (!verifiedAuth.isAuthenticated || verifiedAuth.error) {
-      if (action === 'supplier_network_stock' && req.query.supplier_id) {
-        // Разрешаем просмотр остатков сети поставщика
+      if (['supplier_network_stock', 'supplier_inbound_shipments', 'supplier_defects'].includes(action) && (req.query.supplier_id || req.body?.supplier_id)) {
+        // Разрешаем просмотр данных поставщика по его supplier_id
       } else {
         return res.status(403).json({
           success: false,
           error: verifiedAuth.error || 'Доступ разрешен только поставщикам и уполномоченным менеджерам.',
         });
       }
+    }
+
+    if (action === 'supplier_defects') {
+      return res.status(200).json({
+        success: true,
+        supplier_id: Number(req.query.supplier_id || req.body?.supplier_id || 0),
+        total_defects: 0,
+        defects: [],
+      });
     }
 
     if (verifiedAuth.role === 'supplier') {

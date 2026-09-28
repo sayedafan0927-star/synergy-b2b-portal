@@ -143,7 +143,7 @@ function FilterDrawer(props: FilterDrawerProps) {
               <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Поиск по каталогу..." className="input-field pl-9 text-sm" />
             </div>
           </div>
-          <FilterSection title="КЛАСТЕРЫ РАЗМЕРОВ (RUGSUSA)" defaultOpen={true}>
+          <FilterSection title="КЛАСТЕРЫ РАЗМЕРОВ" defaultOpen={true}>
             <CheckItem label="Маленькие (< 2.5 м²)" checked={selectedClusters.has('small')} onToggle={() => toggleCluster('small')} />
             <CheckItem label="Средние (2.5 – 5.5 м²)" checked={selectedClusters.has('medium')} onToggle={() => toggleCluster('medium')} />
             <CheckItem label="Большие (5.5 – 10.0 м²)" checked={selectedClusters.has('large')} onToggle={() => toggleCluster('large')} />

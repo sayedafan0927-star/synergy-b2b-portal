@@ -40,65 +40,7 @@ interface SupplierCabinetProps {
   isAdmin?: boolean;
 }
 
-const FALLBACK_DEFECTS: SupplierDefectItem[] = [
-  {
-    defect_id: 'def-101',
-    carpet_id: 1205,
-    article: 'MER-SILK-VE001',
-    collection: 'Merinos Silk',
-    size: '1.60 × 2.30 м',
-    warehouse_name: 'Центральный склад (Алматы)',
-    city: 'Алматы',
-    defect_type: 'factory_defect',
-    defect_type_label: 'Производственный дефект',
-    qty_pcs: 3,
-    area_sqm: 11.04,
-    status: 'inspecting',
-    status_label: 'В зоне инспекции',
-    act_number: 'АКТ-БРК-2026-0012',
-    act_date: '2026-09-20',
-    responsible_party: 'Поставщик (фабрика)',
-    comment: 'Смещение плотности жаккардового ворса по левому краю полотна, заводской брак плетения.',
-  },
-  {
-    defect_id: 'def-102',
-    carpet_id: 1208,
-    article: 'MER-ROYAL-CL004',
-    collection: 'Royal Palace',
-    size: '2.00 × 3.00 м',
-    warehouse_name: 'Хаб Астана',
-    city: 'Астана',
-    defect_type: 'transit_damage',
-    defect_type_label: 'Повреждение при транспортировке',
-    qty_pcs: 2,
-    area_sqm: 12.00,
-    status: 'discounted',
-    status_label: 'Передано в уценку',
-    act_number: 'АКТ-БРК-2026-0009',
-    act_date: '2026-09-12',
-    responsible_party: 'Логистика / Перевозчик',
-    comment: 'Порыв заводской полиэтиленовой упаковки стяжными ремнями, локальное загрязнение.',
-  },
-  {
-    defect_id: 'def-103',
-    carpet_id: 1214,
-    article: 'MER-VINTAGE-VN002',
-    collection: 'Vintage Collection',
-    size: '2.50 × 3.50 м',
-    warehouse_name: 'Центральный склад (Алматы)',
-    city: 'Алматы',
-    defect_type: 'client_return',
-    defect_type_label: 'Возврат дилера (скрытый дефект)',
-    qty_pcs: 1,
-    area_sqm: 8.75,
-    status: 'written_off',
-    status_label: 'Списано / изолятор',
-    act_number: 'АКТ-БРК-2026-0004',
-    act_date: '2026-09-05',
-    responsible_party: 'Поставщик (фабрика)',
-    comment: 'Неравномерный прокрас нити основы, выявлен при вскрытии рулона дилером в шоуруме.',
-  },
-];
+const FALLBACK_DEFECTS: SupplierDefectItem[] = [];
 
 const FALLBACK_SUPPLIERS = [
   { id: 6, name: 'ISMEN (Турция)' },
@@ -111,73 +53,7 @@ const FALLBACK_SUPPLIERS = [
   { id: 12, name: 'LYSANDRA HALI (Турция)' },
 ];
 
-const FALLBACK_INBOUND_SHIPMENTS: InboundShipment[] = [
-  {
-    receipt_id: 142,
-    receipt_doc_number: 'ПРИ-2026-0042',
-    incoming_doc_number: 'CMR-TR-884910',
-    incoming_doc_date: '2026-09-15',
-    receipt_date: '2026-09-24',
-    warehouse_id: 1,
-    warehouse_name: 'Центральный склад (Алматы)',
-    city: 'Алматы',
-    status: 'completed',
-    reconciliation_status: 'discrepancy',
-    reconciliation_status_label: 'С расхождениями',
-    declared: {
-      qty_pcs: 1200,
-      area_sqm: 4416.0,
-    },
-    actual: {
-      qty_pcs: 1195,
-      area_sqm: 4397.6,
-    },
-    discrepancy: {
-      qty_pcs: -5,
-      area_sqm: -18.4,
-    },
-    has_discrepancy: true,
-    comment: 'Акт приемки: обнаружена недостача 5 шт ковров коллекции Silk, повреждение упаковки 2 шт.',
-    items: [
-      {
-        article: 'MER-SILK-160X230',
-        name: 'Merinos Silk 1.60x2.30',
-        declared_qty: 100,
-        actual_qty: 95,
-        discrepancy_qty: -5,
-        status: 'shortage',
-        reason: 'Недостача при выгрузке контейнера',
-      },
-    ],
-  },
-  {
-    receipt_id: 139,
-    receipt_doc_number: 'ПРИ-2026-0038',
-    incoming_doc_number: 'CMR-TR-883104',
-    incoming_doc_date: '2026-09-02',
-    receipt_date: '2026-09-10',
-    warehouse_id: 1,
-    warehouse_name: 'Центральный склад (Алматы)',
-    city: 'Алматы',
-    status: 'completed',
-    reconciliation_status: 'matched',
-    reconciliation_status_label: 'Принято полностью',
-    declared: {
-      qty_pcs: 950,
-      area_sqm: 3496.0,
-    },
-    actual: {
-      qty_pcs: 950,
-      area_sqm: 3496.0,
-    },
-    discrepancy: {
-      qty_pcs: 0,
-      area_sqm: 0.0,
-    },
-    has_discrepancy: false,
-    comment: 'Принято без расхождений. Упаковка целая, маркировка соответствует спецификации.',
-  },
-];
+const FALLBACK_INBOUND_SHIPMENTS: InboundShipment[] = [];
 
 export default function SupplierCabinet({ profile, isAdmin: propIsAdmin }: SupplierCabinetProps) {
   const isAdmin = propIsAdmin ?? (profile.role === 'admin');

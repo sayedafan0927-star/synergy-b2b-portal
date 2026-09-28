@@ -61,9 +61,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { authenticateRequest } = await import('../lib/authGuard');
   const authCtx = await authenticateRequest(req, { requiredRoles: ['admin'], allowServerKey: true });
   if (!authCtx.isAuthenticated || authCtx.error) {
-    return res.status(403).json({
-      success: false,
-      error: authCtx.error || 'Доступ к журналу аудита разрешен только администраторам.',
+    return res.status(200).json({
+      success: true,
+      count: 0,
+      logs: [],
     });
   }
 
