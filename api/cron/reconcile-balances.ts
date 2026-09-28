@@ -259,7 +259,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (fixedDiscrepancies > 0) {
       await recordAuditLog({
         eventType: 'reconciliation_discrepancy',
-        direction: 'internal',
+        direction: 'inbound',
         status: 'warning',
         source: 'Nightly Reconciliation Cron',
         payload: {
@@ -271,7 +271,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     await recordAuditLog({
       eventType: 'nightly_reconciliation_summary',
-      direction: 'internal',
+      direction: 'inbound',
       status: 'success',
       source: 'Nightly Reconciliation Cron',
       payload: {
@@ -297,7 +297,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     await recordAuditLog({
       eventType: 'nightly_reconciliation_summary',
-      direction: 'internal',
+      direction: 'inbound',
       status: 'error',
       source: 'Nightly Reconciliation Cron',
       errorMessage: err?.message,
