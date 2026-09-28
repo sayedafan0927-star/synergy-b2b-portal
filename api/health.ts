@@ -76,8 +76,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const authHeader = req.headers.authorization || '';
   const token = authHeader.replace(/^Bearer\s+/i, '').trim();
   const CRON_SECRET = process.env.CRON_SECRET || '';
-  const PORTAL_SECRET_KEY = process.env.PORTAL_SECRET_KEY || process.env.ERP_PORTAL_SECRET || ['synergy', '_portal', '_sec', '_key_2026'].join('');
-  const isAuthenticated = token && (token === CRON_SECRET || token === PORTAL_SECRET_KEY);
+  const PORTAL_SECRET_KEY = process.env.PORTAL_SECRET_KEY || process.env.ERP_PORTAL_SECRET || '';
+  const isAuthenticated = Boolean(token && (token === CRON_SECRET || token === PORTAL_SECRET_KEY));
 
   if (!isAuthenticated) {
     return res.status(httpCode).json({

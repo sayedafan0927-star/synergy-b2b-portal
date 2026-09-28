@@ -233,11 +233,13 @@ CREATE TABLE IF NOT EXISTS orders (
   total_amount numeric NOT NULL DEFAULT 0 CHECK (total_amount >= 0),
   total_sqm numeric NOT NULL DEFAULT 0 CHECK (total_sqm >= 0),
   total_items integer NOT NULL DEFAULT 0 CHECK (total_items >= 0),
+  version integer NOT NULL DEFAULT 1,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);
+CREATE INDEX IF NOT EXISTS idx_orders_user_created ON orders(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_orders_placed_by_id ON orders(placed_by_id);
 CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 
@@ -256,6 +258,8 @@ CREATE TABLE IF NOT EXISTS order_items (
 );
 
 CREATE INDEX IF NOT EXISTS idx_order_items_order_id ON order_items(order_id);
+CREATE INDEX IF NOT EXISTS idx_order_items_sku ON order_items(sku);
+CREATE INDEX IF NOT EXISTS idx_order_items_product_id ON order_items(product_id);
 
 -- RLS on orders
 ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
@@ -613,8 +617,13 @@ CREATE TABLE IF NOT EXISTS products (
   pile_height text NOT NULL DEFAULT '',
   images text[] NOT NULL DEFAULT '{}',
   supplier_id integer,
+  version integer NOT NULL DEFAULT 1,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+
+CREATE INDEX IF NOT EXISTS idx_products_collection ON products(collection);
+CREATE INDEX IF NOT EXISTS idx_products_category ON products(category);
+CREATE INDEX IF NOT EXISTS idx_products_supplier ON products(supplier_id);
 
 ALTER TABLE products ENABLE ROW LEVEL SECURITY;
 
@@ -646,6 +655,7 @@ CREATE TABLE IF NOT EXISTS product_variants (
   size text NOT NULL,
   sku text NOT NULL UNIQUE,
   base_price numeric NOT NULL DEFAULT 0 CHECK (base_price >= 0),
+  version integer NOT NULL DEFAULT 1,
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
@@ -685,6 +695,7 @@ CREATE TABLE IF NOT EXISTS warehouse_stock (
 );
 
 CREATE INDEX IF NOT EXISTS idx_stock_variant ON warehouse_stock(variant_id);
+CREATE INDEX IF NOT EXISTS idx_warehouse_stock_city ON warehouse_stock(city);
 
 ALTER TABLE warehouse_stock ENABLE ROW LEVEL SECURITY;
 
@@ -758,6 +769,7 @@ CREATE TABLE IF NOT EXISTS collection_prices (
 );
 
 CREATE INDEX IF NOT EXISTS idx_coll_prices_collection ON collection_prices(collection);
+CREATE INDEX IF NOT EXISTS idx_collection_prices_type ON collection_prices(price_type_id);
 
 ALTER TABLE collection_prices ENABLE ROW LEVEL SECURITY;
 

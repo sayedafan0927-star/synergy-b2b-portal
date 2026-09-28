@@ -9,6 +9,7 @@ import { getCachedCatalog, saveCachedCatalog } from './lib/catalogCache';
 import { authenticateRequest } from './lib/authGuard';
 import { validateAndPriceOrder } from './lib/pricingValidator';
 import { applyCorsHeaders } from './lib/cors';
+import { checkCircuit, recordSuccess, recordFailure } from './lib/circuitBreaker';
 
 // Primary live ERP gateway: https://kilem-khan.kz/api/sin/public/api_portal.php
 // Production router alias per ERP spec: https://crm.kilem-khan.kz/api_portal.php
@@ -873,6 +874,56 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       headers['X-Idempotency-Key'] = String(idempotencyKey);
     }
 
+    // Circuit Breaker: Проверка состояния внешнего шлюза 1C:ERP
+    const circuit = checkCircuit('erp_gateway');
+    if (!circuit.permitted) {
+      console.warn(`[CircuitBreaker] Request to ERP suppressed for action '${action}'. Circuit state: ${circuit.state}`);
+      if (action === 'create_order' && outboxOrderDoc) {
+        return res.status(200).json({
+          success: true,
+          order: {
+            order_id: outboxOrderId || 9999,
+            doc_number: outboxOrderDoc,
+            status: 'pending',
+            is_buffered: true,
+            total_amount: finalTotalAmount,
+          },
+          message: 'Заказ успешно зафиксирован в автономном буфере (Circuit Breaker Active).',
+        });
+      }
+      if (action === 'catalog' || action === 'catalog_normalized') {
+        const fallback = await getCachedCatalog('catalog_global');
+        if (fallback && fallback.data) {
+          res.status(200);
+          res.setHeader('Content-Type', 'application/json');
+          res.setHeader('X-Cache', 'CIRCUIT_BREAKER_FALLBACK');
+          res.setHeader('X-Cache-Age-Ms', String(fallback.ageMs));
+          return res.json(fallback.data);
+        }
+      }
+      if (action === 'display_settings') {
+        const fallbackSettings = {
+          success: true,
+          settings: {
+            show_free_stock: true,
+            show_reserved_stock: false,
+            show_total_stock: true,
+            show_prices: true,
+            show_price_per_sqm: true,
+            show_discounts: true,
+            show_dealer_showroom: true,
+            allow_orders_when_zero_stock: false,
+          },
+        };
+        return res.status(200).json(fallbackSettings);
+      }
+      return res.status(503).json({
+        success: false,
+        code: 'CIRCUIT_BREAKER_OPEN',
+        error: 'Шлюз 1C:ERP временно недоступен (активирован защитный контур Circuit Breaker). Повторите попытку через 30 секунд.',
+      });
+    }
+
     // Таймаут запроса к ERP: 2.5 секунды для чекаута (быстрый fallback в Outbox) и 12 секунд для каталога
     const erpTimeoutMs = action === 'create_order' ? 2500 : 12000;
     const controller = new AbortController();
@@ -894,6 +945,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const erpResponse = await fetch(targetUrl, fetchOptions).finally(() => clearTimeout(timeoutId));
+    if (erpResponse.ok) {
+      recordSuccess('erp_gateway');
+    } else if (erpResponse.status >= 500) {
+      recordFailure('erp_gateway');
+    }
+
     const latencyMs = Date.now() - startTime;
     const contentType = erpResponse.headers.get('content-type') || 'application/json';
     const textData = await erpResponse.text();
@@ -1321,14 +1378,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     }
                   } catch {}
 
-                  // Правило стартового пароля:
-                  // 1. Сохраненный пароль
-                  // 2. 123456
-                  // 3. Последние 6 цифр телефона
-                  // 4. Последние 4 цифры телефона
-                  const isPasswordValid =
-                    customPasswordMatched ||
-                    (inputPass && (inputPass === '123456' || inputPass === last6 || inputPass === last4));
+                  // Проверка стойкости пароля (Enterprise Security Standard):
+                  // Запрещены тривиальные пароли (123456, окончания телефонов и т.д.)
+                  const isTrivialPassword = (p: string) => {
+                    const norm = p.toLowerCase().trim();
+                    return (
+                      norm.length < 8 ||
+                      ['123456', '12345678', 'password', 'qwerty', '111111', '000000', 'admin123'].includes(norm) ||
+                      (last6 && norm === last6) ||
+                      (last4 && norm === last4)
+                    );
+                  };
+
+                  const isPasswordValid = customPasswordMatched || (
+                    Boolean(inputPass) &&
+                    !isTrivialPassword(inputPass) &&
+                    inputPass.length >= 8
+                  );
 
                   if (isPasswordValid) {
                     const pId = String(matchedClient.id || '');
@@ -1408,7 +1474,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     return res.json({
                       success: false,
                       code: 'AUTH_FAILED',
-                      error: `Неверный пароль для клиента «${matchedClient.name}». Для первого входа используйте стартовый пароль (123456 или последние 6 цифр номера: ${last6}), либо обратитесь к вашему менеджеру.`,
+                      error: `Неверный пароль для клиента «${matchedClient.name}». Пароль должен содержать минимум 8 символов и не быть тривиальным (123456 или цифры телефона запрещены). Для первого входа или сброса обратитесь к вашему менеджеру.`,
                     });
                   }
                 }
@@ -1460,6 +1526,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   } catch (err: any) {
     const latencyMs = Date.now() - startTime;
+    recordFailure('erp_gateway');
     console.error('[API Proxy ERP] Error proxying request:', err?.name === 'AbortError' ? `ERP Request Timeout (${action === 'create_order' ? '2.5s' : '12s'})` : err);
 
     if (action === 'catalog' || action === 'catalog_normalized') {
