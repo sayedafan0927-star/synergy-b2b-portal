@@ -7,6 +7,7 @@ import { enforceRateLimit } from './lib/rateLimit';
 import { getCachedCatalog, saveCachedCatalog } from './lib/catalogCache';
 import { authenticateRequest } from './lib/authGuard';
 import { validateAndPriceOrder } from './lib/pricingValidator';
+import { applyCorsHeaders } from './lib/cors';
 
 const TARGET_ERP_URL = process.env.ERP_API_URL || 'https://kilem-khan.kz/api/sin/public/api_portal.php';
 const SERVER_ERP_KEY = process.env.ERP_API_KEY || '';
@@ -20,6 +21,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
 // Список публичных действий, не требующих обязательной предварительной авторизации
 const PUBLIC_ACTIONS = new Set([
   'catalog',
+  'catalog_paginated',
   'product',
   'ping',
   'login',
@@ -39,17 +41,9 @@ const ADMIN_ACTIONS = new Set([
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const startTime = Date.now();
 
-  // CORS Headers
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,POST');
-  res.setHeader(
-    'Access-Control-Allow-Headers',
-    'X-CSRF-Token, X-Requested-With, Accept, Content-Type, X-Portal-Key, Idempotency-Key, Authorization, X-Correlation-ID, X-Request-ID'
-  );
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+  // Unified CORS Guard
+  if (!applyCorsHeaders(req, res)) {
+    return;
   }
 
   // Сквозной Correlation-ID
@@ -109,6 +103,146 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(404).json({ success: false, error: 'Товар не найден в каталоге' });
     } catch (e: any) {
       return res.status(500).json({ success: false, error: e?.message });
+    }
+  }
+
+  // 1.02. Серверная пагинация, фильтрация и поиск каталога (масштабирование до 50k+ SKU)
+  if (action === 'catalog_paginated' && req.method === 'GET') {
+    const page = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || '24'), 10) || 24));
+    const offset = (page - 1) * limit;
+    const search = String(req.query.search || '').trim();
+    const category = String(req.query.category || '').trim();
+    const collection = String(req.query.collection || '').trim();
+    const inStockOnly = req.query.in_stock === 'true' || req.query.in_stock === '1';
+
+    try {
+      let query = supabase
+        .from('products')
+        .select(`
+          id,
+          name,
+          category,
+          collection,
+          manufacturer,
+          material,
+          style,
+          country,
+          density,
+          pile_height,
+          images,
+          product_variants (
+            id,
+            size,
+            sku,
+            base_price,
+            warehouse_stock (
+              city,
+              stock
+            )
+          )
+        `, { count: 'exact' });
+
+      if (category) {
+        query = query.eq('category', category);
+      }
+      if (collection) {
+        query = query.ilike('collection', `%${collection}%`);
+      }
+      if (search) {
+        query = query.or(`name.ilike.%${search}%,collection.ilike.%${search}%,id.ilike.%${search}%`);
+      }
+
+      query = query.range(offset, offset + limit - 1).order('name', { ascending: true });
+
+      const { data, count, error } = await query;
+
+      if (error) {
+        // Fallback to cached catalog snapshot if database tables aren't populated yet
+        const cached = await getCachedCatalog('catalog_global');
+        if (cached && cached.data && Array.isArray(cached.data.products)) {
+          let list = cached.data.products;
+          if (category) list = list.filter((p: any) => p.category === category);
+          if (collection) list = list.filter((p: any) => p.collection?.toLowerCase().includes(collection.toLowerCase()));
+          if (search) {
+            const sLower = search.toLowerCase();
+            list = list.filter((p: any) => 
+              p.name?.toLowerCase().includes(sLower) || 
+              p.collection?.toLowerCase().includes(sLower) ||
+              p.id?.toLowerCase().includes(sLower) ||
+              (p.variants || []).some((v: any) => v.sku?.toLowerCase().includes(sLower))
+            );
+          }
+          if (inStockOnly) {
+            list = list.filter((p: any) => (p.variants || []).some((v: any) => (v.stock || v.total_stock || 0) > 0));
+          }
+          const total = list.length;
+          const paginated = list.slice(offset, offset + limit);
+          return res.status(200).json({
+            success: true,
+            page,
+            limit,
+            total,
+            totalPages: Math.ceil(total / limit),
+            items: paginated,
+            source: 'cache_fallback'
+          });
+        }
+        return res.status(500).json({ success: false, error: error.message });
+      }
+
+      let items = (data || []).map((p: any) => {
+        const variants = (p.product_variants || []).map((v: any) => {
+          const stocks = v.warehouse_stock || [];
+          const totalStock = stocks.reduce((acc: number, s: any) => acc + (Number(s.stock) || 0), 0);
+          return {
+            id: v.id,
+            size: v.size,
+            sku: v.sku,
+            base_price: Number(v.base_price) || 0,
+            stock: totalStock,
+            stocks_by_city: stocks.reduce((acc: Record<string, number>, s: any) => {
+              acc[s.city] = Number(s.stock) || 0;
+              return acc;
+            }, {})
+          };
+        });
+
+        const totalProductStock = variants.reduce((acc: number, v: any) => acc + v.stock, 0);
+
+        return {
+          id: p.id,
+          name: p.name,
+          category: p.category,
+          collection: p.collection,
+          manufacturer: p.manufacturer,
+          material: p.material,
+          style: p.style,
+          country: p.country,
+          density: p.density,
+          pile_height: p.pile_height,
+          images: p.images || [],
+          variants,
+          total_stock: totalProductStock
+        };
+      });
+
+      if (inStockOnly) {
+        items = items.filter((p: any) => p.total_stock > 0);
+      }
+
+      const total = count || items.length;
+      return res.status(200).json({
+        success: true,
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+        items,
+        source: 'supabase_db'
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message });
     }
   }
 

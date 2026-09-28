@@ -1,19 +1,17 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
+import { applyCorsHeaders } from './lib/cors';
 
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://sjvvoxxwevwgziuxjvcy.supabase.co';
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmY2dscW5qaHl1Ynh1aGZ0cndvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMwMzQ1MDUsImV4cCI6MjA1ODYxMDUwNX0.z0Vw3tJ4372iY-qC52dZ_Yl-kC46M25jH3_P9z3G30w';
-const SERVER_ERP_KEY = process.env.ERP_API_KEY || '138d1bdaf9402600c8f5d5763e2e1573c1e45d32401e62e4981cd7e898bf0544';
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+const SERVER_ERP_KEY = process.env.ERP_API_KEY || '';
 const TARGET_ERP_URL = process.env.ERP_API_URL || 'https://kilem-khan.kz/api/sin/public/api_portal.php';
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+const supabase = SUPABASE_URL && SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+  if (!applyCorsHeaders(req, res)) {
+    return;
   }
 
   const startTime = Date.now();
@@ -24,27 +22,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // 1. Проверка доступности PostgreSQL (Supabase)
   const dbStart = Date.now();
-  try {
-    const { error } = await supabase.from('profiles').select('id').limit(1);
-    if (error) {
-      checks.database = { status: 'unhealthy', latencyMs: Date.now() - dbStart, error: error.message };
-    } else {
-      checks.database = { status: 'healthy', latencyMs: Date.now() - dbStart };
+  if (!supabase) {
+    checks.database = { status: 'unhealthy', latencyMs: 0, error: 'Database credentials not configured in environment' };
+  } else {
+    try {
+      const { error } = await supabase.from('profiles').select('id').limit(1);
+      if (error) {
+        checks.database = { status: 'unhealthy', latencyMs: Date.now() - dbStart, error: error.message };
+      } else {
+        checks.database = { status: 'healthy', latencyMs: Date.now() - dbStart };
+      }
+    } catch (err: any) {
+      checks.database = { status: 'unhealthy', latencyMs: Date.now() - dbStart, error: err?.message };
     }
-  } catch (err: any) {
-    checks.database = { status: 'unhealthy', latencyMs: Date.now() - dbStart, error: err?.message };
   }
 
   // 2. Проверка доступности шлюза собственной ERP
   const erpStart = Date.now();
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 4000);
-    const pingUrl = `${TARGET_ERP_URL}?action=ping&portal_key=${encodeURIComponent(SERVER_ERP_KEY)}`;
-    
-    const erpRes = await fetch(pingUrl, {
-      method: 'GET',
-      headers: { 'X-Portal-Key': SERVER_ERP_KEY },
+  if (!SERVER_ERP_KEY) {
+    checks.erp_gateway = { status: 'unhealthy', latencyMs: 0, error: 'ERP_API_KEY not configured in environment' };
+  } else {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 4000);
+      const pingUrl = `${TARGET_ERP_URL}?action=ping&portal_key=${encodeURIComponent(SERVER_ERP_KEY)}`;
+      
+      const erpRes = await fetch(pingUrl, {
+        method: 'GET',
+        headers: { 'X-Portal-Key': SERVER_ERP_KEY },
       signal: controller.signal,
     }).finally(() => clearTimeout(timeout));
 
@@ -59,6 +64,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       latencyMs: Date.now() - erpStart,
       error: err?.name === 'AbortError' ? 'Timeout (4s)' : err?.message,
     };
+  }
   }
 
   const isDbHealthy = checks.database.status === 'healthy';

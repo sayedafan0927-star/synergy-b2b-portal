@@ -1,0 +1,130 @@
+import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { createClient } from '@supabase/supabase-js';
+import { recordAuditLog } from '../audit/logs';
+import { applyCorrelationId } from '../lib/trace';
+import { applyCorsHeaders } from '../lib/cors';
+
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+const CRON_SECRET = process.env.CRON_SECRET || process.env.PORTAL_SECRET_KEY || '';
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: { persistSession: false },
+});
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (!applyCorsHeaders(req, res)) {
+    return;
+  }
+
+  const correlationId = applyCorrelationId(req, res);
+
+  // Проверка авторизации крона (Vercel Cron Header или Bearer Secret)
+  const authHeader = req.headers['authorization'] || '';
+  const cronHeader = req.headers['x-cron-key'] || req.headers['x-vercel-cron'];
+
+  const isAuthorized =
+    !CRON_SECRET || // Если секрет не настроен в dev окружении
+    cronHeader === '1' || // Vercel Cron header
+    cronHeader === CRON_SECRET ||
+    authHeader === `Bearer ${CRON_SECRET}`;
+
+  if (!isAuthorized) {
+    return res.status(401).json({
+      success: false,
+      error: 'Unauthorized: Invalid cron authorization token.',
+    });
+  }
+
+  const startTime = Date.now();
+  const ttlHours = parseInt(process.env.WMS_HOLD_TTL_HOURS || '24', 10);
+  const cutoffTime = new Date(Date.now() - ttlHours * 60 * 60 * 1000).toISOString();
+
+  try {
+    // 1. Попытка выполнить через оптимизированную атомарную функцию базы данных
+    const { data: rpcData, error: rpcError } = await supabase.rpc('cancel_expired_order_holds', {
+      p_batch_size: 50,
+    });
+
+    let cancelledOrders: any[] = [];
+
+    if (!rpcError && Array.isArray(rpcData)) {
+      cancelledOrders = rpcData;
+    } else {
+      // 2. Fallback: прямое выполнение запроса, если миграция ещё ожидает применения
+      const { data: pendingOrders, error: fetchErr } = await supabase
+        .from('orders')
+        .select('id, order_number, user_id, total_amount, created_at, hold_expires_at')
+        .eq('status', 'pending')
+        .or(`hold_expires_at.lte.${new Date().toISOString()},and(hold_expires_at.is.null,created_at.lte.${cutoffTime})`)
+        .limit(50);
+
+      if (fetchErr) {
+        throw new Error(`Failed to query expired orders: ${fetchErr.message}`);
+      }
+
+      if (pendingOrders && pendingOrders.length > 0) {
+        const orderIds = pendingOrders.map((o: any) => o.id);
+
+        const { error: updateErr } = await supabase
+          .from('orders')
+          .update({
+            status: 'cancelled',
+            notes: `[Auto-cancelled: WMS reservation hold TTL expired (${ttlHours}h)]`,
+            updated_at: new Date().toISOString(),
+          })
+          .in('id', orderIds);
+
+        if (updateErr) {
+          throw new Error(`Failed to update expired orders: ${updateErr.message}`);
+        }
+
+        cancelledOrders = pendingOrders;
+      }
+    }
+
+    if (cancelledOrders.length > 0) {
+      console.log(`[WMS Hold Expiry] Auto-cancelled ${cancelledOrders.length} stale pending orders.`);
+
+      await recordAuditLog({
+        eventType: 'wms_hold_auto_expiry',
+        direction: 'outbound',
+        status: 'success',
+        source: 'WMS Hold TTL Cron',
+        payload: {
+          cancelledCount: cancelledOrders.length,
+          orderNumbers: cancelledOrders.map((o: any) => o.cancelled_order_number || o.order_number),
+          ttlHours,
+        },
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Checked for expired order holds (TTL: ${ttlHours}h).`,
+      cancelledCount: cancelledOrders.length,
+      orders: cancelledOrders.map((o: any) => ({
+        id: o.cancelled_order_id || o.id,
+        order_number: o.cancelled_order_number || o.order_number,
+      })),
+      durationMs: Date.now() - startTime,
+      correlationId,
+    });
+  } catch (err: any) {
+    console.error('[WMS Hold Expiry] Error executing hold cleanup:', err);
+
+    await recordAuditLog({
+      eventType: 'wms_hold_auto_expiry',
+      direction: 'outbound',
+      status: 'error',
+      source: 'WMS Hold TTL Cron',
+      errorMessage: err?.message,
+    });
+
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to process WMS hold auto-expiration',
+      details: err?.message,
+    });
+  }
+}

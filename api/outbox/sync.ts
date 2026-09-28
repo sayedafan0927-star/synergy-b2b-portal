@@ -4,6 +4,7 @@ import { recordAuditLog } from '../audit/logs';
 import { applyCorrelationId } from '../lib/trace';
 import { enforceRateLimit } from '../lib/rateLimit';
 import { sendWhatsAppMessage } from '../approvals/whatsapp';
+import { applyCorsHeaders } from '../lib/cors';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://sjvvoxxwevwgziuxjvcy.supabase.co';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
@@ -51,14 +52,8 @@ async function dispatchDlqEmergencyAlert(params: {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Portal-Key, X-Cron-Key, X-Correlation-ID');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+  if (!applyCorsHeaders(req, res)) {
+    return;
   }
 
   const correlationId = applyCorrelationId(req, res);

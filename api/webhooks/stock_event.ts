@@ -1,26 +1,17 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { applyCorsHeaders } from '../lib/cors';
 
-const ALLOWED_KEYS = new Set([
-  'SynergySecretKey2025',
-  '138d1bdaf9402600c8f5d5763e2e1573c1e45d32401e62e4981cd7e898bf0544',
-]);
-
-if (process.env.ERP_PORTAL_SECRET) {
-  ALLOWED_KEYS.add(process.env.ERP_PORTAL_SECRET);
-}
+const ALLOWED_KEYS = new Set(
+  [
+    process.env.ERP_WEBHOOK_SECRET,
+    process.env.ERP_PORTAL_SECRET,
+    process.env.PORTAL_SECRET_KEY,
+  ].filter((k): k is string => Boolean(k && k.trim().length > 0))
+);
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS Headers
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
-  res.setHeader(
-    'Access-Control-Allow-Headers',
-    'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version, X-Portal-Key'
-  );
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+  if (!applyCorsHeaders(req, res)) {
+    return;
   }
 
   if (req.method !== 'POST') {

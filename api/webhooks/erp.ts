@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 import { patchCachedCatalogStock } from '../lib/catalogCache';
 import { recordAuditLog } from '../audit/logs';
+import { applyCorsHeaders } from '../lib/cors';
 
 const ALLOWED_KEYS = new Set([
   process.env.PORTAL_SECRET_KEY,
@@ -78,17 +79,8 @@ async function dispatchWhatsAppNotification(params: {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS Headers
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,POST');
-  res.setHeader(
-    'Access-Control-Allow-Headers',
-    'X-CSRF-Token, X-Requested-With, Accept, Content-Type, X-Portal-Key, X-Webhook-Signature, X-Webhook-Event-ID'
-  );
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
+  if (!applyCorsHeaders(req, res)) {
+    return;
   }
 
   if (req.method !== 'POST') {
