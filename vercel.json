@@ -2,18 +2,17 @@
   "version": 2,
   "crons": [
     {
-      "path": "/api/outbox/sync",
-      "schedule": "*/5 * * * *"
+      "path": "/api/cron/reconcile-balances",
+      "schedule": "0 3 * * *"
     },
     {
       "path": "/api/cron/expire-holds",
-      "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/cron/reconcile-balances",
-      "schedule": "0 3 * * *"
+      "schedule": "0 4 * * *"
     }
   ],
+  "crons_reference": {
+    "outbox_sync": "/api/outbox/sync"
+  },
   "rewrites": [
     {
       "source": "/api/(.*)",
