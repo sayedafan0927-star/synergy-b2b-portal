@@ -850,10 +850,10 @@ let displaySettingsCache: { data: any; expiry: number } | null = null;
 
     if (req.method === 'POST') {
       headers['Content-Type'] = 'application/json';
-      const bodyToSend = validatedOrderPayload || req.body;
+      const bodyToSend = validatedOrderPayload || (Buffer.isBuffer(req.body) ? req.body.toString('utf8') : req.body);
       fetchOptions = {
         ...fetchOptions,
-        body: typeof bodyToSend === 'string' ? bodyToSend : JSON.stringify(bodyToSend || {}),
+        body: typeof bodyToSend === 'string' ? bodyToSend : (Buffer.isBuffer(bodyToSend) ? bodyToSend.toString('utf8') : JSON.stringify(bodyToSend || {})),
       };
     }
 
@@ -1220,7 +1220,7 @@ let displaySettingsCache: { data: any; expiry: number } | null = null;
               if (inputCleanPhone && inputCleanPhone.length >= 7) {
                 let counterparties: any[] = [];
                 try {
-                  const cpUrl = `${TARGET_ERP_URL}?action=counterparties&portal_key=${encodeURIComponent(SERVER_ERP_KEY)}`;
+                  const cpUrl = `${TARGET_ERP_URL}?action=counterparties&phone=${encodeURIComponent(inputCleanPhone)}&portal_key=${encodeURIComponent(SERVER_ERP_KEY)}`;
                   const cpRes = await fetch(cpUrl, { headers: { 'X-Portal-Key': SERVER_ERP_KEY } });
                   if (cpRes.ok) {
                     const cpData = await cpRes.json();
@@ -1228,6 +1228,14 @@ let displaySettingsCache: { data: any; expiry: number } | null = null;
                       counterparties = cpData;
                     } else if (cpData && Array.isArray(cpData.counterparties)) {
                       counterparties = cpData.counterparties;
+                    }
+                  }
+                  if (counterparties.length === 0) {
+                    const allUrl = `${TARGET_ERP_URL}?action=counterparties&portal_key=${encodeURIComponent(SERVER_ERP_KEY)}`;
+                    const allRes = await fetch(allUrl, { headers: { 'X-Portal-Key': SERVER_ERP_KEY } });
+                    if (allRes.ok) {
+                      const allData = await allRes.json();
+                      counterparties = Array.isArray(allData) ? allData : (allData?.counterparties || []);
                     }
                   }
                 } catch (cpErr) {
