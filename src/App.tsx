@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, lazy, Suspense } from 'react';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { CartProvider } from '@/contexts/CartContext';
 import { LanguageProvider } from '@/contexts/LanguageContext';
@@ -6,16 +6,28 @@ import WhatsAppWidget from '@/components/WhatsAppWidget';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import MobileNav from '@/components/MobileNav';
-import HomePage from '@/pages/HomePage';
-import CatalogPage from '@/pages/CatalogPage';
-import ProductPage from '@/pages/ProductPage';
-import CartPage from '@/pages/CartPage';
-import ContactsPage from '@/pages/ContactsPage';
-import LoginPage from '@/pages/LoginPage';
-import ProfilePage from '@/pages/ProfilePage';
+
+// Code Splitting: Ленивая загрузка страниц для максимального быстродействия
+const HomePage = lazy(() => import('@/pages/HomePage'));
+const CatalogPage = lazy(() => import('@/pages/CatalogPage'));
+const ProductPage = lazy(() => import('@/pages/ProductPage'));
+const CartPage = lazy(() => import('@/pages/CartPage'));
+const ContactsPage = lazy(() => import('@/pages/ContactsPage'));
+const LoginPage = lazy(() => import('@/pages/LoginPage'));
+const ProfilePage = lazy(() => import('@/pages/ProfilePage'));
+
 import { useNetworkStatus } from '@/registerServiceWorker';
 import { initOfflineQueueAutoSync } from '@/lib/offlineOrderQueue';
 import type { PageId } from '@/types';
+
+function PageLoadingFallback() {
+  return (
+    <div className="min-h-[50vh] flex flex-col items-center justify-center py-24 px-4">
+      <div className="w-10 h-10 border-3 border-amber-500 border-t-transparent rounded-full animate-spin mb-4" />
+      <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Загрузка раздела...</p>
+    </div>
+  );
+}
 
 function Preloader({ onFinished }: { onFinished: () => void }) {
   const [phase, setPhase] = useState<'logo' | 'expand' | 'done'>('logo');
@@ -251,7 +263,9 @@ export default function App() {
             </div>
           )}
           <MainLayout page={page} navigate={navigate} showFooter={showFooter}>
-            {renderPage()}
+            <Suspense fallback={<PageLoadingFallback />}>
+              {renderPage()}
+            </Suspense>
           </MainLayout>
         </CartProvider>
       </AuthProvider>
