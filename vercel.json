@@ -10,10 +10,11 @@
       "schedule": "0 4 * * *"
     }
   ],
-  "crons_reference": {
-    "outbox_sync": "/api/outbox/sync"
-  },
   "rewrites": [
+    {
+      "source": "/api/outbox/sync",
+      "destination": "/api/outbox/sync"
+    },
     {
       "source": "/api/(.*)",
       "destination": "/api/$1"
