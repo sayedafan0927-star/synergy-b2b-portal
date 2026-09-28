@@ -575,7 +575,18 @@ export function useProduct(id: string | undefined, customDealerId?: string | num
         const erpData = await fetchCatalogFromErp(effectiveDealerId);
         if (!cancelled && erpData && erpData.success && Array.isArray(erpData.products)) {
           const merged = mergeProducts(erpData.products as Product[]);
-          const found = merged.find(p => p.id === id || p.variants.some(v => v.id === id || v.sku === id));
+          const cleanId = decodeURIComponent(String(id || '')).trim().toLowerCase();
+          const found = merged.find(p => {
+            if (String(p.id).toLowerCase() === cleanId) return true;
+            if (String(p.article || '').toLowerCase() === cleanId) return true;
+            return p.variants.some(v => 
+              String(v.id).toLowerCase() === cleanId ||
+              String(v.sku || '').toLowerCase() === cleanId ||
+              String(v.barcode || '').toLowerCase() === cleanId ||
+              String(v.article || '').toLowerCase() === cleanId ||
+              String((v as any).code || '').toLowerCase() === cleanId
+            );
+          });
           if (found) {
             setProduct(found);
             setLoading(false);

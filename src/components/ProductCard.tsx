@@ -170,11 +170,22 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
 
   return (
     <div
+      role="button"
+      tabIndex={0}
       onClick={() => onNavigate('product', product.id)}
-      className={`group card relative flex flex-col overflow-visible text-left cursor-pointer transition-shadow hover:shadow-lg ${sizesOpen ? 'z-30' : ''}`}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onNavigate('product', product.id);
+        }
+      }}
+      className={`group card relative flex flex-col overflow-visible text-left cursor-pointer transition-shadow hover:shadow-lg active:scale-[0.99] touch-manipulation ${sizesOpen ? 'z-30' : ''}`}
     >
       {/* Превью фото с возможностью листать */}
-      <div className="relative aspect-[4/5] sm:aspect-[3/4] overflow-hidden rounded-t-xl bg-slate-50 select-none p-2 sm:p-2.5 flex items-center justify-center">
+      <div 
+        onClick={() => onNavigate('product', product.id)}
+        className="relative aspect-[4/5] sm:aspect-[3/4] overflow-hidden rounded-t-xl bg-slate-50 p-2 sm:p-2.5 flex items-center justify-center cursor-pointer"
+      >
         <ProductImage
           src={activeImage}
           alt={product.name}
@@ -182,7 +193,7 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
           decoding="async"
           width={600}
           fit="contain"
-          className="h-full w-full bg-transparent flex items-center justify-center"
+          className="h-full w-full bg-transparent flex items-center justify-center pointer-events-none"
           imageClassName="transition-transform duration-500 ease-apple group-hover:scale-105"
         />
 
@@ -195,14 +206,14 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
           </div>
         )}
 
-        {/* Кнопки перелистывания фото при наведении */}
+        {/* Кнопки перелистывания фото при наведении (скрыты на мобильных, активны только на десктопе) */}
         {allImages.length > 1 && (
           <>
             <button
               type="button"
               onClick={handlePrevImage}
               aria-label="Предыдущее фото"
-              className="absolute left-2 top-1/2 -translate-y-1/2 z-20 flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full bg-white/90 text-slate-700 shadow-md backdrop-blur-sm border border-slate-200/80 transition-all hover:bg-white hover:scale-110 opacity-0 group-hover:opacity-100"
+              className="hidden sm:flex absolute left-2 top-1/2 -translate-y-1/2 z-20 h-8 w-8 items-center justify-center rounded-full bg-white/90 text-slate-700 shadow-md backdrop-blur-sm border border-slate-200/80 transition-all hover:bg-white hover:scale-110 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
@@ -210,13 +221,13 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
               type="button"
               onClick={handleNextImage}
               aria-label="Следующее фото"
-              className="absolute right-2 top-1/2 -translate-y-1/2 z-20 flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full bg-white/90 text-slate-700 shadow-md backdrop-blur-sm border border-slate-200/80 transition-all hover:bg-white hover:scale-110 opacity-0 group-hover:opacity-100"
+              className="hidden sm:flex absolute right-2 top-1/2 -translate-y-1/2 z-20 h-8 w-8 items-center justify-center rounded-full bg-white/90 text-slate-700 shadow-md backdrop-blur-sm border border-slate-200/80 transition-all hover:bg-white hover:scale-110 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto"
             >
               <ChevronRight className="h-4 w-4" />
             </button>
 
-            {/* Точки-индикаторы снизу (dots) */}
-            <div className="absolute bottom-2 left-0 right-0 z-20 flex items-center justify-center gap-1 pointer-events-auto">
+            {/* Точки-индикаторы снизу (dots) - контейнер не перехватывает клики */}
+            <div className="absolute bottom-2 left-0 right-0 z-20 flex items-center justify-center gap-1 pointer-events-none">
               {allImages.slice(0, 6).map((_, idx) => (
                 <button
                   key={idx}
@@ -225,7 +236,7 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
                     e.stopPropagation();
                     setCurrentImgIndex(idx);
                   }}
-                  className={`h-1.5 rounded-full transition-all ${
+                  className={`h-1.5 rounded-full transition-all pointer-events-auto ${
                     idx === currentImgIndex
                       ? 'w-3.5 bg-slate-900 shadow'
                       : 'w-1.5 bg-white/90 border border-slate-300 hover:bg-slate-400'
@@ -240,7 +251,10 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
 
       <div className="flex flex-col p-3 sm:p-4">
         {/* Название товара: Артикул — Цвет (для дорожек с приставкой Дорожка / Жол кілем) */}
-        <h3 className="text-sm font-bold text-slate-900 leading-snug line-clamp-2 group-hover:text-brand-700 transition-colors">
+        <h3 
+          onClick={() => onNavigate('product', product.id)}
+          className="text-sm font-bold text-slate-900 leading-snug line-clamp-2 group-hover:text-brand-700 transition-colors cursor-pointer"
+        >
           {formatProductTitle(product, language)}
         </h3>
 

@@ -138,7 +138,6 @@ export default function ProductPage({
     const dy = Math.abs(e.touches[0].clientY - touchStartY.current);
     if (dx > dy && dx > 10) {
       isHorizontalSwipe.current = true;
-      e.preventDefault();
     }
   }, []);
 
