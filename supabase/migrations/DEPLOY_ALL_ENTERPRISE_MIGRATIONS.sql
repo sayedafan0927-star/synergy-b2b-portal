@@ -286,4 +286,100 @@ CREATE POLICY "anyone_insert_leads" ON leads
   TO anon, authenticated
   WITH CHECK (true);
 
+-- ==============================================================================
+-- 6. DATA INTEGRITY CHECK CONSTRAINTS & OPTIMISTIC LOCKING
+-- ==============================================================================
+
+-- 6.1 Non-negative CHECK Constraints
+ALTER TABLE orders DROP CONSTRAINT IF EXISTS chk_orders_total_amount;
+ALTER TABLE orders ADD CONSTRAINT chk_orders_total_amount CHECK (total_amount >= 0);
+
+ALTER TABLE orders DROP CONSTRAINT IF EXISTS chk_orders_total_sqm;
+ALTER TABLE orders ADD CONSTRAINT chk_orders_total_sqm CHECK (total_sqm >= 0);
+
+ALTER TABLE orders DROP CONSTRAINT IF EXISTS chk_orders_total_items;
+ALTER TABLE orders ADD CONSTRAINT chk_orders_total_items CHECK (total_items >= 0);
+
+ALTER TABLE order_items DROP CONSTRAINT IF EXISTS chk_order_items_price;
+ALTER TABLE order_items ADD CONSTRAINT chk_order_items_price CHECK (price >= 0);
+
+ALTER TABLE profiles DROP CONSTRAINT IF EXISTS chk_profiles_credit_limit;
+ALTER TABLE profiles ADD CONSTRAINT chk_profiles_credit_limit CHECK (credit_limit_usd >= 0);
+
+ALTER TABLE profiles DROP CONSTRAINT IF EXISTS chk_profiles_delay_days;
+ALTER TABLE profiles ADD CONSTRAINT chk_profiles_delay_days CHECK (payment_delay_days >= 0);
+
+ALTER TABLE inventory_balances DROP CONSTRAINT IF EXISTS chk_inv_free_stock;
+ALTER TABLE inventory_balances ADD CONSTRAINT chk_inv_free_stock CHECK (free_stock >= 0);
+
+ALTER TABLE inventory_balances DROP CONSTRAINT IF EXISTS chk_inv_reserved_stock;
+ALTER TABLE inventory_balances ADD CONSTRAINT chk_inv_reserved_stock CHECK (reserved_stock >= 0);
+
+ALTER TABLE inventory_balances DROP CONSTRAINT IF EXISTS chk_inv_total_stock;
+ALTER TABLE inventory_balances ADD CONSTRAINT chk_inv_total_stock CHECK (total_stock >= 0);
+
+-- 6.2 Optimistic Locking (version columns)
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS version integer NOT NULL DEFAULT 1;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS version integer NOT NULL DEFAULT 1;
+ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS version integer NOT NULL DEFAULT 1;
+
+-- ==============================================================================
+-- 7. HIGH-PERFORMANCE QUERY INDEXES
+-- ==============================================================================
+
+CREATE INDEX IF NOT EXISTS idx_orders_user_created ON orders (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_order_items_sku ON order_items (sku);
+CREATE INDEX IF NOT EXISTS idx_order_items_product_id ON order_items (product_id);
+CREATE INDEX IF NOT EXISTS idx_products_collection ON products (collection);
+CREATE INDEX IF NOT EXISTS idx_products_category ON products (category);
+CREATE INDEX IF NOT EXISTS idx_products_supplier ON products (supplier_id);
+CREATE INDEX IF NOT EXISTS idx_warehouse_stock_city ON warehouse_stock (city);
+CREATE INDEX IF NOT EXISTS idx_collection_prices_type ON collection_prices (price_type_id);
+CREATE INDEX IF NOT EXISTS idx_leads_kanban ON leads (kanban_stage);
+
+-- ==============================================================================
+-- 8. PARTITIONED AUDIT LOGS (RANGE BY MONTH)
+-- ==============================================================================
+
+CREATE TABLE IF NOT EXISTS integration_audit_logs_v2 (
+  id uuid DEFAULT gen_random_uuid(),
+  event_type text NOT NULL,
+  direction text NOT NULL CHECK (direction IN ('inbound', 'outbound')),
+  status text NOT NULL CHECK (status IN ('success', 'warning', 'error')),
+  status_code integer,
+  latency_ms integer,
+  source text NOT NULL,
+  payload jsonb,
+  error_message text,
+  correlation_id text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (id, created_at)
+) PARTITION BY RANGE (created_at);
+
+CREATE TABLE IF NOT EXISTS audit_logs_y2026m09 PARTITION OF integration_audit_logs_v2
+  FOR VALUES FROM ('2026-09-01 00:00:00+00') TO ('2026-10-01 00:00:00+00');
+CREATE TABLE IF NOT EXISTS audit_logs_y2026m10 PARTITION OF integration_audit_logs_v2
+  FOR VALUES FROM ('2026-10-01 00:00:00+00') TO ('2026-11-01 00:00:00+00');
+CREATE TABLE IF NOT EXISTS audit_logs_y2026m11 PARTITION OF integration_audit_logs_v2
+  FOR VALUES FROM ('2026-11-01 00:00:00+00') TO ('2026-12-01 00:00:00+00');
+CREATE TABLE IF NOT EXISTS audit_logs_y2026m12 PARTITION OF integration_audit_logs_v2
+  FOR VALUES FROM ('2026-12-01 00:00:00+00') TO ('2027-01-01 00:00:00+00');
+CREATE TABLE IF NOT EXISTS audit_logs_default PARTITION OF integration_audit_logs_v2 DEFAULT;
+
+CREATE INDEX IF NOT EXISTS idx_audit_v2_created ON integration_audit_logs_v2 (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_v2_status ON integration_audit_logs_v2 (status);
+CREATE INDEX IF NOT EXISTS idx_audit_v2_event_type ON integration_audit_logs_v2 (event_type);
+CREATE INDEX IF NOT EXISTS idx_audit_v2_correlation ON integration_audit_logs_v2 (correlation_id);
+
+ALTER TABLE integration_audit_logs_v2 ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "admin_read_audit_logs_v2" ON integration_audit_logs_v2;
+CREATE POLICY "admin_read_audit_logs_v2" ON integration_audit_logs_v2 FOR SELECT
+  TO authenticated
+  USING (EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin'));
+
+DROP POLICY IF EXISTS "service_insert_audit_logs_v2" ON integration_audit_logs_v2;
+CREATE POLICY "service_insert_audit_logs_v2" ON integration_audit_logs_v2 FOR INSERT
+  TO authenticated WITH CHECK (true);
+
 COMMIT;
