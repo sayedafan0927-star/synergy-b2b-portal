@@ -1,5 +1,5 @@
 import { useState, useEffect, useContext } from 'react';
-import { fetchCatalogFromErp } from '@/lib/erpApi';
+import { fetchCatalogFromErp, fetchSingleProductFromErp } from '@/lib/erpApi';
 import { AuthContext, type Profile } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import type { Product, ProductVariant, Warehouse, StockSummary } from '@/types';
@@ -590,7 +590,8 @@ export function useProducts(customDealerId?: string | number) {
 
     async function load() {
       try {
-        const erpData = await fetchCatalogFromErp(effectiveDealerId);
+        const bypassCache = reloadCounter > 0;
+        const erpData = await fetchCatalogFromErp(effectiveDealerId, undefined, bypassCache);
         if (!cancelled && erpData && erpData.success && Array.isArray(erpData.products) && erpData.products.length > 0) {
           const merged = mergeProducts(erpData.products as Product[]);
           setProducts(merged);
@@ -637,6 +638,18 @@ export function useProduct(id: string | undefined, customDealerId?: string | num
 
     async function load() {
       try {
+        // 1. Попытка быстрой точечной загрузки одного товара (минуя дамп всего каталога)
+        const single = await fetchSingleProductFromErp(id).catch(() => null);
+        if (!cancelled && single) {
+          const merged = mergeProducts([single as Product]);
+          if (merged.length > 0) {
+            setProduct(merged[0]);
+            setLoading(false);
+            return;
+          }
+        }
+
+        // 2. Fallback на полный каталог, если точечный поиск не вернул результат
         const erpData = await fetchCatalogFromErp(effectiveDealerId);
         if (!cancelled && erpData && erpData.success && Array.isArray(erpData.products)) {
           const merged = mergeProducts(erpData.products as Product[]);

@@ -62,6 +62,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ success: false, error: 'Method not allowed' });
   }
 
+  // Защита ИБ: доступ к журналу транзакций строго для администраторов
+  const { authenticateRequest } = await import('../lib/authGuard');
+  const authCtx = await authenticateRequest(req, { requiredRoles: ['admin'], allowServerKey: true });
+  if (!authCtx.isAuthenticated || authCtx.error) {
+    return res.status(403).json({
+      success: false,
+      error: authCtx.error || 'Доступ к журналу аудита разрешен только администраторам.',
+    });
+  }
+
   try {
     const limit = Math.min(Number(req.query.limit || 50), 100);
 

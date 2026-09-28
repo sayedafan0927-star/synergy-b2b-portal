@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
+import { recordAuditLog } from '../audit/logs';
 
 const ALLOWED_KEYS = new Set([
   'SynergySecretKey2025',
@@ -127,18 +128,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       
       console.log(`[Webhook clients] ACTIVATED client: ID=${p.counterparty_id}, Name="${p.name}", Login="${p.portal_login}"`);
 
-      // Сохраняем в Supabase profiles
+      // Сохраняем в Supabase profiles расширенные атрибуты контрагента
       try {
         await supabase
           .from('profiles')
           .upsert({
             partner_id: String(p.counterparty_id),
+            erp_id: p.counterparty_id,
             full_name: p.name,
             phone: p.phone,
             company_name: p.name,
+            city: p.city || '',
+            address: p.address || '',
+            bin_iin: p.bin || '',
+            credit_limit_usd: Number(p.credit_limit_usd || 0),
+            payment_delay_days: Number(p.payment_delay_days || 0),
             role: 'client',
             updated_at: new Date().toISOString(),
           }, { onConflict: 'partner_id' });
+
+        if (p.credit_limit_usd !== undefined) {
+          await supabase
+            .from('partner_balances')
+            .upsert({
+              partner_id: String(p.counterparty_id),
+              last_synced_at: new Date().toISOString(),
+            }, { onConflict: 'partner_id' });
+        }
+
+        await recordAuditLog({
+          eventType: 'client_synced_webhook',
+          direction: 'inbound',
+          status: 'success',
+          source: 'ERP Client Webhook',
+          payload: {
+            counterparty_id: p.counterparty_id,
+            name: p.name,
+            login: p.portal_login,
+            credit_limit: p.credit_limit_usd,
+            payment_delay_days: p.payment_delay_days,
+          },
+        });
       } catch (dbErr) {
         console.warn('[Webhook clients] Profile upsert notice:', dbErr);
       }
@@ -173,6 +203,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await channel.send({
           type: 'broadcast',
           event: 'client_deactivated',
+          payload: { counterparty_id },
+        });
+
+        await recordAuditLog({
+          eventType: 'client_deactivated_webhook',
+          direction: 'inbound',
+          status: 'success',
+          source: 'ERP Client Webhook',
           payload: { counterparty_id },
         });
       } catch (dbErr) {

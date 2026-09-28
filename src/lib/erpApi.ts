@@ -65,21 +65,28 @@ export async function erpFetch(
     ...(options.headers || {}),
   };
 
-  // Автоматическая передача безопасного контекста роли и partner_id для защиты от IDOR
+  // Автоматическая передача Bearer JWT токена текущей сессии
   if (typeof window !== 'undefined') {
     try {
+      // 1. Ищем токен сессии Supabase Auth в localStorage
+      const sbKey = Object.keys(localStorage).find(k => k.startsWith('sb-') && k.endsWith('-auth-token'));
+      if (sbKey) {
+        const item = localStorage.getItem(sbKey);
+        if (item) {
+          const parsed = JSON.parse(item);
+          const accessToken = parsed?.access_token || parsed?.currentSession?.access_token;
+          if (accessToken) {
+            requestHeaders['Authorization'] = `Bearer ${accessToken}`;
+          }
+        }
+      }
+
+      // 2. Fallback на токен кастомной сессии
       const sessionStr = sessionStorage.getItem('synergy:auth_session');
       if (sessionStr) {
-        const { profile } = JSON.parse(sessionStr);
-        if (profile?.role) {
-          requestHeaders['X-User-Role'] = profile.role;
-        }
-        if (profile?.partner_id) {
-          if (profile.role === 'supplier') {
-            requestHeaders['X-Supplier-Id'] = String(profile.partner_id);
-          } else {
-            requestHeaders['X-Client-Id'] = String(profile.partner_id);
-          }
+        const parsedSession = JSON.parse(sessionStr);
+        if (parsedSession?.token && !requestHeaders['Authorization']) {
+          requestHeaders['Authorization'] = `Bearer ${parsedSession.token}`;
         }
       }
     } catch {}
@@ -290,9 +297,15 @@ export async function fetchCatalogFromErp(dealerId?: string | number, priceType?
       params: {
         dealer_id: dealerId ? String(dealerId) : undefined,
         price_type: priceType || undefined,
-        _t: Date.now(),
+        refresh: bypassCache ? 'true' : undefined,
       },
     });
+
+    const xCache = response.headers.get('x-cache');
+    const xAge = response.headers.get('x-cache-age-ms');
+    if (xCache) {
+      console.log(`[Catalog Gateway] Status: ${xCache}${xAge ? ` (${xAge}ms)` : ''}`);
+    }
 
     if (!response.ok) {
       throw new Error(`Ошибка загрузки каталога (${response.status})`);
@@ -304,6 +317,23 @@ export async function fetchCatalogFromErp(dealerId?: string | number, priceType?
     }
     return data;
   });
+}
+
+/**
+ * Точечная загрузка одного товара по ID или артикулу (исключает скачивание всего каталога)
+ */
+export async function fetchSingleProductFromErp(id: string) {
+  const response = await erpFetch('product', {
+    method: 'GET',
+    params: { id },
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const data = await response.json();
+  return data?.product || null;
 }
 
 /**

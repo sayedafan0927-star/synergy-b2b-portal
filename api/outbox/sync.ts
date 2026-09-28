@@ -5,11 +5,15 @@ import { applyCorrelationId } from '../lib/trace';
 import { enforceRateLimit } from '../lib/rateLimit';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://sjvvoxxwevwgziuxjvcy.supabase.co';
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmY2dscW5qaHl1Ynh1aGZ0cndvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMwMzQ1MDUsImV4cCI6MjA1ODYxMDUwNX0.z0Vw3tJ4372iY-qC52dZ_Yl-kC46M25jH3_P9z3G30w';
-const SERVER_ERP_KEY = process.env.ERP_API_KEY || '138d1bdaf9402600c8f5d5763e2e1573c1e45d32401e62e4981cd7e898bf0544';
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+const SERVER_ERP_KEY = process.env.ERP_API_KEY || '';
 const TARGET_ERP_URL = process.env.ERP_API_URL || 'https://kilem-khan.kz/api/sin/public/api_portal.php';
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+const MAX_RETRIES = 5;
+
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: { persistSession: false },
+});
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS
@@ -30,15 +34,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const startTime = Date.now();
+  const nowIso = new Date().toISOString();
 
   try {
-    // 1. Поиск отложенных буферизованных заказов в Supabase
+    // 1. Поиск отложенных заказов, готовых к синхронизации (pending и next_retry_at <= now)
     const { data: pendingOrders, error: fetchErr } = await supabase
       .from('orders')
       .select('*')
-      .in('status', ['pending', 'pending_erp_sync', 'queued_for_erp'])
+      .eq('status', 'pending')
+      .lte('next_retry_at', nowIso)
       .order('created_at', { ascending: true })
-      .limit(20);
+      .limit(10);
 
     if (fetchErr) {
       console.error('[Outbox Sync] Failed to fetch pending orders:', fetchErr);
@@ -52,16 +58,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!pendingOrders || pendingOrders.length === 0) {
       return res.status(200).json({
         success: true,
-        message: 'Очередь Outbox пуста. Все заказы синхронизированы с 1С.',
+        message: 'Очередь Outbox пуста или все заказы ожидают своего тайм-аута ретрая.',
         count: 0,
         processed: [],
       });
     }
 
-    const results: Array<{ order_id: string; order_number: string; success: boolean; error?: string }> = [];
+    const results: Array<{ order_id: string; order_number: string; success: boolean; dlq?: boolean; error?: string }> = [];
 
     for (const order of pendingOrders) {
-      // Подгружаем реальные товарные позиции заказа из order_items
+      // 2. Атомарный захват заказа (Claim Lock) для исключения параллельной гонки
+      const { data: claimedRow } = await supabase
+        .from('orders')
+        .update({
+          status: 'processing_sync',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', order.id)
+        .eq('status', 'pending')
+        .select('id')
+        .maybeSingle();
+
+      if (!claimedRow) {
+        // Заказ уже перехвачен параллельным воркером
+        continue;
+      }
+
+      const currentRetries = Number(order.retry_count || 0);
+
+      // Подгружаем товарные позиции заказа из order_items
       const { data: dbItems } = await supabase
         .from('order_items')
         .select('*')
@@ -75,14 +100,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             price: Number(it.price) || 10,
             warehouse: it.warehouse || order.warehouse || 'Основной Склад Астана',
           }))
-        : (order.items || [
+        : [
             {
               sku: 'OUTBOX-ITEM',
               quantity: order.total_items || 1,
               price: order.total_amount || 10,
               warehouse: order.warehouse || 'Основной Склад Астана',
             }
-          ]);
+          ];
 
       const orderPayload = {
         partner_id: order.partner_id || 'guest',
@@ -111,8 +136,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           headers: {
             'Content-Type': 'application/json',
             'X-Portal-Key': SERVER_ERP_KEY,
-            'Idempotency-Key': `outbox-${order.id}`,
-            'X-Idempotency-Key': `outbox-${order.id}`,
+            'Idempotency-Key': order.idempotency_key || `outbox-${order.id}`,
+            'X-Idempotency-Key': order.idempotency_key || `outbox-${order.id}`,
             'X-Correlation-ID': correlationId,
           },
           body: JSON.stringify(orderPayload),
@@ -123,11 +148,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const erpData = await erpRes.json().catch(() => ({}));
           const docNumber = erpData?.order?.doc_number || erpData?.order_id || `1C-${order.order_number}`;
 
-          // Обновляем статус заказа в Supabase на confirmed
+          // Успех: обновляем статус заказа в Supabase на confirmed
           await supabase
             .from('orders')
             .update({
               status: 'confirmed',
+              order_number: docNumber,
+              last_error: null,
               notes: `${order.notes || ''} [Синхронизировано с 1С: ${new Date().toISOString()}]`.trim(),
               updated_at: new Date().toISOString(),
             })
@@ -152,7 +179,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               event: 'order_status_changed',
               payload: {
                 order_id: order.id,
-                order_doc_number: order.order_number,
+                order_doc_number: docNumber,
                 new_status: 'confirmed',
                 timestamp: new Date().toISOString(),
               },
@@ -162,33 +189,87 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           results.push({ order_id: order.id, order_number: order.order_number, success: true });
         } else {
           const errText = await erpRes.text().catch(() => '');
-          results.push({ order_id: order.id, order_number: order.order_number, success: false, error: `ERP ${erpRes.status}: ${errText.slice(0, 100)}` });
+          const nextRetries = currentRetries + 1;
+          const isDlq = nextRetries >= MAX_RETRIES;
+
+          // Экспоненциальный откат: 1 мин, 2 мин, 4 мин, 8 мин, 16 мин
+          const backoffMinutes = Math.min(60, Math.pow(2, nextRetries - 1));
+          const nextRetryAt = new Date(Date.now() + backoffMinutes * 60000).toISOString();
+
+          await supabase
+            .from('orders')
+            .update({
+              status: isDlq ? 'failed_dlq' : 'pending',
+              retry_count: nextRetries,
+              last_error: `ERP ${erpRes.status}: ${errText.slice(0, 200)}`,
+              next_retry_at: nextRetryAt,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', order.id);
 
           await recordAuditLog({
-            eventType: 'outbox_sync_retry_failed',
+            eventType: isDlq ? 'outbox_dlq_moved' : 'outbox_sync_retry_scheduled',
             direction: 'outbound',
-            status: 'warning',
+            status: isDlq ? 'error' : 'warning',
             statusCode: erpRes.status,
             latencyMs: Date.now() - startTime,
             source: 'Outbox Worker',
             correlationId,
-            payload: { order_id: order.id, order_number: order.order_number },
-            errorMessage: errText.slice(0, 200),
+            payload: {
+              order_id: order.id,
+              order_number: order.order_number,
+              retry_count: nextRetries,
+              is_dlq: isDlq,
+              next_retry_at: nextRetryAt,
+            },
+            errorMessage: errText.slice(0, 250),
+          });
+
+          results.push({
+            order_id: order.id,
+            order_number: order.order_number,
+            success: false,
+            dlq: isDlq,
+            error: `ERP ${erpRes.status}: ${errText.slice(0, 100)}`,
           });
         }
       } catch (reqErr: any) {
-        results.push({ order_id: order.id, order_number: order.order_number, success: false, error: reqErr?.message || 'Network error' });
+        const nextRetries = currentRetries + 1;
+        const isDlq = nextRetries >= MAX_RETRIES;
+        const backoffMinutes = Math.min(60, Math.pow(2, nextRetries - 1));
+        const nextRetryAt = new Date(Date.now() + backoffMinutes * 60000).toISOString();
+
+        await supabase
+          .from('orders')
+          .update({
+            status: isDlq ? 'failed_dlq' : 'pending',
+            retry_count: nextRetries,
+            last_error: `Сетевой сбой: ${reqErr?.message || 'Network error'}`,
+            next_retry_at: nextRetryAt,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', order.id);
+
+        results.push({
+          order_id: order.id,
+          order_number: order.order_number,
+          success: false,
+          dlq: isDlq,
+          error: reqErr?.message || 'Network error',
+        });
       }
     }
 
     const succeeded = results.filter(r => r.success).length;
-    const failed = results.filter(r => !r.success).length;
+    const failed = results.filter(r => !r.success && !r.dlq).length;
+    const dlq = results.filter(r => r.dlq).length;
 
     return res.status(200).json({
       success: true,
-      total_pending: pendingOrders.length,
+      total_processed: results.length,
       succeeded,
       failed,
+      dlq_moved: dlq,
       results,
       executed_at: new Date().toISOString(),
     });

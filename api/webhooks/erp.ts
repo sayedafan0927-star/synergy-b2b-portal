@@ -1,15 +1,18 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
+import { patchCachedCatalogStock } from '../lib/catalogCache';
+import { recordAuditLog } from '../audit/logs';
 
 const ALLOWED_KEYS = new Set([
-  'SynergySecretKey2025',
-  '138d1bdaf9402600c8f5d5763e2e1573c1e45d32401e62e4981cd7e898bf0544',
-]);
+  process.env.PORTAL_SECRET_KEY,
+  process.env.ERP_API_KEY,
+  process.env.ERP_PORTAL_SECRET,
+].filter(Boolean) as string[]);
 
-const SECRET_KEY = process.env.PORTAL_SECRET_KEY || process.env.ERP_PORTAL_SECRET || 'SynergySecretKey2025';
+const SECRET_KEY = process.env.PORTAL_SECRET_KEY || process.env.ERP_PORTAL_SECRET || '';
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://sjvvoxxwevwgziuxjvcy.supabase.co';
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmY2dscW5qaHl1Ynh1aGZ0cndvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMwMzQ1MDUsImV4cCI6MjA1ODYxMDUwNX0.z0Vw3tJ4372iY-qC52dZ_Yl-kC46M25jH3_P9z3G30w';
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
 
 const supabaseServer = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -161,11 +164,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.log(`  -> SKU: ${item.sku}, Free stock: ${item.free_stock}, Reserved: ${item.reserved_stock}, Total: ${item.total_stock}`);
       }
 
-      // Сквозная трансляция в Realtime-шину браузеров
+      // 1.1. Материализация в БД (inventory_balances) и инкрементальное обновление кэша каталога
+      let dbUpdated = 0;
+      let cachePatched = false;
+      try {
+        const patchResult = await patchCachedCatalogStock(items);
+        dbUpdated = patchResult.updatedInDb;
+        cachePatched = patchResult.cachePatched;
+      } catch (patchErr) {
+        console.warn('[Webhook ERP] Error materializing stock updates:', patchErr);
+      }
+
+      // 1.2. Сквозная трансляция в Realtime-шину браузеров
       await broadcastLiveUpdate('stock_changed', {
         items,
         reason: payload.reason || 'manual',
         timestamp,
+      });
+
+      // 1.3. Фиксация в журнале аудита интеграции
+      await recordAuditLog({
+        eventType: 'stock_changed_webhook',
+        direction: 'inbound',
+        status: 'success',
+        source: 'ERP Stock Webhook',
+        payload: {
+          items_count: items.length,
+          db_updated: dbUpdated,
+          cache_patched: cachePatched,
+          reason: payload.reason || 'manual',
+        },
       });
 
       return res.status(200).json({
@@ -173,7 +201,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         event: 'stock_changed',
         event_id: eventId || payload.event_id,
         items_processed: items.length,
-        message: `Successfully processed stock update for ${items.length} item(s).`,
+        items_saved_to_db: dbUpdated,
+        catalog_cache_updated: cachePatched,
+        message: `Successfully processed stock update for ${items.length} item(s) (DB: ${dbUpdated}, Cache: ${cachePatched}).`,
         processed_at: new Date().toISOString(),
       });
     }

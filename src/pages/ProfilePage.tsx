@@ -96,6 +96,7 @@ interface Order {
   userId?: string;
   placedById?: string;
   date: string;
+  rawDate?: string;
   status: string;
   statusRaw: string;
   statusColor: string;
@@ -118,6 +119,28 @@ const ORDER_STATUS_MAP: Record<string, { label: string; color: string }> = {
   cancelled: { label: 'Отменён', color: 'bg-rose-50 text-rose-700 border-rose-200' },
   draft: { label: 'Черновик', color: 'bg-slate-100 text-slate-600 border-slate-200' },
 };
+
+/**
+ * Расчет оставшегося времени действия складской брони (WMS Hold TTL 24ч)
+ */
+function getReservationTtlRemaining(rawDate?: string, ttlHours = 24): { hours: number; minutes: number; isExpired: boolean; label: string } | null {
+  if (!rawDate) return null;
+  const created = new Date(rawDate).getTime();
+  if (isNaN(created)) return null;
+  const deadline = created + ttlHours * 3600 * 1000;
+  const remainingMs = deadline - Date.now();
+  if (remainingMs <= 0) {
+    return { hours: 0, minutes: 0, isExpired: true, label: 'Бронь истекла' };
+  }
+  const hours = Math.floor(remainingMs / (3600 * 1000));
+  const minutes = Math.floor((remainingMs % (3600 * 1000)) / (60 * 1000));
+  return {
+    hours,
+    minutes,
+    isExpired: false,
+    label: `${hours} ч ${minutes} мин`,
+  };
+}
 
 interface DisplaySettings {
   show_stock: boolean;
@@ -296,6 +319,43 @@ function OrderDetail({
           )}
         </div>
       </div>
+
+      {/* WMS Hold TTL (24ч) Banner */}
+      {status === 'pending' && (() => {
+        const ttl = getReservationTtlRemaining(order.rawDate || order.date, 24);
+        if (!ttl) return null;
+        return (
+          <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-3.5 flex items-start gap-3">
+            <div className="p-1.5 rounded-lg bg-amber-100 text-amber-700 shrink-0 mt-0.5">
+              <Clock className="h-4 w-4" />
+            </div>
+            <div className="text-xs">
+              <p className="font-bold text-amber-900">
+                Складской резерв WMS активен (Hold TTL 24ч)
+              </p>
+              <p className="text-amber-700 mt-0.5">
+                {ttl.isExpired
+                  ? 'Срок действия брони истекает. Оплатите счет или свяжитесь с менеджером для продления.'
+                  : `До автоматической отмены брони и возврата товара на общую витрину осталось: ${ttl.label}.`}
+              </p>
+            </div>
+          </div>
+        );
+      })()}
+
+      {status === 'cancelled' && (order.notes?.toLowerCase().includes('hold ttl') || order.notes?.toLowerCase().includes('брони')) && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50/80 p-3.5 flex items-start gap-3">
+          <div className="p-1.5 rounded-lg bg-rose-100 text-rose-700 shrink-0 mt-0.5">
+            <Clock className="h-4 w-4" />
+          </div>
+          <div className="text-xs">
+            <p className="font-bold text-rose-900">Бронь аннулирована по истечении Hold TTL (24ч)</p>
+            <p className="text-rose-700 mt-0.5">
+              Товары автоматически возвращены в свободный остаток на складе. Вы можете нажать «Повторить заказ», чтобы проверить текущее наличие и переоформить.
+            </p>
+          </div>
+        </div>
+      )}
 
       {order.notes && (
         <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs text-slate-600">
@@ -2917,6 +2977,7 @@ function OrdersTab({
             orderNumber: o.doc_number || `ORD-${o.id}`,
             userId: String(o.client_id || ''),
             date: dateStr,
+            rawDate: o.date || o.created_at || new Date().toISOString(),
             status: o.status || meta.label,
             statusRaw: st,
             statusColor: meta.color,
@@ -3172,6 +3233,22 @@ function OrdersTab({
                     <span className={`badge border ${order.statusColor}`}>
                       {order.status}
                     </span>
+                    {order.statusRaw === 'pending' && (() => {
+                      const ttl = getReservationTtlRemaining(order.rawDate || order.date, 24);
+                      if (!ttl) return null;
+                      return (
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold ${ttl.isExpired ? 'bg-rose-50 text-rose-700 border border-rose-200' : 'bg-amber-50 text-amber-800 border border-amber-200'}`}>
+                          <Clock className="h-3 w-3" />
+                          <span>{ttl.isExpired ? 'Бронь истекает' : `Бронь: ${ttl.label}`}</span>
+                        </span>
+                      );
+                    })()}
+                    {order.statusRaw === 'cancelled' && (order.notes?.toLowerCase().includes('hold ttl') || order.notes?.toLowerCase().includes('брони')) && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-rose-50 text-rose-700 border border-rose-200">
+                        <Clock className="h-3 w-3" />
+                        <span>Снята бронь (Hold TTL)</span>
+                      </span>
+                    )}
                     {isAdmin && (
                       <div className="ml-1" onClick={e => e.stopPropagation()}>
                         <select

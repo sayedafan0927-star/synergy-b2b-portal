@@ -4,17 +4,23 @@ import { dispatchApprovalRequest } from './approvals/whatsapp';
 import { recordAuditLog } from './audit/logs';
 import { applyCorrelationId } from './lib/trace';
 import { enforceRateLimit } from './lib/rateLimit';
+import { getCachedCatalog, saveCachedCatalog } from './lib/catalogCache';
+import { authenticateRequest } from './lib/authGuard';
+import { validateAndPriceOrder } from './lib/pricingValidator';
 
 const TARGET_ERP_URL = process.env.ERP_API_URL || 'https://kilem-khan.kz/api/sin/public/api_portal.php';
-const SERVER_ERP_KEY = process.env.ERP_API_KEY || '138d1bdaf9402600c8f5d5763e2e1573c1e45d32401e62e4981cd7e898bf0544';
+const SERVER_ERP_KEY = process.env.ERP_API_KEY || '';
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://sjvvoxxwevwgziuxjvcy.supabase.co';
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmY2dscW5qaHl1Ynh1aGZ0cndvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMwMzQ1MDUsImV4cCI6MjA1ODYxMDUwNX0.z0Vw3tJ4372iY-qC52dZ_Yl-kC46M25jH3_P9z3G30w';
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: { persistSession: false },
+});
 
-// Список публичных действий, не требующих авторизации
+// Список публичных действий, не требующих обязательной предварительной авторизации
 const PUBLIC_ACTIONS = new Set([
   'catalog',
+  'product',
   'ping',
   'login',
   'create_lead',
@@ -56,6 +62,56 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const action = String(req.query.action || req.body?.action || '').trim();
 
+  // 1.0. Высоконагруженный кэш каталога (Staging Cache / Sub-50ms HIT)
+  if (action === 'catalog' && req.method === 'GET') {
+    const isRefresh = req.query.refresh === 'true' || req.query.refresh === '1';
+    if (!isRefresh) {
+      try {
+        const cached = await getCachedCatalog('catalog_global');
+        if (cached && cached.isFresh) {
+          res.setHeader('X-Cache', 'HIT');
+          res.setHeader('X-Cache-Age-Ms', String(cached.ageMs));
+          res.setHeader('X-Cache-Source', cached.source);
+          return res.status(200).json(cached.data);
+        }
+      } catch (cacheLookupErr) {
+        console.warn('[API Proxy ERP] Cache lookup warning:', cacheLookupErr);
+      }
+    }
+  }
+
+  // 1.01. Точечный эндпоинт товара (исключает скачивание всего каталога на карточке товара)
+  if (action === 'product' && req.method === 'GET') {
+    const targetId = decodeURIComponent(String(req.query.id || req.query.sku || '')).trim().toLowerCase();
+    if (!targetId) {
+      return res.status(400).json({ success: false, error: 'Параметр id или sku обязателен' });
+    }
+
+    try {
+      const cached = await getCachedCatalog('catalog_global');
+      if (cached && cached.data && Array.isArray(cached.data.products)) {
+        const found = cached.data.products.find((p: any) => {
+          if (String(p.id).toLowerCase() === targetId) return true;
+          if (String(p.article || '').toLowerCase() === targetId) return true;
+          return (p.variants || []).some((v: any) =>
+            String(v.id).toLowerCase() === targetId ||
+            String(v.sku || '').toLowerCase() === targetId ||
+            String(v.barcode || '').toLowerCase() === targetId ||
+            String(v.article || '').toLowerCase() === targetId
+          );
+        });
+
+        if (found) {
+          res.setHeader('X-Cache', 'HIT');
+          return res.status(200).json({ success: true, product: found });
+        }
+      }
+      return res.status(404).json({ success: false, error: 'Товар не найден в каталоге' });
+    } catch (e: any) {
+      return res.status(500).json({ success: false, error: e?.message });
+    }
+  }
+
   // 1. Специальное действие: запрос согласования заказа в WhatsApp
   if (action === 'request_approval' && req.method === 'POST') {
     try {
@@ -95,225 +151,176 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // 1.1. Запрос акта сверки взаиморасчетов с 1С:ERP
+  // 1.1. Запрос официального акта сверки взаиморасчетов с 1С:ERP
   if (action === 'get_reconciliation_report') {
+    const authCtx = await authenticateRequest(req, { allowServerKey: true });
+    if (!authCtx.isAuthenticated) {
+      return res.status(401).json({ success: false, error: authCtx.error || 'Требуется авторизация' });
+    }
+
+    let partnerId = String(req.query.partner_id || req.query.counterpartyId || '');
+    if (authCtx.role === 'client') {
+      partnerId = String(authCtx.partnerId || '');
+      req.query.partner_id = partnerId;
+    }
+
+    const startDate = (req.query.start_date as string) || new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];
+    const endDate = (req.query.end_date as string) || new Date().toISOString().split('T')[0];
+
     try {
-      const partnerId = req.query.partner_id || req.query.counterpartyId || '';
-      const startDate = (req.query.start_date as string) || new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];
-      const endDate = (req.query.end_date as string) || new Date().toISOString().split('T')[0];
-
-      // Пробуем запросить из боевой ERP
-      try {
-        const erpUrl = `${TARGET_ERP_URL}?action=get_reconciliation_report&partner_id=${encodeURIComponent(String(partnerId))}&start_date=${startDate}&end_date=${endDate}&portal_key=${encodeURIComponent(SERVER_ERP_KEY)}`;
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 8000);
-        const erpRes = await fetch(erpUrl, { headers: { 'X-Portal-Key': SERVER_ERP_KEY }, signal: controller.signal }).finally(() => clearTimeout(timeout));
-        if (erpRes.ok) {
-          const report = await erpRes.json();
-          await recordAuditLog({
-            eventType: 'reconciliation_report',
-            direction: 'inbound',
-            status: 'success',
-            source: '1C ERP Reconciliation',
-            payload: { partner_id: partnerId, startDate, endDate },
-          });
-          return res.status(200).json(report);
-        }
-      } catch (erpNetErr) {
-        console.warn('[API Proxy ERP] Direct reconciliation ERP fetch failed, generating ledger from portal DB:', erpNetErr);
+      const erpUrl = `${TARGET_ERP_URL}?action=get_reconciliation_report&partner_id=${encodeURIComponent(partnerId)}&start_date=${startDate}&end_date=${endDate}&portal_key=${encodeURIComponent(SERVER_ERP_KEY)}`;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+      const erpRes = await fetch(erpUrl, { headers: { 'X-Portal-Key': SERVER_ERP_KEY }, signal: controller.signal }).finally(() => clearTimeout(timeout));
+      
+      if (erpRes.ok) {
+        const report = await erpRes.json();
+        await recordAuditLog({
+          eventType: 'reconciliation_report',
+          direction: 'inbound',
+          status: 'success',
+          source: '1C ERP Reconciliation',
+          payload: { partner_id: partnerId, startDate, endDate },
+        });
+        return res.status(200).json(report);
+      } else {
+        throw new Error(`ERP status ${erpRes.status}`);
       }
-
-      // Генерация структурированного акта сверки на основе данных заказов из БД
-      const { data: clientOrders } = await supabase
-        .from('orders')
-        .select('*')
-        .gte('created_at', `${startDate}T00:00:00Z`)
-        .lte('created_at', `${endDate}T23:59:59Z`)
-        .order('created_at', { ascending: true });
-
-      const transactions = (clientOrders || []).map(o => ({
-        id: o.id,
-        date: o.created_at ? o.created_at.split('T')[0] : startDate,
-        doc_type: 'Расходная накладная (УПД)',
-        doc_number: o.order_number,
-        debit: Number(o.total_amount) || 0,
-        credit: 0,
-        comment: o.notes || 'Отгрузка ковровых изделий Synergy',
-      }));
-
-      const totalDebit = transactions.reduce((s, t) => s + t.debit, 0);
-      const totalCredit = transactions.reduce((s, t) => s + t.credit, 0);
-      const startBalance = 0;
-      const endBalance = startBalance + totalDebit - totalCredit;
-
-      const ledgerReport = {
-        success: true,
-        report: {
-          partner_id: partnerId,
-          start_date: startDate,
-          end_date: endDate,
-          currency: 'USD',
-          initial_balance: startBalance,
-          total_debit: Math.round(totalDebit * 100) / 100,
-          total_credit: Math.round(totalCredit * 100) / 100,
-          final_balance: Math.round(endBalance * 100) / 100,
-          transactions,
-        },
-      };
-
-      await recordAuditLog({
-        eventType: 'reconciliation_report',
-        direction: 'inbound',
-        status: 'success',
-        source: 'Portal Reconciliation Engine',
-        payload: { partner_id: partnerId, startDate, endDate, count: transactions.length },
-      });
-
-      return res.status(200).json(ledgerReport);
-    } catch (recErr: any) {
-      return res.status(500).json({
+    } catch (erpNetErr: any) {
+      console.warn('[API Proxy ERP] Direct reconciliation ERP fetch failed:', erpNetErr?.message);
+      // Ликвидирована ложная генерация фиктивных актов по заказам! Честный ответ при недоступности учетной системы.
+      return res.status(503).json({
         success: false,
-        error: 'Не удалось сформировать акт сверки',
-        details: recErr?.message,
+        error: 'Сервер 1С:ERP временно недоступен для формирования официального акта сверки взаиморасчетов. Пожалуйста, повторите попытку позже.',
+        details: erpNetErr?.message,
       });
     }
   }
 
-  // 2. Валидация прав доступа для административных действий
-  const authHeader = req.headers.authorization || '';
-  const portalKeyHeader = req.headers['x-portal-key'] || req.headers['X-Portal-Key'];
+  // 2. Строгая аутентификация и валидация прав доступа через JWT и RBAC
+  let verifiedAuth: any = null;
 
   if (ADMIN_ACTIONS.has(action)) {
-    const isAuthorizedServer = portalKeyHeader === SERVER_ERP_KEY || portalKeyHeader === 'SynergySecretKey2025';
-    const hasBearer = authHeader.toString().startsWith('Bearer ');
-
-    if (!isAuthorizedServer && !hasBearer) {
+    verifiedAuth = await authenticateRequest(req, { requiredRoles: ['admin'], allowServerKey: true });
+    if (!verifiedAuth.isAuthenticated || verifiedAuth.error) {
       return res.status(403).json({
         success: false,
-        error: 'Forbidden: Для выполнения данного действия требуются права администратора.',
+        error: verifiedAuth.error || 'Forbidden: Для выполнения данного действия требуются права администратора.',
       });
     }
   }
 
-  // 2.1. ─── B2B IDOR Protection для поставщиков и клиентов ───
-  const callerRole = (req.headers['x-user-role'] as string || '').toLowerCase();
-  const callerSupplierId = req.headers['x-supplier-id'] as string;
-  const callerClientId = req.headers['x-client-id'] as string;
-
-  // Ограничения для фабрик / поставщиков
-  if (['supplier_network_stock', 'supplier_inbound_shipments', 'supplier_defects'].includes(action)) {
-    if (callerRole === 'supplier' && callerSupplierId) {
-      const requestedSupplierId = String(req.query.supplier_id || req.body?.supplier_id || '');
-      if (requestedSupplierId && requestedSupplierId !== callerSupplierId) {
-        return res.status(403).json({
-          success: false,
-          error: 'Forbidden: Поставщик имеет доступ только к данным собственной фабрики (B2B IDOR Protection).',
-        });
-      }
-      // Принудительно фиксируем ID фабрики на верифицированном значении
-      req.query.supplier_id = callerSupplierId;
-    }
-  }
-
-  // Ограничения для клиентов
+  // 2.1. ─── Защита от B2B IDOR (на основе криптографически проверенного профиля) ───
   if (['client_debt', 'orders'].includes(action)) {
-    if (callerRole === 'client' && callerClientId) {
-      const requestedClientId = String(req.query.client_id || req.query.counterparty_id || '');
-      if (requestedClientId && requestedClientId !== callerClientId) {
-        return res.status(403).json({
-          success: false,
-          error: 'Forbidden: Доступ к чужим финансовым начислениям и заказам запрещен (B2B IDOR Protection).',
-        });
-      }
-      req.query.client_id = callerClientId;
-    }
-  }
-
-  // 3. ─── Anti-Tamper Pricing Guard & Pre-Validation для заказов ───
-  let validatedOrderPayload: any = null;
-  if (action === 'create_order' && req.method === 'POST') {
-    try {
-      validatedOrderPayload = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-      const items = Array.isArray(validatedOrderPayload?.items) ? validatedOrderPayload.items : [];
-
-      if (items.length === 0) {
-        return res.status(400).json({
-          success: false,
-          error: 'В заказе отсутствует список позиций (массив items пуст).',
-        });
-      }
-
-      for (const item of items) {
-        const qty = Number(item.quantity);
-        const price = Number(item.price);
-
-        if (isNaN(qty) || qty <= 0 || !Number.isInteger(qty)) {
-          return res.status(400).json({
-            success: false,
-            error: `Недопустимое количество позиции: "${item.sku || item.productId || 'Товар'}". Количество должно быть целым положительным числом.`,
-          });
-        }
-
-        // Защита от нулевых или мошеннических цен (< $1.00)
-        if (isNaN(price) || price < 1.0) {
-          return res.status(400).json({
-            success: false,
-            error: `Обнаружена недопустимая или нулевая цена позиции: "${item.sku || item.productId || 'Товар'}". Минимальная допустимая стоимость изделия $1.00 (Anti-Tamper Protection).`,
-          });
-        }
-      }
-    } catch (parseErr) {
-      return res.status(400).json({
+    verifiedAuth = await authenticateRequest(req, { allowServerKey: true });
+    if (!verifiedAuth.isAuthenticated) {
+      return res.status(401).json({
         success: false,
-        error: 'Некорректный JSON формат полезной нагрузки заказа.',
+        error: verifiedAuth.error || 'Для доступа к финансовым данным требуется авторизация.',
       });
     }
+
+    if (verifiedAuth.role === 'client') {
+      const callerPartnerId = String(verifiedAuth.partnerId || verifiedAuth.erpId || '');
+      const requestedId = String(req.query.client_id || req.query.counterparty_id || '');
+      if (requestedId && callerPartnerId && requestedId !== callerPartnerId) {
+        return res.status(403).json({
+          success: false,
+          error: 'Forbidden: Доступ к чужим финансовым начислениям и заказам запрещен (B2B Anti-IDOR Protection).',
+        });
+      }
+      if (callerPartnerId) {
+        req.query.client_id = callerPartnerId;
+        req.query.counterparty_id = callerPartnerId;
+      }
+    }
   }
 
-  // 4. ─── Transactional Outbox (Буферизация заказа в БД перед вызовом ERP) ───
+  if (['supplier_network_stock', 'supplier_inbound_shipments', 'supplier_defects'].includes(action)) {
+    verifiedAuth = await authenticateRequest(req, { requiredRoles: ['admin', 'manager_rm', 'supplier'], allowServerKey: true });
+    if (!verifiedAuth.isAuthenticated || verifiedAuth.error) {
+      return res.status(403).json({
+        success: false,
+        error: verifiedAuth.error || 'Доступ разрешен только поставщикам и уполномоченным менеджерам.',
+      });
+    }
+
+    if (verifiedAuth.role === 'supplier') {
+      const callerSuppId = String(verifiedAuth.partnerId || verifiedAuth.erpId || '');
+      const requestedSuppId = String(req.query.supplier_id || req.body?.supplier_id || '');
+      if (requestedSuppId && callerSuppId && requestedSuppId !== callerSuppId) {
+        return res.status(403).json({
+          success: false,
+          error: 'Forbidden: Поставщик имеет доступ только к данным собственной фабрики.',
+        });
+      }
+      if (callerSuppId) {
+        req.query.supplier_id = callerSuppId;
+      }
+    }
+  }
+
+  // 3. ─── Серверный расчет и Anti-Tamper Pricing Guard для заказов ───
+  let validatedOrderPayload: any = null;
+  let finalTotalAmount = 0;
+  let finalTotalItems = 0;
   let outboxOrderId: string | null = null;
   let outboxOrderDoc: string | null = null;
 
-  if (action === 'create_order' && validatedOrderPayload) {
+  if (action === 'create_order' && req.method === 'POST') {
     try {
+      const callerAuth = await authenticateRequest(req, { allowServerKey: true });
+      const rawPayload = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+      const rawItems = Array.isArray(rawPayload?.items) ? rawPayload.items : [];
+
+      const priceType = callerAuth.priceType || rawPayload.price_type || 'wholesale';
+      const pricingResult = await validateAndPriceOrder(rawItems, priceType);
+
+      if (!pricingResult.valid) {
+        return res.status(400).json({
+          success: false,
+          error: pricingResult.error || 'Ошибка валидации товарных позиций заказа',
+        });
+      }
+
+      if (pricingResult.tamperDetected) {
+        console.warn(`[Anti-Tamper Pricing] Notice: client sent untrusted prices. Server recalculated to $${pricingResult.totalAmount}`);
+      }
+
+      finalTotalAmount = pricingResult.totalAmount;
+      finalTotalItems = pricingResult.totalItems;
+
+      validatedOrderPayload = {
+        ...rawPayload,
+        total_amount: finalTotalAmount,
+        items: pricingResult.items,
+        user_id: callerAuth.userId || rawPayload.user_id,
+        partner_id: (callerAuth.role === 'client' ? callerAuth.partnerId : rawPayload.partner_id) || rawPayload.client_id,
+      };
+
+      // 4. ─── Transactional Outbox (Буферизация в PostgreSQL перед вызовом 1C) ───
       const year = new Date().getFullYear();
       outboxOrderDoc = `ORD-${year}-${Math.floor(1000 + Math.random() * 9000)}`;
-      const items = validatedOrderPayload.items || [];
-      const totalAmount = items.reduce((s: number, i: any) => s + (Number(i.price) * Number(i.quantity)), 0);
-      const totalItems = items.reduce((s: number, i: any) => s + Number(i.quantity), 0);
-      const totalSqm = items.reduce((s: number, i: any) => s + (Number(i.price_per_sqm || 0) > 0 ? (Number(i.price) / Number(i.price_per_sqm)) * Number(i.quantity) : 0), 0);
 
-      // Определяем корректный user_id для внешнего ключа orders -> profiles(id)
-      let resolvedUserId = validatedOrderPayload.user_id || validatedOrderPayload.userId;
-      const clientPhone = validatedOrderPayload.client_phone || validatedOrderPayload.buyer?.phone;
-
-      if (!resolvedUserId && clientPhone) {
-        const cleanPhone = String(clientPhone).replace(/\D+/g, '');
+      let resolvedUserId = validatedOrderPayload.user_id;
+      if (!resolvedUserId && validatedOrderPayload.client_phone) {
+        const cleanPhone = String(validatedOrderPayload.client_phone).replace(/\D+/g, '');
         const { data: matchedProfile } = await supabase
           .from('profiles')
           .select('id')
           .ilike('phone', `%${cleanPhone.slice(-10)}%`)
           .limit(1)
           .maybeSingle();
-        if (matchedProfile?.id) {
-          resolvedUserId = matchedProfile.id;
-        }
+        if (matchedProfile?.id) resolvedUserId = matchedProfile.id;
       }
 
       if (!resolvedUserId) {
-        // Fallback на первый профиль администратора
-        const { data: adminProf } = await supabase
-          .from('profiles')
-          .select('id')
-          .eq('role', 'admin')
-          .limit(1)
-          .maybeSingle();
+        const { data: adminProf } = await supabase.from('profiles').select('id').eq('role', 'admin').limit(1).maybeSingle();
         resolvedUserId = adminProf?.id;
       }
 
       if (resolvedUserId) {
-        // Пробуем зафиксировать заказ в Supabase
-        const { data: createdRow, error: insErr } = await supabase
+        const { data: createdRow } = await supabase
           .from('orders')
           .insert({
             order_number: outboxOrderDoc,
@@ -321,9 +328,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             placed_by_id: resolvedUserId,
             warehouse: validatedOrderPayload.items?.[0]?.warehouse || 'Основной Склад Астана',
             notes: validatedOrderPayload.comment || '',
-            total_amount: totalAmount,
-            total_items: totalItems,
-            total_sqm: totalSqm,
+            total_amount: finalTotalAmount,
+            total_items: finalTotalItems,
+            total_sqm: pricingResult.items.reduce((s, it) => s + (it.price_per_sqm > 0 ? it.price / it.price_per_sqm * it.quantity : 0), 0),
             status: 'pending',
           })
           .select('id, order_number')
@@ -333,12 +340,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           outboxOrderId = createdRow.id;
           outboxOrderDoc = createdRow.order_number;
 
-          // Сохраняем строки заказа
-          const orderItemRows = items.map((it: any) => ({
+          const orderItemRows = pricingResult.items.map(it => ({
             order_id: createdRow.id,
             product_id: String(it.productId || it.item_id || it.sku || ''),
             product_name: String(it.sku || 'Ковровое изделие'),
-            collection: String(it.collection || ''),
             size: String(it.size || 'Стандарт'),
             sku: String(it.sku || ''),
             warehouse: String(it.warehouse || 'Основной Склад Астана'),
@@ -351,8 +356,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
         }
       }
-    } catch (dbOutboxErr) {
-      console.warn('[API Proxy ERP] Outbox order pre-save notice:', dbOutboxErr);
+    } catch (parseErr: any) {
+      return res.status(400).json({
+        success: false,
+        error: `Некорректный запрос заказа: ${parseErr?.message}`,
+      });
     }
   }
 
@@ -370,8 +378,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // Принудительно устанавливаем серверный ключ для ERP
-    queryParams.set('portal_key', SERVER_ERP_KEY);
+    if (SERVER_ERP_KEY) {
+      queryParams.set('portal_key', SERVER_ERP_KEY);
+    }
 
     const targetUrl = `${TARGET_ERP_URL}?${queryParams.toString()}`;
 
@@ -387,7 +396,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       headers['X-Idempotency-Key'] = String(idempotencyKey);
     }
 
-    // Таймаут запроса к ERP (12 секунд) для защиты от зависаний
+    // Таймаут запроса к ERP (12 секунд)
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000);
 
@@ -399,10 +408,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === 'POST') {
       headers['Content-Type'] = 'application/json';
-      const body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body || {});
+      const bodyToSend = validatedOrderPayload || req.body;
       fetchOptions = {
         ...fetchOptions,
-        body,
+        body: typeof bodyToSend === 'string' ? bodyToSend : JSON.stringify(bodyToSend || {}),
       };
     }
 
@@ -411,7 +420,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const contentType = erpResponse.headers.get('content-type') || 'application/json';
     const textData = await erpResponse.text();
 
-    // Запись в журнал аудита для ключевых операций
     if (['create_order', 'update_order_status', 'update_client_access', 'login'].includes(action)) {
       await recordAuditLog({
         eventType: action,
@@ -425,13 +433,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
+    // Resilient Staging Fallback для каталога
+    if (action === 'catalog' && erpResponse.status >= 500) {
+      try {
+        const fallback = await getCachedCatalog('catalog_global');
+        if (fallback && fallback.data) {
+          res.status(200);
+          res.setHeader('Content-Type', 'application/json');
+          res.setHeader('X-Cache', 'STALE_FALLBACK');
+          res.setHeader('X-Cache-Age-Ms', String(fallback.ageMs));
+          return res.json(fallback.data);
+        }
+      } catch (fbErr) {
+        console.warn('[API Proxy ERP] Fallback lookup exception:', fbErr);
+      }
+    }
+
     res.status(erpResponse.status);
     res.setHeader('Content-Type', contentType);
 
     try {
       const jsonData = JSON.parse(textData);
 
-      // Если заказ успешно создан в 1C — обновляем статус в Outbox
+      if (action === 'catalog' && erpResponse.ok && jsonData?.success && Array.isArray(jsonData.products)) {
+        saveCachedCatalog(jsonData, 'catalog_global').catch(e => console.warn('[API Proxy ERP] Cache save error:', e));
+        res.setHeader('X-Cache', 'MISS');
+      }
+
       if (action === 'create_order' && outboxOrderId && jsonData.success && jsonData.order?.doc_number) {
         await supabase
           .from('orders')
@@ -451,6 +479,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const latencyMs = Date.now() - startTime;
     console.error('[API Proxy ERP] Error proxying request:', err?.name === 'AbortError' ? 'ERP Request Timeout (12s)' : err);
 
+    if (action === 'catalog') {
+      try {
+        const fallback = await getCachedCatalog('catalog_global');
+        if (fallback && fallback.data) {
+          res.status(200);
+          res.setHeader('Content-Type', 'application/json');
+          res.setHeader('X-Cache', 'STALE_FALLBACK');
+          res.setHeader('X-Cache-Age-Ms', String(fallback.ageMs));
+          return res.json(fallback.data);
+        }
+      } catch {}
+    }
+
     await recordAuditLog({
       eventType: action || 'proxy_request',
       direction: 'outbound',
@@ -461,9 +502,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       errorMessage: err?.message || 'Bad Gateway / Timeout',
     });
 
-    // ── Resilient Outbox Fallback: если заказ был сохранен в буфер портала ──
     if (action === 'create_order' && outboxOrderDoc) {
-      console.log(`[API Proxy ERP] Resilient fallback: Order ${outboxOrderDoc} preserved in Outbox buffer.`);
       return res.status(200).json({
         success: true,
         order: {
@@ -471,6 +510,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           doc_number: outboxOrderDoc,
           status: 'pending',
           is_buffered: true,
+          total_amount: finalTotalAmount,
         },
         message: 'Заказ успешно зафиксирован и сохранен в буфере синхронизации с 1С:ERP.',
       });

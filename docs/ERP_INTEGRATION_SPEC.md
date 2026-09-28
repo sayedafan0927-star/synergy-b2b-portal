@@ -30,13 +30,12 @@
 
 1. **Заголовок авторизации:** При всех HTTP-запросах передается заголовок `X-Portal-Key` или `Authorization: Bearer <token>`:
    ```http
-   X-Portal-Key: 138d1bdaf9402600c8f5d5763e2e1573c1e45d32401e62e4981cd7e898bf0544
+   X-Portal-Key: <YOUR_ERP_API_KEY>
    ```
-   *(Примечание: ключ `SynergySecretKey2025` зарезервирован исключительно для внутренних системных крон-задач).*
 
 2. **Секретный ключ подписи (Shared Secret для SSO):**
    ```
-   ERP_PORTAL_SECRET = 138d1bdaf9402600c8f5d5763e2e1573c1e45d32401e62e4981cd7e898bf0544
+   ERP_PORTAL_SECRET = <YOUR_ERP_PORTAL_SECRET>
    ```
 
 ---
@@ -152,7 +151,7 @@ echo "<a href='{$ssoUrl}' target='_blank' class='btn'>Перейти в B2B-по
  * **Метод:** `POST`
  * **Заголовки:**
    - `Content-Type: application/json`
-   - `X-Portal-Key: 138d1bdaf9402600c8f5d5763e2e1573c1e45d32401e62e4981cd7e898bf0544`
+   - `X-Portal-Key: <YOUR_ERP_API_KEY>`
    - `X-Idempotency-Key: <unique-order-uuid>`
    - `X-Correlation-ID: <trace-id>`
  * **Тело запроса (от портала в ERP):**
@@ -268,7 +267,7 @@ echo "<a href='{$ssoUrl}' target='_blank' class='btn'>Перейти в B2B-по
 
 Когда в вашей ERP происходят складские или финансовые операции, отправляйте HTTP POST запрос на портал:
 * **URL вебхука:** `POST https://<b2b-portal-domain>/api/webhooks/erp`
-* **Заголовок:** `X-Portal-Key: SynergySecretKey2025`
+* **Заголовок:** `X-Portal-Key: <YOUR_PORTAL_SECRET_KEY>`
 
 ### 5.1. Событие: `stock_changed` (Смена остатков)
 *Отправляйте **только дельты** (позиции, где реально изменился остаток), а не полный каталог!*
@@ -345,10 +344,10 @@ echo "<a href='{$ssoUrl}' target='_blank' class='btn'>Перейти в B2B-по
 | Переменная | Описание | Пример боевого значения |
 |---|---|---|
 | `ERP_API_URL` | Единая точка входа Action Router ERP | `https://crm.kilem-khan.kz/api_portal.php` |
-| `ERP_API_KEY` | Мастер-ключ авторизации к ERP | `138d1bdaf9402600c8f5d5763e2e1573c1e45d32401e62e4981cd7e898bf0544` |
-| `ERP_PORTAL_SECRET` | Общий секрет для HMAC-подписи SSO | `138d1bdaf9402600c8f5d5763e2e1573c1e45d32401e62e4981cd7e898bf0544` |
+| `ERP_API_KEY` | Мастер-ключ авторизации к ERP | `<SECRET_ERP_API_KEY>` |
+| `ERP_PORTAL_SECRET` | Общий секрет для HMAC-подписи SSO | `<SECRET_PORTAL_KEY>` |
 | `GREEN_API_URL` | URL шлюза WhatsApp (Green-API / Chat-API) | `https://api.green-api.com/waInstance.../sendMessage/...` |
-| `WHATSAPP_API_TOKEN` | Токен авторизации WhatsApp API | `7b9a...` |
-| `SUPABASE_URL` | База данных PostgreSQL портала | `https://sjvvoxxwevwgziuxjvcy.supabase.co` |
-| `SUPABASE_SERVICE_ROLE_KEY`| Сервисный ключ базы данных (бэкенд) | `eyJhbGciOi...` |
-| `CRON_SECRET` | Секрет защиты вызова Vercel Cron | `SynergySecretKey2025` |
+| `WHATSAPP_API_TOKEN` | Токен авторизации WhatsApp API | `<SECRET_WHATSAPP_TOKEN>` |
+| `SUPABASE_URL` | База данных PostgreSQL портала | `https://your-project.supabase.co` |
+| `SUPABASE_SERVICE_ROLE_KEY`| Сервисный ключ базы данных (бэкенд) | `<SECRET_SUPABASE_SERVICE_ROLE_KEY>` |
+| `CRON_SECRET` | Секрет защиты вызова Vercel Cron | `<SECRET_CRON_KEY>` |
