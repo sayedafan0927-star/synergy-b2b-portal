@@ -486,6 +486,8 @@ export default function CatalogPage({ onNavigate, initialCollection, initialCoun
   const [selectedManufacturers, setSelectedManufacturers] = useState<Set<string>>(new Set());
   const [selectedCountries, setSelectedCountries] = useState<Set<string>>(() => initialCountry ? new Set([initialCountry]) : new Set());
   const [selectedClusters, setSelectedClusters] = useState<Set<string>>(new Set());
+  const [selectedWarehouses, setSelectedWarehouses] = useState<Set<string>>(new Set());
+  const [selectedSizes, setSelectedSizes] = useState<Set<string>>(new Set());
   const [activeClusterQuickFilter, setActiveClusterQuickFilter] = useState<'all' | 'small' | 'medium' | 'large' | 'oversize' | 'runner'>('all');
   const [adminStockFilter, setAdminStockFilter] = useState<'all' | 'in_stock' | 'out_of_stock'>('all');
   const hideOutOfStockSetting = displaySettings.hide_out_of_stock_products !== false;
