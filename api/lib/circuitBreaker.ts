@@ -9,6 +9,7 @@
  */
 
 export type CircuitState = 'CLOSED' | 'OPEN' | 'HALF_OPEN';
+import { logger } from './logger';
 
 export interface CircuitBreakerConfig {
   failureThreshold: number;      // Number of failures before opening (default: 5)
@@ -75,7 +76,7 @@ export function checkCircuit(serviceName: string, config: CircuitBreakerConfig =
       s.state = 'HALF_OPEN';
       s.probeCount = 0;
       s.lastStateChange = now;
-      console.warn(`[CircuitBreaker] '${serviceName}' cooldown elapsed. Transitioning OPEN -> HALF_OPEN.`);
+      logger.warn(`[CircuitBreaker] '${serviceName}' cooldown elapsed. Transitioning OPEN -> HALF_OPEN.`, { serviceName });
     } else {
       return { permitted: false, state: 'OPEN' };
     }
@@ -98,7 +99,7 @@ export function checkCircuit(serviceName: string, config: CircuitBreakerConfig =
 export function recordSuccess(serviceName: string): void {
   const s = getOrCreateState(serviceName);
   if (s.state === 'HALF_OPEN') {
-    console.info(`[CircuitBreaker] '${serviceName}' probe succeeded. Transitioning HALF_OPEN -> CLOSED.`);
+    logger.info(`[CircuitBreaker] '${serviceName}' probe succeeded. Transitioning HALF_OPEN -> CLOSED.`, { serviceName });
   }
   s.state = 'CLOSED';
   s.consecutiveFailures = 0;
@@ -116,11 +117,11 @@ export function recordFailure(serviceName: string, config: CircuitBreakerConfig 
   if (s.state === 'CLOSED' && s.consecutiveFailures >= config.failureThreshold) {
     s.state = 'OPEN';
     s.lastStateChange = Date.now();
-    console.error(`[CircuitBreaker] '${serviceName}' reached ${s.consecutiveFailures} consecutive failures. Tripping to OPEN.`);
+    logger.error(`[CircuitBreaker] '${serviceName}' reached ${s.consecutiveFailures} consecutive failures. Tripping to OPEN.`, { serviceName, consecutiveFailures: s.consecutiveFailures });
   } else if (s.state === 'HALF_OPEN') {
     s.state = 'OPEN';
     s.lastStateChange = Date.now();
-    console.error(`[CircuitBreaker] '${serviceName}' probe failed. Returning to OPEN.`);
+    logger.error(`[CircuitBreaker] '${serviceName}' probe failed. Returning to OPEN.`, { serviceName });
   }
 }
 

@@ -7,6 +7,8 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_S
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
+import { logger } from '../lib/logger';
+
 export interface AuditLogEntry {
   eventType: string;
   direction: 'inbound' | 'outbound';
@@ -21,9 +23,28 @@ export interface AuditLogEntry {
 }
 
 /**
- * Логирование интеграционного события в базу данных Supabase
+ * Логирование интеграционного события в базу данных Supabase и Structured Logger
  */
 export async function recordAuditLog(entry: AuditLogEntry): Promise<void> {
+  // 1. Потоковое структурированное JSON-логирование (Vercel Log Drains / Datadog / Grafana)
+  const logCtx = {
+    correlationId: entry.correlationId,
+    action: entry.eventType,
+    direction: entry.direction,
+    statusCode: entry.statusCode,
+    durationMs: entry.latencyMs,
+    source: entry.source,
+    ip: entry.ip,
+  };
+  if (entry.status === 'error') {
+    logger.error(`[IntegrationAudit] ${entry.eventType} ${entry.direction} failed: ${entry.errorMessage || 'Unknown error'}`, logCtx);
+  } else if (entry.status === 'warning') {
+    logger.warn(`[IntegrationAudit] ${entry.eventType} ${entry.direction} warning`, logCtx);
+  } else {
+    logger.info(`[IntegrationAudit] ${entry.eventType} ${entry.direction} success`, logCtx);
+  }
+
+  // 2. Персистенция в БД Supabase
   try {
     const payloadObj = entry.payload ? { ...entry.payload } : {};
     if (entry.correlationId) {
@@ -44,7 +65,7 @@ export async function recordAuditLog(entry: AuditLogEntry): Promise<void> {
       error_message: entry.errorMessage || null,
     });
   } catch (err) {
-    console.warn('[Audit Log] Failed to persist log entry:', err);
+    logger.warn('[Audit Log] Failed to persist log entry to database', { correlationId: entry.correlationId }, err as Error);
   }
 }
 
