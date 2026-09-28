@@ -5,6 +5,7 @@ import { applyCorrelationId } from '../lib/trace';
 import { enforceRateLimit } from '../lib/rateLimit';
 import { sendWhatsAppMessage } from '../approvals/whatsapp';
 import { applyCorsHeaders } from '../lib/cors';
+import { logger } from '../lib/logger';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
@@ -31,10 +32,18 @@ async function dispatchDlqEmergencyAlert(params: {
     `❌ Ошибка: ${params.error}\n\n` +
     `_Требуется ручное вмешательство дежурного инженера или проверка доступности 1С._`;
 
+  logger.error(`[DLQ Alert] Order ${params.orderNumber} placed in DLQ after ${params.retries} retries`, {
+    orderId: params.orderId,
+    orderNumber: params.orderNumber,
+    amount: params.amount,
+    retries: params.retries,
+    error: params.error,
+  });
+
   try {
     await sendWhatsAppMessage(alertPhone, text);
   } catch (e) {
-    console.warn('[DLQ Alert WhatsApp notice]:', e);
+    logger.warn('[DLQ Alert WhatsApp notice]', { orderNumber: params.orderNumber }, e as Error);
   }
 
   const tgWebhook = process.env.TELEGRAM_ALERT_WEBHOOK_URL;
@@ -46,7 +55,7 @@ async function dispatchDlqEmergencyAlert(params: {
         body: JSON.stringify({ text }),
       });
     } catch (e) {
-      console.warn('[DLQ Alert Telegram notice]:', e);
+      logger.warn('[DLQ Alert Telegram notice]', { orderNumber: params.orderNumber }, e as Error);
     }
   }
 }
