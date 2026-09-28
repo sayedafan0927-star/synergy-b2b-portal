@@ -1,7 +1,7 @@
 import { useState, useEffect, useContext } from 'react';
 import { fetchCatalogFromErp } from '@/lib/erpApi';
 import { AuthContext } from '@/contexts/AuthContext';
-import type { Product, ProductVariant, Warehouse } from '@/types';
+import type { Product, ProductVariant, Warehouse, StockSummary } from '@/types';
 
 export const STANDARD_SIZES = ['0.8 × 1.5', '1.6 × 2.3', '2 × 3', '2.5 × 3.5', '3 × 4'];
 
@@ -160,6 +160,8 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
               stock: hubStock,
               free_stock: freeStock,
               reserved_stock: hubWh?.reserved_stock !== undefined ? Number(hubWh.reserved_stock) : (v.reserved_stock !== undefined ? Number(v.reserved_stock) : 0),
+              to_ship_stock: hubWh?.to_ship_stock !== undefined ? Number(hubWh.to_ship_stock) : (v.to_ship_stock !== undefined ? Number(v.to_ship_stock) : 0),
+              to_ship_sqm: hubWh?.to_ship_sqm !== undefined ? Number(hubWh.to_ship_sqm) : (v.to_ship_sqm !== undefined ? Number(v.to_ship_sqm) : 0),
               total_stock: hubWh?.total_stock !== undefined ? Number(hubWh.total_stock) : (v.total_stock !== undefined ? Number(v.total_stock) : hubStock),
             });
           }
@@ -169,6 +171,8 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
                 ...w,
                 stock: Number(w.free_stock ?? w.stock ?? 0),
                 free_stock: w.free_stock !== undefined ? Number(w.free_stock) : Number(w.stock),
+                to_ship_stock: w.to_ship_stock !== undefined ? Number(w.to_ship_stock) : 0,
+                to_ship_sqm: w.to_ship_sqm !== undefined ? Number(w.to_ship_sqm) : 0,
                 is_hub: false,
               });
             }
@@ -182,6 +186,8 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
           const oldPrice = v.old_price ? Number(v.old_price) : null;
           const oldPricePerSqm = v.old_price_per_sqm ? Number(v.old_price_per_sqm) : null;
           const saleDiscountPercent = Number(v.sale_discount_percent) || 0;
+          const toShipStock = v.to_ship_stock !== undefined ? Number(v.to_ship_stock) : 0;
+          const toShipSqm = v.to_ship_sqm !== undefined ? Number(v.to_ship_sqm) : Math.round(toShipStock * area * 100) / 100;
 
           return {
             ...v,
@@ -197,6 +203,8 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
             sale_discount_percent: saleDiscountPercent,
             free_stock: freeStock,
             reserved_stock: v.reserved_stock !== undefined ? Number(v.reserved_stock) : 0,
+            to_ship_stock: toShipStock,
+            to_ship_sqm: toShipSqm,
             total_stock: v.total_stock !== undefined ? Number(v.total_stock) : hubStock,
             stock: freeStock,
             showroom_qty: v.showroom_qty !== undefined ? Number(v.showroom_qty) : (v.dealer_stock?.in_showroom_qty || 0),
@@ -416,6 +424,7 @@ export function useProducts(customDealerId?: string | number) {
   const effectiveDealerId = customDealerId ?? authContext?.impersonatedProfile?.partner_id ?? authContext?.profile?.partner_id ?? undefined;
 
   const [products, setProducts] = useState<Product[]>([]);
+  const [summary, setSummary] = useState<StockSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadCounter, setReloadCounter] = useState(0);
@@ -491,10 +500,14 @@ export function useProducts(customDealerId?: string | number) {
         if (!cancelled && erpData && erpData.success && Array.isArray(erpData.products) && erpData.products.length > 0) {
           const merged = mergeProducts(erpData.products as Product[]);
           setProducts(merged);
+          if (erpData.summary) {
+            setSummary(erpData.summary);
+          }
           setLoading(false);
           return;
         }
         if (!cancelled) {
+          if (erpData?.summary) setSummary(erpData.summary);
           setLoading(false);
         }
       } catch (erpErr) {
@@ -509,7 +522,7 @@ export function useProducts(customDealerId?: string | number) {
     return () => { cancelled = true; };
   }, [reloadCounter, effectiveDealerId]);
 
-  return { products, loading, error };
+  return { products, summary, loading, error };
 }
 
 export function useProduct(id: string | undefined, customDealerId?: string | number) {

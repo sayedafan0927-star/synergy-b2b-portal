@@ -3,10 +3,24 @@ export interface Warehouse {
   stock: number;
   free_stock?: number;
   reserved_stock?: number;
+  to_ship_stock?: number;
+  to_ship_sqm?: number;
   total_stock?: number;
   warehouse_name?: string;
   warehouse_id?: number;
   is_hub?: boolean;
+}
+
+export interface StockSummary {
+  total_items: number;
+  free_stock_qty: number;
+  free_stock_sqm: number;
+  reserved_stock_qty: number;
+  reserved_stock_sqm: number;
+  to_ship_qty: number;
+  to_ship_sqm: number;
+  total_stock_qty: number;
+  total_stock_sqm: number;
 }
 
 export interface DealerStock {
@@ -47,6 +61,8 @@ export interface ProductVariant {
   sale_discount_percent?: number;
   free_stock?: number;
   reserved_stock?: number;
+  to_ship_stock?: number;
+  to_ship_sqm?: number;
   total_stock?: number;
   stock?: number;
   showroom_qty?: number;

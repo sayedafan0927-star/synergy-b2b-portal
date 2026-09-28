@@ -16,11 +16,12 @@ import {
   Loader2,
   Globe,
 } from 'lucide-react';
-import type { PageId, Product, ProductVariant, Warehouse } from '@/types';
+import type { PageId, Product, ProductVariant, Warehouse, StockSummary } from '@/types';
 import { parseSizeDimensions } from '@/types';
 import { useProducts } from '@/hooks/useProductData';
 import { useUserPricing } from '@/hooks/usePricing';
 import ProductCard from '@/components/ProductCard';
+import StockSummaryBar from '@/components/StockSummaryBar';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
@@ -456,7 +457,7 @@ function StockGridView({ filteredProducts, selectedWarehouse, onNavigate }: { fi
 /* ── Main CatalogPage ── */
 
 export default function CatalogPage({ onNavigate, initialCollection, initialCountry }: { onNavigate: (page: PageId, productId?: string) => void; initialCollection?: string; initialCountry?: string }) {
-  const { products, loading, error: loadError } = useProducts();
+  const { products, summary: serverSummary, loading, error: loadError } = useProducts();
   const pricing = useUserPricing();
 
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
@@ -538,6 +539,56 @@ export default function CatalogPage({ onNavigate, initialCollection, initialCoun
     }
     return result;
   }, [products, selectedCategory, selectedCollections, selectedManufacturers, selectedCountries, selectedWarehouses, selectedSizes, searchQuery, sortBy, pricing]);
+
+  const currentSummary: StockSummary = useMemo(() => {
+    const isFiltered = activeFilterCount > 0 || searchQuery.trim().length > 0 || selectedCategory !== 'all' || selectedCollections.size > 0 || selectedCountries.size > 0;
+    if (!isFiltered && serverSummary) {
+      return serverSummary;
+    }
+
+    let freeQty = 0;
+    let freeSqm = 0;
+    let reservedQty = 0;
+    let reservedSqm = 0;
+    let toShipQty = 0;
+    let toShipSqm = 0;
+    let totalQty = 0;
+    let totalSqm = 0;
+
+    for (const p of filteredProducts) {
+      for (const v of p.variants) {
+        const area = v.area_sqm || sizeArea(v.size) || 1;
+        const free = v.free_stock || 0;
+        const res = v.reserved_stock || 0;
+        const toShip = v.to_ship_stock || 0;
+        const total = v.total_stock || (free + res + toShip);
+
+        freeQty += free;
+        freeSqm += (free * area);
+
+        reservedQty += res;
+        reservedSqm += (res * area);
+
+        toShipQty += toShip;
+        toShipSqm += (v.to_ship_sqm || (toShip * area));
+
+        totalQty += total;
+        totalSqm += (total * area);
+      }
+    }
+
+    return {
+      total_items: filteredProducts.length,
+      free_stock_qty: freeQty,
+      free_stock_sqm: Math.round(freeSqm * 100) / 100,
+      reserved_stock_qty: reservedQty,
+      reserved_stock_sqm: Math.round(reservedSqm * 100) / 100,
+      to_ship_qty: toShipQty,
+      to_ship_sqm: Math.round(toShipSqm * 100) / 100,
+      total_stock_qty: totalQty,
+      total_stock_sqm: Math.round(totalSqm * 100) / 100,
+    };
+  }, [filteredProducts, serverSummary, activeFilterCount, searchQuery, selectedCategory, selectedCollections.size, selectedCountries.size]);
 
   // Reset visible count when filters/search/sort change
   useEffect(() => { setVisibleCount(12); }, [selectedCategory, selectedCollections, selectedManufacturers, selectedCountries, selectedWarehouses, selectedSizes, searchQuery, sortBy, viewMode]);
@@ -728,9 +779,10 @@ export default function CatalogPage({ onNavigate, initialCollection, initialCoun
           </div>
         )}
 
-        <p className="mb-4 text-sm text-slate-500">
-          Найдено <span className="font-semibold text-slate-800">{pluralProducts(filteredProducts.length)}</span>
-        </p>
+        {/* Stock Summary Bar (Сводка: свободно, в брони, к отгрузке, всего) */}
+        <div className="mb-4">
+          <StockSummaryBar summary={currentSummary} />
+        </div>
 
         {filteredProducts.length > 0 ? (
           viewMode === 'grid' ? (
