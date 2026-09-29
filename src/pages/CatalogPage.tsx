@@ -26,6 +26,7 @@ import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
 import { filterWarehousesForClient, isProductInStockForUser } from '@/lib/warehouseVisibility';
+import { useCurrency } from '@/contexts/CurrencyContext';
 import ProductImage from '@/components/ProductImage';
 
 type SortOption = 'popular' | 'price-asc' | 'price-desc' | 'name';
@@ -182,6 +183,7 @@ function FilterDrawer(props: FilterDrawerProps) {
 function StockGridView({ filteredProducts, selectedWarehouse, onNavigate }: { filteredProducts: Product[]; selectedWarehouse: string; onNavigate: (page: PageId, productId?: string) => void }) {
   const { addItem, items } = useCart();
   const { user } = useAuth();
+  const { currency, formatPrice } = useCurrency();
   const pricing = useUserPricing();
   const { settings } = useDisplaySettings();
   const [quantities, setQuantities] = useState<Record<string, number>>({});
@@ -329,7 +331,7 @@ function StockGridView({ filteredProducts, selectedWarehouse, onNavigate }: { fi
                     <th className="sticky left-0 z-10 bg-white py-2.5 pl-4 pr-3 text-left font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap min-w-[200px]">
                       Товар
                     </th>
-                    {settings.show_price && <th className="py-2.5 px-2 text-center font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">$/м²</th>}
+                    {settings.show_price && <th className="py-2.5 px-2 text-center font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">{currency === 'KZT' ? '₸/м²' : '$/м²'}</th>}
                     {allSizes.map(size => (
                       <th key={size} className="py-2.5 px-2 text-center font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap border-l border-slate-100">
                         {size}
@@ -384,7 +386,7 @@ function StockGridView({ filteredProducts, selectedWarehouse, onNavigate }: { fi
 
                         {settings.show_price && (
                           <td className="py-2 px-2 text-center font-bold text-slate-700 whitespace-nowrap">
-                            ${pricePerSqm.toFixed(2)}
+                            {formatPrice(pricePerSqm)}
                           </td>
                         )}
 
