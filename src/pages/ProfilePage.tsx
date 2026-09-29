@@ -267,7 +267,14 @@ function OrderDetail({
   }, [order.id]);
 
   const collections = useMemo(() => Array.from(new Set(order.items.map(i => i.collection))).sort(), [order]);
-  const totals = useMemo(() => orderTotals(order.items), [order.items]);
+  const canCancel = !['cancelled', 'shipped', 'delivered'].includes(status);
+
+  const handleCancelOrder = async () => {
+    if (!confirm(`Вы действительно хотите отменить заказ №${order.orderNumber || order.id}? Бронь товаров будет расформирована в ERP.`)) {
+      return;
+    }
+    await handleStatusChange('cancelled');
+  };
 
   const handleStatusChange = async (newStatus: string) => {
     setUpdatingStatus(true);
@@ -276,7 +283,7 @@ function OrderDetail({
       await updateOrderStatusInErp({
         orderId: order.id,
         status: newStatus,
-        comment: `Статус изменен администратором портала на "${newStatus}"`,
+        comment: newStatus === 'cancelled' ? 'Заказ отменен пользователем/администратором через B2B-портал' : `Статус изменен на "${newStatus}"`,
       });
     } catch (erpErr) {
       console.warn('[OrderDetailModal] ERP update_order_status warning:', erpErr);
@@ -360,22 +367,17 @@ function OrderDetail({
             </button>
           )}
 
-          {isAdmin && (
-            <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
-              <span className="text-xs font-semibold text-slate-600">Статус заказа:</span>
-              <select
-                value={status}
-                disabled={updatingStatus}
-                onChange={(e) => handleStatusChange(e.target.value)}
-                className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-bold text-slate-800 shadow-sm focus:outline-none focus:ring-2 focus:ring-brand-500 cursor-pointer"
-              >
-                <option value="pending">Новый</option>
-                <option value="processing">В обработке</option>
-                <option value="shipped">Отгружен</option>
-                <option value="delivered">Доставлен</option>
-                <option value="cancelled">Отменён</option>
-              </select>
-            </div>
+          {canCancel && (
+            <button
+              type="button"
+              onClick={handleCancelOrder}
+              disabled={updatingStatus}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 px-3.5 py-1.5 text-xs font-semibold shadow-2xs transition-colors disabled:opacity-50 cursor-pointer"
+              title="Отменить заказ и расформировать бронь в ERP"
+            >
+              <X className={`h-3.5 w-3.5 ${updatingStatus ? 'animate-spin' : ''}`} />
+              Отменить заказ
+            </button>
           )}
         </div>
       </div>
@@ -3574,7 +3576,7 @@ function OrdersTab({
           const items: OrderItem[] = (o.items || []).map((it) => ({
             id: String(it.id),
             productName: it.name || 'Ковер',
-            collection: it.name.split(' ')[0] || 'Коллекция',
+            collection: (it.name || '').split(' ')[0] || 'Коллекция',
             size: it.size || 'Стандарт',
             sku: it.sku || '',
             warehouse: o.warehouse_name || 'Основной Склад Астана',
@@ -3670,31 +3672,33 @@ function OrdersTab({
     };
   }, []);
 
-  const handleQuickStatusChange = async (orderId: string, newStatus: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setUpdatingId(orderId);
-    // 1. Синхронизируем статус в ERP (при 'cancelled' ERP автоматически расформировывает бронь free_stock)
+  const handleCancelOrder = async (order: Order, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (!confirm(`Вы действительно хотите отменить заказ №${order.orderNumber || order.id}? Бронь товаров будет расформирована в ERP.`)) {
+      return;
+    }
+    setUpdatingId(order.id);
     try {
       await updateOrderStatusInErp({
-        orderId,
-        status: newStatus,
-        comment: `Быстрая смена статуса на "${newStatus}"`,
+        orderId: order.id,
+        status: 'cancelled',
+        comment: 'Заказ отменен пользователем/администратором через B2B-портал',
       });
     } catch (erpErr) {
-      console.warn('[handleQuickStatusChange] ERP update_order_status warning:', erpErr);
+      console.warn('[handleCancelOrder] ERP update_order_status warning:', erpErr);
     }
 
-    // 2. Обновляем статус в Supabase
     try {
       await supabase
         .from('orders')
-        .update({ status: newStatus, updated_at: new Date().toISOString() })
-        .eq('id', orderId);
+        .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+        .eq('id', order.id);
     } catch {
       // safe fallback
     }
-    const meta = ORDER_STATUS_MAP[newStatus] || { label: newStatus, color: 'bg-slate-100 text-slate-600 border-slate-200' };
-    setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: meta.label, statusRaw: newStatus, statusColor: meta.color } : o));
+
+    const meta = ORDER_STATUS_MAP['cancelled'] || { label: 'Отменён', color: 'bg-rose-50 text-rose-700 border-rose-200' };
+    setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: meta.label, statusRaw: 'cancelled', statusColor: meta.color } : o));
     setUpdatingId(null);
   };
 
@@ -3871,22 +3875,6 @@ function OrdersTab({
                         <span>Снята бронь (Hold TTL)</span>
                       </span>
                     )}
-                    {isAdmin && (
-                      <div className="ml-1" onClick={e => e.stopPropagation()}>
-                        <select
-                          value={order.statusRaw}
-                          disabled={updatingId === order.id}
-                          onChange={(e) => handleQuickStatusChange(order.id, e.target.value, e as any)}
-                          className="rounded border border-slate-200 bg-white px-2 py-0.5 text-xs text-slate-600 focus:outline-none focus:ring-1 focus:ring-brand-500 cursor-pointer"
-                        >
-                          <option value="pending">Новый</option>
-                          <option value="processing">В обработке</option>
-                          <option value="shipped">Отгружен</option>
-                          <option value="delivered">Доставлен</option>
-                          <option value="cancelled">Отменён</option>
-                        </select>
-                      </div>
-                    )}
                   </div>
 
                   <div className="flex items-center gap-3 text-xs text-slate-400">
@@ -3943,20 +3931,35 @@ function OrdersTab({
                     ))}
                   </div>
 
-                  {onRepeatOrder && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onRepeatOrder(order);
-                      }}
-                      disabled={repeatingOrderId !== null}
-                      className="flex items-center gap-1.5 text-xs font-semibold text-brand-700 hover:text-brand-800 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-lg border border-brand-200 transition-colors ml-auto active:scale-95 disabled:opacity-50"
-                    >
-                      <RotateCcw className={`h-3 w-3 ${repeatingOrderId === order.id ? 'animate-spin' : ''}`} />
-                      Повторить заказ
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2 ml-auto">
+                    {!['cancelled', 'shipped', 'delivered'].includes(order.statusRaw) && (
+                      <button
+                        type="button"
+                        onClick={(e) => handleCancelOrder(order, e)}
+                        disabled={updatingId === order.id}
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-rose-700 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 px-2.5 py-1.5 rounded-lg border border-rose-200 transition-colors active:scale-95 disabled:opacity-50 cursor-pointer"
+                        title="Отменить заказ и расформировать бронь в ERP"
+                      >
+                        <X className={`h-3 w-3 ${updatingId === order.id ? 'animate-spin' : ''}`} />
+                        Отменить
+                      </button>
+                    )}
+
+                    {onRepeatOrder && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onRepeatOrder(order);
+                        }}
+                        disabled={repeatingOrderId !== null}
+                        className="flex items-center gap-1.5 text-xs font-semibold text-brand-700 hover:text-brand-800 bg-brand-50 hover:bg-brand-100 px-3 py-1.5 rounded-lg border border-brand-200 transition-colors active:scale-95 disabled:opacity-50 cursor-pointer"
+                      >
+                        <RotateCcw className={`h-3 w-3 ${repeatingOrderId === order.id ? 'animate-spin' : ''}`} />
+                        Повторить заказ
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             );
