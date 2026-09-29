@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 import { recordAuditLog } from '../audit/logs';
 import { applyCorsHeaders } from '../lib/cors';
+import { logger } from '../lib/logger';
 
 const ALLOWED_KEYS = new Set(
   [
@@ -78,6 +79,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
+  // Reject oversized payloads (10MB limit)
+  const bodyStr = JSON.stringify(req.body);
+  if (bodyStr && bodyStr.length > 10 * 1024 * 1024) {
+    return res.status(413).json({ error: 'Payload too large', maxSize: '10MB' });
+  }
+
   // 1. Проверка авторизационного ключа
   const portalKey = (req.headers['x-portal-key'] || req.headers['X-Portal-Key']) as string | undefined;
   if (!portalKey || !ALLOWED_KEYS.has(portalKey)) {
@@ -94,7 +101,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (receivedSig) {
     const expectedSig = crypto.createHmac('sha256', SECRET_KEY).update(rawBody).digest('hex');
     if (receivedSig !== expectedSig) {
-      console.warn(`[Webhook clients] Invalid HMAC signature. Expected: ${expectedSig}, Received: ${receivedSig}`);
+      logger.warn(`[Webhook clients] Invalid HMAC signature. Expected: ${expectedSig}, Received: ${receivedSig}`);
       return res.status(401).json({
         success: false,
         error: 'Invalid HMAC signature in X-Webhook-Signature header.',
@@ -115,13 +122,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    console.log(`[Webhook clients] Received event '${event}' for counterparty_id=${counterparty_id} (EventID: ${eventId || payload.event_id || 'n/a'})`);
+    logger.info(`[Webhook clients] Received event '${event}' for counterparty_id=${counterparty_id}`, {
+      eventId: eventId || payload.event_id || 'n/a',
+      event,
+      counterparty_id,
+    });
 
     // Событие А: client_synced (Создание / Активация / Обновление)
     if (event === 'client_synced' && (access === 'enabled' || status === 'active' || payload.is_active === 1 || (payload as any).is_active === true)) {
       const p = payload as ClientSyncedPayload;
       
-      console.log(`[Webhook clients] ACTIVATED client: ID=${p.counterparty_id}, Name="${p.name}", Login="${p.portal_login}"`);
+      logger.info(`[Webhook clients] ACTIVATED client: ID=${p.counterparty_id}, Name="${p.name}", Login="${p.portal_login}"`, {
+        counterparty_id: p.counterparty_id,
+        login: p.portal_login,
+      });
 
       // Сохраняем в Supabase profiles расширенные атрибуты контрагента
       try {
@@ -195,7 +209,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       (payload as any).portal_access_enabled === false;
 
     if (isDeactivation) {
-      console.log(`[Webhook clients] DEACTIVATED client: ID=${counterparty_id}. Revoking all sessions.`);
+      logger.info(`[Webhook clients] DEACTIVATED client: ID=${counterparty_id}. Revoking all sessions.`, { counterparty_id });
 
       // Мгновенная деактивация: фиксируем в БД и транслируем в Realtime
       try {
@@ -222,7 +236,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           payload: { counterparty_id },
         });
       } catch (dbErr) {
-        console.warn('[Webhook clients] Profile deactivation notice:', dbErr);
+        logger.warn('[Webhook clients] Profile deactivation notice:', {}, dbErr as Error);
       }
 
       return res.status(200).json({
@@ -242,7 +256,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       error: `Unsupported or unknown event state: event='${event}', access='${access}'.`,
     });
   } catch (err: any) {
-    console.error('[Webhook clients] Error processing webhook:', err);
+    logger.error('[Webhook clients] Error processing webhook:', {}, err as Error);
     return res.status(500).json({
       success: false,
       error: 'Internal server error processing client webhook.',
