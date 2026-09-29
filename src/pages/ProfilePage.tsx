@@ -63,6 +63,7 @@ import {
 } from '@/lib/erpApi';
 import SupplierCabinet from '@/components/SupplierCabinet';
 import { triggerCatalogReload, mergeProducts } from '@/hooks/useProductData';
+import { formatCurrency } from '@/lib/pricingEngine';
 import { triggerDisplaySettingsReload } from '@/hooks/useDisplaySettings';
 import {
   getClientWarehouseSettings,
@@ -160,7 +161,15 @@ interface DisplaySettings {
 
 /* ─── Helpers ─── */
 function fmt2(n: number) { return n.toFixed(2); }
-function fmtPrice(n: number) { return `$${n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`; }
+function fmtPrice(n: number) {
+  try {
+    const cur = typeof localStorage !== 'undefined' ? localStorage.getItem('synergy_preferred_currency') : 'USD';
+    if (cur === 'KZT') {
+      return formatCurrency(n, 'KZT');
+    }
+  } catch {}
+  return `$${n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+}
 function sizeArea(size: string) { const { w, h } = parseSizeDimensions(size); return w * h; }
 
 function roleName(role: UserRole) {
@@ -1479,19 +1488,19 @@ function ClientDemoPanel({ client }: { client: { id: string; full_name: string; 
               <div className="flex items-center justify-between">
                 <span className="text-xs text-slate-500">Задолженность</span>
                 <span className="text-sm font-bold text-red-600">
-                  ${debt.financials.total_debt_usd.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  {fmtPrice(debt.financials.total_debt_usd)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-slate-500">Оплачено</span>
                 <span className="text-sm font-bold text-emerald-600">
-                  ${debt.financials.total_paid_usd.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  {fmtPrice(debt.financials.total_paid_usd)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-slate-500">Просрочено</span>
                 <span className="text-sm font-bold text-amber-600">
-                  ${debt.financials.overdue_usd.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  {fmtPrice(debt.financials.overdue_usd)}
                 </span>
               </div>
               {debt.financials.is_overdue && (
@@ -1502,7 +1511,7 @@ function ClientDemoPanel({ client }: { client: { id: string; full_name: string; 
               )}
               {debt.client?.credit_limit_usd && (
                 <div className="border-t border-slate-100 pt-2 text-[11px] text-slate-400">
-                  Лимит: ${debt.client.credit_limit_usd.toLocaleString('en-US')} • Отсрочка: {debt.client.payment_delay_days} дн.
+                  Лимит: {fmtPrice(debt.client.credit_limit_usd)} • Отсрочка: {debt.client.payment_delay_days} дн.
                 </div>
               )}
               {debt.regional_manager?.name && (
