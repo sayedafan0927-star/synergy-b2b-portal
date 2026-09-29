@@ -381,9 +381,14 @@ test_assert("X-Idempotency-Key" in current_erp_api, "src/lib/erpApi.ts includes 
 test_assert("delete itemObj.cell" in current_erp_api, "src/lib/erpApi.ts strips any cell/rack stubs")
 
 profile_page_path = os.path.join(ROOT_DIR, "src", "pages", "ProfilePage.tsx")
+profile_types_path = os.path.join(ROOT_DIR, "src", "components", "profile", "types.ts")
 with open(profile_page_path, "r", encoding="utf-8") as fp:
     profile_code = fp.read()
-test_assert("В авторезерве" in profile_code and "На сборке" in profile_code and "Готов к отгрузке" in profile_code, "ProfilePage.tsx implements WMS dealer lifecycle status mapping")
+profile_all_code = profile_code
+if os.path.exists(profile_types_path):
+    with open(profile_types_path, "r", encoding="utf-8") as fp:
+        profile_all_code += fp.read()
+test_assert("В авторезерве" in profile_all_code and "На сборке" in profile_all_code and "Готов к отгрузке" in profile_all_code, "ProfilePage.tsx implements WMS dealer lifecycle status mapping")
 
 # ------------------------------------------------------------------------------
 # 14. Quick Wins P0 Security & Health Fixes Verification
@@ -559,12 +564,17 @@ for comp in ["AdminDisplaySettingsTab", "AdminUsersTab", "AdminErpSyncTab", "Cli
     test_assert(comp in admin_index_code, f"src/components/admin/index.ts exports {comp}")
 
 profile_path = os.path.join(ROOT_DIR, "src", "pages", "ProfilePage.tsx")
+orders_tab_path = os.path.join(ROOT_DIR, "src", "components", "profile", "OrdersTab.tsx")
 with open(profile_path, "r", encoding="utf-8") as fp:
     profile_code = fp.read()
+orders_code = ""
+if os.path.exists(orders_tab_path):
+    with open(orders_tab_path, "r", encoding="utf-8") as fp:
+        orders_code = fp.read()
 test_assert("from '@/components/admin'" in profile_code, "ProfilePage.tsx imports modular admin components")
 test_assert("<AdminDisplaySettingsTab />" in profile_code, "ProfilePage.tsx uses decoupled AdminDisplaySettingsTab")
 test_assert("AdminBootstrap" not in profile_code, "ProfilePage.tsx eliminated client-facing AdminBootstrap RPC")
-test_assert("supabase.from('orders')" in profile_code and "localMapped" in profile_code, "ProfilePage.tsx implements offline & buffered orders merge resilience")
+test_assert(("supabase.from('orders')" in profile_code and "localMapped" in profile_code) or ("supabase.from('orders')" in orders_code and "localMapped" in orders_code), "ProfilePage.tsx implements offline & buffered orders merge resilience")
 
 # ------------------------------------------------------------------------------
 # 20. Summary Report
