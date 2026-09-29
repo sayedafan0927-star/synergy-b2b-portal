@@ -324,9 +324,14 @@ with open(product_card_path, "r", encoding="utf-8") as fp:
 test_assert("variant.is_runner" in pcard_code and "variant.size_cluster" in pcard_code, "ProductCard.tsx displays size cluster and runner tags in quick size switcher")
 
 product_page_path = os.path.join(ROOT_DIR, "src", "pages", "ProductPage.tsx")
+product_table_path = os.path.join(ROOT_DIR, "src", "components", "product", "ProductWarehouseStockTable.tsx")
 with open(product_page_path, "r", encoding="utf-8") as fp:
     ppage_code = fp.read()
+if os.path.exists(product_table_path):
+    with open(product_table_path, "r", encoding="utf-8") as fp:
+        ppage_code += fp.read()
 test_assert("variant.is_runner" in ppage_code and "variant.size_cluster" in ppage_code, "ProductPage.tsx displays size cluster & runner badges in dimension matrix table")
+
 
 # ------------------------------------------------------------------------------
 # 12. Sprint 3: ERP Gateway Realignment, Bulk Reconciliation & CDC Invariant
@@ -356,6 +361,10 @@ test_assert("warehouse_id" in pv_code, "api/lib/pricingValidator.ts preserves wa
 
 with open(erp_api_path, "r", encoding="utf-8") as fp:
     fresh_erp_api = fp.read()
+erp_orders_api_path = os.path.join(ROOT_DIR, "src", "lib", "erp", "ordersApi.ts")
+if os.path.exists(erp_orders_api_path):
+    with open(erp_orders_api_path, "r", encoding="utf-8") as fp:
+        fresh_erp_api += fp.read()
 test_assert("partner_id:" in fresh_erp_api and "warehouse_id:" in fresh_erp_api, "src/lib/erpApi.ts createOrder includes partner_id and warehouse_id")
 
 # ------------------------------------------------------------------------------
@@ -376,6 +385,9 @@ test_assert("cell?: never" in current_pv_code and "rack?: never" in current_pv_c
 
 with open(erp_api_path, "r", encoding="utf-8") as fp:
     current_erp_api = fp.read()
+if os.path.exists(erp_orders_api_path):
+    with open(erp_orders_api_path, "r", encoding="utf-8") as fp:
+        current_erp_api += fp.read()
 test_assert("parseSizeDimensions" in current_erp_api and "area_sqm" in current_erp_api, "src/lib/erpApi.ts computes carpet physical dimensions for WMS")
 test_assert("X-Idempotency-Key" in current_erp_api, "src/lib/erpApi.ts includes X-Idempotency-Key in headers")
 test_assert("delete itemObj.cell" in current_erp_api, "src/lib/erpApi.ts strips any cell/rack stubs")
