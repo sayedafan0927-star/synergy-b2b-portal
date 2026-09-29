@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, lazy, Suspense } from 'react';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { CartProvider } from '@/contexts/CartContext';
 import { LanguageProvider } from '@/contexts/LanguageContext';
+import { CurrencyProvider } from '@/contexts/CurrencyContext';
 import WhatsAppWidget from '@/components/WhatsAppWidget';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
@@ -251,23 +252,25 @@ export default function App() {
   return (
     <LanguageProvider>
       <AuthProvider>
-        <CartProvider>
-          {!preloaderDone && <Preloader onFinished={handlePreloaderFinished} />}
-          {!isOnline && (
-            <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 z-[9990] flex items-center gap-2.5 rounded-xl border border-amber-300 bg-amber-500 text-white px-4 py-2.5 shadow-xl text-xs font-semibold backdrop-blur-md">
-              <span className="relative flex h-2.5 w-2.5 shrink-0">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
-              </span>
-              <span>Офлайн-режим: данные каталога загружены из локального кэша</span>
-            </div>
-          )}
-          <MainLayout page={page} navigate={navigate} showFooter={showFooter}>
-            <Suspense fallback={<PageLoadingFallback />}>
-              {renderPage()}
-            </Suspense>
-          </MainLayout>
-        </CartProvider>
+        <CurrencyProvider>
+          <CartProvider>
+            {!preloaderDone && <Preloader onFinished={handlePreloaderFinished} />}
+            {!isOnline && (
+              <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 z-[9990] flex items-center gap-2.5 rounded-xl border border-amber-300 bg-amber-500 text-white px-4 py-2.5 shadow-xl text-xs font-semibold backdrop-blur-md">
+                <span className="relative flex h-2.5 w-2.5 shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
+                </span>
+                <span>Офлайн-режим: данные каталога загружены из локального кэша</span>
+              </div>
+            )}
+            <MainLayout page={page} navigate={navigate} showFooter={showFooter}>
+              <Suspense fallback={<PageLoadingFallback />}>
+                {renderPage()}
+              </Suspense>
+            </MainLayout>
+          </CartProvider>
+        </CurrencyProvider>
       </AuthProvider>
     </LanguageProvider>
   );

@@ -3,6 +3,7 @@ import { Menu, X, ShoppingCart, User, Shield, Phone, CloudOff, RefreshCw } from 
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useCurrency } from '@/contexts/CurrencyContext';
 import { checkSystemHealth } from '@/lib/erpApi';
 import { getQueuedOfflineOrders, processOfflineOrderQueue, onOfflineQueueChange } from '@/lib/offlineOrderQueue';
 import type { PageId } from '@/types';
@@ -21,6 +22,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
   const { totalItems } = useCart();
   const { user, profile, isAdmin } = useAuth();
   const { language, setLanguage, t } = useLanguage();
+  const { currency, setCurrency } = useCurrency();
 
   useEffect(() => {
     let mounted = true;
@@ -131,6 +133,34 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
                 title="Русский язык"
               >
                 RU
+              </button>
+            </div>
+
+            {/* Currency Switcher ($ USD / ₸ KZT) */}
+            <div className="flex items-center rounded-lg bg-slate-100 p-0.5 border border-slate-200/80 text-xs font-bold">
+              <button
+                type="button"
+                onClick={() => setCurrency('USD')}
+                className={`rounded-md px-2 py-1 transition-all ${
+                  currency === 'USD'
+                    ? 'bg-white text-slate-900 shadow-2xs'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+                title="Цены в долларах ($)"
+              >
+                $
+              </button>
+              <button
+                type="button"
+                onClick={() => setCurrency('KZT')}
+                className={`rounded-md px-2 py-1 transition-all ${
+                  currency === 'KZT'
+                    ? 'bg-white text-slate-900 shadow-2xs'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+                title="Цены в тенге (₸)"
+              >
+                ₸
               </button>
             </div>
 
