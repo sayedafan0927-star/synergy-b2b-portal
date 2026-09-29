@@ -1,5 +1,6 @@
 import { RotateCcw, X, CheckCircle2, AlertTriangle, ShoppingCart } from 'lucide-react';
 import type { RepeatResult } from './types';
+import { Portal } from '@/components/common/Portal';
 
 export interface RepeatOrderModalProps {
   repeatResult: RepeatResult | null;
@@ -15,7 +16,8 @@ export function RepeatOrderModal({
   if (!repeatResult) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+    <Portal>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
       <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-slate-100 space-y-5">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div className="flex items-center gap-2.5">
@@ -101,6 +103,7 @@ export function RepeatOrderModal({
         </div>
       </div>
     </div>
+    </Portal>
   );
 }
 

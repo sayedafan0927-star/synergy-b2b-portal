@@ -605,7 +605,52 @@ test_assert("AdminBootstrap" not in profile_code, "ProfilePage.tsx eliminated cl
 test_assert(("supabase.from('orders')" in profile_code and "localMapped" in profile_code) or ("supabase.from('orders')" in orders_code and "localMapped" in orders_code), "ProfilePage.tsx implements offline & buffered orders merge resilience")
 
 # ------------------------------------------------------------------------------
-# 20. Summary Report
+# 20. Verifying Core 5 Blocks Quality Bar & Resilience Hardening...
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}20. Verifying Core 5 Blocks Quality Bar & Resilience Hardening...{RESET}")
+
+portal_path = os.path.join(ROOT_DIR, "src", "components", "common", "Portal.tsx")
+test_assert(os.path.exists(portal_path), "src/components/common/Portal.tsx exists")
+with open(portal_path, "r", encoding="utf-8") as fp:
+    portal_code = fp.read()
+test_assert("createPortal(children, document.body)" in portal_code, "Portal component renders to document.body")
+
+reconcil_path = os.path.join(ROOT_DIR, "src", "components", "profile", "ReconciliationModal.tsx")
+with open(reconcil_path, "r", encoding="utf-8") as fp:
+    test_assert("<Portal>" in fp.read(), "ReconciliationModal.tsx wraps modal in Portal")
+
+repeat_modal_path = os.path.join(ROOT_DIR, "src", "components", "profile", "RepeatOrderModal.tsx")
+with open(repeat_modal_path, "r", encoding="utf-8") as fp:
+    test_assert("<Portal>" in fp.read(), "RepeatOrderModal.tsx wraps modal in Portal")
+
+client_wh_modal_path = os.path.join(ROOT_DIR, "src", "components", "admin", "ClientWarehouseModal.tsx")
+with open(client_wh_modal_path, "r", encoding="utf-8") as fp:
+    test_assert("<Portal>" in fp.read(), "ClientWarehouseModal.tsx wraps modal in Portal")
+
+filter_drawer_path = os.path.join(ROOT_DIR, "src", "components", "catalog", "FilterDrawer.tsx")
+with open(filter_drawer_path, "r", encoding="utf-8") as fp:
+    test_assert("<Portal>" in fp.read(), "FilterDrawer.tsx wraps drawer in Portal")
+
+balance_handler_path = os.path.join(ROOT_DIR, "api", "modules", "financial", "balanceHandler.ts")
+test_assert(os.path.exists(balance_handler_path), "api/modules/financial/balanceHandler.ts exists")
+with open(balance_handler_path, "r", encoding="utf-8") as fp:
+    balance_code = fp.read()
+test_assert("Promise.allSettled" in balance_code, "balanceHandler.ts uses Promise.allSettled for fault isolation")
+test_assert("roundToCents" in balance_code, "balanceHandler.ts uses roundToCents for decimal precision")
+test_assert("off_balance" in balance_code and "consignment_stock_value" in balance_code, "balanceHandler.ts isolates consignment stock to off_balance")
+
+with open(erp_ts_path, "r", encoding="utf-8") as fp:
+    erp_code_current = fp.read()
+test_assert("'financial_balance'" in erp_code_current, "api/erp.ts includes financial_balance action")
+test_assert("ADMIN_ACTIONS = new Set([" in erp_code_current and "'financial_balance'" in erp_code_current, "api/erp.ts protects financial_balance with ADMIN_ACTIONS")
+
+vercel_path = os.path.join(ROOT_DIR, "vercel.json")
+with open(vercel_path, "r", encoding="utf-8") as fp:
+    vercel_code = fp.read()
+test_assert('"/api/cron/expire-holds"' in vercel_code and '"*/10 * * * *"' in vercel_code, "vercel.json schedules expire-holds cron every 10 minutes")
+
+# ------------------------------------------------------------------------------
+# 21. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

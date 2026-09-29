@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { Search, ChevronDown, ChevronUp, X, Filter } from 'lucide-react';
 import { parseSizeDimensions } from '@/types';
 import type { FilterDrawerProps } from './types';
+import { Portal } from '@/components/common/Portal';
 
 export function FilterSection({
   title,
@@ -113,7 +114,7 @@ export function FilterDrawer(props: FilterDrawerProps) {
   }, [open]);
 
   return (
-    <>
+    <Portal>
       <div
         onClick={onClose}
         className={`fixed inset-0 z-40 bg-black/40 backdrop-blur-sm transition-opacity duration-300 cursor-pointer ${
@@ -212,7 +213,7 @@ export function FilterDrawer(props: FilterDrawerProps) {
           )}
         </div>
       </div>
-    </>
+    </Portal>
   );
 }
 export default FilterDrawer;

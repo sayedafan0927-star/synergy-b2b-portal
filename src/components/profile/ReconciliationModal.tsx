@@ -1,5 +1,6 @@
 import { FileText, X, RefreshCw, Printer } from 'lucide-react';
 import type { Profile } from '@/contexts/AuthContext';
+import { Portal } from '@/components/common/Portal';
 
 export interface ReconciliationModalProps {
   isOpen: boolean;
@@ -23,7 +24,8 @@ export function ReconciliationModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+    <Portal>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
       <div className="bg-white rounded-2xl max-w-3xl w-full p-6 shadow-2xl border border-slate-100 space-y-4 max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between pb-3 border-b border-slate-100 shrink-0">
           <div className="flex items-center gap-2.5">
@@ -174,6 +176,7 @@ export function ReconciliationModal({
         </div>
       </div>
     </div>
+    </Portal>
   );
 }
 

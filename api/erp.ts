@@ -16,6 +16,7 @@ import { handleCatalogRequests } from './modules/catalog/catalogHandler';
 import { handleCreateOrder } from './modules/orders/createOrderHandler';
 import { handleLoginFallback, handleEmployeeLoginFallback } from './modules/auth/loginHandler';
 import { handleCachedClientDebt, handleDebtFallbackOnFailure } from './modules/financial/debtHandler';
+import { handleFinancialBalanceSheet } from './modules/financial/balanceHandler';
 import { getErpApiKey } from './lib/erpKey';
 
 // Primary live ERP gateway: https://kilem-khan.kz/api/sin/public/api_portal.php
@@ -52,6 +53,7 @@ const ADMIN_ACTIONS = new Set([
   'update_client_access',
   'update_order_status',
   'sync_bundle',
+  'financial_balance',
 ]);
 let displaySettingsCache: { data: any; expiry: number } | null = null;
 let lastKnownInboundShipments: any = null;
@@ -266,6 +268,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (await handleCachedClientDebt(req, res, supabase)) {
         return;
       }
+    }
+
+    // Управленческий баланс предприятия (Чистый капитал, активы, забаланс)
+    if (action === 'financial_balance' && req.method === 'GET') {
+      await handleFinancialBalanceSheet(req, res, supabase);
+      return;
     }
   }
 

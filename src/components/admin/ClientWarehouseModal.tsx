@@ -5,6 +5,7 @@ import {
   saveClientWarehouseSettings,
   resetClientWarehouseSettings,
 } from '@/lib/warehouseVisibility';
+import { Portal } from '@/components/common/Portal';
 
 export interface ClientWarehouseModalProps {
   client: {
@@ -57,7 +58,8 @@ export function ClientWarehouseModal({ client, onClose }: ClientWarehouseModalPr
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150">
+    <Portal>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150">
       <div className="relative w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-slate-100 p-6 space-y-5" onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
@@ -240,6 +242,7 @@ export function ClientWarehouseModal({ client, onClose }: ClientWarehouseModalPr
         </div>
       </div>
     </div>
+    </Portal>
   );
 }
 
