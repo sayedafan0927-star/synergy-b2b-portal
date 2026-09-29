@@ -78,3 +78,55 @@ export async function handleRetryDlqOrder(
     order: updated,
   });
 }
+
+export async function handleRetryAllDlqOrders(
+  req: VercelRequest,
+  res: VercelResponse,
+  supabase: SupabaseClient,
+  correlationId: string,
+) {
+  const auth = await authenticateRequest(req, { requiredRoles: ['admin'], allowServerKey: true });
+  if (!auth.isAuthenticated || auth.error) {
+    return res.status(403).json({ success: false, error: auth.error || 'Access denied' });
+  }
+
+  const { data: updatedList, error: updErr } = await supabase
+    .from('orders')
+    .update({
+      status: 'pending',
+      retry_count: 0,
+      next_retry_at: new Date().toISOString(),
+      notes: `[Пакетный перезапуск администратором: ${auth.fullName || auth.userId}]`,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('status', 'failed_dlq')
+    .select('id, order_number');
+
+  if (updErr) {
+    return res.status(500).json({ success: false, error: updErr.message });
+  }
+
+  const retriedCount = updatedList?.length || 0;
+
+  await recordAuditLog({
+    eventType: 'dlq_batch_retry',
+    direction: 'outbound',
+    status: 'success',
+    statusCode: 200,
+    source: 'Admin Portal',
+    correlationId,
+    payload: {
+      retried_count: retriedCount,
+      order_numbers: updatedList?.map(o => o.order_number) || [],
+      retried_by: auth.userId,
+    },
+  });
+
+  return res.status(200).json({
+    success: true,
+    message: `Успешно возвращено в очередь ${retriedCount} заказов из DLQ.`,
+    count: retriedCount,
+    orders: updatedList,
+  });
+}
+

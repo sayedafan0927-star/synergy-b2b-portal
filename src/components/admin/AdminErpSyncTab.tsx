@@ -48,6 +48,7 @@ export function AdminErpSyncTab({ isAdmin = true }: AdminErpSyncTabProps) {
   const [dlqOrders, setDlqOrders] = useState<any[]>([]);
   const [dlqLoading, setDlqLoading] = useState(false);
   const [dlqRetryingId, setDlqRetryingId] = useState<string | null>(null);
+  const [dlqRetryingAll, setDlqRetryingAll] = useState(false);
   const [dlqMessage, setDlqMessage] = useState<string | null>(null);
 
   // Outbox state
@@ -91,6 +92,26 @@ export function AdminErpSyncTab({ isAdmin = true }: AdminErpSyncTabProps) {
       setDlqMessage('Сбой обращения к серверу при попытке повтора');
     } finally {
       setDlqRetryingId(null);
+    }
+  };
+
+  const handleRetryAllDlq = async () => {
+    if (!confirm('Вы действительно хотите вернуть все сбойные заказы обратно в очередь Outbox?')) return;
+    setDlqRetryingAll(true);
+    setDlqMessage(null);
+    try {
+      const res = await erpFetch('retry_all_dlq_orders', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setDlqMessage(data.message || 'Все сбойные заказы возвращены в очередь Outbox');
+        fetchDlqOrders();
+      } else {
+        setDlqMessage(data.error || 'Ошибка пакетного перезапуска');
+      }
+    } catch {
+      setDlqMessage('Сбой обращения к серверу при пакетном повторе');
+    } finally {
+      setDlqRetryingAll(false);
     }
   };
 
@@ -384,9 +405,11 @@ export function AdminErpSyncTab({ isAdmin = true }: AdminErpSyncTabProps) {
               dlqOrders={dlqOrders}
               dlqLoading={dlqLoading}
               dlqRetryingId={dlqRetryingId}
+              dlqRetryingAll={dlqRetryingAll}
               dlqMessage={dlqMessage}
               onRefresh={fetchDlqOrders}
               onRetryOrder={handleRetryDlqOrder}
+              onRetryAll={handleRetryAllDlq}
               onClearMessage={() => setDlqMessage(null)}
             />
           )}

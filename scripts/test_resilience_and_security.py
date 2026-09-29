@@ -751,7 +751,54 @@ with open(dlq_handler_path, "r", encoding="utf-8") as fp:
 test_assert("categorizeDlqError" in dlq_h_code and "error_analysis" in dlq_h_code, "dlqHandler.ts enriches failed orders with structured error categorization")
 
 # ------------------------------------------------------------------------------
-# 23. Summary Report
+# 23. Verifying Advanced Resilience: Stock Release, Monotonic FSM, In-Flight Exposure & DLQ Batch Replay
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}23. Verifying Advanced Resilience: Stock Release, Monotonic FSM & DLQ Batch Replay...{RESET}")
+
+rel_sql_path = os.path.join(ROOT_DIR, "supabase", "migrations", "20260929200000_release_order_reservations_and_outbox_filter.sql")
+test_assert(os.path.exists(rel_sql_path), "20260929200000_release_order_reservations_and_outbox_filter.sql migration exists")
+with open(rel_sql_path, "r", encoding="utf-8") as fp:
+    rel_sql_code = fp.read()
+test_assert("CREATE OR REPLACE FUNCTION release_order_reservations" in rel_sql_code, "release_order_reservations SQL function defined in migration")
+test_assert("parent_order_id IS NULL" in rel_sql_code, "claim_outbox_orders filters out split sub-orders in migration")
+test_assert('CREATE POLICY "orders_update"' in rel_sql_code and 'CREATE POLICY "order_items_update"' in rel_sql_code, "orders and order_items RLS policies hardened against client tampering")
+
+with open(deploy_all_path, "r", encoding="utf-8") as fp:
+    fresh_deploy_sql = fp.read()
+test_assert("CREATE OR REPLACE FUNCTION release_order_reservations" in fresh_deploy_sql, "DEPLOY_ALL_ENTERPRISE_MIGRATIONS.sql includes release_order_reservations")
+test_assert("PERFORM release_order_reservations(r.id)" in fresh_deploy_sql, "DEPLOY_ALL_ENTERPRISE_MIGRATIONS.sql cancel_expired_order_holds releases reservations")
+test_assert("parent_order_id IS NULL" in fresh_deploy_sql, "DEPLOY_ALL_ENTERPRISE_MIGRATIONS.sql claim_outbox_orders includes parent_order_id IS NULL")
+
+order_status_handler_path = os.path.join(ROOT_DIR, "api", "webhooks", "handlers", "orderStatusHandler.ts")
+with open(order_status_handler_path, "r", encoding="utf-8") as fp:
+    osh_code = fp.read()
+test_assert("canTransitionOrderStatus" in osh_code, "orderStatusHandler.ts enforces Monotonic Order State Machine")
+test_assert("release_order_reservations" in osh_code, "orderStatusHandler.ts releases stock reservations upon order cancellation")
+
+with open(outbox_path, "r", encoding="utf-8") as fp:
+    sync_code = fp.read()
+test_assert("is('parent_order_id', null)" in sync_code, "api/outbox/sync.ts isolates split sub-orders from redundant 1C sync")
+
+exposure_validator_path = os.path.join(ROOT_DIR, "api", "modules", "orders", "exposureValidator.ts")
+with open(exposure_validator_path, "r", encoding="utf-8") as fp:
+    ev_code = fp.read()
+test_assert("inFlightOrdersSum" in ev_code and "totalExposure" in ev_code, "exposureValidator.ts factors in-flight active orders into credit limit verification")
+
+with open(dlq_handler_path, "r", encoding="utf-8") as fp:
+    dlq_fresh = fp.read()
+test_assert("handleRetryAllDlqOrders" in dlq_fresh, "dlqHandler.ts implements handleRetryAllDlqOrders batch replay")
+
+with open(erp_ts_path, "r", encoding="utf-8") as fp:
+    erp_fresh = fp.read()
+test_assert("retry_all_dlq_orders" in erp_fresh, "api/erp.ts routes retry_all_dlq_orders action")
+
+use_orders_path = os.path.join(ROOT_DIR, "src", "components", "profile", "useOrdersList.ts")
+with open(use_orders_path, "r", encoding="utf-8") as fp:
+    uol_code = fp.read()
+test_assert("release_order_reservations" in uol_code, "useOrdersList.ts triggers release_order_reservations when dealer cancels order")
+
+# ------------------------------------------------------------------------------
+# 24. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

@@ -4,9 +4,11 @@ export interface AdminDlqSubTabProps {
   dlqOrders: any[];
   dlqLoading: boolean;
   dlqRetryingId: string | null;
+  dlqRetryingAll?: boolean;
   dlqMessage: string | null;
   onRefresh: () => void;
   onRetryOrder: (id: string) => void;
+  onRetryAll?: () => void;
   onClearMessage: () => void;
 }
 
@@ -14,9 +16,11 @@ export function AdminDlqSubTab({
   dlqOrders,
   dlqLoading,
   dlqRetryingId,
+  dlqRetryingAll,
   dlqMessage,
   onRefresh,
   onRetryOrder,
+  onRetryAll,
   onClearMessage,
 }: AdminDlqSubTabProps) {
   return (
@@ -33,14 +37,26 @@ export function AdminDlqSubTab({
             </div>
           </div>
         </div>
-        <button
-          onClick={onRefresh}
-          disabled={dlqLoading}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white text-red-700 border border-red-300 rounded-lg hover:bg-red-50 transition-colors shadow-sm disabled:opacity-50 cursor-pointer"
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${dlqLoading ? 'animate-spin' : ''}`} />
-          Обновить
-        </button>
+        <div className="flex items-center gap-2">
+          {onRetryAll && dlqOrders.length > 0 && (
+            <button
+              onClick={onRetryAll}
+              disabled={dlqLoading || dlqRetryingAll}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors shadow-sm disabled:opacity-50 cursor-pointer"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${dlqRetryingAll ? 'animate-spin' : ''}`} />
+              Повторить все ({dlqOrders.length})
+            </button>
+          )}
+          <button
+            onClick={onRefresh}
+            disabled={dlqLoading}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white text-red-700 border border-red-300 rounded-lg hover:bg-red-50 transition-colors shadow-sm disabled:opacity-50 cursor-pointer"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${dlqLoading ? 'animate-spin' : ''}`} />
+            Обновить
+          </button>
+        </div>
       </div>
 
       {dlqMessage && (

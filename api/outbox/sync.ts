@@ -84,6 +84,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .from('orders')
         .select('*')
         .eq('status', 'pending')
+        .is('parent_order_id', null)
         .lte('next_retry_at', nowIso)
         .order('created_at', { ascending: true })
         .limit(10);

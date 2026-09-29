@@ -65,6 +65,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (pendingOrders && pendingOrders.length > 0) {
         const orderIds = pendingOrders.map((o: any) => o.id);
 
+        // Освобождаем зарезервированные остатки обратно в free_stock
+        for (const ord of pendingOrders) {
+          try {
+            await supabase.rpc('release_order_reservations', { p_order_id: ord.id });
+          } catch (relErr) {
+            logger.warn('[WMS Hold Expiry] Fallback release_order_reservations notice:', relErr as Error);
+          }
+        }
+
         const { error: updateErr } = await supabase
           .from('orders')
           .update({

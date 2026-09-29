@@ -65,12 +65,31 @@ export async function validateClientCreditExposure(
       }
     }
 
-    const totalExposure = Math.round((currentDebt + finalTotalAmount) * 100) / 100;
+    // 4. Подсчет суммы незавершенных заказов («в пути»), не проведенных в 1C
+    let inFlightOrdersSum = 0;
+    if (callerAuth.userId) {
+      try {
+        const { data: inFlightOrders } = await supabase
+          .from('orders')
+          .select('total_amount')
+          .eq('user_id', callerAuth.userId)
+          .in('status', ['pending', 'processing_sync', 'confirmed', 'processing'])
+          .is('parent_order_id', null);
+
+        if (inFlightOrders && inFlightOrders.length > 0) {
+          inFlightOrdersSum = inFlightOrders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
+        }
+      } catch (inFlightErr) {
+        logger.warn('[Order] In-flight orders lookup notice:', inFlightErr as Error);
+      }
+    }
+
+    const totalExposure = Math.round((currentDebt + inFlightOrdersSum + finalTotalAmount) * 100) / 100;
     if (clientCreditLimit > 0 && totalExposure > clientCreditLimit) {
       return {
         blocked: false,
         requiresApproval: true,
-        complianceReason: `Превышен кредитный лимит с учетом текущей задолженности (Долг: $${currentDebt} + Заказ: $${finalTotalAmount} = $${totalExposure} > Лимит: $${clientCreditLimit})`,
+        complianceReason: `Превышен кредитный лимит с учетом текущей задолженности и заказов в пути (Долг: $${currentDebt} + В обработке: $${inFlightOrdersSum} + Заказ: $${finalTotalAmount} = $${totalExposure} > Лимит: $${clientCreditLimit})`,
       };
     }
   } catch (profErr) {

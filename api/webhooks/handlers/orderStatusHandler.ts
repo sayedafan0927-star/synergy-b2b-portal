@@ -100,16 +100,33 @@ export async function handleOrderStatusChanged(
     }
   }
 
+const STATUS_HIERARCHY: Record<string, number> = {
+  pending: 1,
+  confirmed: 2,
+  processing: 3,
+  shipped: 4,
+  delivered: 5,
+};
+
+export function canTransitionOrderStatus(currentStatus: string, nextStatus: string): boolean {
+  const normCurrent = (currentStatus || 'pending').toLowerCase();
+  const normNext = (nextStatus || '').toLowerCase();
+
+  if (normCurrent === normNext) return true;
+  if (normCurrent === 'delivered' || normCurrent === 'cancelled') return false;
+
+  if (normNext === 'cancelled') {
+    return normCurrent !== 'shipped' && normCurrent !== 'delivered';
+  }
+
+  const currentRank = STATUS_HIERARCHY[normCurrent] || 0;
+  const nextRank = STATUS_HIERARCHY[normNext] || 0;
+
+  return nextRank >= currentRank;
+}
+
   // Синхронизация статуса в Supabase
   try {
-    const updatePayload: Record<string, any> = {
-      status: targetStatus,
-      updated_at: new Date().toISOString(),
-    };
-    if (orderNotes) {
-      updatePayload.notes = orderNotes;
-    }
-
     const isUuid = (val: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
     const matchConditions: string[] = [];
     if (order_id && isUuid(String(order_id))) {
@@ -123,6 +140,46 @@ export async function handleOrderStatusChanged(
     }
 
     if (matchConditions.length > 0 && supabaseServer) {
+      // 1. Проверяем текущий статус для защиты от отката (Monotonic Order State Machine)
+      const { data: existingOrder } = await supabaseServer
+        .from('orders')
+        .select('id, status, order_number')
+        .or(matchConditions.join(','))
+        .maybeSingle();
+
+      if (existingOrder && !canTransitionOrderStatus(existingOrder.status, targetStatus)) {
+        console.warn(
+          `[Webhook ERP] Monotonic status regression blocked for order ${existingOrder.order_number}: cannot transition from '${existingOrder.status}' to '${targetStatus}'`,
+        );
+        return {
+          success: true,
+          event: 'order_status_changed',
+          ignored: true,
+          reason: 'MONOTONIC_ORDER_STATUS_VIOLATION',
+          current_status: existingOrder.status,
+          attempted_status: targetStatus,
+          message: `Ignored out-of-order webhook transition '${existingOrder.status}' -> '${targetStatus}'.`,
+        };
+      }
+
+      // 2. Высвобождение остатков при отмене заказа (Zero Reservation Leak Invariant)
+      if (targetStatus === 'cancelled' && existingOrder?.id) {
+        try {
+          await supabaseServer.rpc('release_order_reservations', { p_order_id: existingOrder.id });
+          console.log(`[Webhook ERP] Successfully released stock reservations for cancelled order ${existingOrder.id}`);
+        } catch (relErr) {
+          console.warn('[Webhook ERP] Notice during release_order_reservations RPC:', relErr);
+        }
+      }
+
+      const updatePayload: Record<string, any> = {
+        status: targetStatus,
+        updated_at: new Date().toISOString(),
+      };
+      if (orderNotes) {
+        updatePayload.notes = orderNotes;
+      }
+
       const { data: updatedOrders } = await supabaseServer
         .from('orders')
         .update(updatePayload)

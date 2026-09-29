@@ -224,6 +224,13 @@ export function useOrdersList({ isAdmin, isManager }: UseOrdersListOptions) {
     }
 
     try {
+      // 1. Освобождаем зарезервированные остатки обратно на склад (Zero Reservation Leak)
+      await supabase.rpc('release_order_reservations', { p_order_id: order.id });
+    } catch (rpcErr) {
+      console.warn('[handleCancelOrder] release_order_reservations notice:', rpcErr);
+    }
+
+    try {
       await supabase
         .from('orders')
         .update({ status: 'cancelled', updated_at: new Date().toISOString() })

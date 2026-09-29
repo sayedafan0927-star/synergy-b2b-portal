@@ -12,7 +12,7 @@ import { handleCreateOrder } from './modules/orders/createOrderHandler';
 import { handleCachedClientDebt } from './modules/financial/debtHandler';
 import { handleFinancialBalanceSheet } from './modules/financial/balanceHandler';
 import { handleRefreshClientBalance } from './modules/financial/refreshBalanceHandler';
-import { handleDlqOrders, handleRetryDlqOrder } from './modules/dlq/dlqHandler';
+import { handleDlqOrders, handleRetryDlqOrder, handleRetryAllDlqOrders } from './modules/dlq/dlqHandler';
 import {
   handleDisplaySettingsGet,
   handleDisplaySettingsPost,
@@ -90,6 +90,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (action === 'retry_dlq_order' && req.method === 'POST') {
       return await handleRetryDlqOrder(req, res, supabase, correlationId);
+    }
+
+    if (action === 'retry_all_dlq_orders' && req.method === 'POST') {
+      return await handleRetryAllDlqOrders(req, res, supabase, correlationId);
     }
 
     // 0.9. Кэш настроек отображения (60s TTL)
