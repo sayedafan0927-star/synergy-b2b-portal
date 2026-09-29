@@ -4,12 +4,16 @@ import { createClient } from '@supabase/supabase-js';
 import { patchCachedCatalogStock } from '../lib/catalogCache';
 import { recordAuditLog } from '../audit/logs';
 import { applyCorsHeaders } from '../lib/cors';
+import { getErpApiKey } from '../lib/erpKey';
 
-const ALLOWED_KEYS = new Set([
-  process.env.PORTAL_SECRET_KEY,
-  process.env.ERP_API_KEY,
-  process.env.ERP_PORTAL_SECRET,
-].filter(Boolean) as string[]);
+function getAllowedKeys(): Set<string> {
+  return new Set([
+    process.env.PORTAL_SECRET_KEY?.trim(),
+    process.env.ERP_API_KEY?.trim(),
+    process.env.ERP_PORTAL_SECRET?.trim(),
+    getErpApiKey(),
+  ].filter(Boolean) as string[]);
+}
 
 const SECRET_KEY = process.env.PORTAL_SECRET_KEY || process.env.ERP_PORTAL_SECRET || '';
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
@@ -100,14 +104,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // 1. Проверка авторизационного ключа
-  const portalKey = (
+  const rawPortalKey = (
     req.headers['x-portal-key'] ||
     req.headers['X-Portal-Key'] ||
     req.query?.portal_key ||
     req.body?.portal_key
   ) as string | undefined;
 
-  if (!portalKey || !ALLOWED_KEYS.has(portalKey)) {
+  const portalKey = rawPortalKey ? String(rawPortalKey).trim() : '';
+  const allowedKeys = getAllowedKeys();
+
+  if (!portalKey || !allowedKeys.has(portalKey)) {
     return res.status(401).json({
       success: false,
       error: 'Unauthorized: Invalid or missing X-Portal-Key header.',
