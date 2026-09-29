@@ -25,6 +25,34 @@ export interface AuditLogEntry {
 }
 
 /**
+ * Рекурсивное маскирование конфиденциальных данных и PII в аудит-логах
+ */
+export function sanitizeAuditPayload(data: any): any {
+  if (!data || typeof data !== 'object') return data;
+  if (Array.isArray(data)) return data.map(sanitizeAuditPayload);
+  const sanitized: Record<string, any> = {};
+  for (const [key, value] of Object.entries(data)) {
+    const k = key.toLowerCase();
+    if (
+      k.includes('password') ||
+      k.includes('token') ||
+      k.includes('secret') ||
+      k.includes('key') ||
+      k.includes('authorization') ||
+      k.includes('pin') ||
+      k.includes('pass')
+    ) {
+      sanitized[key] = '***REDACTED***';
+    } else if (typeof value === 'object' && value !== null) {
+      sanitized[key] = sanitizeAuditPayload(value);
+    } else {
+      sanitized[key] = value;
+    }
+  }
+  return sanitized;
+}
+
+/**
  * Логирование интеграционного события в базу данных Supabase и Structured Logger
  */
 export async function recordAuditLog(entry: AuditLogEntry): Promise<void> {
@@ -46,16 +74,17 @@ export async function recordAuditLog(entry: AuditLogEntry): Promise<void> {
     logger.info(`[IntegrationAudit] ${entry.eventType} ${entry.direction} success`, logCtx);
   }
 
-  // 2. Персистенция в БД Supabase
+  // 2. Персистенция в БД Supabase с обязательной санитизацией секретов
   if (!supabase) return;
   try {
-    const payloadObj = entry.payload ? { ...entry.payload } : {};
+    const rawPayloadObj = entry.payload ? { ...entry.payload } : {};
     if (entry.correlationId) {
-      payloadObj.correlation_id = entry.correlationId;
+      rawPayloadObj.correlation_id = entry.correlationId;
     }
     if (entry.ip) {
-      payloadObj.client_ip = entry.ip;
+      rawPayloadObj.client_ip = entry.ip;
     }
+    const payloadObj = sanitizeAuditPayload(rawPayloadObj);
 
     await supabase.from('integration_audit_logs').insert({
       event_type: entry.eventType,

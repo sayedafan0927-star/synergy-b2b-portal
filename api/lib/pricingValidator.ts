@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { getCachedCatalog } from './catalogCache';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
@@ -56,8 +57,9 @@ export interface PricingValidationResult {
  * Разрешение warehouse_id по числовому ID либо наименованию склада
  */
 export function resolveWarehouseId(rawId?: any, name?: string): number {
-  if (rawId !== undefined && rawId !== null && !isNaN(Number(rawId))) {
-    return Number(rawId);
+  const numId = Number(rawId);
+  if (rawId !== undefined && rawId !== null && !isNaN(numId) && numId > 0) {
+    return numId;
   }
   const wName = (name || '').toLowerCase();
   if (wName.includes('астана') || wName.includes('основной')) return 81;
@@ -183,6 +185,49 @@ export async function validateAndPriceOrder(
     }
   }
 
+  // Fallback: Если каких-то позиций нет в product_variants, подтягиваем их из кэша каталога (L1/L2)
+  const missingSkus = skusToLookup.filter(sku => !dbVariantsMap.has(sku.toUpperCase()));
+  if (missingSkus.length > 0) {
+    try {
+      const cached = await getCachedCatalog('catalog_global');
+      if (cached?.data?.products && Array.isArray(cached.data.products)) {
+        const missingUpper = new Set(missingSkus.map(s => s.toUpperCase()));
+        for (const p of cached.data.products) {
+          if (Array.isArray(p.variants)) {
+            for (const v of p.variants) {
+              const vSku = String(v.sku || '').trim().toUpperCase();
+              if (missingUpper.has(vSku) && !dbVariantsMap.has(vSku)) {
+                const bPrice = Number(v.price || v.base_price || p.base_price || p.price || 0);
+                if (bPrice > 0) {
+                  dbVariantsMap.set(vSku, {
+                    base_price: bPrice,
+                    sku: v.sku || vSku,
+                    size: v.size || p.size || 'Стандарт',
+                    product_id: String(p.id || ''),
+                  });
+                }
+              }
+            }
+          }
+          const pSku = String(p.sku || p.id || p.article || '').trim().toUpperCase();
+          if (missingUpper.has(pSku) && !dbVariantsMap.has(pSku)) {
+            const bPrice = Number(p.price || p.base_price || 0);
+            if (bPrice > 0) {
+              dbVariantsMap.set(pSku, {
+                base_price: bPrice,
+                sku: p.sku || pSku,
+                size: p.size || 'Стандарт',
+                product_id: String(p.id || ''),
+              });
+            }
+          }
+        }
+      }
+    } catch (cErr) {
+      console.warn('[PricingValidator] Catalog cache lookup notice:', cErr);
+    }
+  }
+
   let totalAmount = 0;
   let totalItems = 0;
   let tamperDetected = false;
@@ -204,8 +249,7 @@ export async function validateAndPriceOrder(
     const skuUpper = String(raw.sku || '').trim().toUpperCase();
     const dbVariant = dbVariantsMap.get(skuUpper);
     const clientPrice = Number(raw.price);
-
-    let authoritativePrice = clientPrice;
+    let authoritativePrice = 0;
     let serverVerified = false;
 
     if (dbVariant && dbVariant.base_price > 0) {
@@ -220,18 +264,16 @@ export async function validateAndPriceOrder(
       authoritativePrice = calculatedPrice;
       serverVerified = true;
     } else {
-      // Если позиции еще нет в локальной таблице variants, проверяем жесткий нижний предел
-      if (isNaN(clientPrice) || clientPrice < 1.0) {
-        return {
-          valid: false,
-          tamperDetected: true,
-          totalAmount: 0,
-          totalItems: 0,
-          items: [],
-          error: `Обнаружена недопустимая или нулевая цена позиции: "${raw.sku || 'Товар'}".`,
-        };
-      }
-      authoritativePrice = clientPrice;
+      // КРИТИЧЕСКИЙ ФИКС P0-3: Товар не найден ни в таблице вариантов, ни в кэше каталога.
+      // Категорически запрещаем прием клиентской цены!
+      return {
+        valid: false,
+        tamperDetected: true,
+        totalAmount: 0,
+        totalItems: 0,
+        items: [],
+        error: `Позиция "${raw.sku || 'Товар'}" отсутствует в официальном каталоге и прайс-листе. Оформление заблокировано (Anti-Tamper Protection).`,
+      };
     }
 
     const lineTotal = Math.round(authoritativePrice * qty * 100) / 100;

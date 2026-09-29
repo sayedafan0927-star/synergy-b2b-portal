@@ -165,10 +165,19 @@ export async function patchCachedCatalogStock(
       const free = Number(it.free_stock ?? 0);
       const reserved = Number(it.reserved_stock ?? 0);
       const total = Number(it.total_stock ?? (free + reserved));
+      const rawWhId = Number(it.warehouse_id || 0);
+      const whName = String(it.warehouse_name || (it as any).warehouse || 'Основной склад Астана');
+      let effectiveWhId = rawWhId;
+      if (effectiveWhId <= 0) {
+        const wLow = whName.toLowerCase();
+        if (wLow.includes('алматы')) effectiveWhId = 82;
+        else if (wLow.includes('шымкент')) effectiveWhId = 83;
+        else effectiveWhId = 81; // Дефолтный центральный склад Астана
+      }
       return {
         sku,
-        warehouse_id: Number(it.warehouse_id || 0),
-        warehouse_name: String(it.warehouse_name || 'Основной склад'),
+        warehouse_id: effectiveWhId,
+        warehouse_name: whName,
         free_stock: free,
         reserved_stock: reserved,
         total_stock: total,

@@ -433,7 +433,52 @@ with open(cart_page_path, "r", encoding="utf-8") as fp:
 test_assert("isServerBuffered" in fresh_cart_code, "CartPage.tsx implements isServerBuffered state for offline buffer confirmation")
 
 # ------------------------------------------------------------------------------
-# 16. Summary Report
+# 16. Audit Hardening & Red Flags Elimination Verification
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}16. Verifying Audit Hardening & Red Flags Elimination (Zero-Trust)...{RESET}")
+
+with open(erp_path, "r", encoding="utf-8") as fp:
+    hardening_erp_code = fp.read()
+test_assert("handleEmployeeLoginFallback" in hardening_erp_code, "api/erp.ts routes employee login through secure fallback handler")
+test_assert("const uId = `erp-employee-${empId}`;" not in hardening_erp_code, "api/erp.ts eliminated passwordless employee session generation (Red Flag 1 Eliminated)")
+
+erp_key_path = os.path.join(ROOT_DIR, "api", "lib", "erpKey.ts")
+with open(erp_key_path, "r", encoding="utf-8") as fp:
+    erp_key_code = fp.read()
+test_assert("ERP_KEY_B64" not in erp_key_code, "api/lib/erpKey.ts eliminated hardcoded Base64 master key (Red Flag 2 Eliminated)")
+test_assert("process.env.ERP_API_KEY" in erp_key_code, "api/lib/erpKey.ts prioritizes environment variables")
+
+pricing_path = os.path.join(ROOT_DIR, "api", "lib", "pricingValidator.ts")
+with open(pricing_path, "r", encoding="utf-8") as fp:
+    pv_hardening_code = fp.read()
+test_assert("authoritativePrice = clientPrice" not in pv_hardening_code, "api/lib/pricingValidator.ts rejects arbitrary client prices (Red Flag 3 Eliminated)")
+test_assert("PRICE_TAMPER" in pv_hardening_code or "Anti-Tamper Protection" in pv_hardening_code, "api/lib/pricingValidator.ts enforces Anti-Tamper Protection")
+test_assert("numId > 0" in pv_hardening_code, "api/lib/pricingValidator.ts resolveWarehouseId ensures positive warehouse ID")
+
+catalog_cache_path = os.path.join(ROOT_DIR, "api", "lib", "catalogCache.ts")
+with open(catalog_cache_path, "r", encoding="utf-8") as fp:
+    cc_hardening_code = fp.read()
+test_assert("effectiveWhId" in cc_hardening_code and "effectiveWhId <= 0" in cc_hardening_code, "api/lib/catalogCache.ts harmonizes warehouse_id 0 to 81 (Red Flag 4 Eliminated)")
+
+audit_logs_path = os.path.join(ROOT_DIR, "api", "audit", "logs.ts")
+with open(audit_logs_path, "r", encoding="utf-8") as fp:
+    logs_code = fp.read()
+test_assert("sanitizeAuditPayload" in logs_code, "api/audit/logs.ts implements recursive PII & secret masking")
+
+recon_path = os.path.join(ROOT_DIR, "api", "modules", "reconciliation.ts")
+with open(recon_path, "r", encoding="utf-8") as fp:
+    recon_code = fp.read()
+test_assert("Anti-IDOR" in recon_code and "partnerId = String(authCtx.partnerId" in recon_code, "api/modules/reconciliation.ts enforces Anti-IDOR partnerId validation")
+test_assert("1С:ERP" not in recon_code, "api/modules/reconciliation.ts replaced legacy 1C naming with Synergy ERP")
+
+partition_2027_path = os.path.join(ROOT_DIR, "supabase", "migrations", "20260929150000_audit_partitions_2027.sql")
+test_assert(os.path.exists(partition_2027_path), "supabase/migrations/20260929150000_audit_partitions_2027.sql exists")
+with open(partition_2027_path, "r", encoding="utf-8") as fp:
+    part_code = fp.read()
+test_assert("audit_logs_y2027m12" in part_code, "Migration pre-allocates monthly audit partitions through Dec 2027")
+
+# ------------------------------------------------------------------------------
+# 17. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests
@@ -445,3 +490,4 @@ else:
 print(f"{BOLD}{BLUE}===================================================================={RESET}\n")
 
 sys.exit(0 if failed_tests == 0 else 1)
+

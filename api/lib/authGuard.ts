@@ -58,7 +58,7 @@ export async function authenticateRequest(
   const portalKeyHeader = (req.headers['x-portal-key'] || req.headers['X-Portal-Key']) as string | undefined;
 
   // 1. Проверка прямого защищенного ключа сервера ERP
-  if (allowServerKey && portalKeyHeader && SERVER_ERP_KEY && portalKeyHeader === SERVER_ERP_KEY) {
+  if (allowServerKey && portalKeyHeader && SERVER_ERP_KEY && SERVER_ERP_KEY.length >= 16 && portalKeyHeader === SERVER_ERP_KEY) {
     return {
       isAuthenticated: true,
       isServer: true,

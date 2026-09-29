@@ -190,3 +190,153 @@ export async function handleLoginFallback(
 
   return true;
 }
+
+/**
+ * Enterprise Fallback: Безопасный вход сотрудников ERP (РМ, ЛМ, Администратор)
+ * Ликвидирует P0 Auth Bypass: Категорически требует проверку пароля по bcrypt hash в profiles.
+ */
+export async function handleEmployeeLoginFallback(
+  req: VercelRequest,
+  res: VercelResponse,
+  matchedEmp: any,
+  inputCleanPhone: string,
+  inputLogin: string,
+  inputPass: string,
+  correlationId: string
+): Promise<boolean> {
+  // 1. Проверяем наличие введенного пароля
+  if (!inputPass) {
+    logger.warn('[Auth P0 Guard] Employee login rejected: missing password', {
+      empId: matchedEmp.id,
+      login: inputLogin,
+      correlationId,
+    });
+    res.status(401).json({
+      success: false,
+      code: 'PASSWORD_REQUIRED',
+      error: 'Для входа сотрудника ERP обязательно требуется указать пароль.',
+    });
+    return true;
+  }
+
+  const empRole = matchedEmp.role === 'lm' ? 'manager_lm' : (matchedEmp.role === 'admin' ? 'admin' : 'manager_rm');
+  const empName = matchedEmp.name || matchedEmp.username || 'Сотрудник ERP';
+  const empPhone = matchedEmp.phone || inputLogin;
+  const empId = matchedEmp.id;
+  const uId = `erp-employee-${empId}`;
+
+  // 2. Поиск хэша пароля сотрудника в profiles
+  const { data: dbProfile } = await supabase
+    .from('profiles')
+    .select('id, password_hash, role')
+    .or(`phone.eq.${empPhone},manager_id.eq.${empId}`)
+    .maybeSingle();
+
+  // Если пароль в базе не настроен - блокируем вход
+  if (!dbProfile?.password_hash) {
+    logger.warn('[Auth P0 Guard] Blocked employee login: account has no password_hash configured', {
+      empId,
+      phone: empPhone,
+      correlationId,
+    });
+    res.status(401).json({
+      success: false,
+      code: 'PASSWORD_NOT_CONFIGURED',
+      error: `Для учетной записи сотрудника «${empName}» пароль на портале не настроен. Обратитесь к главному администратору.`,
+    });
+    return true;
+  }
+
+  // 3. Криптографическая сверка пароля (bcrypt / SHA-256 fallback)
+  let passwordMatched = false;
+  const storedHash = String(dbProfile.password_hash).trim();
+
+  try {
+    if (storedHash.startsWith('$2a$') || storedHash.startsWith('$2b$')) {
+      passwordMatched = await bcrypt.compare(inputPass, storedHash);
+    } else {
+      const inputHash = crypto.createHash('sha256').update(inputPass).digest('hex');
+      if (storedHash === inputHash) {
+        passwordMatched = true;
+        try {
+          const bcryptHash = await bcrypt.hash(inputPass, 10);
+          await supabase
+            .from('profiles')
+            .update({ password_hash: bcryptHash, updated_at: new Date().toISOString() })
+            .eq('id', dbProfile.id);
+          logger.info('[Auth] Upgraded employee password hash to bcrypt', { empId });
+        } catch {}
+      }
+    }
+  } catch (pwErr) {
+    logger.warn('[Auth] Employee password verification exception:', pwErr as Error);
+  }
+
+  if (!passwordMatched) {
+    logger.warn('[Auth P0 Guard] Invalid password for employee', { empId, correlationId });
+    res.status(401).json({
+      success: false,
+      code: 'AUTH_FAILED',
+      error: 'Неверный пароль сотрудника.',
+    });
+    return true;
+  }
+
+  // 4. Формирование сессии при успешной аутентификации
+  const sessionData = {
+    user: {
+      id: uId,
+      email: `${empPhone.replace(/\D+/g, '') || empId}@synergy-portal.kz`,
+      user_metadata: { full_name: empName },
+    },
+    profile: {
+      id: uId,
+      role: empRole,
+      partner_id: null,
+      full_name: empName,
+      phone: empPhone,
+      company_name: 'Synergy Group (ERP)',
+      manager_id: String(empId),
+      price_type: 'wholesale',
+      impersonation_enabled: true,
+    },
+    timestamp: Date.now(),
+  };
+
+  const sessionToken = generateSessionToken(sessionData);
+
+  try {
+    await supabase.from('profiles').upsert({
+      id: dbProfile?.id || crypto.randomUUID(),
+      role: empRole,
+      full_name: empName,
+      company_name: 'Synergy Group (ERP)',
+      phone: empPhone,
+      manager_id: String(empId),
+      impersonation_enabled: true,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'phone' });
+  } catch (e) {
+    logger.warn('[Auth] Employee profile sync notice:', e as Error);
+  }
+
+  res.status(200).json({
+    success: true,
+    user_type: 'employee',
+    manager_id: empId,
+    name: empName,
+    role: empRole,
+    phone: empPhone,
+    token: sessionToken,
+    portal_session_token: sessionToken,
+    employee: {
+      id: empId,
+      name: empName,
+      role: empRole,
+      phone: empPhone,
+    },
+  });
+
+  return true;
+}
+

@@ -1,0 +1,32 @@
+-- Enterprise Audit Log Partitioning 2027
+-- Extends monthly partition coverage for integration_audit_logs_v2 through 2027-12-31
+
+CREATE TABLE IF NOT EXISTS audit_logs_y2027m03 PARTITION OF integration_audit_logs_v2
+  FOR VALUES FROM ('2027-03-01 00:00:00+00') TO ('2027-04-01 00:00:00+00');
+
+CREATE TABLE IF NOT EXISTS audit_logs_y2027m04 PARTITION OF integration_audit_logs_v2
+  FOR VALUES FROM ('2027-04-01 00:00:00+00') TO ('2027-05-01 00:00:00+00');
+
+CREATE TABLE IF NOT EXISTS audit_logs_y2027m05 PARTITION OF integration_audit_logs_v2
+  FOR VALUES FROM ('2027-05-01 00:00:00+00') TO ('2027-06-01 00:00:00+00');
+
+CREATE TABLE IF NOT EXISTS audit_logs_y2027m06 PARTITION OF integration_audit_logs_v2
+  FOR VALUES FROM ('2027-06-01 00:00:00+00') TO ('2027-07-01 00:00:00+00');
+
+CREATE TABLE IF NOT EXISTS audit_logs_y2027m07 PARTITION OF integration_audit_logs_v2
+  FOR VALUES FROM ('2027-07-01 00:00:00+00') TO ('2027-08-01 00:00:00+00');
+
+CREATE TABLE IF NOT EXISTS audit_logs_y2027m08 PARTITION OF integration_audit_logs_v2
+  FOR VALUES FROM ('2027-08-01 00:00:00+00') TO ('2027-09-01 00:00:00+00');
+
+CREATE TABLE IF NOT EXISTS audit_logs_y2027m09 PARTITION OF integration_audit_logs_v2
+  FOR VALUES FROM ('2027-09-01 00:00:00+00') TO ('2027-10-01 00:00:00+00');
+
+CREATE TABLE IF NOT EXISTS audit_logs_y2027m10 PARTITION OF integration_audit_logs_v2
+  FOR VALUES FROM ('2027-10-01 00:00:00+00') TO ('2027-11-01 00:00:00+00');
+
+CREATE TABLE IF NOT EXISTS audit_logs_y2027m11 PARTITION OF integration_audit_logs_v2
+  FOR VALUES FROM ('2027-11-01 00:00:00+00') TO ('2027-12-01 00:00:00+00');
+
+CREATE TABLE IF NOT EXISTS audit_logs_y2027m12 PARTITION OF integration_audit_logs_v2
+  FOR VALUES FROM ('2027-12-01 00:00:00+00') TO ('2028-01-01 00:00:00+00');

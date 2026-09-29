@@ -15,7 +15,7 @@ import { handleCreateLead } from './modules/leads';
 import { handleReconciliationReport } from './modules/reconciliation';
 import { handleCatalogRequests } from './modules/catalog/catalogHandler';
 import { handleCreateOrder } from './modules/orders/createOrderHandler';
-import { handleLoginFallback } from './modules/auth/loginHandler';
+import { handleLoginFallback, handleEmployeeLoginFallback } from './modules/auth/loginHandler';
 import { handleCachedClientDebt, handleDebtFallbackOnFailure } from './modules/financial/debtHandler';
 import { getErpApiKey } from './lib/erpKey';
 
@@ -773,69 +773,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               });
 
               if (matchedEmp) {
-                const empRole = matchedEmp.role === 'lm' ? 'manager_lm' : (matchedEmp.role === 'admin' ? 'admin' : 'manager_rm');
-                const empName = matchedEmp.name || matchedEmp.username || 'Сотрудник ERP';
-                const empPhone = matchedEmp.phone || inputLogin;
-                const empId = matchedEmp.id;
-                const uId = `erp-employee-${empId}`;
-
-                const SECRET_KEY = process.env.PORTAL_SECRET_KEY || '';
-                const sessionData = {
-                  user: {
-                    id: uId,
-                    email: `${empPhone.replace(/\D+/g, '') || empId}@synergy-portal.kz`,
-                    user_metadata: { full_name: empName },
-                  },
-                  profile: {
-                    id: uId,
-                    role: empRole,
-                    partner_id: null,
-                    full_name: empName,
-                    phone: empPhone,
-                    company_name: 'Synergy Group (ERP)',
-                    manager_id: String(empId),
-                    price_type: 'wholesale',
-                    impersonation_enabled: true,
-                  },
-                  timestamp: Date.now(),
-                };
-
-                const sig = crypto.createHmac('sha256', SECRET_KEY).update(JSON.stringify(sessionData)).digest('hex');
-                const signedPayload = { data: sessionData, sig };
-                const sessionToken = Buffer.from(JSON.stringify(signedPayload)).toString('base64url');
-
-                try {
-                  await supabase.from('profiles').upsert({
-                    id: crypto.randomUUID(),
-                    role: empRole,
-                    full_name: empName,
-                    company_name: 'Synergy Group (ERP)',
-                    phone: empPhone,
-                    manager_id: String(empId),
-                    impersonation_enabled: true,
-                    updated_at: new Date().toISOString(),
-                  }, { onConflict: 'phone' });
-                } catch (e) {
-                  console.warn('[API Proxy ERP] Employee profile upsert notice:', e);
-                }
-
-                res.status(200);
-                return res.json({
-                  success: true,
-                  user_type: 'employee',
-                  manager_id: empId,
-                  name: empName,
-                  role: empRole,
-                  phone: empPhone,
-                  token: sessionToken,
-                  portal_session_token: sessionToken,
-                  employee: {
-                    id: empId,
-                    name: empName,
-                    role: empRole,
-                    phone: empPhone,
-                  },
-                });
+                const inputPass = String(loginBody.password || req.query?.password || '').trim();
+                const handled = await handleEmployeeLoginFallback(
+                  req,
+                  res,
+                  matchedEmp,
+                  inputCleanPhone,
+                  inputLogin,
+                  inputPass,
+                  correlationId
+                );
+                if (handled) return;
               }
 
               // 2. Проверяем, не является ли логин/телефон зарегистрированным клиентом (дилером) в ERP

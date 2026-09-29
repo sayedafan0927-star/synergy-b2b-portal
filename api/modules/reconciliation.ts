@@ -15,8 +15,17 @@ export async function handleReconciliationReport(
 
   let partnerId = String(req.query.partner_id || req.query.counterpartyId || '');
   if (authCtx.role === 'client') {
+    // Клиент может запрашивать акт сверки ТОЛЬКО по своему подтвержденному partner_id (Anti-IDOR)
     partnerId = String(authCtx.partnerId || '');
+    if (!partnerId) {
+      return res.status(403).json({ success: false, error: 'Доступ запрещен: партнерский ID клиента не привязан к профилю.' });
+    }
     req.query.partner_id = partnerId;
+  } else if (!authCtx.isServer && authCtx.role !== 'admin') {
+    // Для менеджеров: обязательное наличие partner_id
+    if (!partnerId) {
+      return res.status(400).json({ success: false, error: 'Параметр partner_id обязателен для формирования акта сверки.' });
+    }
   }
 
   const startDate = (req.query.start_date as string) || new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];
@@ -34,7 +43,7 @@ export async function handleReconciliationReport(
         eventType: 'reconciliation_report',
         direction: 'inbound',
         status: 'success',
-        source: '1C ERP Reconciliation',
+        source: 'Synergy ERP Reconciliation',
         payload: { partner_id: partnerId, startDate, endDate },
       });
       return res.status(200).json(report);
@@ -45,7 +54,7 @@ export async function handleReconciliationReport(
     console.warn('[API Proxy ERP] Direct reconciliation ERP fetch failed:', erpNetErr?.message);
     return res.status(503).json({
       success: false,
-      error: 'Сервер 1С:ERP временно недоступен для формирования официального акта сверки взаиморасчетов. Пожалуйста, повторите попытку позже.',
+      error: 'Сервер Synergy ERP временно недоступен для формирования официального акта сверки взаиморасчетов. Пожалуйста, повторите попытку позже.',
       details: erpNetErr?.message,
     });
   }
