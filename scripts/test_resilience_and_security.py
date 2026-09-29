@@ -289,8 +289,15 @@ with open(cache_path, "r", encoding="utf-8") as fp:
 test_assert("state_version" in cache_code and "Out-of-order" in cache_code, "catalogCache.ts implements monotonic version check for out-of-order webhook protection")
 
 wh_erp_path = os.path.join(ROOT_DIR, "api", "webhooks", "erp.ts")
+wh_handlers_dir = os.path.join(ROOT_DIR, "api", "webhooks", "handlers")
 with open(wh_erp_path, "r", encoding="utf-8") as fp:
     wh_erp_code = fp.read()
+if os.path.exists(wh_handlers_dir):
+    for f in sorted(os.listdir(wh_handlers_dir)):
+        if f.endswith(".ts"):
+            with open(os.path.join(wh_handlers_dir, f), "r", encoding="utf-8") as fp:
+                wh_erp_code += "\n" + fp.read()
+
 test_assert("version_timestamp" in wh_erp_code, "api/webhooks/erp.ts extracts version_timestamp for CDC stock updates")
 test_assert("isUuid" in wh_erp_code, "api/webhooks/erp.ts guards UUID type safety on orders.id query")
 test_assert("payment_received" in wh_erp_code and "debt_usd" in wh_erp_code, "api/webhooks/erp.ts syncs profiles.debt_usd on payment_received")
@@ -466,6 +473,12 @@ test_assert("from '../../approvals/whatsapp'" in order_handler_code, "createOrde
 webhook_erp_path = os.path.join(ROOT_DIR, "api", "webhooks", "erp.ts")
 with open(webhook_erp_path, "r", encoding="utf-8") as fp:
     fresh_webhook_erp = fp.read()
+if os.path.exists(wh_handlers_dir):
+    for f in sorted(os.listdir(wh_handlers_dir)):
+        if f.endswith(".ts"):
+            with open(os.path.join(wh_handlers_dir, f), "r", encoding="utf-8") as fp:
+                fresh_webhook_erp += "\n" + fp.read()
+
 test_assert("parent_order_id" in fresh_webhook_erp, "api/webhooks/erp.ts cascades status updates to child sub-orders")
 test_assert("discount_rules_updated" in fresh_webhook_erp, "api/webhooks/erp.ts handles discount_rules_updated event")
 
