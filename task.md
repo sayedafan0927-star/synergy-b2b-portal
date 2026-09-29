@@ -27,5 +27,8 @@
 - [x] 3.2 Оптимизация отображения каталога (бесконечный скролл с IntersectionObserver и windowing по 12 элементов)
 - [x] 3.3 Партиционирование audit logs (`20260929000300_partition_audit_logs.sql`)
 - [x] 3.4 OpenTelemetry / Structured JSON logging (`api/lib/logger.ts` с correlation IDs и уровнями важности)
-- [x] 3.5 Интеграция structured logger в `api/audit/logs.ts`, `api/lib/circuitBreaker.ts` и `api/outbox/sync.ts`
+- [x] 3.5 Интеграция structured logger в `api/audit/logs.ts`, `api/lib/circuitBreaker.ts`, `api/outbox/sync.ts`, `api/cron/expire-holds.ts`, `api/webhooks/clients.ts`, `api/webhooks/stock_event.ts`
 - [x] 3.6 Автоматическая эскалация алертов Dead Letter Queue (DLQ)
+- [x] 3.7 Безопасность и лимиты входящих вебхуков 1С (`stock_event.ts`, `clients.ts`)
+- [x] 3.8 Мгновенное высвобождение складских остатков по Supabase Realtime при аннулировании холдов
+- [x] 3.9 Мультивалютность (`USD` / `KZT`) и переключатель валют в шапке сайта (`CurrencyContext.tsx`, `Header.tsx`)
