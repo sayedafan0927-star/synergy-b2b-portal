@@ -1,4 +1,4 @@
-const CACHE_NAME = 'synergy-b2b-v1';
+const CACHE_NAME = 'synergy-b2b-v2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -19,19 +19,22 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
-// Activate: clean up old caches
+// Activate: clean up old caches immediately
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
-        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
+        keys.filter((key) => key !== CACHE_NAME).map((key) => {
+          console.log('[SW] Deleting stale cache:', key);
+          return caches.delete(key);
+        })
       );
     })
   );
   self.clients.claim();
 });
 
-// Fetch: Stale-While-Revalidate for catalog queries, Network-First with cache fallback for navigation
+// Fetch: Stale-While-Revalidate for catalog queries, Network-First with cache fallback for navigation & app shell
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
@@ -61,26 +64,36 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Handle Static & App Shell requests
+  // Handle Navigation (HTML Documents): Network-First to guarantee fresh bundles after deploy
+  if (request.mode === 'navigate' || request.destination === 'document') {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response && response.status === 200) {
+            const responseToCache = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, responseToCache));
+          }
+          return response;
+        })
+        .catch(async () => {
+          const cached = await caches.match(request);
+          return cached || caches.match('/index.html');
+        })
+    );
+    return;
+  }
+
+  // Handle Static & App Shell requests: Network-First with Cache Fallback
   event.respondWith(
-    caches.match(request).then((cached) => {
-      return (
-        cached ||
-        fetch(request)
-          .then((response) => {
-            if (response && response.status === 200 && response.type === 'basic') {
-              const responseToCache = response.clone();
-              caches.open(CACHE_NAME).then((cache) => cache.put(request, responseToCache));
-            }
-            return response;
-          })
-          .catch(() => {
-            // If completely offline and navigating to a page, return cached index.html
-            if (request.mode === 'navigate') {
-              return caches.match('/index.html');
-            }
-          })
-      );
-    })
+    fetch(request)
+      .then((response) => {
+        if (response && response.status === 200 && response.type === 'basic') {
+          const responseToCache = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, responseToCache));
+        }
+        return response;
+      })
+      .catch(() => caches.match(request))
   );
 });
+
