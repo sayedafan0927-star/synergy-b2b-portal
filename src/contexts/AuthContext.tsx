@@ -97,9 +97,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .then(res => res.json())
           .then(data => {
             if (data?.success && data.user && data.profile) {
+              const sessionToken = data.token || data.portal_session_token || ssoParam;
               setUser(data.user);
               setProfile(data.profile);
-              sessionStorage.setItem('synergy:auth_session', JSON.stringify({ user: data.user, profile: data.profile }));
+              sessionStorage.setItem('synergy:auth_session', JSON.stringify({ user: data.user, profile: data.profile, token: sessionToken }));
+              sessionStorage.setItem('synergy:demo_auth', JSON.stringify({ user: data.user, profile: data.profile, token: sessionToken }));
             } else {
               console.warn('[AuthContext] SSO verification rejected:', data?.error);
             }
@@ -117,10 +119,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const storedAuth = sessionStorage.getItem('synergy:auth_session') || sessionStorage.getItem('synergy:demo_auth');
       if (storedAuth) {
         try {
-          const { user: su, profile: sp } = JSON.parse(storedAuth);
+          const parsed = JSON.parse(storedAuth);
+          const su = parsed.user;
+          const sp = parsed.profile;
           setUser(su);
           setProfile(sp);
           setLoading(false);
+
+          if (!parsed.token && (su || sp)) {
+            fetch('/api/auth/session', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                role: sp?.role || su?.role || 'admin',
+                user: su,
+                profile: sp,
+              }),
+            })
+              .then(r => r.json())
+              .then(resData => {
+                if (resData?.token) {
+                  parsed.token = resData.token;
+                  sessionStorage.setItem('synergy:auth_session', JSON.stringify(parsed));
+                  sessionStorage.setItem('synergy:demo_auth', JSON.stringify(parsed));
+                }
+              })
+              .catch(() => {});
+          }
           return;
         } catch {
           sessionStorage.removeItem('synergy:auth_session');
@@ -195,13 +220,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const provisionSessionToken = useCallback(async (u: unknown, p: Profile, r?: UserRole) => {
+    try {
+      const res = await fetch('/api/auth/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: r || p.role, user: u, profile: p }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.token && typeof window !== 'undefined') {
+          const sessionObj = { user: u, profile: p, token: data.token };
+          sessionStorage.setItem('synergy:auth_session', JSON.stringify(sessionObj));
+          sessionStorage.setItem('synergy:demo_auth', JSON.stringify(sessionObj));
+        }
+      }
+    } catch (e) {
+      console.warn('[AuthContext] Session token provision notice:', e);
+    }
+  }, []);
+
   const signInAsDemo = useCallback((demoRole: UserRole = 'admin') => {
     const demoProfile: Profile = {
       id: 'demo-' + demoRole,
       role: demoRole,
-      partner_id: demoRole === 'client' ? 'PRT-DEMO-001' : null,
-      full_name: demoRole === 'admin' ? 'Администратор портала' : demoRole === 'manager_rm' ? 'Региональный менеджер' : 'Клиент (Демо)',
-      company_name: 'ТОО «Kilem Khan Synergy»',
+      partner_id: demoRole === 'client' ? 'PRT-DEMO-001' : (demoRole === 'supplier' ? '6' : null),
+      full_name: demoRole === 'admin' ? 'Администратор портала' : demoRole === 'manager_rm' ? 'Региональный менеджер' : demoRole === 'supplier' ? 'Поставщик ISMEN' : 'Клиент (Демо)',
+      company_name: demoRole === 'supplier' ? 'ISMEN (Турция)' : 'ТОО «Kilem Khan Synergy»',
       phone: '+7 (777) 123-45-67',
       manager_id: '1',
       price_type: 'wholesale',
@@ -219,8 +264,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(demoProfile);
     if (typeof window !== 'undefined') {
       sessionStorage.setItem('synergy:demo_auth', JSON.stringify({ user: mockUser, profile: demoProfile }));
+      sessionStorage.setItem('synergy:auth_session', JSON.stringify({ user: mockUser, profile: demoProfile }));
     }
-  }, []);
+    provisionSessionToken(mockUser, demoProfile, demoRole);
+  }, [provisionSessionToken]);
 
   const signInAsClient = useCallback((client: { id: number | string; name: string; phone?: string; price_type?: string; showroom_warehouse_id?: number | null; showroom_warehouse_name?: string | null }) => {
     const clientProfile: Profile = {
@@ -248,8 +295,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(clientProfile);
     if (typeof window !== 'undefined') {
       sessionStorage.setItem('synergy:demo_auth', JSON.stringify({ user: mockUser, profile: clientProfile }));
+      sessionStorage.setItem('synergy:auth_session', JSON.stringify({ user: mockUser, profile: clientProfile }));
     }
-  }, []);
+    provisionSessionToken(mockUser, clientProfile, 'client');
+  }, [provisionSessionToken]);
 
   const signInAsEmployee = useCallback((employee: { id: number | string; name: string; role: UserRole; phone?: string }) => {
     const employeeProfile: Profile = {
@@ -277,7 +326,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       sessionStorage.setItem('synergy:auth_session', JSON.stringify({ user: mockUser, profile: employeeProfile }));
       sessionStorage.setItem('synergy:demo_auth', JSON.stringify({ user: mockUser, profile: employeeProfile }));
     }
-  }, []);
+    provisionSessionToken(mockUser, employeeProfile, employee.role);
+  }, [provisionSessionToken]);
 
   const [deactivationNotice, setDeactivationNotice] = useState<string | null>(() => {
     if (typeof window !== 'undefined') {

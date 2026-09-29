@@ -38,6 +38,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         success: true,
         user: parsed.data.user,
         profile: parsed.data.profile,
+        token,
+        portal_session_token: token,
       });
     }
 

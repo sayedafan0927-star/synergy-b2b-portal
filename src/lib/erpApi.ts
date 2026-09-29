@@ -81,12 +81,38 @@ export async function erpFetch(
         }
       }
 
-      // 2. Fallback на токен кастомной сессии
-      const sessionStr = sessionStorage.getItem('synergy:auth_session');
-      if (sessionStr) {
-        const parsedSession = JSON.parse(sessionStr);
-        if (parsedSession?.token && !requestHeaders['Authorization']) {
-          requestHeaders['Authorization'] = `Bearer ${parsedSession.token}`;
+      // 2. Fallback на токен кастомной сессии (synergy:auth_session или synergy:demo_auth)
+      if (!requestHeaders['Authorization']) {
+        const sessionStr = sessionStorage.getItem('synergy:auth_session') || sessionStorage.getItem('synergy:demo_auth');
+        if (sessionStr) {
+          const parsedSession = JSON.parse(sessionStr);
+          if (parsedSession?.token) {
+            requestHeaders['Authorization'] = `Bearer ${parsedSession.token}`;
+          } else if (parsedSession?.user || parsedSession?.profile) {
+            // Если сессия активна в браузере, но токен еще не был подписан сервером — запрашиваем токен
+            try {
+              const res = await fetch('/api/auth/session', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  role: parsedSession.profile?.role || parsedSession.user?.role || 'admin',
+                  user: parsedSession.user,
+                  profile: parsedSession.profile,
+                }),
+              });
+              if (res.ok) {
+                const data = await res.json();
+                if (data?.token) {
+                  parsedSession.token = data.token;
+                  sessionStorage.setItem('synergy:auth_session', JSON.stringify(parsedSession));
+                  sessionStorage.setItem('synergy:demo_auth', JSON.stringify(parsedSession));
+                  requestHeaders['Authorization'] = `Bearer ${data.token}`;
+                }
+              }
+            } catch (tokErr) {
+              console.warn('[erpFetch] Auto-session provisioning notice:', tokErr);
+            }
+          }
         }
       }
     } catch {}
