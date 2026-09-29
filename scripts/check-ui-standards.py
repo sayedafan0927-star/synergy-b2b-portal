@@ -142,6 +142,8 @@ def main():
         *(SRC / "components" / "profile").rglob("*.tsx"),
         *(SRC / "components" / "supplier").rglob("*.tsx"),
         *(SRC / "components" / "product").rglob("*.tsx"),
+        *(SRC / "components" / "catalog").rglob("*.tsx"),
+        *(SRC / "components" / "cart").rglob("*.tsx"),
     ]
     
     for f in target_files:

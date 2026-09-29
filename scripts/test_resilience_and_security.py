@@ -217,8 +217,12 @@ with open(app_path, "r", encoding="utf-8") as fp:
 test_assert("initOfflineQueueAutoSync" in app_code, "src/App.tsx mounts initOfflineQueueAutoSync on startup")
 
 cart_path = os.path.join(ROOT_DIR, "src", "pages", "CartPage.tsx")
+cart_modal_path = os.path.join(ROOT_DIR, "src", "components", "cart", "CartSuccessModal.tsx")
 with open(cart_path, "r", encoding="utf-8") as fp:
     cart_code = fp.read()
+if os.path.exists(cart_modal_path):
+    with open(cart_modal_path, "r", encoding="utf-8") as fp:
+        cart_code += fp.read()
 test_assert("enqueueOfflineOrder" in cart_code, "CartPage uses enqueueOfflineOrder on offline submission")
 test_assert("splitOrders" in cart_code and "Мультисклад" in cart_code, "CartPage renders split orders breakdown for multi-warehouse orders")
 test_assert("isOfflineQueued" in cart_code, "CartPage handles offline queued confirmation state")
@@ -312,8 +316,12 @@ with open(hooks_path, "r", encoding="utf-8") as fp:
 test_assert("size_cluster: sizeCluster" in hooks_code and "is_runner: isRunner" in hooks_code, "useProductData.ts computes size_cluster and is_runner for all variants")
 
 catalog_page_path = os.path.join(ROOT_DIR, "src", "pages", "CatalogPage.tsx")
+catalog_drawer_path = os.path.join(ROOT_DIR, "src", "components", "catalog", "FilterDrawer.tsx")
 with open(catalog_page_path, "r", encoding="utf-8") as fp:
     catalog_code = fp.read()
+if os.path.exists(catalog_drawer_path):
+    with open(catalog_drawer_path, "r", encoding="utf-8") as fp:
+        catalog_code += fp.read()
 test_assert("activeClusterQuickFilter" in catalog_code and "RugsUSA Size Clustering Bar" in catalog_code, "CatalogPage.tsx renders RugsUSA Size Clustering Bar with quick filter pills")
 test_assert("selectedClusters" in catalog_code and "КЛАСТЕРЫ РАЗМЕРОВ" in catalog_code, "CatalogPage.tsx FilterDrawer supports multi-select size cluster filtering")
 test_assert("split(/\\s+/)" in catalog_code and "searchable" in catalog_code, "CatalogPage.tsx implements sub-50ms multi-token search engine")
