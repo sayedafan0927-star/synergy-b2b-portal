@@ -5,8 +5,9 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { getCachedCatalog } from '../../lib/catalogCache';
+import { getCachedCatalog, saveCachedCatalog } from '../../lib/catalogCache';
 import { sanitizePostgrestFilter } from '../../lib/security';
+import { getErpApiKey } from '../../lib/erpKey';
 
 export async function handleCatalogRequests(
   req: VercelRequest,
@@ -43,13 +44,45 @@ export async function handleCatalogRequests(
     }
 
     try {
+      let catalogData: any = null;
       const cached = await getCachedCatalog('catalog_global');
-      if (cached && cached.data && Array.isArray(cached.data.products)) {
-        const found = cached.data.products.find((p: any) => {
+      if (cached && cached.data && (Array.isArray(cached.data.products) || Array.isArray(cached.data.items))) {
+        catalogData = cached.data;
+      }
+
+      // Если кэш пуст — загружаем боевой каталог из ERP и кэшируем
+      if (!catalogData) {
+        const ERP_API_URL = process.env.ERP_API_URL || 'https://kilem-khan.kz/api/sin/public/api_portal.php';
+        const apiKey = getErpApiKey();
+        const headers: Record<string, string> = { Accept: 'application/json' };
+        if (apiKey) headers['X-Portal-Key'] = apiKey;
+
+        try {
+          const erpRes = await fetch(`${ERP_API_URL}?action=catalog`, { headers });
+          if (erpRes.ok) {
+            const fetched = await erpRes.json().catch(() => null);
+            if (fetched && fetched.success) {
+              const rawItems = fetched.items || fetched.products || [];
+              catalogData = {
+                success: true,
+                products: rawItems,
+              };
+              saveCachedCatalog(catalogData, 'catalog_global').catch(() => {});
+            }
+          }
+        } catch (fetchErr) {
+          console.warn('[Catalog Handler] Notice fetching catalog for product lookup:', fetchErr);
+        }
+      }
+
+      const productsList = catalogData?.products || catalogData?.items || [];
+      if (Array.isArray(productsList) && productsList.length > 0) {
+        const found = productsList.find((p: any) => {
           if (String(p.id).toLowerCase() === targetId) return true;
           if (String(p.article || '').toLowerCase() === targetId) return true;
           return (p.variants || []).some((v: any) =>
             String(v.id).toLowerCase() === targetId ||
+            String(v.item_id || '').toLowerCase() === targetId ||
             String(v.sku || '').toLowerCase() === targetId ||
             String(v.barcode || '').toLowerCase() === targetId ||
             String(v.article || '').toLowerCase() === targetId
@@ -57,7 +90,7 @@ export async function handleCatalogRequests(
         });
 
         if (found) {
-          res.setHeader('X-Cache', 'HIT');
+          res.setHeader('X-Cache', cached ? 'HIT' : 'FETCHED');
           res.status(200).json({ success: true, product: found });
           return true;
         }
@@ -83,8 +116,9 @@ export async function handleCatalogRequests(
         } catch {}
       }
 
-      // 2.3 Позволяем шлюзу erp.ts выполнить поиск во внешней учетной системе ERP
-      return false;
+      // Не отправляем в ERP действие 'product' (ERP не поддерживает action=product и вернет 400)
+      res.status(404).json({ success: false, error: `Товар '${targetId}' не найден в каталоге` });
+      return true;
     } catch (e: any) {
       res.status(500).json({ success: false, error: e?.message });
       return true;
