@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/contexts/CartContext';
 import { useUserPricing } from '@/hooks/usePricing';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useCurrency } from '@/contexts/CurrencyContext';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
 import { filterClientWarehouses } from '@/hooks/useProductData';
 import { isWarehouseVisibleForClient } from '@/lib/warehouseVisibility';
@@ -90,6 +91,7 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
   const { settings: displaySettings } = useDisplaySettings();
   const { addItem } = useCart();
   const { language, t } = useLanguage();
+  const { formatPrice } = useCurrency();
   const { getMinPricePerSqm, getVariantPrice, getPricePerSqm, hasContractDiscount, tier } = useUserPricing();
   const [sizesOpen, setSizesOpen] = useState(false);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
@@ -354,11 +356,11 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
             {user ? (
               <div className="flex items-baseline gap-1 leading-tight flex-wrap">
                 <span className={`text-sm sm:text-base font-bold ${isOnSale ? 'text-red-600' : 'text-slate-900'}`}>
-                  ${pricePerSqm.toFixed(2)}
+                  {formatPrice(pricePerSqm)}
                 </span>
                 {isOnSale && oldPricePerSqm && (
                   <span className="text-[11px] text-slate-400 line-through">
-                    ${oldPricePerSqm.toFixed(2)}
+                    {formatPrice(oldPricePerSqm)}
                   </span>
                 )}
                 <span className="text-[10px] sm:text-[11px] font-normal text-slate-400">/ м²</span>

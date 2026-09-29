@@ -39,10 +39,9 @@ function pluralPositions(n: number): string {
   return 'позиций';
 }
 
+import { useCurrency } from '@/contexts/CurrencyContext';
+
 function fmt2(n: number) { return n.toFixed(2); }
-function fmtPrice(n: number) {
-  return `$${n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
-}
 
 interface SizeSubtotal {
   size: string;
@@ -72,6 +71,7 @@ function calcSizeSubtotals(list: CartItem[]): SizeSubtotal[] {
 const CITIES = ['Астана', 'Алматы', 'Шымкент'];
 
 export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, productId?: string) => void }) {
+  const { formatPrice: fmtPrice } = useCurrency();
   const { items, removeItem, updateQuantity, clearCart, totalItems, totalPrice, totalSqm } = useCart();
   const { user, profile, isImpersonating, impersonatedProfile } = useAuth();
 
@@ -218,7 +218,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
                       <div className="text-slate-500 mt-0.5">{split.warehouse}</div>
                     </div>
                     <div className="text-right">
-                      <div className="font-bold text-slate-900">${split.amount?.toLocaleString()}</div>
+                      <div className="font-bold text-slate-900">{fmtPrice(split.amount || 0)}</div>
                       <div className="text-slate-400">{split.items_count} шт</div>
                     </div>
                   </div>

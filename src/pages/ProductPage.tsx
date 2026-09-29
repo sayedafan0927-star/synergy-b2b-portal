@@ -24,17 +24,13 @@ import { useDisplaySettings } from '@/hooks/useDisplaySettings';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useCurrency } from '@/contexts/CurrencyContext';
 import ProductImage, { CarpetPlaceholderIcon } from '@/components/ProductImage';
 import { formatProductTitle } from '@/components/ProductCard';
 
 
 function rowKey(sku: string, city: string) {
   return `${sku}::${city}`;
-}
-
-function fmtPrice(n: number) {
-  if (typeof n !== 'number' || isNaN(n)) return '$0.00';
-  return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function getVariantShape(v: ProductVariant, productName = '', productCategory = ''): string {
@@ -69,6 +65,7 @@ export default function ProductPage({
   const clientContext = isEffectiveAdmin ? true : profile;
   const { settings: displaySettings } = useDisplaySettings();
   const { language, t } = useLanguage();
+  const { currency, formatPrice: fmtPrice } = useCurrency();
   const pricing = useUserPricing();
 
   const [selectedImage, setSelectedImage] = useState(0);
@@ -788,7 +785,7 @@ export default function ProductPage({
                     <th className="py-3 pl-5 pr-3 font-semibold">Размер</th>
                     <th className="py-3 pr-3 font-semibold">Склад</th>
                     <th className="py-3 pr-3 font-semibold">Наличие</th>
-                    {user && <th className="py-3 pr-3 font-semibold">$/м²</th>}
+                    {user && <th className="py-3 pr-3 font-semibold">{currency === 'KZT' ? '₸/м²' : '$/м²'}</th>}
                     {user && <th className="py-3 pr-3 font-semibold">Цена</th>}
                     <th className="py-3 pr-3 font-semibold">Кол-во</th>
                     <th className="py-3 pr-5 font-semibold sr-only">Действие</th>
@@ -822,7 +819,7 @@ export default function ProductPage({
                           </td>
                           {user && (
                             <td className="py-3 pr-3 text-sm text-slate-400 whitespace-nowrap">
-                              {pricePerSqm > 0 ? `$${pricePerSqm.toFixed(2)}` : '—'}
+                              {pricePerSqm > 0 ? fmtPrice(pricePerSqm) : '—'}
                             </td>
                           )}
                           {user && (
@@ -894,11 +891,11 @@ export default function ProductPage({
                               {pricePerSqm > 0 ? (
                                 <div className="flex items-center gap-1.5">
                                   <span className={variant.is_on_sale ? 'font-bold text-red-600' : 'text-slate-500'}>
-                                    ${pricePerSqm.toFixed(2)}
+                                    {fmtPrice(pricePerSqm)}
                                   </span>
                                   {variant.is_on_sale && variant.old_price_per_sqm && (
                                     <span className="text-xs text-gray-400 line-through">
-                                      ${variant.old_price_per_sqm.toFixed(2)}
+                                      {fmtPrice(variant.old_price_per_sqm)}
                                     </span>
                                   )}
                                 </div>
@@ -1128,7 +1125,7 @@ export default function ProductPage({
                   </div>
                   {user && pricePerSqm > 0 && (
                     <p className="text-xs text-slate-400 mb-2 text-right">
-                      ${pricePerSqm.toFixed(2)} / м²
+                      {fmtPrice(pricePerSqm)} / м²
                     </p>
                   )}
 
