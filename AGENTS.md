@@ -8,5 +8,12 @@
 - **Цель:** Изменения должны немедленно разворачиваться на боевой среде (Vercel/Production) без необходимости ручного запроса от пользователя.
 
 ## 2. Code Quality & Resilience Invariants
-- Перед пушем проверять отсутствие регрессий (`python3 scripts/test_resilience_and_security.py`).
-- Соблюдать стандарты UI/UX (`UI_UX_STANDARDS.md`) и Zero-Trust интеграции с ERP (`docs/ERP_INTEGRATION_SPEC.md`).
+- Перед пушем проверять отсутствие регрессий (`python3 scripts/test_resilience_and_security.py` и `python3 scripts/check-ui-standards.py`).
+- Строго соблюдать архитектурные стандарты проекта:
+  - Свод стандартов и планка качества: [`docs/standards/README.md`](docs/standards/README.md)
+  - Стандарты Frontend и UI/UX: [`docs/standards/FRONTEND_STANDARDS.md`](docs/standards/FRONTEND_STANDARDS.md) и [`UI_UX_STANDARDS.md`](UI_UX_STANDARDS.md)
+  - Стандарты Backend API и безопасности: [`docs/standards/BACKEND_API_STANDARDS.md`](docs/standards/BACKEND_API_STANDARDS.md)
+  - Стандарты БД и миграций: [`docs/standards/DATABASE_STANDARDS.md`](docs/standards/DATABASE_STANDARDS.md)
+  - Интеграция с ERP и CDC: [`docs/standards/INTEGRATION_STANDARDS.md`](docs/standards/INTEGRATION_STANDARDS.md) и [`docs/ERP_INTEGRATION_SPEC.md`](docs/ERP_INTEGRATION_SPEC.md)
+  - Definition of Done и чеклист ревью: [`docs/standards/CODE_REVIEW_AND_DOD.md`](docs/standards/CODE_REVIEW_AND_DOD.md)
+
