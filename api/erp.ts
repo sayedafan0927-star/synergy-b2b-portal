@@ -438,8 +438,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let erpResponse: Response;
     try {
       erpResponse = await sendRequestToErp(targetUrl);
-      if (erpResponse.status >= 500 && ERP_FALLBACK_URL && ERP_FALLBACK_URL !== TARGET_ERP_URL) {
-        console.warn(`[ERP Failover] Primary returned ${erpResponse.status}. Attempting fallback endpoint: ${ERP_FALLBACK_URL}`);
+      const isHtmlResponse = (erpResponse.headers.get('content-type') || '').includes('text/html');
+      if ((erpResponse.status >= 500 || isHtmlResponse) && ERP_FALLBACK_URL && ERP_FALLBACK_URL !== TARGET_ERP_URL) {
+        console.warn(`[ERP Failover] Primary returned ${erpResponse.status} (isHtml: ${isHtmlResponse}). Attempting fallback endpoint: ${ERP_FALLBACK_URL}`);
         const fallbackTargetUrl = `${ERP_FALLBACK_URL}?${queryParams.toString()}`;
         const fallbackResp = await sendRequestToErp(fallbackTargetUrl);
         if (fallbackResp.ok) {

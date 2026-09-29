@@ -121,11 +121,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     // Синхронизируем профиль в БД Supabase
-    const { data: existingProfile } = await supabase
-      .from('profiles')
-      .select('id, role')
-      .eq('phone', p.phone)
-      .maybeSingle();
+    let profileQuery = supabase.from('profiles').select('id, role');
+    if (p.phone && p.phone.trim().length > 0) {
+      profileQuery = profileQuery.eq('phone', p.phone);
+    } else {
+      profileQuery = profileQuery.eq('partner_id', String(p.sub));
+    }
+    const { data: existingProfile } = await profileQuery.maybeSingle();
 
     let targetUserId = existingProfile?.id;
 
@@ -137,9 +139,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         id: newUuid,
         role: p.role,
         full_name: p.name,
-        company_name: 'Synergy Group (1C:ERP)',
-        phone: p.phone,
-        partner_id: p.partner_id || null,
+        company_name: 'Synergy Group (ERP)',
+        phone: p.phone || '',
+        partner_id: p.partner_id || String(p.sub) || null,
         updated_at: new Date().toISOString(),
       });
     } else {

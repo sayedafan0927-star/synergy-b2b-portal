@@ -503,11 +503,14 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
       const itemObj: Record<string, any> = {
         item_id: it.item_id,
         sku: it.sku,
+        width: it.width,
+        length: it.length,
+        area_sqm: it.area_sqm,
         quantity: it.quantity,
         price: it.price,
         total_line: it.total_line,
         warehouse: it.warehouse,
-        warehouse_id: it.warehouse_id,
+        warehouse_id: it.warehouse_id || primaryWarehouseId,
       };
       // Гарантия отсутствия ячеек WMS в заказе
       delete itemObj.cell;
@@ -536,6 +539,8 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
       headers: {
         'Content-Type': 'application/json',
         'X-Portal-Key': serverErpKey,
+        'X-Idempotency-Key': incomingIdempotencyKey || outboxOrderDoc,
+        'Idempotency-Key': incomingIdempotencyKey || outboxOrderDoc,
         'Accept': 'application/json',
         'X-Correlation-ID': correlationId,
         'X-Forwarded-For': clientIp,

@@ -251,7 +251,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 2. Событие: order_status_changed (Статус заказа WMS / авто-отмена Hold TTL)
     // ───────────────────────────────────────────────
     if (event === 'order_status_changed') {
-      const { order_id, order_doc_number, client_name, client_phone, track_code, comment } = payload;
+      const { client_name, client_phone, track_code, comment } = payload;
+      const order_id = payload.order_id;
+      const order_doc_number = payload.order_doc_number || payload.order_number;
       const targetStatus = payload.new_status || payload.status || 'cancelled';
       const orderNotes = comment || payload.reason || (targetStatus === 'cancelled' ? 'Автоматическая отмена брони по истечении Hold TTL (24ч)' : null);
 
@@ -261,6 +263,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       await broadcastLiveUpdate('order_status_changed', {
         order_id,
         order_doc_number,
+        order_number: order_doc_number,
         new_status: targetStatus,
         status: targetStatus,
         track_code: track_code || null,
@@ -374,14 +377,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 3. Событие: payment_received (Поступление оплаты)
     // ───────────────────────────────────────────────
     if (event === 'payment_received') {
-      const { client_id, client_name, amount, currency, payment_doc_number, balance_usd, debt_usd } = payload;
+      const { client_name, currency, payment_doc_number } = payload;
+      const client_id = payload.partner_id || payload.client_id;
+      const amount = Number(payload.amount_usd ?? payload.amount ?? 0);
+      const balance_usd = Number(payload.new_balance_usd ?? payload.balance_usd ?? 0);
+      const debt_usd = payload.debt_usd !== undefined ? Number(payload.debt_usd) : (balance_usd < 0 ? Math.abs(balance_usd) : 0);
       console.log(`[Webhook ERP: payment_received] Client: ${client_name} (ID ${client_id}) paid ${amount} ${currency || 'USD'} (Doc: ${payment_doc_number}). New balance: ${balance_usd}, Debt: ${debt_usd}`);
 
       // Сквозная трансляция в Realtime-шину браузеров
       await broadcastLiveUpdate('payment_received', {
         client_id,
+        partner_id: client_id,
         amount,
         balance_usd,
+        new_balance_usd: balance_usd,
         debt_usd,
         timestamp,
       });
