@@ -111,8 +111,12 @@ test_assert("requiredRoles" in auth_code, "RBAC enforcement via requiredRoles ch
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}5. Verifying Outbox Resilience & DLQ Mechanism...{RESET}")
 outbox_path = os.path.join(ROOT_DIR, "api", "outbox", "sync.ts")
-with open(outbox_path, "r", encoding="utf-8") as fp:
-    outbox_code = fp.read()
+outbox_utils_path = os.path.join(ROOT_DIR, "api", "outbox", "outboxUtils.ts")
+outbox_code = ""
+for p in [outbox_path, outbox_utils_path]:
+    if os.path.exists(p):
+        with open(p, "r", encoding="utf-8") as fp:
+            outbox_code += fp.read() + "\n"
 
 test_assert("processing_sync" in outbox_code, "Atomic claim lock status 'processing_sync' used")
 test_assert("failed_dlq" in outbox_code, "Dead-Letter Queue status 'failed_dlq' used")
@@ -202,9 +206,15 @@ with open(sso_path, "r", encoding="utf-8") as fp:
 test_assert("payloadToSign" in sso_code and "managerId" in sso_code, "api/auth/erp-sso.ts strictly complies with ERP_INTEGRATION_SPEC.md HMAC format")
 
 wh_rules_path = os.path.join(ROOT_DIR, "src", "lib", "warehouseVisibility.ts")
-with open(wh_rules_path, "r", encoding="utf-8") as fp:
-    wh_code = fp.read()
-test_assert("authHeaders['Authorization']" in wh_code, "warehouseVisibility.ts sends Authorization header to /api/warehouse-rules")
+wh_store_path = os.path.join(ROOT_DIR, "src", "lib", "warehouseRulesStore.ts")
+wh_code = ""
+if os.path.exists(wh_rules_path):
+    with open(wh_rules_path, "r", encoding="utf-8") as fp:
+        wh_code += fp.read()
+if os.path.exists(wh_store_path):
+    with open(wh_store_path, "r", encoding="utf-8") as fp:
+        wh_code += fp.read()
+test_assert("authHeaders['Authorization']" in wh_code, "warehouseVisibility.ts / warehouseRulesStore.ts sends Authorization header to /api/warehouse-rules")
 
 client_token_path = os.path.join(ROOT_DIR, "api", "auth", "client-token.ts")
 test_assert(os.path.exists(client_token_path), "api/auth/client-token.ts exists for issuing signed client sessions")
@@ -628,16 +638,19 @@ for comp in ["AdminDisplaySettingsTab", "AdminUsersTab", "AdminErpSyncTab", "Cli
 
 profile_path = os.path.join(ROOT_DIR, "src", "pages", "ProfilePage.tsx")
 orders_tab_path = os.path.join(ROOT_DIR, "src", "components", "profile", "OrdersTab.tsx")
+orders_hook_path = os.path.join(ROOT_DIR, "src", "components", "profile", "useOrdersList.ts")
+orders_card_path = os.path.join(ROOT_DIR, "src", "components", "profile", "OrderCard.tsx")
 with open(profile_path, "r", encoding="utf-8") as fp:
     profile_code = fp.read()
 orders_code = ""
-if os.path.exists(orders_tab_path):
-    with open(orders_tab_path, "r", encoding="utf-8") as fp:
-        orders_code = fp.read()
+for p in [orders_tab_path, orders_hook_path, orders_card_path]:
+    if os.path.exists(p):
+        with open(p, "r", encoding="utf-8") as fp:
+            orders_code += fp.read() + "\n"
 test_assert("from '@/components/admin'" in profile_code, "ProfilePage.tsx imports modular admin components")
 test_assert("<AdminDisplaySettingsTab />" in profile_code, "ProfilePage.tsx uses decoupled AdminDisplaySettingsTab")
 test_assert("AdminBootstrap" not in profile_code, "ProfilePage.tsx eliminated client-facing AdminBootstrap RPC")
-test_assert(("supabase.from('orders')" in profile_code and "localMapped" in profile_code) or ("supabase.from('orders')" in orders_code and "localMapped" in orders_code), "ProfilePage.tsx implements offline & buffered orders merge resilience")
+test_assert(("supabase.from('orders')" in profile_code and "localMapped" in profile_code) or ("supabase.from('orders')" in orders_code and "localMapped" in orders_code), "ProfilePage.tsx / OrdersTab implements offline & buffered orders merge resilience")
 
 # ------------------------------------------------------------------------------
 # 20. Verifying Core 5 Blocks Quality Bar & Resilience Hardening...

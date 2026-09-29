@@ -3,71 +3,25 @@ import { createClient } from '@supabase/supabase-js';
 import { recordAuditLog } from '../audit/logs';
 import { applyCorrelationId } from '../lib/trace';
 import { enforceRateLimit } from '../lib/rateLimit';
-import { sendWhatsAppMessage } from '../approvals/whatsapp';
 import { applyCorsHeaders } from '../lib/cors';
-import { logger } from '../lib/logger';
-import { sendSystemAlert } from '../lib/alerting';
 import { getErpApiKey } from '../lib/erpKey';
+import {
+  dispatchDlqEmergencyAlert,
+  buildOutboxErpPayload,
+  computeBackoffNextRetry,
+} from './outboxUtils';
+
+// Re-export for backwards compatibility and test introspection
+export { dispatchDlqEmergencyAlert };
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
 const SERVER_ERP_KEY = getErpApiKey();
 const TARGET_ERP_URL = process.env.ERP_API_URL || 'https://kilem-khan.kz/api/sin/public/api_portal.php';
 
-const MAX_RETRIES = 5;
-
 const supabase = (SUPABASE_URL && SUPABASE_KEY)
   ? createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })
   : null as any;
-
-async function dispatchDlqEmergencyAlert(params: {
-  orderId: string;
-  orderNumber: string;
-  amount: number;
-  retries: number;
-  error: string;
-}) {
-  const alertPhone = process.env.ADMIN_WHATSAPP_PHONE || '';
-  const text = `🚨 *КРИТИЧЕСКИЙ СБОЙ OUTBOX / 1C:ERP*\n\n` +
-    `Заказ *№${params.orderNumber}* переведен в *Dead Letter Queue (DLQ)* после ${params.retries} неудачных попыток синхронизации!\n\n` +
-    `💰 Сумма заказа: $${params.amount}\n` +
-    `❌ Ошибка: ${params.error}\n\n` +
-    `_Требуется ручное вмешательство дежурного инженера или проверка доступности 1С._`;
-
-  logger.error(`[DLQ Alert] Order ${params.orderNumber} placed in DLQ after ${params.retries} retries`, {
-    orderId: params.orderId,
-    orderNumber: params.orderNumber,
-    amount: params.amount,
-    retries: params.retries,
-    error: params.error,
-  });
-
-  try {
-    await sendWhatsAppMessage(alertPhone, text);
-  } catch (e) {
-    logger.warn('[DLQ Alert WhatsApp notice]', { orderNumber: params.orderNumber }, e as Error);
-  }
-
-  const tgWebhook = process.env.TELEGRAM_ALERT_WEBHOOK_URL;
-  if (tgWebhook) {
-    try {
-      await fetch(tgWebhook, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
-      });
-    } catch (e) {
-      logger.warn('[DLQ Alert Telegram notice]', { orderNumber: params.orderNumber }, e as Error);
-    }
-  }
-
-  sendSystemAlert({
-    level: 'CRITICAL',
-    title: `Order #${params.orderNumber} Moved to DLQ`,
-    description: `Заказ #${params.orderNumber} исчерпал 5 попыток синхронизации и перемещен в Dead Letter Queue.\nСумма: $${params.amount}\nОшибка: ${params.error}`,
-    metadata: { orderId: params.orderId, orderNumber: params.orderNumber, retries: params.retries },
-  }).catch(() => {});
-}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!applyCorsHeaders(req, res)) {
@@ -156,8 +110,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .maybeSingle();
 
         if (!claimedRow) {
-          // Заказ уже перехвачен параллельным воркером
-          return null;
+          return null; // Заказ уже перехвачен параллельным воркером
         }
       }
 
@@ -169,55 +122,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .select('*')
         .eq('order_id', order.id);
 
-      const itemsList = (dbItems && dbItems.length > 0)
-        ? dbItems.map(it => {
-            const sizeStr = it.size || '1.6x2.3';
-            const parts = String(sizeStr).replace(',', '.').split(/[*×xX]/).map(s => parseFloat(s.trim()));
-            const width = (parts.length >= 2 && !isNaN(parts[0])) ? parts[0] : 1.6;
-            const length = (parts.length >= 2 && !isNaN(parts[1])) ? parts[1] : 2.3;
-            const area_sqm = Math.round(width * length * 100) / 100;
-            return {
-              item_id: Number(it.product_id) > 0 ? Number(it.product_id) : undefined,
-              sku: it.sku || it.product_name,
-              quantity: Number(it.quantity) || 1,
-              price: Number(it.price) || 10,
-              width,
-              length,
-              area_sqm,
-              warehouse_id: it.warehouse_id || (it.warehouse && it.warehouse.includes('Астана') ? 1 : 1),
-            };
-          })
-        : [
-            {
-              sku: 'OUTBOX-ITEM',
-              quantity: order.total_items || 1,
-              price: order.total_amount || 10,
-              width: 1.6,
-              length: 2.3,
-              area_sqm: 3.68,
-              warehouse_id: 1,
-            }
-          ];
-
-      const primaryWarehouseId = (itemsList[0] as any)?.warehouse_id || 1;
-
-      const orderPayload = {
-        idempotency_key: order.idempotency_key || `outbox-${order.id}`,
-        partner_id: order.partner_id || 'guest',
-        client_name: order.client_name || 'Оптовый клиент',
-        warehouse_id: primaryWarehouseId,
-        buyer: {
-          name: order.client_name || 'Оптовый клиент',
-          phone: order.client_phone || '',
-        },
-        customer: {
-          name: order.client_name || 'Оптовый клиент',
-          phone: order.client_phone || '',
-        },
-        comment: `[Outbox Auto-Sync] ${order.notes || ''}`,
-        total_amount: order.total_amount,
-        items: itemsList,
-      };
+      const orderPayload = buildOutboxErpPayload(order, dbItems);
 
       try {
         const erpUrl = `${TARGET_ERP_URL}?action=create_order`;
@@ -283,11 +188,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         } else {
           const errText = await erpRes.text().catch(() => '');
           const nextRetries = currentRetries + 1;
-          const isDlq = nextRetries >= MAX_RETRIES;
-
-          // Экспоненциальный откат: 1 мин, 2 мин, 4 мин, 8 мин, 16 мин
-          const backoffMinutes = Math.min(60, Math.pow(2, nextRetries - 1));
-          const nextRetryAt = new Date(Date.now() + backoffMinutes * 60000).toISOString();
+          const { nextRetryAt, isDlq } = computeBackoffNextRetry(nextRetries);
 
           await supabase
             .from('orders')
@@ -338,9 +239,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       } catch (reqErr: any) {
         const nextRetries = currentRetries + 1;
-        const isDlq = nextRetries >= MAX_RETRIES;
-        const backoffMinutes = Math.min(60, Math.pow(2, nextRetries - 1));
-        const nextRetryAt = new Date(Date.now() + backoffMinutes * 60000).toISOString();
+        const { nextRetryAt, isDlq } = computeBackoffNextRetry(nextRetries);
 
         await supabase
           .from('orders')
