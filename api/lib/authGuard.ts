@@ -5,7 +5,7 @@ import { getRedisClient } from './redis';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
-const SERVER_ERP_KEY = process.env.ERP_API_KEY || '';
+const SERVER_ERP_KEY = process.env.ERP_API_KEY || process.env.PORTAL_SECRET_KEY || '';
 
 const supabaseAdmin = (SUPABASE_URL && SUPABASE_KEY)
   ? createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })

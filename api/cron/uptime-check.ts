@@ -10,7 +10,7 @@ const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL |
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
 const CRON_SECRET = process.env.CRON_SECRET || process.env.PORTAL_SECRET_KEY || '';
 const TARGET_ERP_URL = process.env.ERP_API_URL || 'https://kilem-khan.kz/api/sin/public/api_portal.php';
-const SERVER_ERP_KEY = process.env.ERP_API_KEY || '';
+const SERVER_ERP_KEY = process.env.ERP_API_KEY || process.env.PORTAL_SECRET_KEY || '';
 const ADMIN_PHONE = process.env.ADMIN_WHATSAPP_PHONE || '';
 
 const supabase = SUPABASE_URL && SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY, {
