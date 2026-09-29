@@ -343,8 +343,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const targetUrl = `${TARGET_ERP_URL}?${queryParams.toString()}`;
 
     const clientIp = getClientIp(req);
+    const callerPortalKey = (req.headers['x-portal-key'] || req.headers['X-Portal-Key']) as string | undefined;
+    const keyToSend = SERVER_ERP_KEY || callerPortalKey || '';
     const headers: Record<string, string> = {
-      'X-Portal-Key': SERVER_ERP_KEY,
+      'X-Portal-Key': keyToSend,
       'Accept': 'application/json',
       'X-Correlation-ID': correlationId,
       'X-Forwarded-For': req.headers['x-forwarded-for'] ? String(req.headers['x-forwarded-for']) : clientIp,
