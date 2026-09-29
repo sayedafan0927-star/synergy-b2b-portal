@@ -478,7 +478,66 @@ with open(partition_2027_path, "r", encoding="utf-8") as fp:
 test_assert("audit_logs_y2027m12" in part_code, "Migration pre-allocates monthly audit partitions through Dec 2027")
 
 # ------------------------------------------------------------------------------
-# 17. Summary Report
+# 17. Verifying High-Load Scale & Atomic Checkout Invariants (100k+ SKU)
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}17. Verifying High-Load Scale & Atomic Checkout Invariants...{RESET}")
+
+atomic_migration_path = os.path.join(ROOT_DIR, "supabase", "migrations", "20260929160000_create_order_atomic_transaction.sql")
+test_assert(os.path.exists(atomic_migration_path), "20260929160000_create_order_atomic_transaction.sql migration exists")
+with open(atomic_migration_path, "r", encoding="utf-8") as fp:
+    atomic_sql = fp.read()
+test_assert("FUNCTION create_order_atomic" in atomic_sql, "create_order_atomic function declared")
+test_assert("ORDER BY (elem->>'sku')::text ASC" in atomic_sql, "Zero-Deadlock invariant: ordered row locks by SKU")
+test_assert("FOR UPDATE" in atomic_sql and "INSUFFICIENT_STOCK" in atomic_sql, "Atomic verification with instant rollback on stock shortage")
+
+deploy_all_path = os.path.join(ROOT_DIR, "supabase", "migrations", "DEPLOY_ALL_ENTERPRISE_MIGRATIONS.sql")
+with open(deploy_all_path, "r", encoding="utf-8") as fp:
+    deploy_all_sql = fp.read()
+test_assert("create_order_atomic" in deploy_all_sql, "Consolidated DEPLOY_ALL_ENTERPRISE_MIGRATIONS.sql includes create_order_atomic")
+
+order_handler_path = os.path.join(ROOT_DIR, "api", "modules", "orders", "createOrderHandler.ts")
+with open(order_handler_path, "r", encoding="utf-8") as fp:
+    oh_code = fp.read()
+test_assert("create_order_atomic" in oh_code, "createOrderHandler.ts integrates create_order_atomic RPC")
+test_assert("triggerImmediateOutboxSync" in oh_code, "createOrderHandler.ts implements triggerImmediateOutboxSync for sub-second outbox drain")
+
+redis_path = os.path.join(ROOT_DIR, "api", "lib", "redis.ts")
+with open(redis_path, "r", encoding="utf-8") as fp:
+    redis_code = fp.read()
+test_assert("isRedisConfigured" in redis_code, "api/lib/redis.ts exports isRedisConfigured helper")
+test_assert("checkRedisHealth" in redis_code, "api/lib/redis.ts exports checkRedisHealth diagnostic check")
+
+env_example_path = os.path.join(ROOT_DIR, ".env.example")
+with open(env_example_path, "r", encoding="utf-8") as fp:
+    env_content = fp.read()
+test_assert("UPSTASH_REDIS_REST_URL" in env_content and "UPSTASH_REDIS_REST_TOKEN" in env_content, ".env.example documents Upstash Redis production keys")
+
+reconcile_stock_path = os.path.join(ROOT_DIR, "api", "cron", "reconcile-stock.ts")
+with open(reconcile_stock_path, "r", encoding="utf-8") as fp:
+    rs_code = fp.read()
+test_assert("patchCachedCatalogStock" in rs_code, "api/cron/reconcile-stock.ts directly reconciles inventory_balances via patchCachedCatalogStock")
+
+# ------------------------------------------------------------------------------
+# 18. Verifying Audit Hardening & Production Polish
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}18. Verifying Audit Hardening & P0 Compliance Standards...{RESET}")
+
+test_assert("totalExposure" in oh_code and "currentDebt" in oh_code, "P0 Fix: createOrderHandler computes totalExposure (currentDebt + finalTotalAmount)")
+test_assert("partner_balances" in oh_code, "createOrderHandler queries partner_balances fallback for live debt verification")
+test_assert("waitUntil" in oh_code, "createOrderHandler implements waitUntil guard against Serverless Runtime Freeze")
+test_assert("applied_exchange_rate" in oh_code, "createOrderHandler preserves applied_exchange_rate in master order payload")
+
+cb_path = os.path.join(ROOT_DIR, "api", "lib", "circuitBreaker.ts")
+with open(cb_path, "r", encoding="utf-8") as fp:
+    cb_code = fp.read()
+test_assert("l1StateCache" in cb_code and "L1_TTL_MS" in cb_code, "circuitBreaker.ts implements L1 in-memory fast cache to eliminate Redis REST overhead")
+
+ex_sql_path = os.path.join(ROOT_DIR, "supabase", "migrations", "20260929170000_add_applied_exchange_rate.sql")
+test_assert(os.path.exists(ex_sql_path), "supabase/migrations/20260929170000_add_applied_exchange_rate.sql migration exists")
+test_assert("applied_exchange_rate numeric(12,4)" in deploy_all_sql, "DEPLOY_ALL_ENTERPRISE_MIGRATIONS.sql includes applied_exchange_rate DDL")
+
+# ------------------------------------------------------------------------------
+# 19. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

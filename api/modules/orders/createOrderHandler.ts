@@ -27,6 +27,41 @@ export interface CreateOrderContext {
   clientIp: string;
 }
 
+/**
+ * Неблокирующий вызов воркера Outbox для мгновенного сброса заказа в ERP (sub-second sync)
+ * Устраняет 2-минутную задержку ожидания Vercel Cron и защищен от Serverless Runtime Freeze.
+ */
+function triggerImmediateOutboxSync(req: VercelRequest, correlationId: string): void {
+  try {
+    const host = req.headers['host'] || 'localhost:3000';
+    const proto = (req.headers['x-forwarded-proto'] as string) || (String(host).includes('localhost') ? 'http' : 'https');
+    const workerUrl = `${proto}://${host}/api/outbox/sync`;
+    const cronSecret = process.env.CRON_SECRET || process.env.PORTAL_SECRET_KEY || '';
+
+    // Fire-and-forget: не блокируем ответ клиенту
+    const fetchPromise = fetch(workerUrl, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${cronSecret}`,
+        'X-Portal-Key': cronSecret,
+        'X-Cron-Key': cronSecret,
+        'X-Correlation-ID': correlationId,
+      },
+    }).catch(err => {
+      logger.debug('[Outbox Immediate Trigger Notice]', { error: (err as Error)?.message });
+    });
+
+    // Защита от Serverless runtime freezing через waitUntil (Vercel / Edge context)
+    const vercelWaitUntil = (req as any).context?.waitUntil || (globalThis as any).waitUntil;
+    if (typeof vercelWaitUntil === 'function') {
+      vercelWaitUntil(fetchPromise);
+    }
+  } catch (triggerErr) {
+    logger.debug('[Outbox Immediate Trigger Exception]', { error: (triggerErr as Error)?.message });
+  }
+}
+
 export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> {
   const { req, res, callerAuth, correlationId, supabase, targetErpUrl, serverErpKey, clientIp } = ctx;
 
@@ -125,103 +160,76 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
       }
 
       const clientCreditLimit = Number(userProfile?.credit_limit_usd || 0);
-      if (clientCreditLimit > 0 && finalTotalAmount > clientCreditLimit) {
+      let currentDebt = Math.max(0, Number(userProfile?.debt_usd || 0));
+      if (!currentDebt && callerAuth.partnerId) {
+        const { data: pBal } = await supabase
+          .from('partner_balances')
+          .select('balance')
+          .eq('partner_id', String(callerAuth.partnerId))
+          .maybeSingle();
+        if (pBal && typeof pBal.balance === 'number' && pBal.balance < 0) {
+          currentDebt = Math.abs(pBal.balance);
+        }
+      }
+
+      const totalExposure = Math.round((currentDebt + finalTotalAmount) * 100) / 100;
+      if (clientCreditLimit > 0 && totalExposure > clientCreditLimit) {
         serverRequiresApproval = true;
-        complianceReason = `Превышен кредитный лимит ($${finalTotalAmount} > $${clientCreditLimit})`;
+        complianceReason = `Превышен кредитный лимит с учетом текущей задолженности (Долг: $${currentDebt} + Заказ: $${finalTotalAmount} = $${totalExposure} > Лимит: $${clientCreditLimit})`;
       }
     } catch (profErr) {
       logger.warn('[Order] Compliance check notice:', profErr as Error);
     }
   }
 
-  // 4. Компенсирующее резервирование остатков (P0-3 / T-24 Saga)
+  // 4. Попытка высокопроизводительного атомарного чекаута через create_order_atomic (PostgreSQL Transaction)
+  let outboxOrderId: string | null = null;
+  let outboxOrderDoc: string | null = null;
+  let createdSplitOrders: Array<{ doc_number: string; warehouse: string; amount: number; items_count: number }> = [];
   const reservedSkuItems: ReservedStockItem[] = [];
-  let reservationFailedSku: string | null = null;
   const primaryWarehouseId = 81;
+
+  const distinctWarehouses = Array.from(new Set(pricingResult.items.map(it => it.warehouse || 'Основной Склад Астана')));
+  const isMultiWarehouse = distinctWarehouses.length > 1;
+  const resolvedUserId = callerAuth.userId || rawPayload.user_id || '00000000-0000-0000-0000-000000000000';
 
   for (const it of pricingResult.items) {
     const itemSku = String(it.sku || '');
     const itemQty = Number(it.quantity || 1);
     const whId = resolveWarehouseId(it.warehouse_id, it.warehouse);
-
     if (itemSku) {
-      try {
-        const { data: isReserved, error: rpcErr } = await supabase.rpc('reserve_stock', {
-          p_sku: itemSku,
-          p_qty: itemQty,
-          p_warehouse_id: whId,
-        });
-
-        if (rpcErr || isReserved === false) {
-          reservationFailedSku = itemSku;
-          logger.warn('[Stock Reservation] Reservation rejected or error', {
-            sku: itemSku,
-            isReserved,
-            rpcErr: rpcErr?.message,
-          });
-          break;
-        } else if (isReserved === true) {
-          reservedSkuItems.push({ sku: itemSku, qty: itemQty, whId });
-        }
-      } catch (rErr: any) {
-        reservationFailedSku = itemSku;
-        logger.warn('[Stock Reservation] RPC Exception during reservation:', rErr);
-        break;
-      }
+      reservedSkuItems.push({ sku: itemSku, qty: itemQty, whId });
     }
   }
 
-  // Если резерв хотя бы по одному товару не удался — гарантированный откат всех броней (SAGA)
-  if (reservationFailedSku) {
-    await releaseAllReservedStock(reservedSkuItems, {
-      correlationId,
-      reason: `Недостаточно остатка для артикула "${reservationFailedSku}"`,
-    });
-
-    res.status(409).json({
-      success: false,
-      code: 'INSUFFICIENT_STOCK',
-      error: `Недостаточно свободного остатка для артикула "${reservationFailedSku}". Товар был зарезервирован другим покупателем.`,
-    });
-    return;
-  }
-
-  // 5. Персистентное сохранение заказа в Transactional Outbox (PostgreSQL)
-  let outboxOrderId: string | null = null;
-  let outboxOrderDoc: string | null = null;
-  let createdSplitOrders: Array<{ doc_number: string; warehouse: string; amount: number; items_count: number }> = [];
-
+  let atomicExecuted = false;
   try {
-    const distinctWarehouses = Array.from(new Set(pricingResult.items.map(it => it.warehouse || 'Основной Склад Астана')));
-    const isMultiWarehouse = distinctWarehouses.length > 1;
-    const resolvedUserId = callerAuth.userId || rawPayload.user_id || '00000000-0000-0000-0000-000000000000';
+    const orderMasterPayload = {
+      user_id: resolvedUserId,
+      placed_by_id: callerAuth.userId || resolvedUserId,
+      warehouse: pricingResult.items[0]?.warehouse || 'Основной Склад Астана',
+      notes: isMultiWarehouse ? `[Мультисклад (${distinctWarehouses.length} склада)] ${rawPayload.comment || ''}`.trim() : (rawPayload.comment || ''),
+      total_amount: finalTotalAmount,
+      total_items: finalTotalItems,
+      total_sqm: pricingResult.items.reduce((s, it) => s + (it.price_per_sqm > 0 ? (it.price / it.price_per_sqm) * it.quantity : 0), 0),
+      idempotency_key: incomingIdempotencyKey || null,
+      currency: rawPayload.currency || 'USD',
+      applied_exchange_rate: Number(rawPayload.applied_exchange_rate || rawPayload.exchange_rate || 1.0),
+      contract_id: rawPayload.contract_id || null,
+    };
 
-    const { data: createdRow, error: masterOrderErr } = await supabase
-      .from('orders')
-      .insert({
-        user_id: resolvedUserId,
-        placed_by_id: callerAuth.userId || resolvedUserId,
-        warehouse: pricingResult.items[0]?.warehouse || 'Основной Склад Астана',
-        notes: isMultiWarehouse ? `[Мультисклад (${distinctWarehouses.length} склада)] ${rawPayload.comment || ''}`.trim() : (rawPayload.comment || ''),
-        total_amount: finalTotalAmount,
-        total_items: finalTotalItems,
-        total_sqm: pricingResult.items.reduce((s, it) => s + (it.price_per_sqm > 0 ? (it.price / it.price_per_sqm) * it.quantity : 0), 0),
-        status: 'pending',
-        idempotency_key: incomingIdempotencyKey || null,
-        currency: rawPayload.currency || 'USD',
-        contract_id: rawPayload.contract_id || null,
-      })
-      .select('id, order_number')
-      .maybeSingle();
+    const orderItemsPayload = pricingResult.items.map(it => ({
+      product_id: String(it.productId || it.item_id || it.sku || ''),
+      product_name: String(it.sku || 'Ковровое изделие'),
+      size: String(it.size || 'Стандарт'),
+      sku: String(it.sku || ''),
+      warehouse: String(it.warehouse || 'Основной Склад Астана'),
+      warehouse_id: resolveWarehouseId(it.warehouse_id, it.warehouse),
+      price: Number(it.price) || 0,
+      quantity: Number(it.quantity) || 1,
+    }));
 
-    if (masterOrderErr || !createdRow) {
-      throw new Error(`Master order insert failed: ${masterOrderErr?.message || 'No row returned'}`);
-    }
-
-    outboxOrderId = createdRow.id;
-    outboxOrderDoc = createdRow.order_number;
-
-    // Вставка субордеров мультисклада
+    const splitOrdersPayload: any[] = [];
     if (isMultiWarehouse) {
       let splitIdx = 1;
       for (const wh of distinctWarehouses) {
@@ -229,31 +237,17 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
         const whAmount = Math.round(whItems.reduce((acc, it) => acc + it.total_line, 0) * 100) / 100;
         const whItemsCount = whItems.reduce((acc, it) => acc + it.quantity, 0);
         const whSqm = Math.round(whItems.reduce((acc, it) => acc + (it.price_per_sqm > 0 ? (it.price / it.price_per_sqm) * it.quantity : 0), 0) * 100) / 100;
-        const subDoc = `${outboxOrderDoc}-${splitIdx}`;
+        const subDoc = `${incomingIdempotencyKey || 'ORD'}-wh-${splitIdx}`;
 
-        const { data: subOrderRow } = await supabase
-          .from('orders')
-          .insert({
-            order_number: subDoc,
-            user_id: resolvedUserId,
-            placed_by_id: callerAuth.userId || resolvedUserId,
-            warehouse: wh,
-            notes: `[Мультисклад ${splitIdx}/${distinctWarehouses.length}: ${wh}] ${rawPayload.comment || ''}`.trim(),
-            total_amount: whAmount,
-            total_items: whItemsCount,
-            total_sqm: whSqm,
-            status: 'pending',
-            idempotency_key: incomingIdempotencyKey ? `${incomingIdempotencyKey}-wh-${splitIdx}` : null,
-            currency: rawPayload.currency || 'USD',
-            contract_id: rawPayload.contract_id || null,
-            parent_order_id: createdRow.id,
-          })
-          .select('id, order_number')
-          .maybeSingle();
-
-        if (subOrderRow) {
-          const subItemRows = whItems.map(it => ({
-            order_id: subOrderRow.id,
+        splitOrdersPayload.push({
+          doc_number: subDoc,
+          warehouse: wh,
+          notes: `[Мультисклад ${splitIdx}/${distinctWarehouses.length}: ${wh}] ${rawPayload.comment || ''}`.trim(),
+          amount: whAmount,
+          items_count: whItemsCount,
+          sqm: whSqm,
+          idempotency_key: incomingIdempotencyKey ? `${incomingIdempotencyKey}-wh-${splitIdx}` : null,
+          items: whItems.map(it => ({
             product_id: String(it.productId || it.item_id || it.sku || ''),
             product_name: String(it.sku || 'Ковровое изделие'),
             size: String(it.size || 'Стандарт'),
@@ -261,75 +255,240 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
             warehouse: wh,
             price: Number(it.price) || 0,
             quantity: Number(it.quantity) || 1,
-          }));
-          await supabase.from('order_items').insert(subItemRows);
-          createdSplitOrders.push({
-            doc_number: subDoc,
-            warehouse: wh,
-            amount: whAmount,
-            items_count: whItemsCount,
-          });
-        }
+          })),
+        });
         splitIdx++;
       }
-    } else {
-      createdSplitOrders = [{
-        doc_number: outboxOrderDoc,
-        warehouse: distinctWarehouses[0] || 'Основной Склад Астана',
-        amount: finalTotalAmount,
-        items_count: finalTotalItems,
-      }];
     }
 
-    // Вставка товарных позиций мастер-заказа
-    const orderItemRows = pricingResult.items.map(it => ({
-      order_id: createdRow.id,
-      product_id: String(it.productId || it.item_id || it.sku || ''),
-      product_name: String(it.sku || 'Ковровое изделие'),
-      size: String(it.size || 'Стандарт'),
-      sku: String(it.sku || ''),
-      warehouse: String(it.warehouse || 'Основной Склад Астана'),
-      price: Number(it.price) || 0,
-      quantity: Number(it.quantity) || 1,
-    }));
+    const { data: atomicData, error: atomicErr } = await supabase.rpc('create_order_atomic', {
+      p_order: orderMasterPayload,
+      p_items: orderItemsPayload,
+      p_split_orders: splitOrdersPayload,
+    });
 
-    if (orderItemRows.length > 0) {
-      const { error: itemsErr } = await supabase.from('order_items').insert(orderItemRows);
-      if (itemsErr) {
-        throw new Error(`Order items insert failed: ${itemsErr.message}`);
+    if (atomicErr) {
+      const errMsg = atomicErr.message || '';
+      if (errMsg.includes('INSUFFICIENT_STOCK')) {
+        logger.warn('[Order] Atomic checkout rejected due to insufficient stock:', { error: errMsg, correlationId });
+        res.status(409).json({
+          success: false,
+          code: 'INSUFFICIENT_STOCK',
+          error: errMsg.replace('INSUFFICIENT_STOCK:', '').trim() || 'Недостаточно свободного остатка для оформления заказа.',
+        });
+        return;
+      }
+      logger.warn('[Order] create_order_atomic RPC notice, falling back to sequential saga:', atomicErr);
+    } else if (atomicData && atomicData.success) {
+      outboxOrderId = atomicData.order_id;
+      outboxOrderDoc = atomicData.order_number;
+      createdSplitOrders = Array.isArray(atomicData.split_orders) && atomicData.split_orders.length > 0
+        ? atomicData.split_orders
+        : [{
+            doc_number: outboxOrderDoc,
+            warehouse: distinctWarehouses[0] || 'Основной Склад Астана',
+            amount: finalTotalAmount,
+            items_count: finalTotalItems,
+          }];
+      atomicExecuted = true;
+      logger.info('[Order] Order atomically created and reserved via create_order_atomic RPC', {
+        orderId: outboxOrderId,
+        orderNumber: outboxOrderDoc,
+      });
+
+      if (serverRequiresApproval) {
+        dispatchApprovalRequest({
+          orderId: outboxOrderId!,
+          orderDocNumber: outboxOrderDoc!,
+          clientName: rawPayload.client_name || rawPayload.buyer?.name || 'Клиент B2B',
+          clientPhone: rawPayload.client_phone || rawPayload.buyer?.phone,
+          totalAmount: finalTotalAmount,
+          totalSqm: pricingResult.items.reduce((s, it) => s + (it.price_per_sqm > 0 ? (it.price / it.price_per_sqm) * it.quantity : 0), 0),
+          itemsCount: finalTotalItems,
+          reason: complianceReason || 'Превышение кредитного лимита (серверный контроль)',
+        }).catch(e => logger.warn('[Order Approval Warning]', e as Error));
+      }
+    }
+  } catch (atomicEx: any) {
+    logger.warn('[Order] Exception during create_order_atomic call, falling back:', atomicEx);
+  }
+
+  // Fallback на последовательное компенсирующее резервирование (если RPC ещё не развёрнут)
+  if (!atomicExecuted) {
+    let reservationFailedSku: string | null = null;
+    const fallbackReserved: ReservedStockItem[] = [];
+
+    for (const it of pricingResult.items) {
+      const itemSku = String(it.sku || '');
+      const itemQty = Number(it.quantity || 1);
+      const whId = resolveWarehouseId(it.warehouse_id, it.warehouse);
+
+      if (itemSku) {
+        try {
+          const { data: isReserved, error: rpcErr } = await supabase.rpc('reserve_stock', {
+            p_sku: itemSku,
+            p_qty: itemQty,
+            p_warehouse_id: whId,
+          });
+
+          if (rpcErr || isReserved === false) {
+            reservationFailedSku = itemSku;
+            break;
+          } else if (isReserved === true) {
+            fallbackReserved.push({ sku: itemSku, qty: itemQty, whId });
+          }
+        } catch {
+          reservationFailedSku = itemSku;
+          break;
+        }
       }
     }
 
-    if (serverRequiresApproval) {
-      dispatchApprovalRequest({
-        orderId: createdRow.id,
-        orderDocNumber: outboxOrderDoc,
-        clientName: rawPayload.client_name || rawPayload.buyer?.name || 'Клиент B2B',
-        clientPhone: rawPayload.client_phone || rawPayload.buyer?.phone,
-        totalAmount: finalTotalAmount,
-        totalSqm: pricingResult.items.reduce((s, it) => s + (it.price_per_sqm > 0 ? (it.price / it.price_per_sqm) * it.quantity : 0), 0),
-        itemsCount: finalTotalItems,
-        reason: complianceReason || 'Превышение кредитного лимита (серверный контроль)',
-      }).catch(e => logger.warn('[Order Approval Warning]', e as Error));
+    if (reservationFailedSku) {
+      await releaseAllReservedStock(fallbackReserved, {
+        correlationId,
+        reason: `Недостаточно остатка для артикула "${reservationFailedSku}"`,
+      });
+
+      res.status(409).json({
+        success: false,
+        code: 'INSUFFICIENT_STOCK',
+        error: `Недостаточно свободного остатка для артикула "${reservationFailedSku}". Товар был зарезервирован другим покупателем.`,
+      });
+      return;
     }
-  } catch (dbErr: any) {
-    // SAGA ROLLBACK: Если сохранение в базу упало — немедленно освобождаем остатки!
-    logger.error('[Order] Database insertion failure! Triggering Compensating Saga stock release', {
-      error: dbErr?.message,
-      correlationId,
-    });
 
-    await releaseAllReservedStock(reservedSkuItems, {
-      correlationId,
-      reason: `Сбой фиксации заказа в локальной БД: ${dbErr?.message}`,
-    });
+    try {
+      const { data: createdRow, error: masterOrderErr } = await supabase
+        .from('orders')
+        .insert({
+          user_id: resolvedUserId,
+          placed_by_id: callerAuth.userId || resolvedUserId,
+          warehouse: pricingResult.items[0]?.warehouse || 'Основной Склад Астана',
+          notes: isMultiWarehouse ? `[Мультисклад (${distinctWarehouses.length} склада)] ${rawPayload.comment || ''}`.trim() : (rawPayload.comment || ''),
+          total_amount: finalTotalAmount,
+          total_items: finalTotalItems,
+          total_sqm: pricingResult.items.reduce((s, it) => s + (it.price_per_sqm > 0 ? (it.price / it.price_per_sqm) * it.quantity : 0), 0),
+          status: 'pending',
+          idempotency_key: incomingIdempotencyKey || null,
+          currency: rawPayload.currency || 'USD',
+          applied_exchange_rate: Number(rawPayload.applied_exchange_rate || rawPayload.exchange_rate || 1.0),
+          contract_id: rawPayload.contract_id || null,
+        })
+        .select('id, order_number')
+        .maybeSingle();
 
-    res.status(500).json({
-      success: false,
-      error: 'Ошибка сохранения заказа в локальной базе данных. Зарезервированные остатки возвращены на склад.',
-      details: dbErr?.message,
-    });
-    return;
+      if (masterOrderErr || !createdRow) {
+        throw new Error(`Master order insert failed: ${masterOrderErr?.message || 'No row returned'}`);
+      }
+
+      outboxOrderId = createdRow.id;
+      outboxOrderDoc = createdRow.order_number;
+
+      if (isMultiWarehouse) {
+        let splitIdx = 1;
+        for (const wh of distinctWarehouses) {
+          const whItems = pricingResult.items.filter(it => (it.warehouse || 'Основной Склад Астана') === wh);
+          const whAmount = Math.round(whItems.reduce((acc, it) => acc + it.total_line, 0) * 100) / 100;
+          const whItemsCount = whItems.reduce((acc, it) => acc + it.quantity, 0);
+          const whSqm = Math.round(whItems.reduce((acc, it) => acc + (it.price_per_sqm > 0 ? (it.price / it.price_per_sqm) * it.quantity : 0), 0) * 100) / 100;
+          const subDoc = `${outboxOrderDoc}-${splitIdx}`;
+
+          const { data: subOrderRow } = await supabase
+            .from('orders')
+            .insert({
+              order_number: subDoc,
+              user_id: resolvedUserId,
+              placed_by_id: callerAuth.userId || resolvedUserId,
+              warehouse: wh,
+              notes: `[Мультисклад ${splitIdx}/${distinctWarehouses.length}: ${wh}] ${rawPayload.comment || ''}`.trim(),
+              total_amount: whAmount,
+              total_items: whItemsCount,
+              total_sqm: whSqm,
+              status: 'pending',
+              idempotency_key: incomingIdempotencyKey ? `${incomingIdempotencyKey}-wh-${splitIdx}` : null,
+              currency: rawPayload.currency || 'USD',
+              contract_id: rawPayload.contract_id || null,
+              parent_order_id: createdRow.id,
+            })
+            .select('id, order_number')
+            .maybeSingle();
+
+          if (subOrderRow) {
+            const subItemRows = whItems.map(it => ({
+              order_id: subOrderRow.id,
+              product_id: String(it.productId || it.item_id || it.sku || ''),
+              product_name: String(it.sku || 'Ковровое изделие'),
+              size: String(it.size || 'Стандарт'),
+              sku: String(it.sku || ''),
+              warehouse: wh,
+              price: Number(it.price) || 0,
+              quantity: Number(it.quantity) || 1,
+            }));
+            await supabase.from('order_items').insert(subItemRows);
+            createdSplitOrders.push({
+              doc_number: subDoc,
+              warehouse: wh,
+              amount: whAmount,
+              items_count: whItemsCount,
+            });
+          }
+          splitIdx++;
+        }
+      } else {
+        createdSplitOrders = [{
+          doc_number: outboxOrderDoc,
+          warehouse: distinctWarehouses[0] || 'Основной Склад Астана',
+          amount: finalTotalAmount,
+          items_count: finalTotalItems,
+        }];
+      }
+
+      const orderItemRows = pricingResult.items.map(it => ({
+        order_id: createdRow.id,
+        product_id: String(it.productId || it.item_id || it.sku || ''),
+        product_name: String(it.sku || 'Ковровое изделие'),
+        size: String(it.size || 'Стандарт'),
+        sku: String(it.sku || ''),
+        warehouse: String(it.warehouse || 'Основной Склад Астана'),
+        price: Number(it.price) || 0,
+        quantity: Number(it.quantity) || 1,
+      }));
+
+      if (orderItemRows.length > 0) {
+        await supabase.from('order_items').insert(orderItemRows);
+      }
+
+      if (serverRequiresApproval) {
+        dispatchApprovalRequest({
+          orderId: createdRow.id,
+          orderDocNumber: outboxOrderDoc,
+          clientName: rawPayload.client_name || rawPayload.buyer?.name || 'Клиент B2B',
+          clientPhone: rawPayload.client_phone || rawPayload.buyer?.phone,
+          totalAmount: finalTotalAmount,
+          totalSqm: pricingResult.items.reduce((s, it) => s + (it.price_per_sqm > 0 ? (it.price / it.price_per_sqm) * it.quantity : 0), 0),
+          itemsCount: finalTotalItems,
+          reason: complianceReason || 'Превышение кредитного лимита (серверный контроль)',
+        }).catch(e => logger.warn('[Order Approval Warning]', e as Error));
+      }
+    } catch (dbErr: any) {
+      logger.error('[Order] Database insertion failure! Triggering Compensating Saga stock release', {
+        error: dbErr?.message,
+        correlationId,
+      });
+
+      await releaseAllReservedStock(fallbackReserved, {
+        correlationId,
+        reason: `Сбой фиксации заказа в локальной БД: ${dbErr?.message}`,
+      });
+
+      res.status(500).json({
+        success: false,
+        error: 'Ошибка сохранения заказа в локальной базе данных. Зарезервированные остатки возвращены на склад.',
+        details: dbErr?.message,
+      });
+      return;
+    }
   }
 
   const outboundPayload = {
@@ -448,6 +607,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
       statusCode: erpResponse.status,
       orderDoc: outboxOrderDoc,
     });
+    triggerImmediateOutboxSync(req, correlationId);
     res.status(200).json({
       success: true,
       outbox_queued: true,
@@ -466,6 +626,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
       correlationId,
     });
 
+    triggerImmediateOutboxSync(req, correlationId);
     res.status(200).json({
       success: true,
       outbox_queued: true,

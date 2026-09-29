@@ -39,13 +39,30 @@ const DEFAULT_CONFIG: CircuitBreakerConfig = {
 // In-memory fallback map for local development or when Redis is offline
 const memoryRegistry = new Map<string, ServiceState>();
 
+// L1 Fast In-Memory Cache (5s TTL) to eliminate Redis HTTP REST overhead on high RPS
+interface L1CacheEntry {
+  state: ServiceState;
+  expiry: number;
+}
+const l1StateCache = new Map<string, L1CacheEntry>();
+const L1_TTL_MS = 5000;
+
 async function getServiceState(serviceName: string): Promise<ServiceState> {
+  const now = Date.now();
+  const cachedL1 = l1StateCache.get(serviceName);
+  if (cachedL1 && cachedL1.expiry > now) {
+    return cachedL1.state;
+  }
+
   const redis = getRedisClient();
   if (redis) {
     try {
       const key = `circuit:${serviceName}`;
       const state = await redis.get<ServiceState>(key);
-      if (state) return state;
+      if (state) {
+        l1StateCache.set(serviceName, { state, expiry: now + L1_TTL_MS });
+        return state;
+      }
     } catch (err) {
       console.warn(`[CircuitBreaker] Redis get failed for '${serviceName}', falling back to memory:`, err);
     }
@@ -62,11 +79,13 @@ async function getServiceState(serviceName: string): Promise<ServiceState> {
     };
     memoryRegistry.set(serviceName, s);
   }
+  l1StateCache.set(serviceName, { state: s, expiry: now + L1_TTL_MS });
   return s;
 }
 
 async function saveServiceState(serviceName: string, state: ServiceState): Promise<void> {
   memoryRegistry.set(serviceName, state);
+  l1StateCache.set(serviceName, { state, expiry: Date.now() + L1_TTL_MS });
 
   const redis = getRedisClient();
   if (redis) {

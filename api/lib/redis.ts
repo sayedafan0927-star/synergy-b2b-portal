@@ -23,8 +23,46 @@ export function getRedisClient(): Redis | null {
       console.warn('[Redis] Failed to initialize Upstash Redis client:', err);
       redisInstance = null;
     }
-  }
-
   redisInitialized = true;
   return redisInstance;
 }
+
+/**
+ * Returns true if Redis environment variables are provided.
+ */
+export function isRedisConfigured(): boolean {
+  return Boolean(
+    (process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL) &&
+    (process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN)
+  );
+}
+
+/**
+ * Diagnostic health check for Upstash Redis connectivity.
+ */
+export async function checkRedisHealth(): Promise<{ configured: boolean; connected: boolean; latencyMs?: number; error?: string }> {
+  if (!isRedisConfigured()) {
+    return { configured: false, connected: false };
+  }
+  const client = getRedisClient();
+  if (!client) {
+    return { configured: true, connected: false, error: 'Client initialization failed' };
+  }
+  const start = Date.now();
+  try {
+    const pingRes = await client.ping();
+    return {
+      configured: true,
+      connected: pingRes === 'PONG' || Boolean(pingRes),
+      latencyMs: Date.now() - start,
+    };
+  } catch (err: any) {
+    return {
+      configured: true,
+      connected: false,
+      latencyMs: Date.now() - start,
+      error: err?.message,
+    };
+  }
+}
+

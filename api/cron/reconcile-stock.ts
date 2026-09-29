@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { recordAuditLog } from '../audit/logs';
 import { applyCorrelationId } from '../lib/trace';
 import { applyCorsHeaders } from '../lib/cors';
-import { saveCachedCatalog, getCachedCatalog } from '../lib/catalogCache';
+import { saveCachedCatalog, getCachedCatalog, patchCachedCatalogStock } from '../lib/catalogCache';
 import { getErpApiKey } from '../lib/erpKey';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
@@ -107,9 +107,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // 4. Обновление локального L2 кэша каталога при наличии расхождений
+    // 4. Обновление локального L2 кэша каталога и inventory_balances при наличии расхождений
     if (discrepanciesFixed > 0 || !localCached?.data) {
-      await saveCachedCatalog(erpData, 'catalog_global');
+      if (erpProducts.length <= 50000) {
+        await saveCachedCatalog(erpData, 'catalog_global');
+      }
+
+      // Пакетная синхронизация расхождений непосредственно в таблицу inventory_balances
+      if (driftedSkus.length > 0) {
+        try {
+          const patchItems = driftedSkus.map(d => ({
+            sku: d.sku,
+            free_stock: d.erp,
+            total_stock: d.erp,
+          }));
+          await patchCachedCatalogStock(patchItems, 'catalog_global');
+        } catch (patchErr) {
+          console.warn('[Stock Reconciliation] Direct inventory_balances patch notice:', patchErr);
+        }
+      }
     }
 
     // 5. Логирование результатов сверки в integration_audit_logs

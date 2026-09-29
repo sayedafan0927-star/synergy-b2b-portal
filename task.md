@@ -59,3 +59,24 @@
 - [x] 5.9 Внедрена индикация автономного буфера заказов (`is_buffered_offline` / `isServerBuffered`) на странице корзины `src/pages/CartPage.tsx`
 - [x] 5.10 Расширен комплексный тестовый пакет до 103 проверок (100% PASS)
 
+## Этап 6: Атомарный чекаут в СУБД, субсекундный Outbox и масштабирование (100% Выполнено)
+
+- [x] 6.1 Реализована транзакционная процедура `create_order_atomic(p_order, p_items, p_split_orders)` (`20260929160000_create_order_atomic_transaction.sql` и `DEPLOY_ALL_ENTERPRISE_MIGRATIONS.sql`)
+- [x] 6.2 Заложен инвариант Zero-Deadlock с алфавитной сортировкой SKU перед `SELECT FOR UPDATE`
+- [x] 6.3 Интегрирован вызов `create_order_atomic` в `createOrderHandler.ts` с сохранением отказоустойчивого fallback на компенсирующую сагу
+- [x] 6.4 Внедрен неблокирующий субсекундный триггер Outbox воркера `triggerImmediateOutboxSync` при переводе заказа в оффлайн-буфер
+- [x] 6.5 Экспортированы функции `isRedisConfigured` и `checkRedisHealth` в `api/lib/redis.ts` для мониторинга Upstash Redis
+- [x] 6.6 Задокументированы боевые переменные `UPSTASH_REDIS_REST_URL` и `UPSTASH_REDIS_REST_TOKEN` в `.env.example`
+- [x] 6.7 Реализована прямая сверка расхождений остатков в `inventory_balances` через `patchCachedCatalogStock` в `api/cron/reconcile-stock.ts`
+- [x] 6.8 Расширен комплексный тестовый пакет `scripts/test_resilience_and_security.py` до 127 проверок (100% PASS)
+
+## Этап 7: Устранение критических дефектов архитектурного аудита (100% Выполнено)
+
+- [x] 7.1 Исправлен расчет кредитного риска в `createOrderHandler.ts`: проверка совокупного кредитного плеча $\text{Effective Exposure} = \text{Current Debt} + \text{New Order} \le \text{Credit Limit}$ (P0)
+- [x] 7.2 Реализован fallback на `partner_balances` для оперативной проверки долга клиента
+- [x] 7.3 Внедрена защита `triggerImmediateOutboxSync` от Serverless Runtime Freeze через `waitUntil` (P1)
+- [x] 7.4 Реализован 5-секундный локальный L1 in-memory кэш в `circuitBreaker.ts` для устранения задержек HTTP-вызовов к Upstash Redis (P1)
+- [x] 7.5 Создана миграция `20260929170000_add_applied_exchange_rate.sql` с фиксацией курса валют в таблице `orders` (P1)
+- [x] 7.6 Обновлена процедура `create_order_atomic` в `DEPLOY_ALL_ENTERPRISE_MIGRATIONS.sql` с поддержкой `applied_exchange_rate`
+- [x] 7.7 Расширен комплексный тест-сьют `scripts/test_resilience_and_security.py` до 134 проверок (100% PASS)
+
