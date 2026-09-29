@@ -9,14 +9,39 @@ import Footer from '@/components/Footer';
 import MobileNav from '@/components/MobileNav';
 import ErrorBoundary from '@/components/ErrorBoundary';
 
-// Code Splitting: Ленивая загрузка страниц для максимального быстродействия
-const HomePage = lazy(() => import('@/pages/HomePage'));
-const CatalogPage = lazy(() => import('@/pages/CatalogPage'));
-const ProductPage = lazy(() => import('@/pages/ProductPage'));
-const CartPage = lazy(() => import('@/pages/CartPage'));
-const ContactsPage = lazy(() => import('@/pages/ContactsPage'));
-const LoginPage = lazy(() => import('@/pages/LoginPage'));
-const ProfilePage = lazy(() => import('@/pages/ProfilePage'));
+// Code Splitting с автоматическим обновлением при выкатке новой версии на Vercel
+function lazyWithRetry<T extends React.ComponentType<any>>(
+  factory: () => Promise<{ default: T }>
+) {
+  return lazy(async () => {
+    try {
+      return await factory();
+    } catch (err: any) {
+      const msg = String(err?.message || '');
+      if (
+        msg.includes('Failed to fetch dynamically imported module') ||
+        msg.includes('Importing a module script failed') ||
+        msg.includes('Expected a JavaScript-or-Wasm module script')
+      ) {
+        const retryKey = 'chunk_reload_' + (typeof window !== 'undefined' ? window.location.pathname : '');
+        if (typeof window !== 'undefined' && !sessionStorage.getItem(retryKey)) {
+          sessionStorage.setItem(retryKey, '1');
+          window.location.reload();
+          return new Promise(() => {}) as any;
+        }
+      }
+      throw err;
+    }
+  });
+}
+
+const HomePage = lazyWithRetry(() => import('@/pages/HomePage'));
+const CatalogPage = lazyWithRetry(() => import('@/pages/CatalogPage'));
+const ProductPage = lazyWithRetry(() => import('@/pages/ProductPage'));
+const CartPage = lazyWithRetry(() => import('@/pages/CartPage'));
+const ContactsPage = lazyWithRetry(() => import('@/pages/ContactsPage'));
+const LoginPage = lazyWithRetry(() => import('@/pages/LoginPage'));
+const ProfilePage = lazyWithRetry(() => import('@/pages/ProfilePage'));
 
 import { useNetworkStatus } from '@/registerServiceWorker';
 import { initOfflineQueueAutoSync } from '@/lib/offlineOrderQueue';

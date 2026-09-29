@@ -30,6 +30,19 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     this.setState({ errorInfo });
+    const msg = String(error.message || '');
+    if (
+      msg.includes('Failed to fetch dynamically imported module') ||
+      msg.includes('Importing a module script failed') ||
+      msg.includes('Expected a JavaScript-or-Wasm module script')
+    ) {
+      const retryKey = 'error_boundary_chunk_reload';
+      if (!sessionStorage.getItem(retryKey)) {
+        sessionStorage.setItem(retryKey, '1');
+        window.location.reload();
+        return;
+      }
+    }
     console.error('[ErrorBoundary caught error]', {
       errorId: this.state.errorId,
       message: error.message,
