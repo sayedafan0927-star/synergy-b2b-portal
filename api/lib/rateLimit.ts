@@ -1,22 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { getRedisClient } from './redis';
 
 interface RateLimitRecord {
   timestamps: number[];
 }
 
-// In-memory хранилище логов запросов по ключу
+// In-memory fallback map (inline expiration on access, no setInterval)
 const rateLimitMap = new Map<string, RateLimitRecord>();
-
-// Периодическая очистка устаревших записей памяти раз в 2 минуты
-setInterval(() => {
-  const cutoff = Date.now() - 300000; // 5 минут назад
-  for (const [key, record] of rateLimitMap.entries()) {
-    record.timestamps = record.timestamps.filter(t => t > cutoff);
-    if (record.timestamps.length === 0) {
-      rateLimitMap.delete(key);
-    }
-  }
-}, 120000);
 
 export function getClientIp(req: VercelRequest): string {
   const forwarded = req.headers['x-forwarded-for'];
@@ -38,33 +28,65 @@ export interface RateLimitOptions {
 }
 
 /**
- * Проверка лимита частоты запросов (Sliding Window Algorithm)
+ * Проверка лимита частоты запросов с использованием Redis (или in-memory fallback)
  */
-export function checkRateLimit(
+export async function checkRateLimit(
   req: VercelRequest,
   res: VercelResponse,
   options: RateLimitOptions = {}
-): { allowed: boolean; remaining: number; resetSeconds: number; ip: string } {
+): Promise<{ allowed: boolean; remaining: number; resetSeconds: number; ip: string }> {
   const limit = options.limit || 60;
-  const windowMs = (options.windowSeconds || 60) * 1000;
+  const windowSeconds = options.windowSeconds || 60;
+  const windowMs = windowSeconds * 1000;
   const ip = getClientIp(req);
-  const key = `${options.actionPrefix || 'general'}:${ip}`;
+  const action = options.actionPrefix || 'general';
+  const redisKey = `ratelimit:${action}:${ip}`;
 
+  const redis = getRedisClient();
+  if (redis) {
+    try {
+      // Redis pipeline: INCR and set EXPIRE if first request
+      const current = await redis.incr(redisKey);
+      let ttl = await redis.ttl(redisKey);
+      if (ttl < 0) {
+        await redis.expire(redisKey, windowSeconds);
+        ttl = windowSeconds;
+      }
+
+      const resetSeconds = Math.max(1, ttl);
+      const remaining = Math.max(0, limit - current);
+
+      res.setHeader('X-RateLimit-Limit', limit);
+      res.setHeader('X-RateLimit-Remaining', remaining);
+      res.setHeader('X-RateLimit-Reset', resetSeconds);
+
+      if (current > limit) {
+        res.setHeader('Retry-After', resetSeconds);
+        return { allowed: false, remaining: 0, resetSeconds, ip };
+      }
+
+      return { allowed: true, remaining, resetSeconds, ip };
+    } catch (redisErr) {
+      console.warn('[RateLimit] Redis check failed, using memory fallback:', redisErr);
+    }
+  }
+
+  // Fallback: In-memory sliding window
   const now = Date.now();
   const windowStart = now - windowMs;
 
-  let record = rateLimitMap.get(key);
+  let record = rateLimitMap.get(redisKey);
   if (!record) {
     record = { timestamps: [] };
-    rateLimitMap.set(key, record);
+    rateLimitMap.set(redisKey, record);
   }
 
-  // Очищаем отметки времени старше текущего окна
+  // Очищаем отметки времени старше текущего окна inline
   record.timestamps = record.timestamps.filter(t => t > windowStart);
 
   const resetSeconds = record.timestamps.length > 0
     ? Math.max(1, Math.ceil((record.timestamps[0] + windowMs - now) / 1000))
-    : Math.ceil(windowMs / 1000);
+    : windowSeconds;
 
   if (record.timestamps.length >= limit) {
     res.setHeader('X-RateLimit-Limit', limit);
@@ -72,15 +94,9 @@ export function checkRateLimit(
     res.setHeader('X-RateLimit-Reset', resetSeconds);
     res.setHeader('Retry-After', resetSeconds);
 
-    return {
-      allowed: false,
-      remaining: 0,
-      resetSeconds,
-      ip,
-    };
+    return { allowed: false, remaining: 0, resetSeconds, ip };
   }
 
-  // Добавляем текущую отметку
   record.timestamps.push(now);
   const remaining = Math.max(0, limit - record.timestamps.length);
 
@@ -88,23 +104,18 @@ export function checkRateLimit(
   res.setHeader('X-RateLimit-Remaining', remaining);
   res.setHeader('X-RateLimit-Reset', resetSeconds);
 
-  return {
-    allowed: true,
-    remaining,
-    resetSeconds,
-    ip,
-  };
+  return { allowed: true, remaining, resetSeconds, ip };
 }
 
 /**
  * Валидатор и ограничитель: если лимит превышен, автоматически отдает 429 и завершает запрос
  */
-export function enforceRateLimit(
+export async function enforceRateLimit(
   req: VercelRequest,
   res: VercelResponse,
   options: RateLimitOptions = {}
-): boolean {
-  const result = checkRateLimit(req, res, options);
+): Promise<boolean> {
+  const result = await checkRateLimit(req, res, options);
 
   if (!result.allowed) {
     res.status(429).json({

@@ -31,8 +31,8 @@ export function applyCorsHeaders(req: VercelRequest, res: VercelResponse): boole
     isAllowed = true;
   } else if (process.env.NODE_ENV !== 'production' && origin.includes('localhost')) {
     isAllowed = true;
-  } else if (origin.endsWith('.vercel.app')) {
-    // Allow Vercel preview environments
+  } else if (origin.endsWith('.vercel.app') && origin.includes('synergy-b2b-portal')) {
+    // Allow Vercel preview environments only for this project
     isAllowed = true;
   }
 

@@ -6,6 +6,7 @@ import { enforceRateLimit } from '../lib/rateLimit';
 import { sendWhatsAppMessage } from '../approvals/whatsapp';
 import { applyCorsHeaders } from '../lib/cors';
 import { logger } from '../lib/logger';
+import { sendSystemAlert } from '../lib/alerting';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
@@ -58,6 +59,13 @@ async function dispatchDlqEmergencyAlert(params: {
       logger.warn('[DLQ Alert Telegram notice]', { orderNumber: params.orderNumber }, e as Error);
     }
   }
+
+  sendSystemAlert({
+    level: 'CRITICAL',
+    title: `Order #${params.orderNumber} Moved to DLQ`,
+    description: `Заказ #${params.orderNumber} исчерпал 5 попыток синхронизации и перемещен в Dead Letter Queue.\nСумма: $${params.amount}\nОшибка: ${params.error}`,
+    metadata: { orderId: params.orderId, orderNumber: params.orderNumber, retries: params.retries },
+  }).catch(() => {});
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -84,7 +92,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Rate Limiting (макс 30 запусков в минуту на IP)
-  if (!enforceRateLimit(req, res, { limit: 30, windowSeconds: 60, actionPrefix: 'outbox_sync' })) {
+  if (!(await enforceRateLimit(req, res, { limit: 30, windowSeconds: 60, actionPrefix: 'outbox_sync' }))) {
     return;
   }
 

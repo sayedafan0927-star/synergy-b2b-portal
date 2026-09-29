@@ -53,11 +53,33 @@ export interface PricingValidationResult {
 }
 
 /**
- * Расчет скидки по типу договора
+ * Расчет скидки по типу договора на основе динамических правил из БД (T-25)
  */
-function getDiscountPercent(priceType?: string | null): number {
+async function getDynamicDiscountPercent(priceType?: string | null): Promise<number> {
   if (!priceType) return 0;
   const str = priceType.toLowerCase().trim();
+
+  try {
+    const nowIso = new Date().toISOString();
+    const { data: rule } = await supabaseAdmin
+      .from('discount_rules')
+      .select('discount_percent')
+      .eq('price_type_id', str)
+      .eq('is_active', true)
+      .lte('valid_from', nowIso)
+      .or(`valid_to.is.null,valid_to.gte.${nowIso}`)
+      .order('discount_percent', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (rule?.discount_percent !== undefined) {
+      return Number(rule.discount_percent);
+    }
+  } catch (err) {
+    console.warn('[PricingValidator] Discount rule query notice:', err);
+  }
+
+  // Fallback значения
   if (str === 'wholesale' || str === 'price_deferred' || str === 'price_opt' || str === 'оптовая') return 0;
   if (str.includes('vip') || str.includes('вип')) return 25;
   if (str.includes('opt3') || str.includes('опт-3') || str.includes('дилер')) return 20;
@@ -101,7 +123,7 @@ export async function validateAndPriceOrder(
   }
 
   const skusToLookup = rawItems.map(i => String(i.sku || '').trim()).filter(Boolean);
-  const discountPercent = getDiscountPercent(priceType);
+  const discountPercent = await getDynamicDiscountPercent(priceType);
   const discountMultiplier = (100 - discountPercent) / 100;
 
   // Загружаем актуальные базовые цены из PostgreSQL (product_variants)

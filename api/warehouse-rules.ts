@@ -27,7 +27,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   applyCorrelationId(req, res);
 
-  if (!enforceRateLimit(req, res, { limit: 60, windowSeconds: 60, actionPrefix: 'warehouse_rules' })) {
+  if (!(await enforceRateLimit(req, res, { limit: 60, windowSeconds: 60, actionPrefix: 'warehouse_rules' }))) {
     return;
   }
 

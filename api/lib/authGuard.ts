@@ -1,6 +1,7 @@
 import type { VercelRequest } from '@vercel/node';
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
+import { getRedisClient } from './redis';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
@@ -22,6 +23,23 @@ export interface AuthenticatedContext {
   companyName?: string;
   phone?: string;
   error?: string;
+}
+
+/**
+ * Revokes a session token by storing its hash in Redis blacklist
+ */
+export async function revokeToken(token: string, ttlSeconds: number = 7200): Promise<boolean> {
+  const redis = getRedisClient();
+  if (redis && token) {
+    try {
+      const tokenHash = crypto.createHash('sha256').update(token.trim()).digest('hex');
+      await redis.set(`revoked:${tokenHash}`, '1', { ex: ttlSeconds });
+      return true;
+    } catch (e) {
+      console.warn('[AuthGuard] Failed to revoke token in Redis:', e);
+    }
+  }
+  return false;
 }
 
 /**
@@ -66,6 +84,24 @@ export async function authenticateRequest(
     };
   }
 
+  // Проверка отзыва токена через Redis blacklist (T-15)
+  const redis = getRedisClient();
+  if (redis) {
+    try {
+      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+      const isRevoked = await redis.exists(`revoked:${tokenHash}`);
+      if (isRevoked) {
+        return {
+          isAuthenticated: false,
+          isServer: false,
+          error: 'Токен авторизации был отозван (Revoked Session). Пожалуйста, выполните вход повторно.',
+        };
+      }
+    } catch (revErr) {
+      console.warn('[AuthGuard] Redis revocation check notice:', revErr);
+    }
+  }
+
   try {
     let userId: string | undefined;
     let fallbackRole: 'admin' | 'manager_rm' | 'manager_lm' | 'supplier' | 'client' | undefined;
@@ -74,7 +110,7 @@ export async function authenticateRequest(
     let fallbackFullName: string | undefined;
     let fallbackPriceType: string | undefined;
 
-    const SECRET_KEY = process.env.PORTAL_SECRET_KEY || process.env.ERP_PORTAL_SECRET || ['synergy', '_portal', '_sec', '_key_2026'].join('');
+    const SECRET_KEY = process.env.PORTAL_SECRET_KEY || process.env.ERP_PORTAL_SECRET || '';
     if (SECRET_KEY) {
       try {
         const raw = Buffer.from(token, 'base64url').toString('utf8');
@@ -82,9 +118,9 @@ export async function authenticateRequest(
         if (parsed?.data && parsed?.sig) {
           const expectedSig = crypto.createHmac('sha256', SECRET_KEY).update(JSON.stringify(parsed.data)).digest('hex');
           if (parsed.sig === expectedSig) {
-            // Проверка срока жизни токена (24 часа)
+            // Проверка срока жизни токена: сокращено с 24 часов до 2 часов (Enterprise standard T-15)
             const tokenTs = Number(parsed.data.timestamp || 0);
-            if (!tokenTs || Date.now() - tokenTs <= 24 * 3600 * 1000) {
+            if (!tokenTs || Date.now() - tokenTs <= 2 * 3600 * 1000) {
               const u = parsed.data.user || {};
               const p = parsed.data.profile || {};
               userId = String(u.id || p.id || '');

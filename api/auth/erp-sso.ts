@@ -91,7 +91,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const correlationId = applyCorrelationId(req, res);
 
   // Строгий Rate Limiting для SSO (макс 15 попыток в минуту на IP)
-  if (!enforceRateLimit(req, res, { limit: 15, windowSeconds: 60, actionPrefix: 'erp_sso' })) {
+  if (!(await enforceRateLimit(req, res, { limit: 15, windowSeconds: 60, actionPrefix: 'erp_sso' }))) {
     return;
   }
 

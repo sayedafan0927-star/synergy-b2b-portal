@@ -12,6 +12,10 @@
     {
       "path": "/api/outbox/sync",
       "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/reconcile-stock",
+      "schedule": "0 5 * * *"
     }
   ],
   "rewrites": [

@@ -22,7 +22,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   applyCorrelationId(req, res);
 
-  if (!enforceRateLimit(req, res, { limit: 30, windowSeconds: 60, actionPrefix: 'client_token' })) {
+  if (!(await enforceRateLimit(req, res, { limit: 30, windowSeconds: 60, actionPrefix: 'client_token' }))) {
     return;
   }
 

@@ -139,8 +139,45 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
+    const incomingEventId = String(
+      req.headers['x-webhook-event-id'] ||
+      req.headers['X-Webhook-Event-ID'] ||
+      payload.event_id ||
+      payload.id ||
+      ''
+    ).trim();
+
+    // T-18: Дедупликация входящих вебхуков через PostgreSQL
+    if (incomingEventId) {
+      try {
+        const { data: existingEvent } = await supabaseServer
+          .from('webhook_events')
+          .select('event_id')
+          .eq('event_id', incomingEventId)
+          .maybeSingle();
+
+        if (existingEvent) {
+          console.log(`[Webhook ERP] Duplicate event ignored (deduplicated): ${incomingEventId}`);
+          return res.status(200).json({
+            success: true,
+            deduplicated: true,
+            event_id: incomingEventId,
+            message: 'Webhook event already processed previously.',
+          });
+        }
+
+        await supabaseServer.from('webhook_events').insert({
+          event_id: incomingEventId,
+          event_type: String(event),
+          processed_at: new Date().toISOString(),
+        });
+      } catch (dedupErr) {
+        console.warn('[Webhook ERP] Deduplication check notice:', dedupErr);
+      }
+    }
+
     const timestamp = payload.timestamp || new Date().toISOString();
-    console.log(`[Webhook ERP] Received event '${event}' (EventID: ${eventId || payload.event_id || 'n/a'}, Timestamp: ${timestamp})`);
+    console.log(`[Webhook ERP] Received event '${event}' (EventID: ${incomingEventId || 'n/a'}, Timestamp: ${timestamp})`);
 
     // ───────────────────────────────────────────────
     // 1. Событие: stock_changed (Смена остатков / возврат резерва в free_stock)
