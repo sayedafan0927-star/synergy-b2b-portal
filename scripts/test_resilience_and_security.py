@@ -173,9 +173,11 @@ if os.path.exists(auth_handler_path):
     with open(auth_handler_path, "r", encoding="utf-8") as fp:
         erp_code += "\n" + fp.read()
 upstream_proxy_path = os.path.join(ROOT_DIR, "api", "modules", "erp", "upstreamProxy.ts")
-if os.path.exists(upstream_proxy_path):
-    with open(upstream_proxy_path, "r", encoding="utf-8") as fp:
-        erp_code += "\n" + fp.read()
+generic_proxy_path = os.path.join(ROOT_DIR, "api", "modules", "erp", "genericProxyHandler.ts")
+for p in [upstream_proxy_path, generic_proxy_path]:
+    if os.path.exists(p):
+        with open(p, "r", encoding="utf-8") as fp:
+            erp_code += "\n" + fp.read()
 orders_dir = os.path.join(ROOT_DIR, "api", "modules", "orders")
 if os.path.exists(orders_dir):
     for f in sorted(os.listdir(orders_dir)):
@@ -295,6 +297,9 @@ if os.path.exists(order_handler_path):
         erp_code += "\n" + fp.read()
 if os.path.exists(upstream_proxy_path):
     with open(upstream_proxy_path, "r", encoding="utf-8") as fp:
+        erp_code += "\n" + fp.read()
+if os.path.exists(generic_proxy_path):
+    with open(generic_proxy_path, "r", encoding="utf-8") as fp:
         erp_code += "\n" + fp.read()
 
 test_assert("action === 'create_order' ? 2500 : 12000" in erp_code, "api/erp.ts sets 2.5s low-latency checkout timeout for instant fallback")
