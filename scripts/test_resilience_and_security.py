@@ -537,7 +537,37 @@ test_assert(os.path.exists(ex_sql_path), "supabase/migrations/20260929170000_add
 test_assert("applied_exchange_rate numeric(12,4)" in deploy_all_sql, "DEPLOY_ALL_ENTERPRISE_MIGRATIONS.sql includes applied_exchange_rate DDL")
 
 # ------------------------------------------------------------------------------
-# 19. Summary Report
+# 19. Verifying Admin Hardening, Monolith Decoupling & Offline Orders Resilience
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}19. Verifying Admin Hardening, Monolith Decoupling & Offline Resilience...{RESET}")
+
+session_ts_path = os.path.join(ROOT_DIR, "api", "auth", "session.ts")
+with open(session_ts_path, "r", encoding="utf-8") as fp:
+    session_code = fp.read()
+test_assert("authenticateRequest" in session_code and "isPrivileged" in session_code, "api/auth/session.ts prevents unauthenticated privilege escalation")
+
+erp_ts_path = os.path.join(ROOT_DIR, "api", "erp.ts")
+with open(erp_ts_path, "r", encoding="utf-8") as fp:
+    erp_code_current = fp.read()
+test_assert("authenticateRequest" in erp_code_current and "callerAuth.isServer" in erp_code_current, "api/erp.ts session_token blocks privilege escalation")
+
+admin_index_path = os.path.join(ROOT_DIR, "src", "components", "admin", "index.ts")
+test_assert(os.path.exists(admin_index_path), "src/components/admin/index.ts exists")
+with open(admin_index_path, "r", encoding="utf-8") as fp:
+    admin_index_code = fp.read()
+for comp in ["AdminDisplaySettingsTab", "AdminUsersTab", "AdminErpSyncTab", "ClientWarehouseModal", "ClientDemoPanel"]:
+    test_assert(comp in admin_index_code, f"src/components/admin/index.ts exports {comp}")
+
+profile_path = os.path.join(ROOT_DIR, "src", "pages", "ProfilePage.tsx")
+with open(profile_path, "r", encoding="utf-8") as fp:
+    profile_code = fp.read()
+test_assert("from '@/components/admin'" in profile_code, "ProfilePage.tsx imports modular admin components")
+test_assert("<AdminDisplaySettingsTab />" in profile_code, "ProfilePage.tsx uses decoupled AdminDisplaySettingsTab")
+test_assert("AdminBootstrap" not in profile_code, "ProfilePage.tsx eliminated client-facing AdminBootstrap RPC")
+test_assert("supabase.from('orders')" in profile_code and "localMapped" in profile_code, "ProfilePage.tsx implements offline & buffered orders merge resilience")
+
+# ------------------------------------------------------------------------------
+# 20. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

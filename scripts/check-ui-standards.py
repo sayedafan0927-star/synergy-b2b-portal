@@ -136,7 +136,9 @@ def main():
         SRC / "pages" / "CatalogPage.tsx",
         SRC / "pages" / "CartPage.tsx",
         SRC / "pages" / "HomePage.tsx",
+        SRC / "pages" / "ProfilePage.tsx",
         SRC / "components" / "ProductCard.tsx",
+        *(SRC / "components" / "admin").glob("*.tsx"),
     ]
     
     for f in target_files:
