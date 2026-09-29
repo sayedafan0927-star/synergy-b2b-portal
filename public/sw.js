@@ -1,7 +1,5 @@
-const CACHE_NAME = 'synergy-b2b-v2';
+const CACHE_NAME = 'synergy-b2b-v4';
 const STATIC_ASSETS = [
-  '/',
-  '/index.html',
   '/favicon.svg',
   '/manifest.json',
   '/Вектор_Синэнергия.png',
@@ -19,7 +17,7 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
-// Activate: clean up old caches immediately
+// Activate: clean up all old caches immediately
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
@@ -34,7 +32,7 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch: Stale-While-Revalidate for catalog queries, Network-First with cache fallback for navigation & app shell
+// Fetch: Stale-While-Revalidate for catalog queries, Network-First for navigation & app shell
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
@@ -64,21 +62,13 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Handle Navigation (HTML Documents): Network-First to guarantee fresh bundles after deploy
+  // Handle Navigation (HTML Documents): Strictly Network-First to guarantee fresh index.html
   if (request.mode === 'navigate' || request.destination === 'document') {
     event.respondWith(
-      fetch(request)
-        .then((response) => {
-          if (response && response.status === 200) {
-            const responseToCache = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, responseToCache));
-          }
-          return response;
-        })
-        .catch(async () => {
-          const cached = await caches.match(request);
-          return cached || caches.match('/index.html');
-        })
+      fetch(request).catch(async () => {
+        const cached = await caches.match(request);
+        return cached || caches.match('/index.html');
+      })
     );
     return;
   }
@@ -87,7 +77,12 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(request)
       .then((response) => {
-        if (response && response.status === 200 && response.type === 'basic') {
+        const contentType = response.headers.get('content-type') || '';
+        // Защита от MIME text/html для .js чанков при 404 rewrite
+        if (url.pathname.endsWith('.js') && contentType.includes('text/html')) {
+          return new Response('Stale module chunk not found', { status: 404, statusText: 'Not Found' });
+        }
+        if (response && response.status === 200 && response.type === 'basic' && !contentType.includes('text/html')) {
           const responseToCache = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(request, responseToCache));
         }
