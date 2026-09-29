@@ -209,44 +209,43 @@ DROP POLICY IF EXISTS "anon_select_designs" ON product_designs;
 CREATE POLICY "anon_select_designs" ON product_designs FOR SELECT
   TO anon, authenticated USING (true);
 
--- 4.3. Pattern 3: Size Clusters & Runner Dimensions on product_variants
+-- 4.3. Pattern 3: Size Clusters & Runner Dimensions on product_variants (Conditional)
 DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'product_variants' AND column_name = 'width') THEN
-    ALTER TABLE product_variants ADD COLUMN width numeric(4,2) DEFAULT 1.60;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'product_variants' AND column_name = 'length') THEN
-    ALTER TABLE product_variants ADD COLUMN length numeric(4,2) DEFAULT 2.30;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'product_variants' AND column_name = 'area_sqm') THEN
-    ALTER TABLE product_variants ADD COLUMN area_sqm numeric(5,2) DEFAULT 3.68;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'product_variants' AND column_name = 'price_per_sqm') THEN
-    ALTER TABLE product_variants ADD COLUMN price_per_sqm numeric(10,2) DEFAULT 32.60;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'product_variants' AND column_name = 'size_cluster') THEN
-    ALTER TABLE product_variants ADD COLUMN size_cluster text DEFAULT 'medium';
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'product_variants' AND column_name = 'is_runner') THEN
-    ALTER TABLE product_variants ADD COLUMN is_runner boolean DEFAULT false;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'product_variants' AND column_name = 'design_id') THEN
-    ALTER TABLE product_variants ADD COLUMN design_id text REFERENCES product_designs(id) ON DELETE SET NULL;
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'product_variants') THEN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'product_variants' AND column_name = 'width') THEN
+      ALTER TABLE product_variants ADD COLUMN width numeric(4,2) DEFAULT 1.60;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'product_variants' AND column_name = 'length') THEN
+      ALTER TABLE product_variants ADD COLUMN length numeric(4,2) DEFAULT 2.30;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'product_variants' AND column_name = 'area_sqm') THEN
+      ALTER TABLE product_variants ADD COLUMN area_sqm numeric(5,2) DEFAULT 3.68;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'product_variants' AND column_name = 'price_per_sqm') THEN
+      ALTER TABLE product_variants ADD COLUMN price_per_sqm numeric(10,2) DEFAULT 32.60;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'product_variants' AND column_name = 'size_cluster') THEN
+      ALTER TABLE product_variants ADD COLUMN size_cluster text DEFAULT 'medium';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'product_variants' AND column_name = 'is_runner') THEN
+      ALTER TABLE product_variants ADD COLUMN is_runner boolean DEFAULT false;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'product_variants' AND column_name = 'design_id') THEN
+      ALTER TABLE product_variants ADD COLUMN design_id text REFERENCES product_designs(id) ON DELETE SET NULL;
+    END IF;
+
+    CREATE INDEX IF NOT EXISTS idx_variants_cluster ON product_variants(size_cluster);
+    CREATE INDEX IF NOT EXISTS idx_variants_runner ON product_variants(is_runner);
+    CREATE INDEX IF NOT EXISTS idx_variants_design ON product_variants(design_id);
+    CREATE INDEX IF NOT EXISTS idx_variants_sku_trgm ON product_variants USING gin (sku gin_trgm_ops);
   END IF;
 END $$;
-
-CREATE INDEX IF NOT EXISTS idx_variants_cluster ON product_variants(size_cluster);
-CREATE INDEX IF NOT EXISTS idx_variants_runner ON product_variants(is_runner);
-CREATE INDEX IF NOT EXISTS idx_variants_design ON product_variants(design_id);
 
 -- 4.4. Pattern 4: High-Performance Trigram GIN Search Indexes (pg_trgm)
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 CREATE INDEX IF NOT EXISTS idx_designs_trgm ON product_designs USING gin (
   (collection || ' ' || article || ' ' || coalesce(color, '') || ' ' || manufacturer) gin_trgm_ops
-);
-
-CREATE INDEX IF NOT EXISTS idx_variants_sku_trgm ON product_variants USING gin (
-  sku gin_trgm_ops
 );
 
 -- ==============================================================================
@@ -320,8 +319,27 @@ ALTER TABLE inventory_balances ADD CONSTRAINT chk_inv_total_stock CHECK (total_s
 
 -- 6.2 Optimistic Locking (version columns)
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS version integer NOT NULL DEFAULT 1;
-ALTER TABLE products ADD COLUMN IF NOT EXISTS version integer NOT NULL DEFAULT 1;
-ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS version integer NOT NULL DEFAULT 1;
+
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'products') THEN
+    ALTER TABLE products ADD COLUMN IF NOT EXISTS version integer NOT NULL DEFAULT 1;
+    CREATE INDEX IF NOT EXISTS idx_products_collection ON products (collection);
+    CREATE INDEX IF NOT EXISTS idx_products_category ON products (category);
+    CREATE INDEX IF NOT EXISTS idx_products_supplier ON products (supplier_id);
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'product_variants') THEN
+    ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS version integer NOT NULL DEFAULT 1;
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'warehouse_stock') THEN
+    CREATE INDEX IF NOT EXISTS idx_warehouse_stock_city ON warehouse_stock (city);
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'collection_prices') THEN
+    CREATE INDEX IF NOT EXISTS idx_collection_prices_type ON collection_prices (price_type_id);
+  END IF;
+END $$;
 
 -- ==============================================================================
 -- 7. HIGH-PERFORMANCE QUERY INDEXES
@@ -330,16 +348,35 @@ ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS version integer NOT NULL D
 CREATE INDEX IF NOT EXISTS idx_orders_user_created ON orders (user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_order_items_sku ON order_items (sku);
 CREATE INDEX IF NOT EXISTS idx_order_items_product_id ON order_items (product_id);
-CREATE INDEX IF NOT EXISTS idx_products_collection ON products (collection);
-CREATE INDEX IF NOT EXISTS idx_products_category ON products (category);
-CREATE INDEX IF NOT EXISTS idx_products_supplier ON products (supplier_id);
-CREATE INDEX IF NOT EXISTS idx_warehouse_stock_city ON warehouse_stock (city);
-CREATE INDEX IF NOT EXISTS idx_collection_prices_type ON collection_prices (price_type_id);
 CREATE INDEX IF NOT EXISTS idx_leads_kanban ON leads (kanban_stage);
 
 -- ==============================================================================
--- 8. PARTITIONED AUDIT LOGS (RANGE BY MONTH)
+-- 8. AUDIT LOGS (BASE TABLE & PARTITIONED V2)
 -- ==============================================================================
+
+CREATE TABLE IF NOT EXISTS integration_audit_logs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_type text NOT NULL,
+  direction text NOT NULL,
+  status text NOT NULL,
+  status_code integer,
+  latency_ms integer,
+  source text NOT NULL,
+  payload jsonb,
+  error_message text,
+  correlation_id text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE integration_audit_logs ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "admin_read_audit_logs" ON integration_audit_logs;
+CREATE POLICY "admin_read_audit_logs" ON integration_audit_logs FOR SELECT
+  TO authenticated USING (true);
+
+DROP POLICY IF EXISTS "service_insert_audit_logs" ON integration_audit_logs;
+CREATE POLICY "service_insert_audit_logs" ON integration_audit_logs FOR INSERT
+  TO anon, authenticated WITH CHECK (true);
 
 CREATE TABLE IF NOT EXISTS integration_audit_logs_v2 (
   id uuid DEFAULT gen_random_uuid(),
@@ -599,6 +636,9 @@ DO $$ BEGIN
     ALTER TABLE orders ADD COLUMN contract_id uuid REFERENCES contracts(id) ON DELETE SET NULL;
   END IF;
 END $$;
+
+-- 11.4 Reload PostgREST schema cache immediately
+NOTIFY pgrst, 'reload schema';
 
 COMMIT;
 
