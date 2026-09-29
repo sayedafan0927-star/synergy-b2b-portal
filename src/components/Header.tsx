@@ -20,7 +20,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
   const [offlineCount, setOfflineCount] = useState(0);
   const [isSyncingOffline, setIsSyncingOffline] = useState(false);
   const { totalItems } = useCart();
-  const { user, profile, isAdmin, realIsAdmin } = useAuth();
+  const { user, profile, isAdmin, realIsAdmin, isImpersonating, stopImpersonation } = useAuth();
   const isEffectiveAdmin = Boolean(isAdmin || realIsAdmin);
   const { language, setLanguage, t } = useLanguage();
   const { currency, setCurrency } = useCurrency();
@@ -69,6 +69,36 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
           : 'bg-white'
       }`}
     >
+      {/* Impersonation Banner inside fixed header */}
+      {isImpersonating && profile && (
+        <div className="bg-amber-500 text-white px-3 sm:px-4 py-1.5 sm:py-2 text-xs flex items-center justify-between gap-2 shadow-xs border-b border-amber-600/30">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="flex h-2 w-2 rounded-full bg-white animate-ping shrink-0" />
+            <span className="truncate">
+              <span className="hidden sm:inline">Режим просмотра от имени: </span>
+              <span className="sm:hidden font-medium">Просмотр: </span>
+              <strong>{profile.full_name || profile.company_name || 'Пользователь'}</strong>
+              {profile.company_name && profile.full_name && profile.company_name !== profile.full_name && (
+                <span className="hidden md:inline text-amber-100"> ({profile.company_name})</span>
+              )}
+              {profile.price_type && (
+                <span className="ml-1.5 bg-amber-600/90 text-amber-100 px-1.5 py-0.5 rounded text-[10px] font-mono shrink-0">
+                  Тип цен: {profile.price_type}
+                </span>
+              )}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={stopImpersonation}
+            className="rounded bg-white px-2.5 py-1 text-[11px] sm:text-xs font-bold text-amber-900 shadow hover:bg-amber-50 active:scale-95 transition-all shrink-0 whitespace-nowrap cursor-pointer"
+          >
+            <span className="hidden sm:inline">Вернуться в свой аккаунт</span>
+            <span className="sm:hidden">Выйти</span>
+          </button>
+        </div>
+      )}
+
       <div className="container-w">
         <div className="flex h-16 items-center justify-between lg:h-18">
           <button
