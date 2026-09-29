@@ -153,6 +153,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
+  if (action === 'display_settings' && req.method === 'POST') {
+    const auth = await authenticateRequest(req, { requiredRoles: ['admin'], allowServerKey: true });
+    if (!auth.isAuthenticated || auth.error) {
+      return res.status(403).json({ success: false, error: auth.error || 'Access denied' });
+    }
+    const submittedSettings = req.body?.settings || req.body;
+    if (submittedSettings) {
+      displaySettingsCache = {
+        data: { success: true, ...submittedSettings },
+        expiry: Date.now() + 60000,
+      };
+    }
+  }
+
   // 1.0. Каталог, карточка товара и серверная пагинация (модульный обработчик)
   if (action === 'catalog' || action === 'catalog_normalized' || action === 'product' || action === 'catalog_paginated') {
     if (await handleCatalogRequests(req, res, action, supabase)) {

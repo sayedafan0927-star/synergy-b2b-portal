@@ -1,6 +1,7 @@
 import type { Warehouse, Product, ProductVariant } from '@/types';
 import type { Profile } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { getAuthHeaders } from '@/lib/erpApi';
 
 export interface ClientWarehouseSettings {
   mode: 'auto' | 'custom';
@@ -125,32 +126,19 @@ export function saveClientWarehouseSettings(
     localStorage.setItem(STORAGE_KEY, JSON.stringify(allRules));
 
     // Персистируем настройки в PostgreSQL через защищенный серверный API
-    let authHeaders: Record<string, string> = {};
-    try {
-      const sbKey = Object.keys(localStorage).find(k => k.startsWith('sb-') && k.endsWith('-auth-token'));
-      if (sbKey) {
-        const item = localStorage.getItem(sbKey);
-        if (item) {
-          const parsed = JSON.parse(item);
-          const accessToken = parsed?.access_token || parsed?.currentSession?.access_token;
-          if (accessToken) authHeaders['Authorization'] = `Bearer ${accessToken}`;
-        }
+    getAuthHeaders().then(authHeaders => {
+      if (!authHeaders['Authorization']) {
+        console.warn('[warehouseVisibility] Missing Authorization header for warehouse rules sync');
       }
-      const sessionStr = sessionStorage.getItem('synergy:auth_session');
-      if (sessionStr && !authHeaders['Authorization']) {
-        const parsedSession = JSON.parse(sessionStr);
-        if (parsedSession?.token) authHeaders['Authorization'] = `Bearer ${parsedSession.token}`;
-      }
-    } catch {}
-
-    fetch('/api/warehouse-rules', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...authHeaders,
-      },
-      body: JSON.stringify({ clientId: cleanKey, settings: payload }),
-    }).catch(err => console.warn('[warehouseVisibility] Background sync to PostgreSQL failed:', err));
+      fetch('/api/warehouse-rules', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders,
+        },
+        body: JSON.stringify({ clientId: cleanKey, settings: payload }),
+      }).catch(err => console.warn('[warehouseVisibility] Background sync to PostgreSQL failed:', err));
+    }).catch(() => {});
 
     triggerWarehouseSettingsReload();
   } catch (err) {
@@ -172,6 +160,15 @@ export function resetClientWarehouseSettings(clientIdOrPartnerId: string | numbe
     delete allRules[cleanKey];
 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(allRules));
+
+    // Синхронизируем сброс (удаление) с PostgreSQL
+    getAuthHeaders().then(authHeaders => {
+      fetch(`/api/warehouse-rules?client_id=${encodeURIComponent(cleanKey)}`, {
+        method: 'DELETE',
+        headers: authHeaders,
+      }).catch(err => console.warn('[warehouseVisibility] Background reset in PostgreSQL failed:', err));
+    }).catch(() => {});
+
     triggerWarehouseSettingsReload();
   } catch (err) {
     console.error('[warehouseVisibility] Failed to reset settings:', err);

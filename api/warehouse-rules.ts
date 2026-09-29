@@ -120,5 +120,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
+  // 3. DELETE: Сбросить правила для контрагента (Удалить кастомное правило)
+  if (req.method === 'DELETE') {
+    const { authenticateRequest } = await import('./lib/authGuard');
+    const authCtx = await authenticateRequest(req, { requiredRoles: ['admin'], allowServerKey: true });
+    if (!authCtx.isAuthenticated || authCtx.error) {
+      return res.status(403).json({
+        success: false,
+        error: authCtx.error || 'Сброс правил видимости складов доступен только администраторам.',
+      });
+    }
+
+    try {
+      const clientId = req.query.client_id ? String(req.query.client_id).trim() : req.body?.clientId;
+      if (!clientId) {
+        return res.status(400).json({ success: false, error: 'clientId обязателен' });
+      }
+
+      const { error: delErr } = await supabase
+        .from('client_warehouse_rules')
+        .delete()
+        .eq('client_id', String(clientId).trim());
+
+      if (delErr) {
+        console.warn('[Warehouse Rules API] Delete error:', delErr.message);
+        return res.status(500).json({ success: false, error: delErr.message });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: `Правила видимости складов для клиента ${clientId} сброшены (удалены).`,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err?.message });
+    }
+  }
+
   return res.status(405).json({ success: false, error: 'Method not allowed' });
 }

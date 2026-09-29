@@ -1431,7 +1431,7 @@ function ClientDemoPanel({ client }: { client: { id: string; full_name: string; 
               items: (o.items || []).map((it) => ({
                 id: String(it.id),
                 productName: it.name || 'Ковер',
-                collection: it.name.split(' ')[0] || 'Коллекция',
+                collection: (it.name || '').split(' ')[0] || 'Коллекция',
                 size: it.size || 'Стандарт',
                 sku: it.sku || '',
                 warehouse: o.warehouse_name || 'Основной склад',
