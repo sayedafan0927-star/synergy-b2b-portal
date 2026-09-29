@@ -47,6 +47,10 @@
     {
       "path": "/api/cron/reconcile-stock",
       "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/cron/uptime-check",
+      "schedule": "*/5 * * * *"
     }
   ],
   "rewrites": [
