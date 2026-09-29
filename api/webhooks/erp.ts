@@ -13,14 +13,17 @@ const ALLOWED_KEYS = new Set([
 
 const SECRET_KEY = process.env.PORTAL_SECRET_KEY || process.env.ERP_PORTAL_SECRET || '';
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
 
-const supabaseServer = createClient(SUPABASE_URL, SUPABASE_KEY);
+const supabaseServer = (SUPABASE_URL && SUPABASE_KEY)
+  ? createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })
+  : null as any;
 
 /**
  * Отправка сообщения в Supabase Realtime Broadcast Channel
  */
 async function broadcastLiveUpdate(event: string, payload: any) {
+  if (!supabaseServer) return;
   try {
     const channel = supabaseServer.channel('portal_live_updates');
     await channel.send({
@@ -309,11 +312,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           matchConditions.push(`order_number.eq.${order_id}`);
         }
 
-        if (matchConditions.length > 0) {
-          await supabaseServer
+        if (matchConditions.length > 0 && supabaseServer) {
+          const { data: updatedOrders } = await supabaseServer
             .from('orders')
             .update(updatePayload)
-            .or(matchConditions.join(','));
+            .or(matchConditions.join(','))
+            .select('id');
+
+          // КАСКАДНОЕ ОБНОВЛЕНИЕ ДОЧЕРНИХ ПОДЗАКАЗОВ МУЛЬТИСКЛАДА (parent_order_id)
+          if (updatedOrders && updatedOrders.length > 0) {
+            const masterIds = updatedOrders.map((o: any) => o.id);
+            await supabaseServer
+              .from('orders')
+              .update(updatePayload)
+              .in('parent_order_id', masterIds);
+          }
         }
       } catch (dbErr) {
         console.warn('[Webhook ERP] Supabase sync notice:', dbErr);
@@ -540,6 +553,61 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         event: 'client_synced',
         counterparty_id: counterpartyId,
         message: `Client ${counterpartyId} synced successfully.`,
+        processed_at: new Date().toISOString(),
+      });
+    }
+
+    // ───────────────────────────────────────────────
+    // 7. Событие: discount_rules_updated (Обновление сетки скидок / типов цен)
+    // ───────────────────────────────────────────────
+    if (event === 'discount_rules_updated') {
+      const rawRules = Array.isArray(payload.rules) ? payload.rules : (payload.rule ? [payload.rule] : []);
+      let savedCount = 0;
+      if (rawRules.length > 0 && supabaseServer) {
+        try {
+          for (const r of rawRules) {
+            const priceTypeId = String(r.price_type_id || r.price_type || '').toLowerCase().trim();
+            const discountPercent = Number(r.discount_percent ?? r.discount ?? 0);
+            if (priceTypeId) {
+              await supabaseServer
+                .from('discount_rules')
+                .upsert({
+                  price_type_id: priceTypeId,
+                  discount_percent: discountPercent,
+                  is_active: r.is_active !== false,
+                  valid_from: r.valid_from || new Date().toISOString(),
+                  valid_to: r.valid_to || null,
+                  updated_at: new Date().toISOString(),
+                }, { onConflict: 'price_type_id' });
+              savedCount++;
+            }
+          }
+        } catch (ruleErr) {
+          console.warn('[Webhook ERP] discount_rules upsert notice:', ruleErr);
+        }
+      }
+
+      await broadcastLiveUpdate('discount_rules_updated', {
+        rules_count: savedCount,
+        timestamp,
+      });
+
+      await recordAuditLog({
+        eventType: 'discount_rules_updated',
+        direction: 'inbound',
+        status: 'success',
+        source: 'ERP Webhook',
+        payload: {
+          event_id: eventId || payload.event_id,
+          saved_count: savedCount,
+        },
+      });
+
+      return res.status(200).json({
+        success: true,
+        event: 'discount_rules_updated',
+        saved_rules: savedCount,
+        message: `Successfully synced ${savedCount} discount rules from ERP.`,
         processed_at: new Date().toISOString(),
       });
     }

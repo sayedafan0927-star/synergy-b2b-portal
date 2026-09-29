@@ -1,11 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
 
-const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_KEY, {
-  auth: { persistSession: false },
-});
+const supabaseAdmin = (SUPABASE_URL && SUPABASE_KEY)
+  ? createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })
+  : null as any;
 
 export interface OrderItemInput {
   sku?: string;
@@ -73,24 +73,26 @@ async function getDynamicDiscountPercent(priceType?: string | null): Promise<num
   if (!priceType) return 0;
   const str = priceType.toLowerCase().trim();
 
-  try {
-    const nowIso = new Date().toISOString();
-    const { data: rule } = await supabaseAdmin
-      .from('discount_rules')
-      .select('discount_percent')
-      .eq('price_type_id', str)
-      .eq('is_active', true)
-      .lte('valid_from', nowIso)
-      .or(`valid_to.is.null,valid_to.gte.${nowIso}`)
-      .order('discount_percent', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+  if (supabaseAdmin) {
+    try {
+      const nowIso = new Date().toISOString();
+      const { data: rule } = await supabaseAdmin
+        .from('discount_rules')
+        .select('discount_percent')
+        .eq('price_type_id', str)
+        .eq('is_active', true)
+        .lte('valid_from', nowIso)
+        .or(`valid_to.is.null,valid_to.gte.${nowIso}`)
+        .order('discount_percent', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-    if (rule?.discount_percent !== undefined) {
-      return Number(rule.discount_percent);
+      if (rule?.discount_percent !== undefined) {
+        return Number(rule.discount_percent);
+      }
+    } catch (err) {
+      console.warn('[PricingValidator] Discount rule query notice:', err);
     }
-  } catch (err) {
-    console.warn('[PricingValidator] Discount rule query notice:', err);
   }
 
   // Fallback значения
@@ -135,9 +137,13 @@ export function parseDimensions(sizeStr: string): { width: number; length: numbe
  * Серверная валидация цен и пересчет заказа (Anti-Tamper Pricing Guard)
  */
 export async function validateAndPriceOrder(
-  rawItems: OrderItemInput[],
+  rawItemsOrPayload: any,
   priceType = 'wholesale'
 ): Promise<PricingValidationResult> {
+  const rawItems: OrderItemInput[] = Array.isArray(rawItemsOrPayload)
+    ? rawItemsOrPayload
+    : (Array.isArray(rawItemsOrPayload?.items) ? rawItemsOrPayload.items : []);
+
   if (!Array.isArray(rawItems) || rawItems.length === 0) {
     return {
       valid: false,
@@ -155,7 +161,7 @@ export async function validateAndPriceOrder(
 
   // Загружаем актуальные базовые цены из PostgreSQL (product_variants)
   let dbVariantsMap = new Map<string, { base_price: number; sku: string; size: string; product_id: string }>();
-  if (skusToLookup.length > 0) {
+  if (skusToLookup.length > 0 && supabaseAdmin) {
     try {
       const { data: dbVariants } = await supabaseAdmin
         .from('product_variants')
@@ -267,3 +273,5 @@ export async function validateAndPriceOrder(
     items: validatedItems,
   };
 }
+
+export const validateOrderPricing = validateAndPriceOrder;

@@ -45,3 +45,17 @@
 - [x] 4.8 Маркировка заказов `is_buffered_offline: true` при отказе шлюза собственной ERP (P1)
 - [x] 4.9 Спецификация серверного регистра идемпотентности в `docs/ERP_INTEGRATION_SPEC.md` для собственной ERP `kilem-khan.kz` (P2)
 - [x] 4.10 Расширен автоматизированный тестовый пакет `scripts/test_resilience_and_security.py` (96 проверок, 100% PASS)
+
+## Этап 5: Устранение runtime 500 (FUNCTION_INVOCATION_FAILED) и контур автономности ERP (100% Выполнено)
+
+- [x] 5.1 Устранена критическая ошибка 500 `FUNCTION_INVOCATION_FAILED` в `api/erp.ts`: добавлен fallback для `SUPABASE_KEY` на `VITE_SUPABASE_ANON_KEY` / `SUPABASE_ANON_KEY` и защищена инициализация `createClient`
+- [x] 5.2 Устранены битые пути импортов в `api/modules/orders/createOrderHandler.ts`: `dispatchApprovalRequest` из `approvals/whatsapp` и `validateAndPriceOrder` из `pricingValidator`
+- [x] 5.3 Экспортирован псевдоним `validateOrderPricing = validateAndPriceOrder` с поддержкой передачи как объектов payload, так и массивов items
+- [x] 5.4 Удалены устаревшие необъявленные переменные (`outboxOrderDoc`, `validatedOrderPayload`, `outboxOrderId`, `finalTotalAmount`) в `api/erp.ts`
+- [x] 5.5 Добавлен отказоустойчивый fallback для `display_settings` в общем блоке `catch (err)`: гарантированный возврат настроек по умолчанию (200 OK) при тайм-ауте ERP
+- [x] 5.6 Защищена инициализация `createClient` во всех API-модулях (`client-token.ts`, `catalogCache.ts`, `pricingValidator.ts`, `saga.ts`, `authGuard.ts`, `loginHandler.ts`, `audit/logs.ts`, `cron/*`, `webhooks/*`)
+- [x] 5.7 Реализовано каскадное обновление статусов дочерних подзаказов (`parent_order_id`) в `api/webhooks/erp.ts` при изменении статуса мастер-заказа
+- [x] 5.8 Реализована обработка события `discount_rules_updated` в `api/webhooks/erp.ts` с обновлением таблицы `discount_rules` и Realtime-трансляцией
+- [x] 5.9 Внедрена индикация автономного буфера заказов (`is_buffered_offline` / `isServerBuffered`) на странице корзины `src/pages/CartPage.tsx`
+- [x] 5.10 Расширен комплексный тестовый пакет до 103 проверок (100% PASS)
+

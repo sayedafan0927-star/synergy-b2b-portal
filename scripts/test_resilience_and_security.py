@@ -406,7 +406,34 @@ test_assert("canonical_endpoint" in edge_code and "410" in edge_code, "create-or
 test_assert("https://b2b.synergy.kz, https://synergy-b2b-portal.vercel.app" not in edge_code, "create-order Edge Function eliminates invalid multi-origin CORS header")
 
 # ------------------------------------------------------------------------------
-# 15. Summary Report
+# 15. Serverless Runtime Stability & ERP Autonomous Buffering Verification
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}15. Verifying Serverless Runtime Stability & Autonomous Buffering...{RESET}")
+
+with open(erp_path, "r", encoding="utf-8") as fp:
+    fresh_erp_code = fp.read()
+test_assert("VITE_SUPABASE_ANON_KEY" in fresh_erp_code, "api/erp.ts provides fallback for SUPABASE_KEY to prevent runtime crash")
+test_assert("outboxOrderDoc" not in fresh_erp_code, "api/erp.ts eliminated all undeclared variable references")
+test_assert("validatedOrderPayload" not in fresh_erp_code, "api/erp.ts eliminated validatedOrderPayload reference")
+
+create_order_handler_path = os.path.join(ROOT_DIR, "api", "modules", "orders", "createOrderHandler.ts")
+with open(create_order_handler_path, "r", encoding="utf-8") as fp:
+    order_handler_code = fp.read()
+test_assert("from '../../approvals/whatsapp'" in order_handler_code, "createOrderHandler.ts imports dispatchApprovalRequest from approvals/whatsapp")
+
+webhook_erp_path = os.path.join(ROOT_DIR, "api", "webhooks", "erp.ts")
+with open(webhook_erp_path, "r", encoding="utf-8") as fp:
+    fresh_webhook_erp = fp.read()
+test_assert("parent_order_id" in fresh_webhook_erp, "api/webhooks/erp.ts cascades status updates to child sub-orders")
+test_assert("discount_rules_updated" in fresh_webhook_erp, "api/webhooks/erp.ts handles discount_rules_updated event")
+
+cart_page_path = os.path.join(ROOT_DIR, "src", "pages", "CartPage.tsx")
+with open(cart_page_path, "r", encoding="utf-8") as fp:
+    fresh_cart_code = fp.read()
+test_assert("isServerBuffered" in fresh_cart_code, "CartPage.tsx implements isServerBuffered state for offline buffer confirmation")
+
+# ------------------------------------------------------------------------------
+# 16. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

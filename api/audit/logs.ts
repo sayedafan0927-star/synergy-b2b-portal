@@ -3,9 +3,11 @@ import { createClient } from '@supabase/supabase-js';
 import { applyCorsHeaders } from '../lib/cors';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+const supabase = (SUPABASE_URL && SUPABASE_KEY)
+  ? createClient(SUPABASE_URL, SUPABASE_KEY)
+  : null as any;
 
 import { logger } from '../lib/logger';
 
@@ -45,6 +47,7 @@ export async function recordAuditLog(entry: AuditLogEntry): Promise<void> {
   }
 
   // 2. Персистенция в БД Supabase
+  if (!supabase) return;
   try {
     const payloadObj = entry.payload ? { ...entry.payload } : {};
     if (entry.correlationId) {

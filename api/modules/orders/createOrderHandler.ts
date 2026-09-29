@@ -10,10 +10,10 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { validateOrderPricing, resolveWarehouseId } from '../../lib/pricingValidator';
+import { validateOrderPricing, validateAndPriceOrder, resolveWarehouseId } from '../../lib/pricingValidator';
 import { releaseAllReservedStock, ReservedStockItem } from '../../lib/saga';
 import { logger } from '../../lib/logger';
-import { dispatchApprovalRequest } from '../../approvals/action';
+import { dispatchApprovalRequest } from '../../approvals/whatsapp';
 import { recordFailure, recordSuccess } from '../../lib/circuitBreaker';
 
 export interface CreateOrderContext {

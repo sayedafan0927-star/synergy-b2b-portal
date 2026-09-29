@@ -78,6 +78,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
   const [orderDocNumber, setOrderDocNumber] = useState<string | null>(null);
   const [splitOrders, setSplitOrders] = useState<SplitSubOrder[] | null>(null);
   const [isOfflineQueued, setIsOfflineQueued] = useState(false);
+  const [isServerBuffered, setIsServerBuffered] = useState(false);
   const [isWaitingApproval, setIsWaitingApproval] = useState(false);
   const [debtReport, setDebtReport] = useState<any | null>(null);
   const [activeCollection, setActiveCollection] = useState<string | null>(null);
@@ -172,6 +173,8 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
           <h1 className="font-display text-2xl font-bold text-slate-900 sm:text-3xl">
             {isOfflineQueued
               ? 'Заказ сохранен в офлайн-очереди!'
+              : isServerBuffered
+              ? 'Заказ зафиксирован в автономном буфере!'
               : isWaitingApproval
               ? 'Заказ отправлен на согласование!'
               : 'Заказ оформлен!'}
@@ -179,6 +182,8 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
           <div className={`mt-4 rounded-xl border px-6 py-4 ${
             isOfflineQueued
               ? 'border-sky-200 bg-sky-50'
+              : isServerBuffered
+              ? 'border-amber-200 bg-amber-50'
               : isWaitingApproval
               ? 'border-amber-200 bg-amber-50'
               : 'border-emerald-200 bg-emerald-50'
@@ -186,15 +191,19 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
             <p className={`text-sm mb-1 ${
               isOfflineQueued
                 ? 'text-sky-700'
+                : isServerBuffered
+                ? 'text-amber-700'
                 : isWaitingApproval
                 ? 'text-amber-700'
                 : 'text-emerald-700'
             }`}>
-              {isOfflineQueued ? 'Номер в локальной очереди' : 'Номер заказа'}
+              {isOfflineQueued ? 'Номер в локальной очереди' : isServerBuffered ? 'Номер брони в буфере' : 'Номер заказа'}
             </p>
             <p className={`text-2xl font-bold font-mono ${
               isOfflineQueued
                 ? 'text-sky-800'
+                : isServerBuffered
+                ? 'text-amber-800'
                 : isWaitingApproval
                 ? 'text-amber-800'
                 : 'text-emerald-800'
@@ -233,11 +242,13 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
           <p className="mt-4 max-w-md text-slate-500">
             {isOfflineQueued
               ? 'Соединение с сетью отсутствует или нестабильно. Заказ надежно сохранен в локальной базе и будет автоматически передан в ERP при восстановлении интернета.'
+              : isServerBuffered
+              ? 'Шлюз ERP временно недоступен или на регламентном обслуживании. Товар надежно зарезервирован на складе портала и будет автоматически синхронизирован с ERP сервисом Outbox в течение нескольких минут.'
               : isWaitingApproval
               ? 'Запрос на согласование условий отгрузки отправлен вашему региональному менеджеру в WhatsApp. Как только заказ будет одобрен, вам придет подтверждающее сообщение в WhatsApp.'
               : 'Наш менеджер свяжется с вами для подтверждения заказа.'}
           </p>
-          <button onClick={() => { setOrderDocNumber(null); setSplitOrders(null); setIsOfflineQueued(false); onNavigate('catalog'); }} className="btn-primary mt-8">
+          <button onClick={() => { setOrderDocNumber(null); setSplitOrders(null); setIsOfflineQueued(false); setIsServerBuffered(false); onNavigate('catalog'); }} className="btn-primary mt-8">
             Продолжить покупки
           </button>
         </div>
@@ -331,6 +342,8 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
         } else {
           setSplitOrders(null);
         }
+        const buffered = Boolean(data.order?.is_buffered || (data.order as any)?.is_buffered_offline || data.is_buffered || (data as any)?.is_buffered_offline);
+        setIsServerBuffered(buffered);
         setIsOfflineQueued(false);
 
         if (requiresApproval) {

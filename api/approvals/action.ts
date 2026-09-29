@@ -3,13 +3,15 @@ import { createClient } from '@supabase/supabase-js';
 import { verifySignedDecisionToken } from './whatsapp';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
 const TARGET_ERP_URL = process.env.ERP_API_URL || 'https://kilem-khan.kz/api/sin/public/api_portal.php';
 const SERVER_ERP_KEY = process.env.ERP_API_KEY || '';
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
-  auth: { persistSession: false },
-});
+const supabase = (SUPABASE_URL && SUPABASE_KEY)
+  ? createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })
+  : null as any;
+
+export { dispatchApprovalRequest } from './whatsapp';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // Извлекаем токен из query или body
