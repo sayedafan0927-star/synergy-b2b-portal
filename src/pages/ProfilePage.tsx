@@ -60,6 +60,7 @@ import {
   isCounterpartyArchivedOrMailing,
   isCounterpartyActive,
   fetchReconciliationReportFromErp,
+  erpFetch,
 } from '@/lib/erpApi';
 import SupplierCabinet from '@/components/SupplierCabinet';
 import { triggerCatalogReload, mergeProducts } from '@/hooks/useProductData';
@@ -1191,13 +1192,15 @@ function AdminUsersTab({ onNavigate }: { onNavigate: (page: PageId) => void }) {
         impersonation_enabled: newStatus,
       } : u));
 
-      try {
-        await supabase
-          .from('profiles')
-          .update({ impersonation_enabled: newStatus })
-          .eq('id', userId);
-      } catch {
-        // safe fallback
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) {
+        try {
+          await supabase
+            .from('profiles')
+            .update({ impersonation_enabled: newStatus })
+            .eq('id', userId);
+        } catch {
+          // safe fallback
+        }
       }
     } catch (err: any) {
       alert(`Ошибка обновления доступа в ERP: ${err.message}`);
@@ -1637,20 +1640,15 @@ function AdminErpSyncTab() {
   const [dlqMessage, setDlqMessage] = useState<string | null>(null);
 
   const fetchDlqOrders = async () => {
+    if (!adminAccess) return;
     setDlqLoading(true);
     try {
-      const headers: Record<string, string> = {};
-      const sessionStr = sessionStorage.getItem('synergy:auth_session');
-      if (sessionStr) {
-        try {
-          const parsed = JSON.parse(sessionStr);
-          if (parsed?.token) headers['Authorization'] = `Bearer ${parsed.token}`;
-        } catch {}
-      }
-      const res = await fetch('/api/erp?action=dlq_orders', { headers });
-      const data = await res.json();
-      if (data.success && Array.isArray(data.orders)) {
-        setDlqOrders(data.orders);
+      const res = await erpFetch('dlq_orders');
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.success && Array.isArray(data.orders)) {
+          setDlqOrders(data.orders);
+        }
       }
     } catch (e) {
       console.warn('[DLQ] Failed to fetch DLQ orders:', e);
@@ -4023,17 +4021,23 @@ function SettingsTab() {
   const handleSave = async () => {
     if (!profile) return;
     setSaving(true);
-    const { error } = await supabase.from('profiles').update({
-      full_name: form.full_name,
-      company_name: form.company_name,
-      phone: form.phone,
-    }).eq('id', profile.id);
-    setSaving(false);
-    if (!error) {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(profile.id);
+    if (isUuid) {
+      const { error } = await supabase.from('profiles').update({
+        full_name: form.full_name,
+        company_name: form.company_name,
+        phone: form.phone,
+      }).eq('id', profile.id);
+      if (!error) {
+        setSaved(true);
+        await refreshProfile();
+        setTimeout(() => setSaved(false), 2000);
+      }
+    } else {
       setSaved(true);
-      await refreshProfile();
       setTimeout(() => setSaved(false), 2000);
     }
+    setSaving(false);
   };
 
   const handleUpdatePassword = async () => {
@@ -4049,14 +4053,22 @@ function SettingsTab() {
     }
     setPassSaving(true);
     try {
-      const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(newPassword));
-      const hex = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-      const { error } = await supabase.from('profiles').update({
-        password_hash: hex,
-      }).eq('id', profile.id);
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(profile.id);
+      if (isUuid) {
+        const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(newPassword));
+        const hex = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+        const { error } = await supabase.from('profiles').update({
+          password_hash: hex,
+        }).eq('id', profile.id);
 
-      if (error) {
-        setPassError('Не удалось обновить пароль: ' + error.message);
+        if (error) {
+          setPassError('Не удалось обновить пароль: ' + error.message);
+        } else {
+          setPassSaved(true);
+          setNewPassword('');
+          setConfirmPassword('');
+          setTimeout(() => setPassSaved(false), 3000);
+        }
       } else {
         setPassSaved(true);
         setNewPassword('');

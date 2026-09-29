@@ -53,12 +53,20 @@ interface AuthContextValue {
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
 
+export function getDeterministicEmployeeUuid(empId: string | number): string {
+  const cleanId = String(empId).replace(/\D+/g, '') || '1';
+  return `00000000-0000-4000-8000-${cleanId.padStart(12, '0')}`;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchProfile = useCallback(async (userId: string) => {
+    if (!userId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) {
+      return;
+    }
     const { data, error } = await supabase
       .from('profiles')
       .select('id, role, partner_id, full_name, company_name, phone, manager_id, price_type, impersonation_enabled')
@@ -245,7 +253,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInAsEmployee = useCallback((employee: { id: number | string; name: string; role: UserRole; phone?: string }) => {
     const employeeProfile: Profile = {
-      id: `erp-employee-${employee.id}`,
+      id: getDeterministicEmployeeUuid(employee.id),
       role: employee.role,
       partner_id: null,
       full_name: employee.name,
@@ -393,7 +401,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (res.user_type === 'employee' && res.employee) {
         const emp = res.employee;
         const employeeProfile: Profile = {
-          id: `erp-employee-${emp.id}`,
+          id: getDeterministicEmployeeUuid(emp.id),
           role: emp.role as UserRole,
           partner_id: null,
           full_name: emp.name,

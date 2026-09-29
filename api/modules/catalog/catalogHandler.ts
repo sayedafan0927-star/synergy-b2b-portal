@@ -62,8 +62,29 @@ export async function handleCatalogRequests(
           return true;
         }
       }
-      res.status(404).json({ success: false, error: 'Товар не найден в каталоге' });
-      return true;
+
+      // 2.2 Проверка в локальной базе данных Supabase
+      if (supabase) {
+        try {
+          const { data: dbProduct } = await supabase
+            .from('products')
+            .select(`
+              *,
+              variants:product_variants(*)
+            `)
+            .or(`id.eq.${targetId},article.ilike.%${targetId}%`)
+            .maybeSingle();
+
+          if (dbProduct) {
+            res.setHeader('X-Cache', 'DB_FALLBACK');
+            res.status(200).json({ success: true, product: dbProduct });
+            return true;
+          }
+        } catch {}
+      }
+
+      // 2.3 Позволяем шлюзу erp.ts выполнить поиск во внешней учетной системе ERP
+      return false;
     } catch (e: any) {
       res.status(500).json({ success: false, error: e?.message });
       return true;

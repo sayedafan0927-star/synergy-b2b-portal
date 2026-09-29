@@ -81,12 +81,14 @@ export default function SupplierCabinet({ profile, isAdmin: propIsAdmin }: Suppl
     return () => { cancelled = true; };
   }, []);
 
-  // Выбираем ID поставщика: для администратора 0 (Основной Склад Астана), иначе partner_id или 0
+  // Выбираем ID поставщика: для администратора ID первой фабрики, иначе partner_id или ID первой фабрики
   const defaultSupplierId = useMemo(() => {
-    if (isAdmin) return 0;
+    if (isAdmin) {
+      return suppliersList[0]?.id || 1;
+    }
     const parsed = Number(profile.partner_id);
-    return !isNaN(parsed) && parsed > 0 ? parsed : 0;
-  }, [isAdmin, profile.partner_id]);
+    return !isNaN(parsed) && parsed > 0 ? parsed : (suppliersList[0]?.id || 1);
+  }, [isAdmin, profile.partner_id, suppliersList]);
 
   const [selectedSupplierId, setSelectedSupplierId] = useState<number>(defaultSupplierId);
   const [activeSubTab, setActiveSubTab] = useState<'stock' | 'releases' | 'inbound' | 'defects'>('stock');
@@ -139,6 +141,10 @@ export default function SupplierCabinet({ profile, isAdmin: propIsAdmin }: Suppl
   // 1. Загрузка географии остатков с защитой от Race Condition
   useEffect(() => {
     let cancelled = false;
+    if (!selectedSupplierId || Number(selectedSupplierId) <= 0) {
+      setLoadingStock(false);
+      return;
+    }
     setLoadingStock(true);
     setStockError(null);
 
@@ -167,6 +173,10 @@ export default function SupplierCabinet({ profile, isAdmin: propIsAdmin }: Suppl
   // 2. Загрузка акта реализации с защитой от Race Condition
   useEffect(() => {
     if (activeSubTab !== 'releases') return;
+    if (!selectedSupplierId || Number(selectedSupplierId) <= 0) {
+      setLoadingReleases(false);
+      return;
+    }
 
     if (startDate > endDate) {
       setReleasesError('Начальная дата периода не может быть позже конечной даты');
