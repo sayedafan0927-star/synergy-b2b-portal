@@ -10,6 +10,8 @@ import { authenticateRequest } from './lib/authGuard';
 import { validateAndPriceOrder } from './lib/pricingValidator';
 import { applyCorsHeaders } from './lib/cors';
 import { checkCircuit, recordSuccess, recordFailure } from './lib/circuitBreaker';
+import { handleCreateLead } from './modules/leads';
+import { handleReconciliationReport } from './modules/reconciliation';
 
 // Primary live ERP gateway: https://kilem-khan.kz/api/sin/public/api_portal.php
 // Production router alias per ERP spec: https://crm.kilem-khan.kz/api_portal.php
@@ -278,99 +280,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // 1.03. Прием лидов и заявок с контактных форм B2B-портала
   if (action === 'create_lead' && req.method === 'POST') {
-    try {
-      const payload = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {});
-      const name = String(payload?.name || '').trim();
-      const phone = String(payload?.phone || '').trim();
-
-      if (!name || !phone) {
-        return res.status(400).json({
-          success: false,
-          error: 'Поля "Имя" и "Телефон" обязательны для оформления заявки.',
-        });
-      }
-
-      const company = String(payload?.company || '').trim() || null;
-      const email = String(payload?.email || '').trim() || null;
-      const message = String(payload?.message || '').trim() || null;
-      const source = String(payload?.source || 'Форма заявки с сайта B2B').trim();
-      const kanbanStage = String(payload?.kanban_stage || 'Новые лиды').trim();
-      const generatedLeadId = `lead-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
-
-      // 1. Фиксация лида в базе данных Supabase
-      let savedId = generatedLeadId;
-      try {
-        const { data: leadRow, error: leadErr } = await supabase
-          .from('leads')
-          .insert({
-            name,
-            phone,
-            company,
-            email,
-            message,
-            source,
-            kanban_stage: kanbanStage,
-            status: 'new',
-            created_at: new Date().toISOString(),
-          })
-          .select('id')
-          .maybeSingle();
-
-        if (leadErr) {
-          console.warn('[API Proxy ERP] Supabase leads table insert notice:', leadErr.message);
-        } else if (leadRow?.id) {
-          savedId = leadRow.id;
-        }
-      } catch (dbErr: any) {
-        console.warn('[API Proxy ERP] Leads database persistence warning:', dbErr?.message);
-      }
-
-      // 2. Регистрация в журнале аудита интеграций
-      await recordAuditLog({
-        eventType: 'create_lead',
-        direction: 'inbound',
-        status: 'success',
-        source: 'B2B Portal Contacts Form',
-        correlationId,
-        ip: getClientIp(req),
-        payload: {
-          lead_id: savedId,
-          name,
-          phone,
-          company,
-          email,
-          source,
-        },
-      });
-
-      // 3. Отправка оперативного WhatsApp-уведомления менеджеру
-      const managerPhone = process.env.ADMIN_WHATSAPP_PHONE || '';
-      const notificationText =
-        `📥 *НОВАЯ ЗАЯВКА С B2B ПОРТАЛА*\n\n` +
-        `👤 *Имя:* ${name}\n` +
-        `📞 *Телефон:* ${phone}\n` +
-        (company ? `🏢 *Компания:* ${company}\n` : '') +
-        (email ? `✉️ *Email:* ${email}\n` : '') +
-        (message ? `💬 *Сообщение:* ${message}\n` : '') +
-        `🏷️ *Источник:* ${source}\n` +
-        `⏱️ *Время:* ${new Date().toLocaleString('ru-RU', { timeZone: 'Asia/Almaty' })}`;
-
-      sendWhatsAppMessage(managerPhone, notificationText).catch(waErr => {
-        console.warn('[API Proxy ERP] WhatsApp lead notification error:', waErr);
-      });
-
-      return res.status(200).json({
-        success: true,
-        lead_id: savedId,
-        message: 'Заявка успешно принята. Наш менеджер свяжется с вами в ближайшее время.',
-      });
-    } catch (parseErr: any) {
-      console.error('[API Proxy ERP] Error processing create_lead:', parseErr);
-      return res.status(400).json({
-        success: false,
-        error: `Некорректный запрос заявки: ${parseErr?.message}`,
-      });
-    }
+    return handleCreateLead(req, res, supabase, correlationId);
   }
 
   // 1. Специальное действие: запрос согласования заказа в WhatsApp
@@ -414,48 +324,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // 1.1. Запрос официального акта сверки взаиморасчетов с 1С:ERP
   if (action === 'get_reconciliation_report') {
-    const authCtx = await authenticateRequest(req, { allowServerKey: true });
-    if (!authCtx.isAuthenticated) {
-      return res.status(401).json({ success: false, error: authCtx.error || 'Требуется авторизация' });
-    }
-
-    let partnerId = String(req.query.partner_id || req.query.counterpartyId || '');
-    if (authCtx.role === 'client') {
-      partnerId = String(authCtx.partnerId || '');
-      req.query.partner_id = partnerId;
-    }
-
-    const startDate = (req.query.start_date as string) || new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];
-    const endDate = (req.query.end_date as string) || new Date().toISOString().split('T')[0];
-
-    try {
-      const erpUrl = `${TARGET_ERP_URL}?action=get_reconciliation_report&partner_id=${encodeURIComponent(partnerId)}&start_date=${startDate}&end_date=${endDate}&portal_key=${encodeURIComponent(SERVER_ERP_KEY)}`;
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8000);
-      const erpRes = await fetch(erpUrl, { headers: { 'X-Portal-Key': SERVER_ERP_KEY }, signal: controller.signal }).finally(() => clearTimeout(timeout));
-      
-      if (erpRes.ok) {
-        const report = await erpRes.json();
-        await recordAuditLog({
-          eventType: 'reconciliation_report',
-          direction: 'inbound',
-          status: 'success',
-          source: '1C ERP Reconciliation',
-          payload: { partner_id: partnerId, startDate, endDate },
-        });
-        return res.status(200).json(report);
-      } else {
-        throw new Error(`ERP status ${erpRes.status}`);
-      }
-    } catch (erpNetErr: any) {
-      console.warn('[API Proxy ERP] Direct reconciliation ERP fetch failed:', erpNetErr?.message);
-      // Ликвидирована ложная генерация фиктивных актов по заказам! Честный ответ при недоступности учетной системы.
-      return res.status(503).json({
-        success: false,
-        error: 'Сервер 1С:ERP временно недоступен для формирования официального акта сверки взаиморасчетов. Пожалуйста, повторите попытку позже.',
-        details: erpNetErr?.message,
-      });
-    }
+    return handleReconciliationReport(req, res, TARGET_ERP_URL, SERVER_ERP_KEY);
   }
 
   // 2. Строгая аутентификация и валидация прав доступа через JWT и RBAC
