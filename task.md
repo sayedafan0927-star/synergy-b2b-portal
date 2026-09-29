@@ -29,6 +29,19 @@
 - [x] 3.4 OpenTelemetry / Structured JSON logging (`api/lib/logger.ts` с correlation IDs и уровнями важности)
 - [x] 3.5 Интеграция structured logger в `api/audit/logs.ts`, `api/lib/circuitBreaker.ts`, `api/outbox/sync.ts`, `api/cron/expire-holds.ts`, `api/webhooks/clients.ts`, `api/webhooks/stock_event.ts`
 - [x] 3.6 Автоматическая эскалация алертов Dead Letter Queue (DLQ)
-- [x] 3.7 Безопасность и лимиты входящих вебхуков 1С (`stock_event.ts`, `clients.ts`)
+- [x] 3.7 Безопасность и лимиты входящих вебхуков (`stock_event.ts`, `clients.ts`)
 - [x] 3.8 Мгновенное высвобождение складских остатков по Supabase Realtime при аннулировании холдов
 - [x] 3.9 Мультивалютность (`USD` / `KZT`) и переключатель валют в шапке сайта (`CurrencyContext.tsx`, `Header.tsx`)
+
+## Этап 4: Архитектурный аудит и устранение критических уязвимостей (100% Выполнено и задеплоено)
+
+- [x] 4.1 Исправлен `ReferenceError: timeout is not defined` в `api/health.ts` (P0)
+- [x] 4.2 Закрыт неконтролируемый обход Saga и проверки цен через Edge Function `create-order` (P0)
+- [x] 4.3 Устранена уязвимость CORS в `api/lib/cors.ts`: неавторизованные Origin блокируются со статусом 403 для всех методов (P0)
+- [x] 4.4 Исправлен невалидный заголовок с несколькими доменами в Edge Function CORS (P1)
+- [x] 4.5 Оптимизирован Outbox Worker (`api/outbox/sync.ts`): таймаут 4s, параллельный пул батчей по 3 заказа (P1)
+- [x] 4.6 Сокращен интервал Vercel Cron для синхронизации заказов до 2 минут (`*/2 * * * *`) в `vercel.json` (P1)
+- [x] 4.7 Добавлена каскадная связь `parent_order_id` в `orders` (`20260929140000_add_parent_order_id.sql`) и привязка субордеров мультисклада в `createOrderHandler.ts` (P1)
+- [x] 4.8 Маркировка заказов `is_buffered_offline: true` при отказе шлюза собственной ERP (P1)
+- [x] 4.9 Спецификация серверного регистра идемпотентности в `docs/ERP_INTEGRATION_SPEC.md` для собственной ERP `kilem-khan.kz` (P2)
+- [x] 4.10 Расширен автоматизированный тестовый пакет `scripts/test_resilience_and_security.py` (96 проверок, 100% PASS)

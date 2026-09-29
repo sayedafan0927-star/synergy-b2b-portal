@@ -44,13 +44,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } else {
     try {
       const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 4000);
       const pingUrl = `${TARGET_ERP_URL}?action=ping`;
       
       const erpRes = await fetch(pingUrl, {
         method: 'GET',
         headers: { 'X-Portal-Key': SERVER_ERP_KEY },
-      signal: controller.signal,
-    }).finally(() => clearTimeout(timeout));
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeout));
 
     if (erpRes.ok) {
       checks.erp_gateway = { status: 'healthy', latencyMs: Date.now() - erpStart };

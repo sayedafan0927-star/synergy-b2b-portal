@@ -351,3 +351,28 @@ echo "<a href='{$ssoUrl}' target='_blank' class='btn'>Перейти в B2B-по
 | `SUPABASE_URL` | База данных PostgreSQL портала | `https://your-project.supabase.co` |
 | `SUPABASE_SERVICE_ROLE_KEY`| Сервисный ключ базы данных (бэкенд) | `<SECRET_SUPABASE_SERVICE_ROLE_KEY>` |
 | `CRON_SECRET` | Секрет защиты вызова Vercel Cron | `<SECRET_CRON_KEY>` |
+
+---
+
+## 8. Требования к серверной идемпотентности в ERP (Idempotency Key Register)
+
+При сбоях сети между порталом и вашей ERP (таймаут ответа, обрыв сокета) воркер Outbox выполняет повторную отправку заказа (Retry with Exponential Backoff).
+Чтобы исключить создание дублирующих заказов и повторного списания остатков, бэкенд вашей ERP (`api_portal.php?action=create_order`) **обязан соблюдать протокол идемпотентности**:
+
+1. **Заголовок и поле ключа:**
+   - Заголовок: `X-Idempotency-Key: <UUID>`
+   - Поле в JSON-теле: `"idempotency_key": "<UUID>"`
+2. **Алгоритм обработки в ERP:**
+   - Перед созданием документа заказа выполните проверку в таблице/регистре `idempotency_keys`:
+     ```sql
+     SELECT order_id, doc_number, status, response_json 
+     FROM idempotency_keys 
+     WHERE idempotency_key = :idempotency_key;
+     ```
+   - Если запись найдена: **немедленно верните ранее сохраненный JSON-ответ** со статусом `200 OK` без повторного создания накладных и списания остатков!
+   - Если запись отсутствует: проведите заказ в ERP, сохраните ключ и результат в транзакции:
+     ```sql
+     INSERT INTO idempotency_keys (idempotency_key, order_id, doc_number, created_at)
+     VALUES (:idempotency_key, :order_id, :doc_number, NOW());
+     ```
+

@@ -42,7 +42,7 @@
     },
     {
       "path": "/api/outbox/sync",
-      "schedule": "*/10 * * * *"
+      "schedule": "*/2 * * * *"
     },
     {
       "path": "/api/cron/reconcile-stock",

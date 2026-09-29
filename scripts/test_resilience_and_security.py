@@ -386,7 +386,27 @@ with open(profile_page_path, "r", encoding="utf-8") as fp:
 test_assert("В авторезерве" in profile_code and "На сборке" in profile_code and "Готов к отгрузке" in profile_code, "ProfilePage.tsx implements WMS dealer lifecycle status mapping")
 
 # ------------------------------------------------------------------------------
-# 14. Summary Report
+# 14. Quick Wins P0 Security & Health Fixes Verification
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}14. Verifying Quick Wins P0 Hardening & Health Check Fixes...{RESET}")
+
+health_path = os.path.join(ROOT_DIR, "api", "health.ts")
+with open(health_path, "r", encoding="utf-8") as fp:
+    health_code = fp.read()
+test_assert("const timeout = setTimeout" in health_code, "api/health.ts properly declares timeout timer before fetch")
+
+with open(cors_path, "r", encoding="utf-8") as fp:
+    fresh_cors = fp.read()
+test_assert("res.status(403)" in fresh_cors and "return false" in fresh_cors, "api/lib/cors.ts rejects unauthorized origins for all HTTP methods")
+
+edge_fn_path = os.path.join(ROOT_DIR, "supabase", "functions", "create-order", "index.ts")
+with open(edge_fn_path, "r", encoding="utf-8") as fp:
+    edge_code = fp.read()
+test_assert("canonical_endpoint" in edge_code and "410" in edge_code, "create-order Edge Function blocks unverified ERP bypass with status 410")
+test_assert("https://b2b.synergy.kz, https://synergy-b2b-portal.vercel.app" not in edge_code, "create-order Edge Function eliminates invalid multi-origin CORS header")
+
+# ------------------------------------------------------------------------------
+# 15. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

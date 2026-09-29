@@ -140,7 +140,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const results: Array<{ order_id: string; order_number: string; success: boolean; dlq?: boolean; error?: string }> = [];
 
-    for (const order of pendingOrders) {
+    async function syncSingleOrder(order: any): Promise<{ order_id: string; order_number: string; success: boolean; dlq?: boolean; error?: string } | null> {
       // Если заказ не был предварительно залочен через SKIP LOCKED RPC — захватываем атомарно
       if (!claimedViaRpc) {
         const { data: claimedRow } = await supabase
@@ -156,7 +156,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         if (!claimedRow) {
           // Заказ уже перехвачен параллельным воркером
-          continue;
+          return null;
         }
       }
 
@@ -221,7 +221,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try {
         const erpUrl = `${TARGET_ERP_URL}?action=create_order`;
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 10000);
+        const timeout = setTimeout(() => controller.abort(), 4000); // 4s timeout (fast failover)
 
         const erpRes = await fetch(erpUrl, {
           method: 'POST',
@@ -247,7 +247,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               status: 'confirmed',
               order_number: docNumber,
               last_error: null,
-              notes: `${order.notes || ''} [Синхронизировано с 1С: ${new Date().toISOString()}]`.trim(),
+              notes: `${order.notes || ''} [Синхронизировано с ERP: ${new Date().toISOString()}]`.trim(),
               updated_at: new Date().toISOString(),
             })
             .eq('id', order.id);
@@ -278,7 +278,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             });
           } catch {}
 
-          results.push({ order_id: order.id, order_number: order.order_number, success: true });
+          return { order_id: order.id, order_number: order.order_number, success: true };
         } else {
           const errText = await erpRes.text().catch(() => '');
           const nextRetries = currentRetries + 1;
@@ -327,13 +327,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }).catch(() => {});
           }
 
-          results.push({
+          return {
             order_id: order.id,
             order_number: order.order_number,
             success: false,
             dlq: isDlq,
             error: `ERP ${erpRes.status}: ${errText.slice(0, 100)}`,
-          });
+          };
         }
       } catch (reqErr: any) {
         const nextRetries = currentRetries + 1;
@@ -362,13 +362,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }).catch(() => {});
         }
 
-        results.push({
+        return {
           order_id: order.id,
           order_number: order.order_number,
           success: false,
           dlq: isDlq,
           error: reqErr?.message || 'Network error',
-        });
+        };
+      }
+    }
+
+    // Обработка параллельными батчами по 3 заказа (Parallel Concurrency Pool)
+    const BATCH_SIZE = 3;
+    for (let i = 0; i < pendingOrders.length; i += BATCH_SIZE) {
+      const batch = pendingOrders.slice(i, i + BATCH_SIZE);
+      const batchResults = await Promise.all(batch.map(order => syncSingleOrder(order)));
+      for (const res of batchResults) {
+        if (res) results.push(res);
       }
     }
 

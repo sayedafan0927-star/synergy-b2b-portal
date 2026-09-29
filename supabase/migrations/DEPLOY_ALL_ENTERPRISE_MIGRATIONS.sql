@@ -42,8 +42,10 @@ DO $$ BEGIN
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS hold_expires_at timestamptz;
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS version integer NOT NULL DEFAULT 1;
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS currency text NOT NULL DEFAULT 'USD';
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS parent_order_id uuid REFERENCES orders(id) ON DELETE CASCADE;
   END IF;
 END $$;
+CREATE INDEX IF NOT EXISTS idx_orders_parent_order_id ON orders(parent_order_id);
 
 -- 0.3 Ensure order_items table and all required columns exist
 DO $$ BEGIN

@@ -37,19 +37,19 @@ export function applyCorsHeaders(req: VercelRequest, res: VercelResponse): boole
   }
 
   if (isAllowed) {
-    res.setHeader('Access-Control-Allow-Origin', origin || '*');
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    if (origin) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    }
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
     res.setHeader(
       'Access-Control-Allow-Headers',
       'X-CSRF-Token, X-Requested-With, Accept, Content-Type, X-Portal-Key, Idempotency-Key, Authorization, X-Correlation-ID, X-Request-ID'
     );
   } else {
-    // Origin not in whitelist
-    if (req.method === 'OPTIONS') {
-      res.status(403).json({ error: 'CORS origin not allowed' });
-      return false;
-    }
+    // Origin not in whitelist - reject all HTTP methods immediately (P0 CORS Guard)
+    res.status(403).json({ error: 'CORS origin not allowed' });
+    return false;
   }
 
   // Handle preflight OPTIONS

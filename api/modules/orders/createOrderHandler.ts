@@ -246,6 +246,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
             idempotency_key: incomingIdempotencyKey ? `${incomingIdempotencyKey}-wh-${splitIdx}` : null,
             currency: rawPayload.currency || 'USD',
             contract_id: rawPayload.contract_id || null,
+            parent_order_id: createdRow.id,
           })
           .select('id, order_number')
           .maybeSingle();
@@ -450,10 +451,11 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
     res.status(200).json({
       success: true,
       outbox_queued: true,
+      is_buffered_offline: true,
       order_number: outboxOrderDoc,
       order_id: outboxOrderId,
       split_orders: createdSplitOrders,
-      message: 'Заказ успешно зарегистрирован и поставлен в очередь асинхронной отправки в 1С:ERP.',
+      message: 'Заказ успешно зарегистрирован и поставлен в очередь асинхронной отправки в ERP.',
     });
   } catch (err: any) {
     clearTimeout(erpTimeoutId);
@@ -467,10 +469,11 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
     res.status(200).json({
       success: true,
       outbox_queued: true,
+      is_buffered_offline: true,
       order_number: outboxOrderDoc,
       order_id: outboxOrderId,
       split_orders: createdSplitOrders,
-      message: 'Заказ принят и надежно сохранен в базе данных. Синхронизация с 1С выполняется в фоновом режиме.',
+      message: 'Заказ принят и надежно сохранен в базе данных. Синхронизация с ERP выполняется в фоновом режиме.',
     });
   }
 }
