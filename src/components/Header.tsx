@@ -20,7 +20,8 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
   const [offlineCount, setOfflineCount] = useState(0);
   const [isSyncingOffline, setIsSyncingOffline] = useState(false);
   const { totalItems } = useCart();
-  const { user, profile, isAdmin } = useAuth();
+  const { user, profile, isAdmin, realIsAdmin } = useAuth();
+  const isEffectiveAdmin = Boolean(isAdmin || realIsAdmin);
   const { language, setLanguage, t } = useLanguage();
   const { currency, setCurrency } = useCurrency();
 
@@ -136,33 +137,35 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
               </button>
             </div>
 
-            {/* Currency Switcher ($ USD / ₸ KZT) */}
-            <div className="flex items-center rounded-lg bg-slate-100 p-0.5 border border-slate-200/80 text-xs font-bold">
-              <button
-                type="button"
-                onClick={() => setCurrency('USD')}
-                className={`rounded-md px-2 py-1 transition-all ${
-                  currency === 'USD'
-                    ? 'bg-white text-slate-900 shadow-2xs'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-                title="Цены в долларах ($)"
-              >
-                $
-              </button>
-              <button
-                type="button"
-                onClick={() => setCurrency('KZT')}
-                className={`rounded-md px-2 py-1 transition-all ${
-                  currency === 'KZT'
-                    ? 'bg-white text-slate-900 shadow-2xs'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-                title="Цены в тенге (₸)"
-              >
-                ₸
-              </button>
-            </div>
+            {/* Currency Switcher ($ USD / ₸ KZT) - Скрыт для всех, кроме администратора */}
+            {isEffectiveAdmin && (
+              <div className="flex items-center rounded-lg bg-slate-100 p-0.5 border border-slate-200/80 text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setCurrency('USD')}
+                  className={`rounded-md px-2 py-1 transition-all ${
+                    currency === 'USD'
+                      ? 'bg-white text-slate-900 shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                  title="Цены в долларах ($)"
+                >
+                  $
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCurrency('KZT')}
+                  className={`rounded-md px-2 py-1 transition-all ${
+                    currency === 'KZT'
+                      ? 'bg-white text-slate-900 shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                  title="Цены в тенге (₸)"
+                >
+                  ₸
+                </button>
+              </div>
+            )}
 
             {/* 1C:ERP Gateway Health Badge */}
             <div

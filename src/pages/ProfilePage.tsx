@@ -165,7 +165,15 @@ function fmt2(n: number) { return n.toFixed(2); }
 function fmtPrice(n: number) {
   try {
     const cur = typeof localStorage !== 'undefined' ? localStorage.getItem('synergy_preferred_currency') : 'USD';
-    if (cur === 'KZT') {
+    const session = typeof localStorage !== 'undefined' ? localStorage.getItem('synergy_auth_session') : null;
+    let isAdminUser = false;
+    if (session) {
+      try {
+        const parsed = JSON.parse(session);
+        isAdminUser = parsed?.profile?.role === 'admin' || parsed?.role === 'admin';
+      } catch {}
+    }
+    if (cur === 'KZT' && isAdminUser) {
       return formatCurrency(n, 'KZT');
     }
   } catch {}
