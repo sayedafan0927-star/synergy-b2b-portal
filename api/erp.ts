@@ -1,22 +1,38 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
-import { dispatchApprovalRequest, sendWhatsAppMessage } from './approvals/whatsapp';
 import { recordAuditLog } from './audit/logs';
 import { applyCorrelationId } from './lib/trace';
 import { enforceRateLimit, getClientIp } from './lib/rateLimit';
 import { getCachedCatalog, saveCachedCatalog } from './lib/catalogCache';
 import { authenticateRequest, revokeToken } from './lib/authGuard';
-import { validateAndPriceOrder } from './lib/pricingValidator';
 import { applyCorsHeaders } from './lib/cors';
 import { checkCircuit, recordSuccess, recordFailure } from './lib/circuitBreaker';
 import { handleCreateLead } from './modules/leads';
 import { handleReconciliationReport } from './modules/reconciliation';
 import { handleCatalogRequests } from './modules/catalog/catalogHandler';
 import { handleCreateOrder } from './modules/orders/createOrderHandler';
-import { handleLoginFallback, handleEmployeeLoginFallback } from './modules/auth/loginHandler';
-import { handleCachedClientDebt, handleDebtFallbackOnFailure } from './modules/financial/debtHandler';
+import { handleCachedClientDebt } from './modules/financial/debtHandler';
 import { handleFinancialBalanceSheet } from './modules/financial/balanceHandler';
+import { handleDlqOrders, handleRetryDlqOrder } from './modules/dlq/dlqHandler';
+import {
+  handleDisplaySettingsGet,
+  handleDisplaySettingsPost,
+  getFallbackDisplaySettings,
+  updateDisplaySettingsCache,
+} from './modules/display/displaySettingsHandler';
+import { handleRequestApproval } from './modules/approvals/approvalHandler';
+import {
+  normalizeSupplierStockDistribution,
+  filterSupplierShipments,
+  handleSupplierDefects,
+} from './modules/supplier/supplierHandler';
+import {
+  normalizeErpDesigns,
+  handleErpLoginToken,
+  handleErpLoginFallback,
+} from './modules/erp/upstreamProxy';
+import { handleEmployeeLoginFallback } from './modules/auth/loginHandler';
 import { getErpApiKey } from './lib/erpKey';
 
 // Primary live ERP gateway: https://kilem-khan.kz/api/sin/public/api_portal.php
@@ -55,7 +71,7 @@ const ADMIN_ACTIONS = new Set([
   'sync_bundle',
   'financial_balance',
 ]);
-let displaySettingsCache: { data: any; expiry: number } | null = null;
+
 let lastKnownInboundShipments: any = null;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -66,1020 +82,572 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-  // Reject oversized payloads (10MB limit)
-  const bodyStr = JSON.stringify(req.body);
-  if (bodyStr && bodyStr.length > 10 * 1024 * 1024) {
-    return res.status(413).json({ error: 'Payload too large', maxSize: '10MB' });
-  }
-
-  // Сквозной Correlation-ID
-  const correlationId = applyCorrelationId(req, res);
-
-  // Rate Limiting (300 запросов в минуту на IP)
-  if (!(await enforceRateLimit(req, res, { limit: 300, windowSeconds: 60, actionPrefix: 'erp_proxy' }))) {
-    return;
-  }
-
-  const action = String(req.query.action || req.body?.action || '').trim();
-
-  // 0.8. Управление очередью недоставленных заказов DLQ (T-14)
-  if (action === 'dlq_orders' && req.method === 'GET') {
-    const auth = await authenticateRequest(req, { requiredRoles: ['admin', 'manager_rm'], allowServerKey: true });
-    if (!auth.isAuthenticated || auth.error) {
-      return res.status(403).json({ success: false, error: auth.error || 'Access denied' });
-    }
-    const { data: dlqList, error: dlqErr } = await supabase
-      .from('orders')
-      .select('id, order_number, user_id, warehouse, total_amount, total_items, notes, retry_count, last_error, updated_at, created_at')
-      .eq('status', 'failed_dlq')
-      .order('created_at', { ascending: false })
-      .limit(100);
-
-    if (dlqErr) {
-      return res.status(500).json({ success: false, error: dlqErr.message });
-    }
-    return res.status(200).json({ success: true, count: dlqList?.length || 0, orders: dlqList || [] });
-  }
-
-  if (action === 'retry_dlq_order' && req.method === 'POST') {
-    const auth = await authenticateRequest(req, { requiredRoles: ['admin'], allowServerKey: true });
-    if (!auth.isAuthenticated || auth.error) {
-      return res.status(403).json({ success: false, error: auth.error || 'Access denied' });
-    }
-    const orderId = req.body?.order_id || req.query?.order_id;
-    if (!orderId) {
-      return res.status(400).json({ success: false, error: 'Параметр order_id обязателен.' });
+    // Reject oversized payloads (10MB limit)
+    const bodyStr = JSON.stringify(req.body);
+    if (bodyStr && bodyStr.length > 10 * 1024 * 1024) {
+      return res.status(413).json({ error: 'Payload too large', maxSize: '10MB' });
     }
 
-    const { data: updated, error: updErr } = await supabase
-      .from('orders')
-      .update({
-        status: 'pending',
-        retry_count: 0,
-        next_retry_at: new Date().toISOString(),
-        notes: `[Ручной перезапуск администратором: ${auth.fullName || auth.userId}]`,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', orderId)
-      .eq('status', 'failed_dlq')
-      .select('id, order_number')
-      .maybeSingle();
+    // Сквозной Correlation-ID
+    const correlationId = applyCorrelationId(req, res);
 
-    if (updErr || !updated) {
-      return res.status(500).json({ success: false, error: updErr?.message || 'Заказ не найден в очереди DLQ.' });
-    }
-
-    await recordAuditLog({
-      eventType: 'dlq_manual_retry',
-      direction: 'outbound',
-      status: 'success',
-      statusCode: 200,
-      source: 'Admin Portal',
-      correlationId,
-      payload: { order_id: orderId, order_number: updated.order_number, retried_by: auth.userId },
-    });
-
-    return res.status(200).json({
-      success: true,
-      message: `Заказ ${updated.order_number} успешно возвращен в очередь синхронизации Outbox.`,
-      order: updated,
-    });
-  }
-
-  // 0.9. Кэш настроек отображения (60s TTL)
-  if (action === 'display_settings' && req.method === 'GET') {
-    const isRefresh = req.query.refresh === 'true' || req.query.refresh === '1';
-    if (!isRefresh && displaySettingsCache && displaySettingsCache.expiry > Date.now()) {
-      res.setHeader('X-Cache', 'HIT');
-      return res.status(200).json(displaySettingsCache.data);
-    }
-  }
-
-  if (action === 'display_settings' && req.method === 'POST') {
-    const auth = await authenticateRequest(req, { requiredRoles: ['admin'], allowServerKey: true });
-    if (!auth.isAuthenticated || auth.error) {
-      return res.status(403).json({ success: false, error: auth.error || 'Access denied' });
-    }
-    const submittedSettings = req.body?.settings || req.body;
-    if (submittedSettings) {
-      displaySettingsCache = {
-        data: { success: true, ...submittedSettings },
-        expiry: Date.now() + 60000,
-      };
-    }
-  }
-
-  // 1.0. Каталог, карточка товара и серверная пагинация (модульный обработчик)
-  if (action === 'catalog' || action === 'catalog_normalized' || action === 'product' || action === 'catalog_paginated') {
-    if (await handleCatalogRequests(req, res, action, supabase)) {
+    // Rate Limiting (300 запросов в минуту на IP)
+    if (!(await enforceRateLimit(req, res, { limit: 300, windowSeconds: 60, actionPrefix: 'erp_proxy' }))) {
       return;
     }
-  }
 
-  // 1.03. Прием лидов и заявок с контактных форм B2B-портала
-  if (action === 'create_lead' && req.method === 'POST') {
-    return handleCreateLead(req, res, supabase, correlationId);
-  }
+    const action = String(req.query.action || req.body?.action || '').trim();
 
-  // 1. Специальное действие: запрос согласования заказа в WhatsApp
-  if (action === 'request_approval' && req.method === 'POST') {
-    try {
-      const payload = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-      const sent = await dispatchApprovalRequest({
-        orderId: payload.order_id || payload.orderId || `tmp-${Date.now()}`,
-        orderDocNumber: payload.order_doc_number || payload.orderDocNumber,
-        clientName: payload.client_name || payload.clientName || 'Клиент B2B',
-        clientPhone: payload.client_phone || payload.clientPhone,
-        totalAmount: Number(payload.total_amount || payload.totalAmount || 0),
-        totalSqm: Number(payload.total_sqm || payload.totalSqm || 0),
-        itemsCount: Number(payload.items_count || payload.itemsCount || 1),
-        reason: payload.reason || 'Превышение кредитного лимита / стоп-лист',
-        managerPhone: payload.manager_phone || payload.managerPhone,
-      });
-
-      await recordAuditLog({
-        eventType: 'request_approval',
-        direction: 'outbound',
-        status: sent ? 'success' : 'warning',
-        source: 'WhatsApp Approvals',
-        payload: { order_id: payload.order_id, client: payload.client_name },
-      });
-
-      return res.status(200).json({
-        success: true,
-        dispatched: sent,
-        message: 'Запрос на согласование успешно отправлен ответственному менеджеру в WhatsApp.',
-      });
-    } catch (apprErr: any) {
-      console.error('[API Proxy ERP] Error dispatching approval:', apprErr);
-      return res.status(500).json({
-        success: false,
-        error: 'Не удалось отправить запрос в WhatsApp',
-        details: apprErr?.message,
-      });
-    }
-  }
-
-  // 1.1. Запрос официального акта сверки взаиморасчетов с 1С:ERP
-  if (action === 'get_reconciliation_report') {
-    return handleReconciliationReport(req, res, TARGET_ERP_URL, SERVER_ERP_KEY);
-  }
-
-  // 2. Строгая аутентификация и валидация прав доступа через JWT и RBAC
-  let verifiedAuth: any = null;
-
-  if (ADMIN_ACTIONS.has(action)) {
-    verifiedAuth = await authenticateRequest(req, { requiredRoles: ['admin'], allowServerKey: true });
-    if (!verifiedAuth.isAuthenticated || verifiedAuth.error) {
-      return res.status(403).json({
-        success: false,
-        error: verifiedAuth.error || 'Forbidden: Для выполнения данного действия требуются права администратора.',
-      });
-    }
-  }
-
-  // 2.1. ─── Защита от B2B IDOR (на основе криптографически проверенного профиля) ───
-  if (['client_debt', 'orders'].includes(action)) {
-    verifiedAuth = await authenticateRequest(req, { allowServerKey: true });
-    if (!verifiedAuth.isAuthenticated) {
-      return res.status(401).json({
-        success: false,
-        error: verifiedAuth.error || 'Для доступа к финансовым данным требуется авторизация.',
-      });
+    // 0.8. Управление очередью недоставленных заказов DLQ (T-14)
+    if (action === 'dlq_orders' && req.method === 'GET') {
+      return await handleDlqOrders(req, res, supabase);
     }
 
-    if (verifiedAuth.isAuthenticated && verifiedAuth.role === 'client') {
-      const callerPartnerId = String(verifiedAuth.partnerId || verifiedAuth.erpId || '');
-      const requestedId = String(req.query.client_id || req.query.counterparty_id || '');
-      if (requestedId && callerPartnerId && requestedId !== callerPartnerId) {
-        return res.status(403).json({
-          success: false,
-          error: 'Forbidden: Доступ к чужим финансовым начислениям и заказам запрещен (B2B Anti-IDOR Protection).',
-        });
-      }
-      if (callerPartnerId) {
-        req.query.client_id = callerPartnerId;
-        req.query.counterparty_id = callerPartnerId;
-      }
+    if (action === 'retry_dlq_order' && req.method === 'POST') {
+      return await handleRetryDlqOrder(req, res, supabase, correlationId);
     }
 
-    // T-12: Высокоскоростной кэш финансового баланса контрагента (5 минут TTL)
-    if (action === 'client_debt' && req.method === 'GET') {
-      if (await handleCachedClientDebt(req, res, supabase)) {
+    // 0.9. Кэш настроек отображения (60s TTL)
+    if (action === 'display_settings' && req.method === 'GET') {
+      if (await handleDisplaySettingsGet(req, res)) return;
+    }
+
+    if (action === 'display_settings' && req.method === 'POST') {
+      if (await handleDisplaySettingsPost(req, res)) return;
+    }
+
+    // 1.0. Каталог, карточка товара и серверная пагинация (модульный обработчик)
+    if (action === 'catalog' || action === 'catalog_normalized' || action === 'product' || action === 'catalog_paginated') {
+      if (await handleCatalogRequests(req, res, action, supabase)) {
         return;
       }
     }
 
-    // Управленческий баланс предприятия (Чистый капитал, активы, забаланс)
-    if (action === 'financial_balance' && req.method === 'GET') {
-      await handleFinancialBalanceSheet(req, res, supabase);
-      return;
+    // 1.03. Прием лидов и заявок с контактных форм B2B-портала
+    if (action === 'create_lead' && req.method === 'POST') {
+      return handleCreateLead(req, res, supabase, correlationId);
     }
-  }
 
-  // T-15: Отзыв сессии через Redis blacklist
-  if (action === 'logout' && req.method === 'POST') {
-    const authHeader = req.headers.authorization || '';
-    if (authHeader.startsWith('Bearer ')) {
-      const tokenToRevoke = authHeader.substring(7).trim();
-      await revokeToken(tokenToRevoke);
+    // 1. Специальное действие: запрос согласования заказа в WhatsApp
+    if (action === 'request_approval' && req.method === 'POST') {
+      return await handleRequestApproval(req, res, correlationId);
     }
-    return res.status(200).json({ success: true, message: 'Сессия успешно завершена (Token Revoked).' });
-  }
 
-  // Генерация криптографически подписанной сессии портала (HMAC-SHA256)
-  if (action === 'session_token' && req.method === 'POST') {
-    const SECRET_KEY = process.env.PORTAL_SECRET_KEY || process.env.ERP_PORTAL_SECRET || '';
-    if (!SECRET_KEY) {
-      return res.status(500).json({ success: false, error: 'Server secret key not configured' });
+    // 1.1. Запрос официального акта сверки взаиморасчетов с 1С:ERP
+    if (action === 'get_reconciliation_report') {
+      return handleReconciliationReport(req, res, TARGET_ERP_URL, SERVER_ERP_KEY);
     }
-    let body: any = {};
-    try {
-      if (Buffer.isBuffer(req.body)) {
-        body = JSON.parse(req.body.toString('utf8'));
-      } else if (typeof req.body === 'string') {
-        body = JSON.parse(req.body || '{}');
-      } else if (typeof req.body === 'object' && req.body !== null) {
-        body = req.body;
-      }
-    } catch {}
 
-    const { role = 'client', user, profile } = body || {};
-    const validRoles = ['admin', 'manager_rm', 'manager_lm', 'supplier', 'client'];
-    const effectiveRole = validRoles.includes(role) ? role : (profile?.role && validRoles.includes(profile.role) ? profile.role : 'client');
+    // 2. Строгая аутентификация и валидация прав доступа через JWT и RBAC
+    let verifiedAuth: any = null;
 
-    // Anti-Bypass P0: Запрет произвольного назначения привилегированных ролей без подтвержденной серверной аутентификации
-    const callerAuth = await authenticateRequest(req, { allowServerKey: true });
-    const isPrivileged = ['admin', 'manager_rm', 'manager_lm', 'supplier'].includes(effectiveRole);
-
-    if (isPrivileged) {
-      if (!callerAuth.isAuthenticated || (!callerAuth.isServer && callerAuth.role !== 'admin' && callerAuth.role !== effectiveRole)) {
+    if (ADMIN_ACTIONS.has(action)) {
+      verifiedAuth = await authenticateRequest(req, { requiredRoles: ['admin'], allowServerKey: true });
+      if (!verifiedAuth.isAuthenticated || verifiedAuth.error) {
         return res.status(403).json({
           success: false,
-          error: 'Forbidden: Повышение привилегий до роли сотрудника или администратора запрещено без валидной серверной авторизации.',
+          error: verifiedAuth.error || 'Forbidden: Для выполнения данного действия требуются права администратора.',
         });
       }
     }
 
-    const userId = String(user?.id || profile?.id || callerAuth.userId || `user-${effectiveRole}`);
-    const fullName = String(
-      profile?.full_name ||
-      user?.user_metadata?.full_name ||
-      callerAuth.fullName ||
-      (effectiveRole === 'admin' ? 'Администратор портала' : 'Пользователь портала')
-    );
-    const partnerId = profile?.partner_id ? String(profile.partner_id) : (callerAuth.partnerId || null);
-    const phone = String(profile?.phone || user?.phone || callerAuth.phone || '');
-    const priceType = String(profile?.price_type || callerAuth.priceType || 'wholesale');
+    // 2.1. ─── Защита от B2B IDOR (на основе криптографически проверенного профиля) ───
+    if (['client_debt', 'orders'].includes(action)) {
+      verifiedAuth = await authenticateRequest(req, { allowServerKey: true });
+      if (!verifiedAuth.isAuthenticated) {
+        return res.status(401).json({
+          success: false,
+          error: verifiedAuth.error || 'Для доступа к финансовым данным требуется авторизация.',
+        });
+      }
 
-    const sessionData = {
-      user: {
-        id: userId,
-        email: user?.email || `${effectiveRole}@kilem-khan.kz`,
-        user_metadata: { full_name: fullName },
-      },
-      profile: {
-        id: userId,
-        role: effectiveRole,
-        partner_id: partnerId,
-        full_name: fullName,
-        company_name: profile?.company_name || callerAuth.companyName || 'ТОО «Kilem Khan Synergy»',
-        phone,
-        price_type: priceType,
-        showroom_warehouse_id: profile?.showroom_warehouse_id ?? null,
-      },
-      timestamp: Date.now(),
-    };
+      if (verifiedAuth.isAuthenticated && verifiedAuth.role === 'client') {
+        const callerPartnerId = String(verifiedAuth.partnerId || verifiedAuth.erpId || '');
+        const requestedId = String(req.query.client_id || req.query.counterparty_id || '');
+        if (requestedId && callerPartnerId && requestedId !== callerPartnerId) {
+          return res.status(403).json({
+            success: false,
+            error: 'Forbidden: Доступ к чужим финансовым начислениям и заказам запрещен (B2B Anti-IDOR Protection).',
+          });
+        }
+        if (callerPartnerId) {
+          req.query.client_id = callerPartnerId;
+          req.query.counterparty_id = callerPartnerId;
+        }
+      }
 
-    const sig = crypto.createHmac('sha256', SECRET_KEY).update(JSON.stringify(sessionData)).digest('hex');
-    const token = Buffer.from(JSON.stringify({ data: sessionData, sig })).toString('base64url');
+      // T-12: Высокоскоростной кэш финансового баланса контрагента (5 минут TTL)
+      if (action === 'client_debt' && req.method === 'GET') {
+        if (await handleCachedClientDebt(req, res, supabase)) {
+          return;
+        }
+      }
 
-    return res.status(200).json({
-      success: true,
-      token,
-      portal_session_token: token,
-      user: sessionData.user,
-      profile: sessionData.profile,
-    });
-  }
-
-  if (['supplier_network_stock', 'supplier_inbound_shipments', 'supplier_defects'].includes(action)) {
-    verifiedAuth = await authenticateRequest(req, { requiredRoles: ['admin', 'manager_rm', 'supplier'], allowServerKey: true });
-    if (!verifiedAuth.isAuthenticated || verifiedAuth.error) {
-      return res.status(403).json({
-        success: false,
-        error: verifiedAuth.error || 'Доступ разрешен только поставщикам и уполномоченным менеджерам.',
-      });
+      // Управленческий баланс предприятия (Чистый капитал, активы, забаланс)
+      if (action === 'financial_balance' && req.method === 'GET') {
+        await handleFinancialBalanceSheet(req, res, supabase);
+        return;
+      }
     }
 
-    if (action === 'supplier_network_stock' && (!req.query.supplier_id || req.query.supplier_id === '0')) {
-      return res.status(400).json({
-        success: false,
-        error: 'Параметр supplier_id обязателен для запроса складских остатков поставщика.',
-      });
+    // T-15: Отзыв сессии через Redis blacklist
+    if (action === 'logout' && req.method === 'POST') {
+      const authHeader = req.headers.authorization || '';
+      if (authHeader.startsWith('Bearer ')) {
+        const tokenToRevoke = authHeader.substring(7).trim();
+        await revokeToken(tokenToRevoke);
+      }
+      return res.status(200).json({ success: true, message: 'Сессия успешно завершена (Token Revoked).' });
     }
 
-    if (action === 'supplier_defects') {
+    // Генерация криптографически подписанной сессии портала (HMAC-SHA256)
+    if (action === 'session_token' && req.method === 'POST') {
+      const SECRET_KEY = process.env.PORTAL_SECRET_KEY || process.env.ERP_PORTAL_SECRET || '';
+      if (!SECRET_KEY) {
+        return res.status(500).json({ success: false, error: 'Server secret key not configured' });
+      }
+      let body: any = {};
+      try {
+        if (Buffer.isBuffer(req.body)) {
+          body = JSON.parse(req.body.toString('utf8'));
+        } else if (typeof req.body === 'string') {
+          body = JSON.parse(req.body || '{}');
+        } else if (typeof req.body === 'object' && req.body !== null) {
+          body = req.body;
+        }
+      } catch {}
+
+      const { role = 'client', user, profile } = body || {};
+      const validRoles = ['admin', 'manager_rm', 'manager_lm', 'supplier', 'client'];
+      const effectiveRole = validRoles.includes(role) ? role : (profile?.role && validRoles.includes(profile.role) ? profile.role : 'client');
+
+      // Anti-Bypass P0: Запрет произвольного назначения привилегированных ролей без подтвержденной серверной аутентификации
+      const callerAuth = await authenticateRequest(req, { allowServerKey: true });
+      const isPrivileged = ['admin', 'manager_rm', 'manager_lm', 'supplier'].includes(effectiveRole);
+
+      if (isPrivileged) {
+        if (!callerAuth.isAuthenticated || (!callerAuth.isServer && callerAuth.role !== 'admin' && callerAuth.role !== effectiveRole)) {
+          return res.status(403).json({
+            success: false,
+            error: 'Forbidden: Повышение привилегий до роли сотрудника или администратора запрещено без валидной серверной авторизации.',
+          });
+        }
+      }
+
+      const userId = String(user?.id || profile?.id || callerAuth.userId || `user-${effectiveRole}`);
+      const fullName = String(
+        profile?.full_name ||
+        user?.user_metadata?.full_name ||
+        callerAuth.fullName ||
+        (effectiveRole === 'admin' ? 'Администратор портала' : 'Пользователь портала')
+      );
+      const partnerId = profile?.partner_id ? String(profile.partner_id) : (callerAuth.partnerId || null);
+      const phone = String(profile?.phone || user?.phone || callerAuth.phone || '');
+      const priceType = String(profile?.price_type || callerAuth.priceType || 'wholesale');
+
+      const sessionData = {
+        user: {
+          id: userId,
+          email: user?.email || `${effectiveRole}@kilem-khan.kz`,
+          user_metadata: { full_name: fullName },
+        },
+        profile: {
+          id: userId,
+          role: effectiveRole,
+          partner_id: partnerId,
+          full_name: fullName,
+          company_name: profile?.company_name || callerAuth.companyName || 'ТОО «Kilem Khan Synergy»',
+          phone,
+          price_type: priceType,
+          showroom_warehouse_id: profile?.showroom_warehouse_id ?? null,
+        },
+        timestamp: Date.now(),
+      };
+
+      const sig = crypto.createHmac('sha256', SECRET_KEY).update(JSON.stringify(sessionData)).digest('hex');
+      const token = Buffer.from(JSON.stringify({ data: sessionData, sig })).toString('base64url');
+
       return res.status(200).json({
         success: true,
-        supplier_id: Number(req.query.supplier_id || req.body?.supplier_id || 0),
-        total_defects: 0,
-        defects: [],
+        token,
+        portal_session_token: token,
+        user: sessionData.user,
+        profile: sessionData.profile,
       });
     }
 
-    if (verifiedAuth.role === 'supplier') {
-      const callerSuppId = String(verifiedAuth.partnerId || verifiedAuth.erpId || '');
-      const requestedSuppId = String(req.query.supplier_id || req.body?.supplier_id || '');
-      if (requestedSuppId && callerSuppId && requestedSuppId !== callerSuppId) {
+    if (['supplier_network_stock', 'supplier_inbound_shipments', 'supplier_defects'].includes(action)) {
+      verifiedAuth = await authenticateRequest(req, { requiredRoles: ['admin', 'manager_rm', 'supplier'], allowServerKey: true });
+      if (!verifiedAuth.isAuthenticated || verifiedAuth.error) {
         return res.status(403).json({
           success: false,
-          error: 'Forbidden: Поставщик имеет доступ только к данным собственной фабрики.',
+          error: verifiedAuth.error || 'Доступ разрешен только поставщикам и уполномоченным менеджерам.',
         });
       }
-      if (callerSuppId) {
-        req.query.supplier_id = callerSuppId;
-      }
-    }
-  }
 
-  // 3. ─── Создание заказов с Compensating Saga и Anti-Tamper Guard ───
-  if (action === 'create_order' && req.method === 'POST') {
-    const callerAuth = await authenticateRequest(req, { allowServerKey: true });
-    if (!callerAuth.isAuthenticated || callerAuth.error) {
-      return res.status(401).json({ success: false, error: callerAuth.error || 'Требуется авторизация' });
-    }
-    await handleCreateOrder({
-      req,
-      res,
-      callerAuth,
-      correlationId,
-      supabase,
-      targetErpUrl: TARGET_ERP_URL,
-      serverErpKey: SERVER_ERP_KEY,
-      clientIp: getClientIp(req),
-    });
-    return;
-  }
-
-
-
-  try {
-    // Собираем Query параметры
-    const queryParams = new URLSearchParams();
-    for (const [key, val] of Object.entries(req.query)) {
-      if (key === 'supplier_id' && (val === '0' || val === 'all' || val === '' || val === 'undefined' || val === 'null')) {
-        continue;
-      }
-      if (action === 'supplier_inbound_shipments' && key === 'supplier_id') {
-        // В 1C:ERP приходные накладные привязаны к юрлицам перевозчиков (2984, 1),
-        // а принадлежность к фабрике (SAYDAM, ISMEN и др.) определяется по номенклатуре.
-        // Запрашиваем общий реестр, сопоставление выполнит шлюз ниже.
-        continue;
-      }
-      if (Array.isArray(val)) {
-        val.forEach(v => queryParams.append(key, String(v)));
-      } else if (val !== undefined && val !== null && val !== '') {
-        queryParams.set(key, String(val));
-      }
-    }
-
-    // Note: X-Portal-Key is passed strictly via HTTP headers, never in URL query string
-
-    const targetUrl = `${TARGET_ERP_URL}?${queryParams.toString()}`;
-
-    const clientIp = getClientIp(req);
-    const callerPortalKey = (req.headers['x-portal-key'] || req.headers['X-Portal-Key']) as string | undefined;
-    const keyToSend = SERVER_ERP_KEY || callerPortalKey || '';
-    const headers: Record<string, string> = {
-      'X-Portal-Key': keyToSend,
-      'Accept': 'application/json',
-      'X-Correlation-ID': correlationId,
-      'X-Forwarded-For': req.headers['x-forwarded-for'] ? String(req.headers['x-forwarded-for']) : clientIp,
-      'X-Real-IP': clientIp,
-    };
-
-    const idempotencyKey = req.headers['idempotency-key'] || req.headers['x-idempotency-key'];
-    if (idempotencyKey) {
-      headers['Idempotency-Key'] = String(idempotencyKey);
-      headers['X-Idempotency-Key'] = String(idempotencyKey);
-    }
-
-    // Circuit Breaker: Проверка состояния внешнего шлюза 1C:ERP (T-08: Persistent Redis state)
-    const circuit = await checkCircuit('erp_gateway');
-    if (!circuit.permitted) {
-      console.warn(`[CircuitBreaker] Request to ERP suppressed for action '${action}'. Circuit state: ${circuit.state}`);
-      if (action === 'create_order') {
-        return res.status(200).json({
-          success: true,
-          order: {
-            order_id: 9999,
-            doc_number: `ORD-BUF-${Date.now()}`,
-            status: 'pending',
-            is_buffered: true,
-          },
-          message: 'Заказ успешно зафиксирован в автономном буфере (Circuit Breaker Active).',
+      if (action === 'supplier_network_stock' && (!req.query.supplier_id || req.query.supplier_id === '0')) {
+        return res.status(400).json({
+          success: false,
+          error: 'Параметр supplier_id обязателен для запроса складских остатков поставщика.',
         });
       }
-      if (action === 'catalog' || action === 'catalog_normalized') {
-        const fallback = await getCachedCatalog('catalog_global');
-        if (fallback && fallback.data) {
-          res.status(200);
-          res.setHeader('Content-Type', 'application/json');
-          res.setHeader('X-Cache', 'CIRCUIT_BREAKER_FALLBACK');
-          res.setHeader('X-Cache-Age-Ms', String(fallback.ageMs));
-          return res.json(fallback.data);
+
+      if (action === 'supplier_defects') {
+        return handleSupplierDefects(req, res);
+      }
+
+      if (verifiedAuth.role === 'supplier') {
+        const callerSuppId = String(verifiedAuth.partnerId || verifiedAuth.erpId || '');
+        const requestedSuppId = String(req.query.supplier_id || req.body?.supplier_id || '');
+        if (requestedSuppId && callerSuppId && requestedSuppId !== callerSuppId) {
+          return res.status(403).json({
+            success: false,
+            error: 'Forbidden: Поставщик имеет доступ только к данным собственной фабрики.',
+          });
+        }
+        if (callerSuppId) {
+          req.query.supplier_id = callerSuppId;
         }
       }
-      if (action === 'display_settings') {
-        const fallbackSettings = {
-          success: true,
-          settings: {
-            show_free_stock: true,
-            show_reserved_stock: false,
-            show_total_stock: true,
-            show_prices: true,
-            show_price_per_sqm: true,
-            show_discounts: true,
-            show_dealer_showroom: true,
-            allow_orders_when_zero_stock: false,
-          },
+    }
+
+    // 3. ─── Создание заказов с Compensating Saga и Anti-Tamper Guard ───
+    if (action === 'create_order' && req.method === 'POST') {
+      const callerAuth = await authenticateRequest(req, { allowServerKey: true });
+      if (!callerAuth.isAuthenticated || callerAuth.error) {
+        return res.status(401).json({ success: false, error: callerAuth.error || 'Требуется авторизация' });
+      }
+      await handleCreateOrder({
+        req,
+        res,
+        callerAuth,
+        correlationId,
+        supabase,
+        targetErpUrl: TARGET_ERP_URL,
+        serverErpKey: SERVER_ERP_KEY,
+        clientIp: getClientIp(req),
+      });
+      return;
+    }
+
+    try {
+      // Собираем Query параметры
+      const queryParams = new URLSearchParams();
+      for (const [key, val] of Object.entries(req.query)) {
+        if (key === 'supplier_id' && (val === '0' || val === 'all' || val === '' || val === 'undefined' || val === 'null')) {
+          continue;
+        }
+        if (action === 'supplier_inbound_shipments' && key === 'supplier_id') {
+          continue;
+        }
+        if (Array.isArray(val)) {
+          val.forEach(v => queryParams.append(key, String(v)));
+        } else if (val !== undefined && val !== null && val !== '') {
+          queryParams.set(key, String(val));
+        }
+      }
+
+      const targetUrl = `${TARGET_ERP_URL}?${queryParams.toString()}`;
+      const clientIp = getClientIp(req);
+      const callerPortalKey = (req.headers['x-portal-key'] || req.headers['X-Portal-Key']) as string | undefined;
+      const keyToSend = SERVER_ERP_KEY || callerPortalKey || '';
+      const headers: Record<string, string> = {
+        'X-Portal-Key': keyToSend,
+        'Accept': 'application/json',
+        'X-Correlation-ID': correlationId,
+        'X-Forwarded-For': req.headers['x-forwarded-for'] ? String(req.headers['x-forwarded-for']) : clientIp,
+        'X-Real-IP': clientIp,
+      };
+
+      const idempotencyKey = req.headers['idempotency-key'] || req.headers['x-idempotency-key'];
+      if (idempotencyKey) {
+        headers['Idempotency-Key'] = String(idempotencyKey);
+        headers['X-Idempotency-Key'] = String(idempotencyKey);
+      }
+
+      // Circuit Breaker: Проверка состояния внешнего шлюза 1C:ERP
+      const circuit = await checkCircuit('erp_gateway');
+      if (!circuit.permitted) {
+        console.warn(`[CircuitBreaker] Request to ERP suppressed for action '${action}'. Circuit state: ${circuit.state}`);
+        if (action === 'create_order') {
+          return res.status(200).json({
+            success: true,
+            order: {
+              order_id: 9999,
+              doc_number: `ORD-BUF-${Date.now()}`,
+              status: 'pending',
+              is_buffered: true,
+            },
+            message: 'Заказ успешно зафиксирован в автономном буфере (Circuit Breaker Active).',
+          });
+        }
+        if (action === 'catalog' || action === 'catalog_normalized') {
+          const fallback = await getCachedCatalog('catalog_global');
+          if (fallback && fallback.data) {
+            res.status(200);
+            res.setHeader('Content-Type', 'application/json');
+            res.setHeader('X-Cache', 'CIRCUIT_BREAKER_FALLBACK');
+            res.setHeader('X-Cache-Age-Ms', String(fallback.ageMs));
+            return res.json(fallback.data);
+          }
+        }
+        if (action === 'display_settings') {
+          return res.status(200).json(getFallbackDisplaySettings());
+        }
+        return res.status(503).json({
+          success: false,
+          code: 'CIRCUIT_BREAKER_OPEN',
+          error: 'Шлюз 1C:ERP временно недоступен (активирован защитный контур Circuit Breaker). Повторите попытку через 30 секунд.',
+        });
+      }
+
+      // Таймаут запроса к ERP: 2.5 секунды для чекаута (быстрый fallback в Outbox) и 12 секунд для каталога
+      const erpTimeoutMs = action === 'create_order' ? 2500 : 12000;
+
+      let fetchOptions: RequestInit = {
+        method: req.method,
+        headers,
+      };
+
+      if (req.method === 'POST') {
+        headers['Content-Type'] = 'application/json';
+        const bodyToSend = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : req.body;
+        fetchOptions = {
+          ...fetchOptions,
+          body: typeof bodyToSend === 'string' ? bodyToSend : (Buffer.isBuffer(bodyToSend) ? bodyToSend.toString('utf8') : JSON.stringify(bodyToSend || {})),
         };
+      }
+
+      async function sendRequestToErp(url: string): Promise<Response> {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), erpTimeoutMs);
+        try {
+          return await fetch(url, { ...fetchOptions, signal: controller.signal });
+        } finally {
+          clearTimeout(timeoutId);
+        }
+      }
+
+      let erpResponse: Response;
+      try {
+        erpResponse = await sendRequestToErp(targetUrl);
+        const isHtmlResponse = (erpResponse.headers.get('content-type') || '').includes('text/html');
+        if ((erpResponse.status >= 500 || isHtmlResponse) && ERP_FALLBACK_URL && ERP_FALLBACK_URL !== TARGET_ERP_URL) {
+          console.warn(`[ERP Failover] Primary returned ${erpResponse.status} (isHtml: ${isHtmlResponse}). Attempting fallback endpoint: ${ERP_FALLBACK_URL}`);
+          const fallbackTargetUrl = `${ERP_FALLBACK_URL}?${queryParams.toString()}`;
+          const fallbackResp = await sendRequestToErp(fallbackTargetUrl);
+          if (fallbackResp.ok) {
+            erpResponse = fallbackResp;
+          }
+        }
+      } catch (primaryFetchErr) {
+        if (ERP_FALLBACK_URL && ERP_FALLBACK_URL !== TARGET_ERP_URL) {
+          console.warn(`[ERP Failover] Primary connection failed. Attempting fallback endpoint: ${ERP_FALLBACK_URL}`);
+          const fallbackTargetUrl = `${ERP_FALLBACK_URL}?${queryParams.toString()}`;
+          erpResponse = await sendRequestToErp(fallbackTargetUrl);
+        } else {
+          throw primaryFetchErr;
+        }
+      }
+
+      if (erpResponse.ok) {
+        await recordSuccess('erp_gateway');
+      } else if (erpResponse.status >= 500) {
+        await recordFailure('erp_gateway');
+      }
+
+      const latencyMs = Date.now() - startTime;
+      const contentType = erpResponse.headers.get('content-type') || 'application/json';
+      const textData = await erpResponse.text();
+
+      if (['create_order', 'update_order_status', 'update_client_access', 'login'].includes(action)) {
+        await recordAuditLog({
+          eventType: action,
+          direction: 'outbound',
+          status: erpResponse.ok ? 'success' : 'error',
+          statusCode: erpResponse.status,
+          latencyMs,
+          source: 'B2B Proxy API',
+          correlationId,
+          payload: { action, query: req.query },
+        });
+      }
+
+      if (action === 'display_settings') {
+        try {
+          const jsonData = JSON.parse(textData);
+          if (jsonData && jsonData.success && jsonData.settings) {
+            updateDisplaySettingsCache(jsonData, 60000);
+            return res.status(200).json(jsonData);
+          }
+        } catch {}
+        const fallbackSettings = getFallbackDisplaySettings();
+        updateDisplaySettingsCache(fallbackSettings, 60000);
         return res.status(200).json(fallbackSettings);
       }
-      return res.status(503).json({
-        success: false,
-        code: 'CIRCUIT_BREAKER_OPEN',
-        error: 'Шлюз 1C:ERP временно недоступен (активирован защитный контур Circuit Breaker). Повторите попытку через 30 секунд.',
-      });
-    }
 
-    // Таймаут запроса к ERP: 2.5 секунды для чекаута (быстрый fallback в Outbox) и 12 секунд для каталога
-    const erpTimeoutMs = action === 'create_order' ? 2500 : 12000;
-
-    let fetchOptions: RequestInit = {
-      method: req.method,
-      headers,
-    };
-
-    if (req.method === 'POST') {
-      headers['Content-Type'] = 'application/json';
-      const bodyToSend = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : req.body;
-      fetchOptions = {
-        ...fetchOptions,
-        body: typeof bodyToSend === 'string' ? bodyToSend : (Buffer.isBuffer(bodyToSend) ? bodyToSend.toString('utf8') : JSON.stringify(bodyToSend || {})),
-      };
-    }
-
-    // T-10: Отказоустойчивый вызов с автоматическим переключением на резервный URL (Failover)
-    async function sendRequestToErp(url: string): Promise<Response> {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), erpTimeoutMs);
-      try {
-        return await fetch(url, { ...fetchOptions, signal: controller.signal });
-      } finally {
-        clearTimeout(timeoutId);
-      }
-    }
-
-    let erpResponse: Response;
-    try {
-      erpResponse = await sendRequestToErp(targetUrl);
-      const isHtmlResponse = (erpResponse.headers.get('content-type') || '').includes('text/html');
-      if ((erpResponse.status >= 500 || isHtmlResponse) && ERP_FALLBACK_URL && ERP_FALLBACK_URL !== TARGET_ERP_URL) {
-        console.warn(`[ERP Failover] Primary returned ${erpResponse.status} (isHtml: ${isHtmlResponse}). Attempting fallback endpoint: ${ERP_FALLBACK_URL}`);
-        const fallbackTargetUrl = `${ERP_FALLBACK_URL}?${queryParams.toString()}`;
-        const fallbackResp = await sendRequestToErp(fallbackTargetUrl);
-        if (fallbackResp.ok) {
-          erpResponse = fallbackResp;
-        }
-      }
-    } catch (primaryFetchErr) {
-      if (ERP_FALLBACK_URL && ERP_FALLBACK_URL !== TARGET_ERP_URL) {
-        console.warn(`[ERP Failover] Primary connection failed. Attempting fallback endpoint: ${ERP_FALLBACK_URL}`);
-        const fallbackTargetUrl = `${ERP_FALLBACK_URL}?${queryParams.toString()}`;
-        erpResponse = await sendRequestToErp(fallbackTargetUrl);
-      } else {
-        throw primaryFetchErr;
-      }
-    }
-
-    if (erpResponse.ok) {
-      await recordSuccess('erp_gateway');
-    } else if (erpResponse.status >= 500) {
-      await recordFailure('erp_gateway');
-    }
-
-    const latencyMs = Date.now() - startTime;
-    const contentType = erpResponse.headers.get('content-type') || 'application/json';
-    const textData = await erpResponse.text();
-
-    if (['create_order', 'update_order_status', 'update_client_access', 'login'].includes(action)) {
-      await recordAuditLog({
-        eventType: action,
-        direction: 'outbound',
-        status: erpResponse.ok ? 'success' : 'error',
-        statusCode: erpResponse.status,
-        latencyMs,
-        source: 'B2B Proxy API',
-        correlationId,
-        payload: { action, query: req.query },
-      });
-    }
-
-    // Resilient Fallback для настроек отображения (display_settings)
-    if (action === 'display_settings') {
-      try {
-        const jsonData = JSON.parse(textData);
-        if (jsonData && jsonData.success && jsonData.settings) {
-          displaySettingsCache = { data: jsonData, expiry: Date.now() + 60_000 };
-          return res.status(200).json(jsonData);
-        }
-      } catch {}
-      const fallbackSettings = {
-        success: true,
-        settings: {
-          show_free_stock: true,
-          show_reserved_stock: true,
-          show_to_ship_stock: true,
-          show_total_stock: true,
-          show_prices: true,
-          show_price_per_sqm: true,
-          show_discounts: true,
-          show_dealer_showroom: true,
-          allow_orders_when_zero_stock: false,
-        },
-      };
-      displaySettingsCache = { data: fallbackSettings, expiry: Date.now() + 60_000 };
-      return res.status(200).json(fallbackSettings);
-    }
-
-    // Resilient Staging Fallback для каталога
-    if ((action === 'catalog' || action === 'catalog_normalized') && (!erpResponse.ok || !textData.trim().startsWith('{'))) {
-      try {
-        const fallback = await getCachedCatalog('catalog_global');
-        if (fallback && fallback.data) {
-          res.status(200);
-          res.setHeader('Content-Type', 'application/json');
-          res.setHeader('X-Cache', 'STALE_FALLBACK');
-          res.setHeader('X-Cache-Age-Ms', String(fallback.ageMs));
-          return res.json(fallback.data);
-        }
-      } catch (fbErr) {
-        console.warn('[API Proxy ERP] Fallback lookup exception:', fbErr);
-      }
-    }
-
-    res.status(erpResponse.status);
-    res.setHeader('Content-Type', contentType);
-
-    try {
-      const jsonData = JSON.parse(textData);
-
-      if ((action === 'catalog' || action === 'catalog_normalized') && erpResponse.ok && jsonData?.success) {
-        // Если ERP вернул нормализованную структуру designs (Архитектура RugsUSA):
-        if (Array.isArray(jsonData.designs) && !Array.isArray(jsonData.products)) {
-          const normalizedProducts = jsonData.designs.map((d: any) => ({
-            id: String(d.design_id || d.id || `design-${d.article}`),
-            name: d.name || `${d.collection} ${d.article}`,
-            collection: d.collection,
-            article: d.article,
-            category: d.category || 'Ковры',
-            manufacturer: d.manufacturer || 'Karmen Hali',
-            country: d.country || 'Турция',
-            color: d.color || '',
-            material: d.material || '',
-            density: String(d.density || ''),
-            pile_height: String(d.pile_height || ''),
-            images: Array.isArray(d.images) ? d.images : [],
-            image_thumb: Array.isArray(d.images) && d.images[0] ? d.images[0] : undefined,
-            variants: Array.isArray(d.variants) ? d.variants.map((v: any) => ({
-              ...v,
-              id: v.id || `var-${v.sku}`,
-              base_price: Number(v.base_price || (Number(v.price_per_sqm || 15) * Number(v.area_sqm || 1))),
-              price_per_sqm: Number(v.price_per_sqm || 15),
-              stock: Number(v.free_stock ?? v.stock ?? 0),
-              free_stock: Number(v.free_stock ?? v.stock ?? 0),
-              reserved_stock: Number(v.reserved_stock ?? 0),
-              total_stock: Number(v.total_stock ?? 0),
-              warehouses: Array.isArray(v.warehouses) ? v.warehouses.map((w: any) => ({
-                ...w,
-                stock: Number(w.free_stock ?? w.stock ?? 0),
-                free_stock: Number(w.free_stock ?? w.stock ?? 0),
-                reserved_stock: Number(w.reserved_stock ?? 0),
-                total_stock: Number(w.total_stock ?? 0),
-                is_hub: w.warehouse_id === 81 || (w.warehouse_name && w.warehouse_name.includes('Астана')),
-              })) : [],
-            })) : [],
-          }));
-          jsonData.products = normalizedProducts;
-        }
-
-        if (Array.isArray(jsonData.products)) {
-          saveCachedCatalog(jsonData, 'catalog_global').catch(e => console.warn('[API Proxy ERP] Cache save error:', e));
-          res.setHeader('X-Cache', 'MISS');
-        }
-      }
-
-      if (action === 'display_settings' && erpResponse.ok && jsonData?.success) {
-        displaySettingsCache = { data: jsonData, expiry: Date.now() + 60000 };
-      }
-
-      // T-12: Сохранение свежего финансового баланса в локальный кэш
-      if (action === 'client_debt' && erpResponse.ok && jsonData?.success) {
-        const pId = String(req.query.counterparty_id || req.query.client_id || jsonData.client?.partner_id || jsonData.partner_id || '');
-        const fin = jsonData.financials || {};
-        const bal = typeof fin.balance_usd === 'number' ? fin.balance_usd : (typeof jsonData.balance_usd === 'number' ? jsonData.balance_usd : -Number(fin.total_debt_usd || jsonData.debt_usd || 0));
-        const isOverdue = Boolean(fin.is_overdue || jsonData.is_overdue);
-        const overdueDays = Number(fin.max_overdue_days || fin.overdue_days || 0);
-
-        if (pId) {
-          supabase
-            .from('partner_balances')
-            .upsert({
-              partner_id: pId,
-              balance: bal,
-              is_overdue: isOverdue,
-              overdue_days: overdueDays,
-              currency: 'USD',
-              last_synced_at: new Date().toISOString(),
-            }, { onConflict: 'partner_id' })
-            .catch(e => console.warn('[Financial Cache] Update error:', e));
-        }
-      }
-
-      if (action === 'supplier_network_stock' && erpResponse.ok && jsonData?.success) {
-        if (Array.isArray(jsonData.items)) {
-          jsonData.items.forEach((item: any) => {
-            if (Array.isArray(item.distribution)) {
-              item.distribution.forEach((dist: any) => {
-                if (dist.warehouse_id === 81 || (dist.warehouse_name && dist.warehouse_name.includes('Астана')) || dist.type === 'central_hub') {
-                  dist.city = 'Астана';
-                  if (!dist.warehouse_name || dist.warehouse_name.includes('Алматы')) {
-                    dist.warehouse_name = 'Основной Склад Астана';
-                  }
-                }
-              });
-            }
-          });
-        }
-      }
-
-      if (action === 'supplier_inbound_shipments' && erpResponse.ok && jsonData?.success) {
-        if (Array.isArray(jsonData.shipments)) {
-          // 1. Нормализация складов хаба (Основной Склад Астана)
-          jsonData.shipments.forEach((s: any) => {
-            if (s.warehouse_id === 81 || (s.warehouse_name && s.warehouse_name.includes('Астана')) || !s.city) {
-              s.city = 'Астана';
-              s.warehouse_name = 'Основной Склад Астана';
-            }
-          });
-
-          // Сохраняем в кэш шлюза для отказоустойчивости (Resilience Fallback)
-          lastKnownInboundShipments = jsonData;
-
-          // 2. Интеллектуальное сопоставление партий с выбранной фабрикой
-          const rawSupplierId = req.query.supplier_id;
-          if (rawSupplierId && rawSupplierId !== '0' && rawSupplierId !== 'all') {
-            const sId = Number(rawSupplierId);
-            const matched = jsonData.shipments.filter((s: any) => {
-              if (s.supplier_id === sId) return true;
-              return Array.isArray(s.items) && s.items.some((it: any) => {
-                const iname = (it.name || '').toLowerCase();
-                const ibrand = (it.brand || '').toLowerCase();
-                if (sId === 11 || sId === 26) {
-                  // SAYDAM (11) или flora (26)
-                  return iname.includes('saydam') || iname.includes('flora') || ibrand.includes('saydam') || ibrand.includes('flora');
-                }
-                if (sId === 6) {
-                  // ISMEN (6)
-                  return iname.includes('ismen') || iname.includes('linea') || ibrand.includes('ismen');
-                }
-                if (sId === 1 || sId === 7) {
-                  // MERINOS (1 / 7)
-                  return iname.includes('merinos') || iname.includes('octavia') || iname.includes('oslo') || ibrand.includes('merinos');
-                }
-                if (sId === 8 || sId === 9 || sId === 31) {
-                  // IRAN (8) / GHEYTARAN (9)
-                  return iname.includes('iran') || iname.includes('gheytaran') || iname.includes('гейтаран') || iname.includes('исфахан') || iname.includes('afgan');
-                }
-                if (sId === 10) {
-                  // KARMEN HALI (10)
-                  return iname.includes('karmen');
-                }
-                if (sId === 12) {
-                  // LYSANDRA HALI (12)
-                  return iname.includes('lysandra');
-                }
-                return false;
-              });
-            });
-
-            if (matched.length > 0) {
-              jsonData.shipments = matched;
-              jsonData.total_shipments = matched.length;
-              jsonData.supplier_id = sId;
-            } else {
-              // Если по фабрике пока нет привязанных партий, показываем общий реестр хаба с пометкой
-              jsonData.filter_notice = 'Показан общий реестр склада Астана';
-            }
-          }
-        }
-      }
-
-      if (action === 'login') {
-        if (erpResponse.ok && jsonData?.success) {
-          try {
-            const SECRET_KEY = process.env.PORTAL_SECRET_KEY || '';
-            if (SECRET_KEY) {
-              const c = jsonData.client || {};
-              const pId = String(c.id || jsonData.client_id || '');
-              const uId = `erp-client-${pId}`;
-              const fName = String(jsonData.name || c.name || 'Оптовый клиент');
-              const phone = String(jsonData.phone || c.phone || '');
-              const priceType = String(c.price_type || 'wholesale');
-
-              const sessionData = {
-                user: {
-                  id: uId,
-                  email: `${phone.replace(/\D+/g, '') || pId}@kilem-khan.kz`,
-                  user_metadata: { full_name: fName },
-                },
-                profile: {
-                  id: uId,
-                  role: 'client',
-                  partner_id: pId,
-                  full_name: fName,
-                  phone,
-                  company_name: fName,
-                  price_type: priceType,
-                  showroom_warehouse_id: c.showroom_warehouse_id ?? null,
-                },
-                timestamp: Date.now(),
-              };
-
-              const sig = crypto.createHmac('sha256', SECRET_KEY).update(JSON.stringify(sessionData)).digest('hex');
-              const signedPayload = { data: sessionData, sig };
-              const sessionToken = Buffer.from(JSON.stringify(signedPayload)).toString('base64url');
-
-              jsonData.token = sessionToken;
-              jsonData.portal_session_token = sessionToken;
-
-              // Синхронизируем профиль клиента в базе данных
-              if (pId) {
-                try {
-                  await supabase.from('profiles').upsert({
-                    id: crypto.randomUUID(),
-                    partner_id: pId,
-                    erp_id: Number(pId) || null,
-                    full_name: fName,
-                    company_name: fName,
-                    phone,
-                    price_type: priceType,
-                    role: 'client',
-                    impersonation_enabled: true,
-                    updated_at: new Date().toISOString(),
-                  }, { onConflict: 'partner_id' });
-                } catch (e) {
-                  console.warn('[API Proxy ERP] Profile upsert notice:', e);
-                }
-              }
-            }
-          } catch (tokenErr) {
-            console.warn('[API Proxy ERP] Error generating login session token:', tokenErr);
-          }
-        } else {
-          // Fallback: Проверяем, не является ли логин/телефон сотрудником ERP (РМ, ЛМ, Администратор)
-          try {
-            let loginBody: any = {};
-            try {
-              if (Buffer.isBuffer(req.body)) {
-                loginBody = JSON.parse(req.body.toString('utf8'));
-              } else if (typeof req.body === 'string') {
-                loginBody = JSON.parse(req.body || '{}');
-              } else if (typeof req.body === 'object' && req.body !== null) {
-                loginBody = req.body;
-              }
-            } catch {}
-            const inputLogin = String(loginBody.login || loginBody.phone || req.query?.login || req.query?.phone || '').trim();
-            const inputCleanPhone = inputLogin.replace(/\D+/g, '');
-
-            if (inputLogin) {
-              let managers: any[] = [];
-              try {
-                const rmUrl = `${TARGET_ERP_URL}?action=regional_managers`;
-                const rmRes = await fetch(rmUrl, { headers: { 'X-Portal-Key': SERVER_ERP_KEY } });
-                if (rmRes.ok) {
-                  const rmData = await rmRes.json();
-                  if (rmData && Array.isArray(rmData.managers)) {
-                    managers = rmData.managers;
-                  }
-                }
-              } catch (rmErr) {
-                console.warn('[API Proxy ERP] Error fetching regional managers for auth fallback:', rmErr);
-              }
-
-              // Если список менеджеров из ERP недоступен - запрещаем вход под сотрудником (deny-by-default)
-              if (managers.length === 0) {
-                console.warn('[AUTH] ERP regional_managers endpoint returned no data or failed. Employee login denied.');
-              }
-
-              const matchedEmp = managers.find((m: any) => {
-                const mPhoneClean = String(m.phone || '').replace(/\D+/g, '');
-                const mUsername = String(m.username || '').toLowerCase().trim();
-                const mName = String(m.name || '').toLowerCase().trim();
-                const qLow = inputLogin.toLowerCase().trim();
-
-                if (inputCleanPhone && mPhoneClean && (
-                  mPhoneClean === inputCleanPhone ||
-                  (mPhoneClean.length >= 10 && inputCleanPhone.endsWith(mPhoneClean.slice(-10))) ||
-                  (inputCleanPhone.length >= 10 && mPhoneClean.endsWith(inputCleanPhone.slice(-10)))
-                )) {
-                  return true;
-                }
-                if (mUsername && (mUsername === qLow || qLow.includes(mUsername))) return true;
-                if (mName && (mName === qLow || qLow.includes(mName))) return true;
-                return false;
-              });
-
-              if (matchedEmp) {
-                const inputPass = String(loginBody.password || req.query?.password || '').trim();
-                const handled = await handleEmployeeLoginFallback(
-                  req,
-                  res,
-                  matchedEmp,
-                  inputCleanPhone,
-                  inputLogin,
-                  inputPass,
-                  correlationId
-                );
-                if (handled) return;
-              }
-
-              // 2. Проверяем, не является ли логин/телефон зарегистрированным клиентом (дилером) в ERP
-              if (inputCleanPhone && inputCleanPhone.length >= 7) {
-                let counterparties: any[] = [];
-                try {
-                  const cpUrl = `${TARGET_ERP_URL}?action=counterparties&phone=${encodeURIComponent(inputCleanPhone)}`;
-                  const cpRes = await fetch(cpUrl, { headers: { 'X-Portal-Key': SERVER_ERP_KEY } });
-                  if (cpRes.ok) {
-                    const cpData = await cpRes.json();
-                    if (Array.isArray(cpData)) {
-                      counterparties = cpData;
-                    } else if (cpData && Array.isArray(cpData.counterparties)) {
-                      counterparties = cpData.counterparties;
-                    }
-                  }
-                  if (counterparties.length === 0) {
-                    const allUrl = `${TARGET_ERP_URL}?action=counterparties`;
-                    const allRes = await fetch(allUrl, { headers: { 'X-Portal-Key': SERVER_ERP_KEY } });
-                    if (allRes.ok) {
-                      const allData = await allRes.json();
-                      counterparties = Array.isArray(allData) ? allData : (allData?.counterparties || []);
-                    }
-                  }
-                } catch (cpErr) {
-                  console.warn('[API Proxy ERP] Error fetching counterparties for auth fallback:', cpErr);
-                }
-
-                const matchedClient = counterparties.find((c: any) => {
-                  const cPhoneClean = String(c.phone || '').replace(/\D+/g, '');
-                  if (!cPhoneClean) return false;
-                  return (
-                    cPhoneClean === inputCleanPhone ||
-                    (cPhoneClean.length >= 10 && inputCleanPhone.endsWith(cPhoneClean.slice(-10))) ||
-                    (inputCleanPhone.length >= 10 && cPhoneClean.endsWith(inputCleanPhone.slice(-10)))
-                  );
-                });
-
-                if (matchedClient) {
-                  const inputPass = String(loginBody.password || req.query?.password || '').trim();
-                  const handled = await handleLoginFallback(
-                    req,
-                    res,
-                    matchedClient,
-                    inputCleanPhone,
-                    inputLogin,
-                    inputPass,
-                    correlationId
-                  );
-                  if (handled) return;
-                }
-
-
-              }
-            }
-          } catch (empFallbackErr) {
-            console.warn('[API Proxy ERP] Employee fallback auth notice:', empFallbackErr);
-          }
-        }
-      }
-
-
-
-      return res.json(jsonData);
-    } catch {
-      return res.send(textData);
-    }
-  } catch (err: any) {
-    const latencyMs = Date.now() - startTime;
-    await recordFailure('erp_gateway');
-    console.error('[API Proxy ERP] Error proxying request:', err?.name === 'AbortError' ? `ERP Request Timeout (${action === 'create_order' ? '2.5s' : '12s'})` : err);
-
-    if (action === 'display_settings') {
-      const fallbackSettings = {
-        success: true,
-        settings: {
-          show_free_stock: true,
-          show_reserved_stock: false,
-          show_total_stock: true,
-          show_prices: true,
-          show_price_per_sqm: true,
-          show_discounts: true,
-          show_dealer_showroom: true,
-          allow_orders_when_zero_stock: false,
-        },
-      };
-      displaySettingsCache = { data: fallbackSettings, expiry: Date.now() + 60_000 };
-      return res.status(200).json(fallbackSettings);
-    }
-
-    if (action === 'catalog' || action === 'catalog_normalized') {
-      try {
-        const fallback = await getCachedCatalog('catalog_global');
-        if (fallback && fallback.data) {
-          res.status(200);
-          res.setHeader('Content-Type', 'application/json');
-          res.setHeader('X-Cache', 'STALE_FALLBACK');
-          res.setHeader('X-Cache-Age-Ms', String(fallback.ageMs));
-          return res.json(fallback.data);
-        }
-      } catch {}
-    }
-
-    if (action === 'supplier_inbound_shipments' && lastKnownInboundShipments) {
-      res.status(200);
-      res.setHeader('Content-Type', 'application/json');
-      res.setHeader('X-Cache', 'STALE_FALLBACK');
-      return res.json(lastKnownInboundShipments);
-    }
-
-    // T-12: Отказоустойчивый возврат сохраненного баланса при сбое ERP
-    if (action === 'client_debt') {
-      const pId = String(req.query.counterparty_id || req.query.client_id || '');
-      if (pId) {
+      if ((action === 'catalog' || action === 'catalog_normalized') && (!erpResponse.ok || !textData.trim().startsWith('{'))) {
         try {
-          const { data: cachedBal } = await supabase
-            .from('partner_balances')
-            .select('*')
-            .eq('partner_id', pId)
-            .maybeSingle();
-
-          if (cachedBal) {
+          const fallback = await getCachedCatalog('catalog_global');
+          if (fallback && fallback.data) {
             res.status(200);
             res.setHeader('Content-Type', 'application/json');
             res.setHeader('X-Cache', 'STALE_FALLBACK');
-            return res.json({
-              success: true,
-              found: true,
-              client: { partner_id: pId, is_overdue: Boolean(cachedBal.is_overdue) },
-              financials: {
-                balance_usd: Number(cachedBal.balance || 0),
-                total_debt_usd: Math.max(0, -Number(cachedBal.balance || 0)),
-                is_overdue: Boolean(cachedBal.is_overdue),
-                overdue_days: Number(cachedBal.overdue_days || 0),
-              },
-              source: 'stale_partner_balances',
-            });
+            res.setHeader('X-Cache-Age-Ms', String(fallback.ageMs));
+            return res.json(fallback.data);
+          }
+        } catch (fbErr) {
+          console.warn('[API Proxy ERP] Fallback lookup exception:', fbErr);
+        }
+      }
+
+      res.status(erpResponse.status);
+      res.setHeader('Content-Type', contentType);
+
+      try {
+        const jsonData = JSON.parse(textData);
+
+        if ((action === 'catalog' || action === 'catalog_normalized') && erpResponse.ok && jsonData?.success) {
+          normalizeErpDesigns(jsonData);
+
+          if (Array.isArray(jsonData.products)) {
+            saveCachedCatalog(jsonData, 'catalog_global').catch(e => console.warn('[API Proxy ERP] Cache save error:', e));
+            res.setHeader('X-Cache', 'MISS');
+          }
+        }
+
+        if (action === 'display_settings' && erpResponse.ok && jsonData?.success) {
+          updateDisplaySettingsCache(jsonData, 60000);
+        }
+
+        if (action === 'client_debt' && erpResponse.ok && jsonData?.success) {
+          const pId = String(req.query.counterparty_id || req.query.client_id || jsonData.client?.partner_id || jsonData.partner_id || '');
+          const fin = jsonData.financials || {};
+          const bal = typeof fin.balance_usd === 'number' ? fin.balance_usd : (typeof jsonData.balance_usd === 'number' ? jsonData.balance_usd : -Number(fin.total_debt_usd || jsonData.debt_usd || 0));
+          const isOverdue = Boolean(fin.is_overdue || jsonData.is_overdue);
+          const overdueDays = Number(fin.max_overdue_days || fin.overdue_days || 0);
+
+          if (pId && supabase) {
+            supabase
+              .from('partner_balances')
+              .upsert({
+                partner_id: pId,
+                balance: bal,
+                is_overdue: isOverdue,
+                overdue_days: overdueDays,
+                currency: 'USD',
+                last_synced_at: new Date().toISOString(),
+              }, { onConflict: 'partner_id' })
+              .catch((e: any) => console.warn('[Financial Cache] Update error:', e));
+          }
+        }
+
+        if (action === 'supplier_network_stock' && erpResponse.ok && jsonData?.success) {
+          normalizeSupplierStockDistribution(jsonData);
+        }
+
+        if (action === 'supplier_inbound_shipments' && erpResponse.ok && jsonData?.success) {
+          filterSupplierShipments(jsonData, req.query.supplier_id);
+          lastKnownInboundShipments = jsonData;
+        }
+
+        if (action === 'login') {
+          if (erpResponse.ok && jsonData?.success) {
+            handleErpLoginToken(jsonData, supabase);
+          } else {
+            const handled = await handleErpLoginFallback(req, res, TARGET_ERP_URL, SERVER_ERP_KEY, correlationId);
+            if (handled) return;
+          }
+        }
+
+        return res.json(jsonData);
+      } catch {
+        return res.send(textData);
+      }
+    } catch (err: any) {
+      const latencyMs = Date.now() - startTime;
+      await recordFailure('erp_gateway');
+      console.error('[API Proxy ERP] Error proxying request:', err?.name === 'AbortError' ? `ERP Request Timeout (${action === 'create_order' ? '2.5s' : '12s'})` : err);
+
+      if (action === 'display_settings') {
+        const fallbackSettings = getFallbackDisplaySettings();
+        updateDisplaySettingsCache(fallbackSettings, 60000);
+        return res.status(200).json(fallbackSettings);
+      }
+
+      if (action === 'catalog' || action === 'catalog_normalized') {
+        try {
+          const fallback = await getCachedCatalog('catalog_global');
+          if (fallback && fallback.data) {
+            res.status(200);
+            res.setHeader('Content-Type', 'application/json');
+            res.setHeader('X-Cache', 'STALE_FALLBACK');
+            res.setHeader('X-Cache-Age-Ms', String(fallback.ageMs));
+            return res.json(fallback.data);
           }
         } catch {}
       }
+
+      if (action === 'supplier_inbound_shipments' && lastKnownInboundShipments) {
+        res.status(200);
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('X-Cache', 'STALE_FALLBACK');
+        return res.json(lastKnownInboundShipments);
+      }
+
+      if (action === 'client_debt' && supabase) {
+        const pId = String(req.query.counterparty_id || req.query.client_id || '');
+        if (pId) {
+          try {
+            const { data: cachedBal } = await supabase
+              .from('partner_balances')
+              .select('*')
+              .eq('partner_id', pId)
+              .maybeSingle();
+
+            if (cachedBal) {
+              res.status(200);
+              res.setHeader('Content-Type', 'application/json');
+              res.setHeader('X-Cache', 'STALE_FALLBACK');
+              return res.json({
+                success: true,
+                found: true,
+                client: { partner_id: pId, is_overdue: Boolean(cachedBal.is_overdue) },
+                financials: {
+                  balance_usd: Number(cachedBal.balance || 0),
+                  total_debt_usd: Math.max(0, -Number(cachedBal.balance || 0)),
+                  is_overdue: Boolean(cachedBal.is_overdue),
+                  overdue_days: Number(cachedBal.overdue_days || 0),
+                },
+                source: 'stale_partner_balances',
+              });
+            }
+          } catch {}
+        }
+      }
+
+      await recordAuditLog({
+        eventType: action || 'proxy_request',
+        direction: 'outbound',
+        status: 'error',
+        statusCode: 502,
+        latencyMs,
+        source: 'B2B Proxy API',
+        errorMessage: err?.message || 'Bad Gateway / Timeout',
+      });
+
+      return res.status(502).json({
+        success: false,
+        error: err?.name === 'AbortError' ? 'Сервер ERP не ответил вовремя (Таймаут 12с)' : 'Ошибка соединения с сервером ERP (Bad Gateway)',
+        details: err?.message,
+      });
     }
-
-    await recordAuditLog({
-      eventType: action || 'proxy_request',
-      direction: 'outbound',
-      status: 'error',
-      statusCode: 502,
-      latencyMs,
-      source: 'B2B Proxy API',
-      errorMessage: err?.message || 'Bad Gateway / Timeout',
-    });
-
-
-
-    return res.status(502).json({
+  } catch (fatalErr: any) {
+    console.error('[ERP Proxy Fatal Error]', fatalErr);
+    return res.status(500).json({
       success: false,
-      error: err?.name === 'AbortError' ? 'Сервер ERP не ответил вовремя (Таймаут 12с)' : 'Ошибка соединения с сервером ERP (Bad Gateway)',
-      details: err?.message,
+      error: 'Внутренняя ошибка шлюза API',
+      message: fatalErr?.message,
     });
   }
-} catch (fatalErr: any) {
-  console.error('[ERP Proxy Fatal Error]', fatalErr);
-  return res.status(500).json({
-    success: false,
-    error: 'Внутренняя ошибка шлюза API',
-    message: fatalErr?.message,
-  });
-}
 }

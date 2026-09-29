@@ -168,6 +168,11 @@ if os.path.exists(order_handler_path):
 if os.path.exists(auth_handler_path):
     with open(auth_handler_path, "r", encoding="utf-8") as fp:
         erp_code += "\n" + fp.read()
+upstream_proxy_path = os.path.join(ROOT_DIR, "api", "modules", "erp", "upstreamProxy.ts")
+if os.path.exists(upstream_proxy_path):
+    with open(upstream_proxy_path, "r", encoding="utf-8") as fp:
+        erp_code += "\n" + fp.read()
+
 
 test_assert("idempotency_key: incomingIdempotencyKey" in erp_code, "api/erp.ts passes idempotency_key into orders.insert")
 test_assert("existingOrder" in erp_code and "Idempotency Key HIT" in erp_code, "api/erp.ts implements fast idempotent order lookup")
@@ -271,6 +276,10 @@ with open(erp_path, "r", encoding="utf-8") as fp:
 if os.path.exists(order_handler_path):
     with open(order_handler_path, "r", encoding="utf-8") as fp:
         erp_code += "\n" + fp.read()
+if os.path.exists(upstream_proxy_path):
+    with open(upstream_proxy_path, "r", encoding="utf-8") as fp:
+        erp_code += "\n" + fp.read()
+
 test_assert("action === 'create_order' ? 2500 : 12000" in erp_code, "api/erp.ts sets 2.5s low-latency checkout timeout for instant fallback")
 test_assert("action === 'login'" in erp_code and "portal_session_token" in erp_code, "api/erp.ts directly generates signed session token on login")
 
