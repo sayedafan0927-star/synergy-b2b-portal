@@ -2,61 +2,29 @@ import { createContext, useContext, useState, useEffect, useCallback, type React
 import { supabase } from '@/lib/supabase';
 import type { User } from '@supabase/supabase-js';
 import { authenticateClientViaErp } from '@/lib/erpApi';
+import type { UserRole, Profile, AuthContextValue, ClientSignInInput, EmployeeSignInInput } from './auth/types';
+import {
+  getDeterministicEmployeeUuid,
+  createDemoUserAndProfile,
+  createClientUserAndProfile,
+  createEmployeeUserAndProfile,
+  provisionSessionToken,
+  requestSignedClientToken,
+  getStoredAuthSession,
+  saveAuthSession,
+  clearAuthSession,
+} from './auth/sessionStore';
+import {
+  getStoredImpersonation,
+  saveStoredImpersonation,
+  getStoredDeactivationNotice,
+  saveStoredDeactivationNotice,
+} from './auth/impersonationStore';
 
-export type UserRole = 'admin' | 'manager_rm' | 'manager_lm' | 'supplier' | 'client';
-
-export interface Profile {
-  id: string;
-  role: UserRole;
-  partner_id: string | null;
-  full_name: string;
-  company_name: string;
-  phone: string;
-  manager_id: string | null;
-  price_type: string;
-  impersonation_enabled?: boolean;
-  is_active?: boolean;
-  status?: string;
-  debt_usd?: number;
-  balance_usd?: number;
-  credit_limit_usd?: number;
-  payment_delay_days?: number;
-  showroom_warehouse_id?: number | null;
-  showroom_warehouse_name?: string | null;
-}
-
-interface AuthContextValue {
-  user: User | null;
-  profile: Profile | null;
-  loading: boolean;
-  signIn: (email: string, password: string) => Promise<string | null>;
-  signInWithPortal: (login: string, password: string) => Promise<{ success: boolean; role?: UserRole; error?: string }>;
-  signUp: (email: string, password: string, meta: { full_name: string; company_name: string }) => Promise<string | null>;
-  signInAsDemo: (role?: UserRole) => void;
-  signInAsClient: (client: { id: number | string; name: string; phone?: string; price_type?: string; showroom_warehouse_id?: number | null; showroom_warehouse_name?: string | null }) => void;
-  signInAsEmployee: (employee: { id: number | string; name: string; role: UserRole; phone?: string }) => void;
-  signOut: () => Promise<void>;
-  refreshProfile: () => Promise<void>;
-  deactivationNotice: string | null;
-  clearDeactivationNotice: () => void;
-  isAdmin: boolean;
-  realIsAdmin: boolean;
-  isManager: boolean;
-  isSupplier: boolean;
-  isClient: boolean;
-  isImpersonating: boolean;
-  impersonatedProfile: Profile | null;
-  realProfile: Profile | null;
-  impersonateUser: (target: Profile) => void;
-  stopImpersonation: () => void;
-}
+export type { UserRole, Profile };
+export { getDeterministicEmployeeUuid };
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
-
-export function getDeterministicEmployeeUuid(empId: string | number): string {
-  const cleanId = String(empId).replace(/\D+/g, '') || '1';
-  return `00000000-0000-4000-8000-${cleanId.padStart(12, '0')}`;
-}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -83,7 +51,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const urlParams = new URLSearchParams(window.location.search);
       const ssoParam = urlParams.get('sso_session');
       if (ssoParam) {
-        // Очищаем URL от токена сразу для защиты от утечки
         urlParams.delete('sso_session');
         const newSearch = urlParams.toString();
         const cleanUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '');
@@ -100,8 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               const sessionToken = data.token || data.portal_session_token || ssoParam;
               setUser(data.user);
               setProfile(data.profile);
-              sessionStorage.setItem('synergy:auth_session', JSON.stringify({ user: data.user, profile: data.profile, token: sessionToken }));
-              sessionStorage.setItem('synergy:demo_auth', JSON.stringify({ user: data.user, profile: data.profile, token: sessionToken }));
+              saveAuthSession(data.user, data.profile, sessionToken);
             } else {
               console.warn('[AuthContext] SSO verification rejected:', data?.error);
             }
@@ -116,41 +82,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       // 2. Проверяем сохраненную сессию
-      const storedAuth = sessionStorage.getItem('synergy:auth_session') || sessionStorage.getItem('synergy:demo_auth');
-      if (storedAuth) {
-        try {
-          const parsed = JSON.parse(storedAuth);
-          const su = parsed.user;
-          const sp = parsed.profile;
-          setUser(su);
-          setProfile(sp);
-          setLoading(false);
+      const parsed = getStoredAuthSession();
+      if (parsed) {
+        const su = parsed.user;
+        const sp = parsed.profile;
+        setUser(su);
+        setProfile(sp);
+        setLoading(false);
 
-          if (!parsed.token && (su || sp)) {
-            fetch('/api/auth/session', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                role: sp?.role || su?.role || 'admin',
-                user: su,
-                profile: sp,
-              }),
+        if (!parsed.token && (su || sp)) {
+          fetch('/api/auth/session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              role: sp?.role || su?.role || 'admin',
+              user: su,
+              profile: sp,
+            }),
+          })
+            .then(r => r.json())
+            .then(resData => {
+              if (resData?.token) {
+                saveAuthSession(su, sp, resData.token);
+              }
             })
-              .then(r => r.json())
-              .then(resData => {
-                if (resData?.token) {
-                  parsed.token = resData.token;
-                  sessionStorage.setItem('synergy:auth_session', JSON.stringify(parsed));
-                  sessionStorage.setItem('synergy:demo_auth', JSON.stringify(parsed));
-                }
-              })
-              .catch(() => {});
-          }
-          return;
-        } catch {
-          sessionStorage.removeItem('synergy:auth_session');
-          sessionStorage.removeItem('synergy:demo_auth');
+            .catch(() => {});
         }
+        return;
       }
     }
 
@@ -220,151 +178,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const provisionSessionToken = useCallback(async (u: unknown, p: Profile, r?: UserRole) => {
-    try {
-      const res = await fetch('/api/auth/session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role: r || p.role, user: u, profile: p }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data?.token && typeof window !== 'undefined') {
-          const sessionObj = { user: u, profile: p, token: data.token };
-          sessionStorage.setItem('synergy:auth_session', JSON.stringify(sessionObj));
-          sessionStorage.setItem('synergy:demo_auth', JSON.stringify(sessionObj));
-        }
-      }
-    } catch (e) {
-      console.warn('[AuthContext] Session token provision notice:', e);
-    }
+  const signInAsDemo = useCallback((demoRole: UserRole = 'admin') => {
+    const { profile: demoProfile, user: mockUser } = createDemoUserAndProfile(demoRole);
+    setUser(mockUser);
+    setProfile(demoProfile);
+    saveAuthSession(mockUser, demoProfile);
+    provisionSessionToken(mockUser, demoProfile, demoRole);
   }, []);
 
-  const signInAsDemo = useCallback((demoRole: UserRole = 'admin') => {
-    const demoProfile: Profile = {
-      id: 'demo-' + demoRole,
-      role: demoRole,
-      partner_id: demoRole === 'client' ? 'PRT-DEMO-001' : (demoRole === 'supplier' ? '6' : null),
-      full_name: demoRole === 'admin' ? 'Администратор портала' : demoRole === 'manager_rm' ? 'Региональный менеджер' : demoRole === 'supplier' ? 'Поставщик ISMEN' : 'Клиент (Демо)',
-      company_name: demoRole === 'supplier' ? 'ISMEN (Турция)' : 'ТОО «Kilem Khan Synergy»',
-      phone: '+7 (777) 123-45-67',
-      manager_id: '1',
-      price_type: 'wholesale',
-      impersonation_enabled: true,
-    };
-    const mockUser: unknown = {
-      id: demoProfile.id,
-      email: `${demoRole}@kilem-khan.kz`,
-      app_metadata: {},
-      user_metadata: { full_name: demoProfile.full_name },
-      aud: 'authenticated',
-      created_at: new Date().toISOString(),
-    };
-    setUser(mockUser as User);
-    setProfile(demoProfile);
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('synergy:demo_auth', JSON.stringify({ user: mockUser, profile: demoProfile }));
-      sessionStorage.setItem('synergy:auth_session', JSON.stringify({ user: mockUser, profile: demoProfile }));
-    }
-    provisionSessionToken(mockUser, demoProfile, demoRole);
-  }, [provisionSessionToken]);
-
-  const signInAsClient = useCallback((client: { id: number | string; name: string; phone?: string; price_type?: string; showroom_warehouse_id?: number | null; showroom_warehouse_name?: string | null }) => {
-    const clientProfile: Profile = {
-      id: `erp-client-${client.id}`,
-      role: 'client',
-      partner_id: String(client.id),
-      full_name: client.name,
-      company_name: client.name,
-      phone: client.phone || '',
-      manager_id: '1',
-      price_type: client.price_type || 'wholesale',
-      impersonation_enabled: true,
-      showroom_warehouse_id: client.showroom_warehouse_id ?? null,
-      showroom_warehouse_name: client.showroom_warehouse_name ?? null,
-    };
-    const mockUser: unknown = {
-      id: clientProfile.id,
-      email: `client-${client.id}@kilem-khan.kz`,
-      app_metadata: {},
-      user_metadata: { full_name: clientProfile.full_name },
-      aud: 'authenticated',
-      created_at: new Date().toISOString(),
-    };
-    setUser(mockUser as User);
+  const signInAsClient = useCallback((client: ClientSignInInput) => {
+    const { profile: clientProfile, user: mockUser } = createClientUserAndProfile(client);
+    setUser(mockUser);
     setProfile(clientProfile);
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('synergy:demo_auth', JSON.stringify({ user: mockUser, profile: clientProfile }));
-      sessionStorage.setItem('synergy:auth_session', JSON.stringify({ user: mockUser, profile: clientProfile }));
-    }
+    saveAuthSession(mockUser, clientProfile);
     provisionSessionToken(mockUser, clientProfile, 'client');
-  }, [provisionSessionToken]);
+  }, []);
 
-  const signInAsEmployee = useCallback((employee: { id: number | string; name: string; role: UserRole; phone?: string }) => {
-    const employeeProfile: Profile = {
-      id: getDeterministicEmployeeUuid(employee.id),
-      role: employee.role,
-      partner_id: null,
-      full_name: employee.name,
-      company_name: 'Synergy Group (ERP)',
-      phone: employee.phone || '',
-      manager_id: String(employee.id),
-      price_type: 'wholesale',
-      impersonation_enabled: true,
-    };
-    const mockUser: unknown = {
-      id: employeeProfile.id,
-      email: `${(employee.phone || '').replace(/\D+/g, '') || employee.id}@synergy-portal.kz`,
-      app_metadata: {},
-      user_metadata: { full_name: employeeProfile.full_name },
-      aud: 'authenticated',
-      created_at: new Date().toISOString(),
-    };
-    setUser(mockUser as User);
+  const signInAsEmployee = useCallback((employee: EmployeeSignInInput) => {
+    const { profile: employeeProfile, user: mockUser } = createEmployeeUserAndProfile(employee);
+    setUser(mockUser);
     setProfile(employeeProfile);
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('synergy:auth_session', JSON.stringify({ user: mockUser, profile: employeeProfile }));
-      sessionStorage.setItem('synergy:demo_auth', JSON.stringify({ user: mockUser, profile: employeeProfile }));
-    }
+    saveAuthSession(mockUser, employeeProfile);
     provisionSessionToken(mockUser, employeeProfile, employee.role);
-  }, [provisionSessionToken]);
+  }, []);
 
-  const [deactivationNotice, setDeactivationNotice] = useState<string | null>(() => {
-    if (typeof window !== 'undefined') {
-      return sessionStorage.getItem('synergy:deactivation_notice');
-    }
-    return null;
-  });
+  const [deactivationNotice, setDeactivationNotice] = useState<string | null>(() => getStoredDeactivationNotice());
 
   const clearDeactivationNotice = useCallback(() => {
     setDeactivationNotice(null);
-    if (typeof window !== 'undefined') {
-      sessionStorage.removeItem('synergy:deactivation_notice');
-    }
+    saveStoredDeactivationNotice(null);
   }, []);
 
-  const [impersonatedProfile, setImpersonatedProfile] = useState<Profile | null>(() => {
-    if (typeof window !== 'undefined') {
-      const stored = sessionStorage.getItem('synergy:impersonated_profile');
-      if (stored) {
-        try { return JSON.parse(stored); } catch { return null; }
-      }
-    }
-    return null;
-  });
+  const [impersonatedProfile, setImpersonatedProfile] = useState<Profile | null>(() => getStoredImpersonation());
 
   const impersonateUser = useCallback((target: Profile) => {
     setImpersonatedProfile(target);
-    if (typeof window !== 'undefined') {
-      sessionStorage.setItem('synergy:impersonated_profile', JSON.stringify(target));
-    }
+    saveStoredImpersonation(target);
   }, []);
 
   const stopImpersonation = useCallback(() => {
     setImpersonatedProfile(null);
-    if (typeof window !== 'undefined') {
-      sessionStorage.removeItem('synergy:impersonated_profile');
-    }
+    saveStoredImpersonation(null);
   }, []);
 
   const signOutFn = useCallback(async () => {
@@ -373,10 +227,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // ignore network errors on signout
     }
-    if (typeof window !== 'undefined') {
-      sessionStorage.removeItem('synergy:demo_auth');
-      sessionStorage.removeItem('synergy:impersonated_profile');
-    }
+    clearAuthSession();
+    saveStoredImpersonation(null);
     setUser(null);
     setProfile(null);
     stopImpersonation();
@@ -395,11 +247,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.warn(`[AuthContext] Instant deactivation event received for counterparty_id=${targetId}. Revoking all sessions.`);
         const msg = 'Доступ к сайту заблокирован: учетная запись клиента деактивирована в ERP.';
         setDeactivationNotice(msg);
-        if (typeof window !== 'undefined') {
-          sessionStorage.setItem('synergy:deactivation_notice', msg);
-          sessionStorage.removeItem('synergy:demo_auth');
-          sessionStorage.removeItem('synergy:impersonated_profile');
-        }
+        saveStoredDeactivationNotice(msg);
+        clearAuthSession();
+        saveStoredImpersonation(null);
         setUser(null);
         setProfile(null);
         stopImpersonation();
@@ -435,7 +285,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   /**
    * Прямая авторизация клиента через ERP (проверка логина, пароля и статуса is_active).
    */
-  const signInWithPortal = useCallback(async (login: string, password: string): Promise<{ success: boolean; error?: string }> => {
+  const signInWithPortal = useCallback(async (login: string, password: string): Promise<{ success: boolean; role?: UserRole; error?: string }> => {
     setLoading(true);
     try {
       const res = await authenticateClientViaErp(login, password);
@@ -449,44 +299,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (res.user_type === 'employee' && res.employee) {
-        const emp = res.employee;
-        const employeeProfile: Profile = {
-          id: getDeterministicEmployeeUuid(emp.id),
-          role: emp.role as UserRole,
-          partner_id: null,
-          full_name: emp.name,
-          company_name: 'Synergy Group (ERP)',
-          phone: emp.phone || '',
-          manager_id: String(emp.id),
-          price_type: 'wholesale',
-          impersonation_enabled: true,
-        };
+        const { profile: employeeProfile, user: mockUser } = createEmployeeUserAndProfile({
+          id: res.employee.id,
+          name: res.employee.name,
+          role: res.employee.role as UserRole,
+          phone: res.employee.phone,
+        });
 
-        const mockUser: unknown = {
-          id: employeeProfile.id,
-          email: `${(emp.phone || '').replace(/\D+/g, '') || emp.id}@synergy-portal.kz`,
-          app_metadata: {},
-          user_metadata: { full_name: employeeProfile.full_name },
-          aud: 'authenticated',
-          created_at: new Date().toISOString(),
-        };
-
-        setUser(mockUser as User);
+        setUser(mockUser);
         setProfile(employeeProfile);
         setDeactivationNotice(null);
-
-        if (typeof window !== 'undefined') {
-          sessionStorage.removeItem('synergy:deactivation_notice');
-          sessionStorage.setItem('synergy:auth_session', JSON.stringify({
-            user: mockUser,
-            profile: employeeProfile,
-            token: res.token,
-          }));
-          sessionStorage.setItem('synergy:demo_auth', JSON.stringify({
-            user: mockUser,
-            profile: employeeProfile,
-          }));
-        }
+        saveStoredDeactivationNotice(null);
+        saveAuthSession(mockUser, employeeProfile, res.token);
 
         setLoading(false);
         return { success: true, role: employeeProfile.role };
@@ -522,46 +346,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         created_at: new Date().toISOString(),
       };
 
-      // Получаем криптографически подписанный Bearer-токен сессии от бэкенда
-      let sessionToken: string | undefined = res.token;
-      if (!sessionToken) {
-        try {
-          const authHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
-          const storedSession = sessionStorage.getItem('synergy:auth_session');
-          if (storedSession) {
-            try {
-              const parsed = JSON.parse(storedSession);
-              if (parsed?.token) authHeaders['Authorization'] = `Bearer ${parsed.token}`;
-            } catch {}
-          }
-          const tokenRes = await fetch('/api/auth/client-token', {
-            method: 'POST',
-            headers: authHeaders,
-            body: JSON.stringify({ client: clientProfile, user: mockUser }),
-          });
-          if (tokenRes.ok) {
-            const tokenData = await tokenRes.json();
-            if (tokenData?.token) {
-              sessionToken = tokenData.token;
-            }
-          }
-        } catch (tokenErr) {
-          console.warn('[AuthContext] Notice obtaining signed client token:', tokenErr);
-        }
-      }
+      const sessionToken = res.token || (await requestSignedClientToken(clientProfile, mockUser));
 
       setUser(mockUser as User);
       setProfile(clientProfile);
       setDeactivationNotice(null);
-
-      if (typeof window !== 'undefined') {
-        sessionStorage.removeItem('synergy:deactivation_notice');
-        sessionStorage.setItem('synergy:auth_session', JSON.stringify({
-          user: mockUser,
-          profile: clientProfile,
-          token: sessionToken,
-        }));
-      }
+      saveStoredDeactivationNotice(null);
+      saveAuthSession(mockUser, clientProfile, sessionToken);
 
       setLoading(false);
       return { success: true, role: 'client' };

@@ -311,9 +311,13 @@ test_assert("getSizeCluster" in types_code and "SizeCluster" in types_code, "src
 test_assert("isRunnerDimension" in types_code, "src/types/index.ts exports isRunnerDimension aspect-ratio calculator")
 
 hooks_path = os.path.join(ROOT_DIR, "src", "hooks", "useProductData.ts")
+catalog_merge_path = os.path.join(ROOT_DIR, "src", "lib", "catalogMerge.ts")
 with open(hooks_path, "r", encoding="utf-8") as fp:
     hooks_code = fp.read()
-test_assert("size_cluster: sizeCluster" in hooks_code and "is_runner: isRunner" in hooks_code, "useProductData.ts computes size_cluster and is_runner for all variants")
+if os.path.exists(catalog_merge_path):
+    with open(catalog_merge_path, "r", encoding="utf-8") as fp:
+        hooks_code += fp.read()
+test_assert("size_cluster: sizeCluster" in hooks_code and "is_runner: isRunner" in hooks_code, "useProductData.ts / catalogMerge.ts computes size_cluster and is_runner for all variants")
 
 catalog_page_path = os.path.join(ROOT_DIR, "src", "pages", "CatalogPage.tsx")
 catalog_drawer_path = os.path.join(ROOT_DIR, "src", "components", "catalog", "FilterDrawer.tsx")
@@ -327,8 +331,12 @@ test_assert("selectedClusters" in catalog_code and "КЛАСТЕРЫ РАЗМЕ�
 test_assert("split(/\\s+/)" in catalog_code and "searchable" in catalog_code, "CatalogPage.tsx implements sub-50ms multi-token search engine")
 
 product_card_path = os.path.join(ROOT_DIR, "src", "components", "ProductCard.tsx")
+product_sizes_path = os.path.join(ROOT_DIR, "src", "components", "product", "ProductCardQuickSizes.tsx")
 with open(product_card_path, "r", encoding="utf-8") as fp:
     pcard_code = fp.read()
+if os.path.exists(product_sizes_path):
+    with open(product_sizes_path, "r", encoding="utf-8") as fp:
+        pcard_code += fp.read()
 test_assert("variant.is_runner" in pcard_code and "variant.size_cluster" in pcard_code, "ProductCard.tsx displays size cluster and runner tags in quick size switcher")
 
 product_page_path = os.path.join(ROOT_DIR, "src", "pages", "ProductPage.tsx")

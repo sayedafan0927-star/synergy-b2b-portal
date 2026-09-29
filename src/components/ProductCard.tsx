@@ -9,8 +9,9 @@ import { useCurrency } from '@/contexts/CurrencyContext';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
 import { filterClientWarehouses } from '@/hooks/useProductData';
 import { isWarehouseVisibleForClient } from '@/lib/warehouseVisibility';
-import { Check, ChevronDown, ChevronLeft, ChevronRight, Lock, ShoppingCart } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Lock } from 'lucide-react';
 import ProductImage from '@/components/ProductImage';
+import ProductCardQuickSizes from '@/components/product/ProductCardQuickSizes';
 
 interface ProductCardProps {
   product: Product;
@@ -29,19 +30,6 @@ function getMainWarehouseStock(variant: ProductVariant) {
   }
   if (typeof variant.free_stock === 'number') return Math.max(0, variant.free_stock);
   return Math.max(0, variant.stock ?? 0);
-}
-
-function getTotalStock(variant: ProductVariant) {
-  return getMainWarehouseStock(variant);
-}
-
-function getAvailableWarehouse(variant: ProductVariant) {
-  return {
-    warehouse_id: 81,
-    warehouse_name: 'Основной Склад Астана',
-    city: 'Основной Склад Астана',
-    stock: getMainWarehouseStock(variant),
-  };
 }
 
 export function formatProductTitle(product: { name: string; article?: string; color?: string; category?: string; collection: string }, lang: 'ru' | 'kz' = 'ru'): string {
@@ -92,7 +80,7 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
   const { addItem } = useCart();
   const { language, t } = useLanguage();
   const { formatPrice } = useCurrency();
-  const { getMinPricePerSqm, getVariantPrice, getPricePerSqm, hasContractDiscount, tier } = useUserPricing();
+  const { getMinPricePerSqm, getVariantPrice, getPricePerSqm } = useUserPricing();
   const [sizesOpen, setSizesOpen] = useState(false);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [addedSku, setAddedSku] = useState<string | null>(null);
@@ -125,12 +113,6 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
   const activeVariantForSale = product.variants.find(v => (v.price_per_sqm ?? 0) === pricePerSqm) || product.variants[0];
   const isOnSale = Boolean(activeVariantForSale?.is_on_sale || product.is_on_sale);
   const oldPricePerSqm = activeVariantForSale?.old_price_per_sqm || product.old_price_per_sqm || null;
-
-  // Определяем ходовой размер для превью
-  const primarySize = product.variants.find(v => v.size === '1.6 × 2.3' || v.size === '1.6*2.3')?.size
-    || product.variants.find(v => v.size === '2 × 3' || v.size === '2*3')?.size
-    || product.variants[0]?.size
-    || 'Стандарт';
 
   const setQuantity = (sku: string, value: number) => {
     setQuantities(previous => ({ ...previous, [sku]: Math.max(1, value || 1) }));
@@ -402,97 +384,15 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
       </div>
 
       {sizesOpen && (
-        <div
-          className="absolute left-0 right-0 sm:-left-3 sm:-right-3 top-full z-40 -mt-1 rounded-xl bg-white p-3 shadow-xl ring-1 ring-slate-200/80 border border-slate-100 min-w-[290px]"
-          onClick={event => event.stopPropagation()}
-        >
-          <div className="space-y-1.5 max-h-60 overflow-y-auto overflow-x-hidden pr-0.5 select-none">
-            {product.variants.filter(v => getVariantClientStock(v) > 0).length > 0 ? (
-              product.variants
-                .filter(v => getVariantClientStock(v) > 0)
-                .map(variant => {
-                  const stock = getVariantClientStock(variant);
-                  const quantity = quantities[variant.sku] ?? 1;
-                  const isAdded = addedSku === variant.sku;
-
-                  return (
-                    <div
-                      key={variant.sku}
-                      className="flex items-center justify-between py-1.5 border-b border-slate-100 last:border-b-0 gap-2"
-                    >
-                      <div className="flex items-baseline gap-1.5 whitespace-nowrap shrink-0" data-size-cluster={variant.size_cluster}>
-                        <span className="font-semibold text-slate-800 text-xs sm:text-sm whitespace-nowrap">{variant.size}</span>
-                        {variant.is_runner && (
-                          <span className="text-[9px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1 py-0.2 rounded">Дорожка</span>
-                        )}
-                        <span className="text-[10px] sm:text-[11px] text-slate-400 font-normal whitespace-nowrap">({stock} шт)</span>
-                      </div>
-
-                      <div className="flex items-center gap-1.5 ml-auto shrink-0">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setQuantity(variant.sku, Math.max(1, (quantities[variant.sku] ?? 1) - 1));
-                          }}
-                          className="h-7 w-7 shrink-0 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-700 hover:bg-slate-100 active:scale-95 transition-all text-xs font-bold cursor-pointer"
-                        >
-                          -
-                        </button>
-                        <input
-                          type="number"
-                          min="1"
-                          max={stock}
-                          value={quantity}
-                          onChange={event => {
-                            const val = Number(event.target.value);
-                            setQuantity(variant.sku, Math.max(1, Math.min(stock, val || 1)));
-                          }}
-                          onClick={event => event.stopPropagation()}
-                          className="h-7 w-9 shrink-0 rounded-lg border border-slate-200 text-center text-xs font-semibold text-slate-800 outline-none focus:border-brand-500"
-                        />
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setQuantity(variant.sku, Math.min(stock, (quantities[variant.sku] ?? 1) + 1));
-                          }}
-                          className="h-7 w-7 shrink-0 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-700 hover:bg-slate-100 active:scale-95 transition-all text-xs font-bold cursor-pointer"
-                        >
-                          +
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleAdd(variant);
-                          }}
-                          className={`h-7 w-8 shrink-0 rounded-lg flex items-center justify-center text-white transition-all active:scale-95 cursor-pointer ${
-                            isAdded ? 'bg-emerald-600 shadow-sm' : 'bg-brand-700 hover:bg-brand-800 shadow-sm'
-                          }`}
-                          title="Добавить в корзину"
-                        >
-                          {isAdded ? <Check className="h-3.5 w-3.5 shrink-0" /> : <ShoppingCart className="h-3.5 w-3.5 shrink-0" />}
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })
-            ) : (
-              <div className="py-3 px-2 text-center text-xs font-medium">
-                {isEffectiveAdmin ? (
-                  <span className="text-amber-700 bg-amber-50 px-2.5 py-1 rounded-md inline-block">
-                    ⚠️ 0 шт на складах (карточка скрыта от клиентов)
-                  </span>
-                ) : (
-                  <span className="text-slate-500">
-                    Нет в наличии на доступных складах
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
+        <ProductCardQuickSizes
+          product={product}
+          isEffectiveAdmin={isEffectiveAdmin}
+          quantities={quantities}
+          addedSku={addedSku}
+          onSetQuantity={setQuantity}
+          onAdd={handleAdd}
+          getVariantStock={getVariantClientStock}
+        />
       )}
     </div>
   );
