@@ -30,7 +30,7 @@ interface AuthContextValue {
   profile: Profile | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<string | null>;
-  signInWithPortal: (login: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  signInWithPortal: (login: string, password: string) => Promise<{ success: boolean; role?: UserRole; error?: string }>;
   signUp: (email: string, password: string, meta: { full_name: string; company_name: string }) => Promise<string | null>;
   signInAsDemo: (role?: UserRole) => void;
   signInAsClient: (client: { id: number | string; name: string; phone?: string; price_type?: string; showroom_warehouse_id?: number | null; showroom_warehouse_name?: string | null }) => void;
@@ -489,7 +489,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         setLoading(false);
-        return { success: true };
+        return { success: true, role: employeeProfile.role };
       }
 
       const client = res.client!;
@@ -564,7 +564,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       setLoading(false);
-      return { success: true };
+      return { success: true, role: 'client' };
     } catch (err: any) {
       setLoading(false);
       return {

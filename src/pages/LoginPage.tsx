@@ -4,10 +4,9 @@ import type { PageId } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function LoginPage({ onNavigate }: { onNavigate: (page: PageId) => void }) {
-  const { signIn, signInWithPortal, signUp, signInAsDemo, signInAsClient, signInAsEmployee, deactivationNotice, clearDeactivationNotice } = useAuth();
+  const { signIn, signInWithPortal, signUp, deactivationNotice, clearDeactivationNotice } = useAuth();
   const [isLogin, setIsLogin] = useState(true);
   const [showPass, setShowPass] = useState(false);
-  const [quickAccessTab, setQuickAccessTab] = useState<'employees' | 'clients'>('employees');
   const [form, setForm] = useState({ email: '', password: '', name: '', company: '' });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -20,25 +19,28 @@ export default function LoginPage({ onNavigate }: { onNavigate: (page: PageId) =
 
     let err: string | null = null;
     if (isLogin) {
-      const isLikelyPhoneOrLogin = !form.email.includes('@') || /^\+?[\d\s\-()]+$/.test(form.email.trim());
-      if (isLikelyPhoneOrLogin) {
-        const portalRes = await signInWithPortal(form.email, form.password);
-        if (portalRes.success) {
-          setBusy(false);
+      // 1. Приоритетная единая авторизация по номеру телефона / логину ERP
+      const portalRes = await signInWithPortal(form.email, form.password);
+      if (portalRes.success) {
+        setBusy(false);
+        // Сотрудников и админа направляем в панель управления, клиентов — в каталог
+        if (portalRes.role === 'admin' || portalRes.role === 'manager_rm' || portalRes.role === 'manager_lm') {
+          onNavigate('profile');
+        } else {
           onNavigate('catalog');
-          return;
         }
-        err = portalRes.error || 'Ошибка входа';
-      } else {
-        err = await signIn(form.email, form.password);
-        if (err && (err.includes('Supabase') || err.includes('Неверный') || err.includes('fetch'))) {
-          // Fallback: пробуем как логин в ERP
-          const portalRes = await signInWithPortal(form.email, form.password);
-          if (portalRes.success) {
-            setBusy(false);
-            onNavigate('catalog');
-            return;
-          }
+        return;
+      }
+
+      err = portalRes.error || 'Ошибка входа';
+
+      // 2. Резервный fallback для внешних email-учеток
+      if (form.email.includes('@') && !form.email.includes('synergy') && !form.email.includes('kilem-khan')) {
+        const sbErr = await signIn(form.email, form.password);
+        if (!sbErr) {
+          setBusy(false);
+          onNavigate('profile');
+          return;
         }
       }
     } else {
@@ -135,14 +137,14 @@ export default function LoginPage({ onNavigate }: { onNavigate: (page: PageId) =
 
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700">
-                {isLogin ? 'Номер телефона или Email' : 'Email'}
+                {isLogin ? 'Номер телефона или логин' : 'Email'}
               </label>
               <input
                 type={isLogin ? 'text' : 'email'}
                 required
                 value={form.email}
                 onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                placeholder={isLogin ? '+7 (701) 123-45-67 или email' : 'email@company.kz'}
+                placeholder={isLogin ? '+7 (708) 698-45-43 или логин' : 'email@company.kz'}
                 className="input-field"
                 disabled={busy}
               />
@@ -189,190 +191,11 @@ export default function LoginPage({ onNavigate }: { onNavigate: (page: PageId) =
             </button>
           </div>
 
-          {/* Быстрый доступ для сотрудников и клиентов ERP */}
-          <div className="mt-6 pt-5 border-t border-slate-100">
-            <div className="flex items-center justify-center gap-1.5 p-1 bg-slate-100/80 rounded-lg mb-3">
-              <button
-                type="button"
-                onClick={() => setQuickAccessTab('employees')}
-                className={`flex-1 py-1.5 px-2 text-xs font-semibold rounded-md transition-all ${
-                  quickAccessTab === 'employees'
-                    ? 'bg-white text-slate-800 shadow-2xs'
-                    : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                👔 Сотрудники ERP
-              </button>
-              <button
-                type="button"
-                onClick={() => setQuickAccessTab('clients')}
-                className={`flex-1 py-1.5 px-2 text-xs font-semibold rounded-md transition-all ${
-                  quickAccessTab === 'clients'
-                    ? 'bg-white text-slate-800 shadow-2xs'
-                    : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                🏢 Клиенты ERP
-              </button>
-            </div>
-
-            {quickAccessTab === 'employees' ? (
-              <div className="space-y-1.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    signInAsEmployee?.({ id: 9, name: 'Нурбол Торебеков', role: 'manager_rm', phone: '87768818101' });
-                    onNavigate('profile');
-                  }}
-                  className="w-full flex items-center justify-between p-2 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-slate-100 text-left transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-base">👔</span>
-                    <div>
-                      <p className="text-xs font-semibold text-slate-800">Нурбол Торебеков</p>
-                      <p className="text-[10px] text-slate-500">Региональный менеджер (РМ) • 87768818101</p>
-                    </div>
-                  </div>
-                  <span className="text-[10px] font-medium text-brand-700 bg-brand-50 px-2 py-0.5 rounded">Войти →</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    signInAsEmployee?.({ id: 12, name: 'Ришат Худайберды', role: 'manager_rm', phone: '87714691133' });
-                    onNavigate('profile');
-                  }}
-                  className="w-full flex items-center justify-between p-2 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-slate-100 text-left transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-base">👔</span>
-                    <div>
-                      <p className="text-xs font-semibold text-slate-800">Ришат Худайберды</p>
-                      <p className="text-[10px] text-slate-500">Региональный менеджер (РМ) • 87714691133</p>
-                    </div>
-                  </div>
-                  <span className="text-[10px] font-medium text-brand-700 bg-brand-50 px-2 py-0.5 rounded">Войти →</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    signInAsEmployee?.({ id: 15, name: 'Суженова Ботагоз', role: 'manager_lm', phone: '87785806866' });
-                    onNavigate('profile');
-                  }}
-                  className="w-full flex items-center justify-between p-2 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-slate-100 text-left transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-base">🚚</span>
-                    <div>
-                      <p className="text-xs font-semibold text-slate-800">Суженова Ботагоз</p>
-                      <p className="text-[10px] text-slate-500">Логист склада Астана (ЛМ) • 87785806866</p>
-                    </div>
-                  </div>
-                  <span className="text-[10px] font-medium text-brand-700 bg-brand-50 px-2 py-0.5 rounded">Войти →</span>
-                </button>
-
-                <div className="grid grid-cols-2 gap-1.5 pt-0.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      signInAsEmployee?.({ id: 2, name: 'afan', role: 'admin', phone: '87086984543' });
-                      onNavigate('profile');
-                    }}
-                    className="flex items-center justify-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50/70 p-2 text-xs font-semibold text-brand-800 hover:bg-brand-100 transition-colors cursor-pointer"
-                  >
-                    <span>👑 afan (Админ)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      signInAsEmployee?.({ id: 1, name: 'admin1', role: 'admin', phone: '87082449730' });
-                      onNavigate('profile');
-                    }}
-                    className="flex items-center justify-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50/70 p-2 text-xs font-semibold text-brand-800 hover:bg-brand-100 transition-colors cursor-pointer"
-                  >
-                    <span>👑 admin1 (Админ)</span>
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-1.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    signInAsClient({ id: 16, name: 'BIG CARPET ТОО (Сакен)', phone: '87028582444', price_type: 'wholesale' });
-                    onNavigate('catalog');
-                  }}
-                  className="w-full flex items-center justify-between p-2 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-slate-100 text-left transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-base">🏢</span>
-                    <div>
-                      <p className="text-xs font-semibold text-slate-800">BIG CARPET ТОО (Сакен)</p>
-                      <p className="text-[10px] text-slate-500">ID: 16 • РМ: Ришат Худайберды</p>
-                    </div>
-                  </div>
-                  <span className="text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">В каталог →</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    signInAsClient({ id: 2933, name: 'Erkebulan kilem', phone: '77021856786', price_type: 'wholesale' });
-                    onNavigate('catalog');
-                  }}
-                  className="w-full flex items-center justify-between p-2 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-slate-100 text-left transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-base">🏢</span>
-                    <div>
-                      <p className="text-xs font-semibold text-slate-800">Erkebulan kilem</p>
-                      <p className="text-[10px] text-slate-500">ID: 2933 • РМ: Нурбол Торебеков</p>
-                    </div>
-                  </div>
-                  <span className="text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">В каталог →</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    signInAsClient({ id: 13, name: 'INTERIA LLP ТОО', phone: '87774114271', price_type: 'wholesale' });
-                    onNavigate('catalog');
-                  }}
-                  className="w-full flex items-center justify-between p-2 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-slate-100 text-left transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-base">🏢</span>
-                    <div>
-                      <p className="text-xs font-semibold text-slate-800">INTERIA LLP ТОО</p>
-                      <p className="text-[10px] text-slate-500">ID: 13 • РМ: Ришат Худайберды</p>
-                    </div>
-                  </div>
-                  <span className="text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">В каталог →</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    signInAsClient({ id: 2976, name: 'Leila carpets', phone: '87010125577', price_type: 'wholesale' });
-                    onNavigate('catalog');
-                  }}
-                  className="w-full flex items-center justify-between p-2 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-slate-100 text-left transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-base">🏢</span>
-                    <div>
-                      <p className="text-xs font-semibold text-slate-800">Leila carpets</p>
-                      <p className="text-[10px] text-slate-500">ID: 2976 • РМ: Ришат Худайберды</p>
-                    </div>
-                  </div>
-                  <span className="text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">В каталог →</span>
-                </button>
-              </div>
-            )}
-
-            <p className="text-[11px] text-slate-400 mt-3 text-center leading-relaxed">
-              💡 Также сотрудники (по номеру телефона) и клиенты могут входить напрямую через форму ввода выше.
+          {/* Единый защищенный вход ERP */}
+          <div className="mt-8 pt-5 border-t border-slate-100 text-center">
+            <p className="text-xs text-slate-400 leading-relaxed">
+              🔒 Единый защищенный вход для сотрудников ERP и оптовых клиентов.<br />
+              Используйте ваш номер телефона и пароль учетной записи.
             </p>
           </div>
         </div>

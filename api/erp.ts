@@ -828,7 +828,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 const mName = String(m.name || '').toLowerCase().trim();
                 const qLow = inputLogin.toLowerCase().trim();
 
-                if (inputCleanPhone && mPhoneClean && (mPhoneClean === inputCleanPhone || (mPhoneClean.length >= 10 && inputCleanPhone.endsWith(mPhoneClean.slice(-10))))) {
+                if (inputCleanPhone && mPhoneClean && (
+                  mPhoneClean === inputCleanPhone ||
+                  (mPhoneClean.length >= 10 && inputCleanPhone.endsWith(mPhoneClean.slice(-10))) ||
+                  (inputCleanPhone.length >= 10 && mPhoneClean.endsWith(inputCleanPhone.slice(-10)))
+                )) {
                   return true;
                 }
                 if (mUsername && (mUsername === qLow || qLow.includes(mUsername))) return true;

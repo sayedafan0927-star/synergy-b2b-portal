@@ -226,14 +226,42 @@ export async function handleEmployeeLoginFallback(
   const uId = `erp-employee-${empId}`;
 
   // 2. Поиск хэша пароля сотрудника в profiles
-  const { data: dbProfile } = await supabase
-    .from('profiles')
-    .select('id, password_hash, role')
-    .or(`phone.eq.${empPhone},manager_id.eq.${empId}`)
-    .maybeSingle();
+  let dbProfile: any = null;
+  if (supabase) {
+    try {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, password_hash, role')
+        .or(`phone.eq.${empPhone},manager_id.eq.${empId}`)
+        .maybeSingle();
+      dbProfile = data;
+    } catch (e) {
+      logger.warn('[Auth] Error looking up employee profile in Supabase:', e as Error);
+    }
+  }
 
-  // Если пароль в базе не настроен - блокируем вход
-  if (!dbProfile?.password_hash) {
+  // Защищенные стартовые SHA-256 хэши для ключевых сотрудников ERP:
+  // afan (87086984543): 'Aidafa0927!'
+  // остальные сотрудники: 'Synergy2026'
+  const DEFAULT_EMPLOYEE_HASHES: Record<string, string> = {
+    '2': 'b5ea9d36ead0a9326ac1bc5f4eccfe9ca0c2beab0730e1641eefa9eadefc3737', // afan (Aidafa0927!)
+    '87086984543': 'b5ea9d36ead0a9326ac1bc5f4eccfe9ca0c2beab0730e1641eefa9eadefc3737', // afan
+    '1': 'f898c400752061ba5d0fa4773c4277ea8ef1be7611d9c6d82c25a3d9fab7ad54', // admin1 (Synergy2026)
+    '87082449730': 'f898c400752061ba5d0fa4773c4277ea8ef1be7611d9c6d82c25a3d9fab7ad54',
+    '9': 'f898c400752061ba5d0fa4773c4277ea8ef1be7611d9c6d82c25a3d9fab7ad54', // Нурбол Торебеков (Synergy2026)
+    '87768818101': 'f898c400752061ba5d0fa4773c4277ea8ef1be7611d9c6d82c25a3d9fab7ad54',
+    '12': 'f898c400752061ba5d0fa4773c4277ea8ef1be7611d9c6d82c25a3d9fab7ad54', // Ришат Худайберды (Synergy2026)
+    '87714691133': 'f898c400752061ba5d0fa4773c4277ea8ef1be7611d9c6d82c25a3d9fab7ad54',
+    '15': 'f898c400752061ba5d0fa4773c4277ea8ef1be7611d9c6d82c25a3d9fab7ad54', // Суженова Ботагоз (Synergy2026)
+    '87785806866': 'f898c400752061ba5d0fa4773c4277ea8ef1be7611d9c6d82c25a3d9fab7ad54',
+    '17': 'f898c400752061ba5d0fa4773c4277ea8ef1be7611d9c6d82c25a3d9fab7ad54', // Раби (Synergy2026)
+  };
+
+  const cleanPhone = String(empPhone || '').replace(/\D+/g, '');
+  const storedHash = String(dbProfile?.password_hash || DEFAULT_EMPLOYEE_HASHES[String(empId)] || DEFAULT_EMPLOYEE_HASHES[cleanPhone] || '').trim();
+
+  // Если пароль в базе не настроен и нет стартового хэша - блокируем вход
+  if (!storedHash) {
     logger.warn('[Auth P0 Guard] Blocked employee login: account has no password_hash configured', {
       empId,
       phone: empPhone,
@@ -249,7 +277,6 @@ export async function handleEmployeeLoginFallback(
 
   // 3. Криптографическая сверка пароля (bcrypt / SHA-256 fallback)
   let passwordMatched = false;
-  const storedHash = String(dbProfile.password_hash).trim();
 
   try {
     if (storedHash.startsWith('$2a$') || storedHash.startsWith('$2b$')) {
