@@ -1,6 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import crypto from 'crypto';
-import bcrypt from 'bcryptjs';
 import { createClient } from '@supabase/supabase-js';
 import { dispatchApprovalRequest, sendWhatsAppMessage } from './approvals/whatsapp';
 import { recordAuditLog } from './audit/logs';

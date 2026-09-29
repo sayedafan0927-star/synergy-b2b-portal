@@ -1,14 +1,24 @@
-import { Redis } from '@upstash/redis';
-
-let redisInstance: Redis | null = null;
+let RedisClass: any = null;
+let redisInstance: any = null;
 let redisInitialized = false;
+
+function loadRedisClass() {
+  if (RedisClass) return RedisClass;
+  try {
+    const mod = require('@upstash/redis');
+    RedisClass = mod.Redis || mod.default?.Redis || mod;
+  } catch {
+    RedisClass = null;
+  }
+  return RedisClass;
+}
 
 /**
  * Initializes and returns the Upstash Redis client.
  * Supports standard UPSTASH_REDIS_REST_URL/TOKEN and Vercel KV environment variables.
  * Returns null if no Redis environment variables are configured.
  */
-export function getRedisClient(): Redis | null {
+export function getRedisClient(): any {
   if (redisInitialized) {
     return redisInstance;
   }
@@ -18,11 +28,16 @@ export function getRedisClient(): Redis | null {
 
   if (url && token) {
     try {
-      redisInstance = new Redis({ url, token });
+      const Cls = loadRedisClass();
+      if (Cls) {
+        redisInstance = new Cls({ url, token });
+      }
     } catch (err) {
       console.warn('[Redis] Failed to initialize Upstash Redis client:', err);
       redisInstance = null;
     }
+  }
+
   redisInitialized = true;
   return redisInstance;
 }
