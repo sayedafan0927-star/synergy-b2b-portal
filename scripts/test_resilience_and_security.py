@@ -172,6 +172,13 @@ upstream_proxy_path = os.path.join(ROOT_DIR, "api", "modules", "erp", "upstreamP
 if os.path.exists(upstream_proxy_path):
     with open(upstream_proxy_path, "r", encoding="utf-8") as fp:
         erp_code += "\n" + fp.read()
+orders_dir = os.path.join(ROOT_DIR, "api", "modules", "orders")
+if os.path.exists(orders_dir):
+    for f in sorted(os.listdir(orders_dir)):
+        if f.endswith(".ts") and f != "createOrderHandler.ts":
+            with open(os.path.join(orders_dir, f), "r", encoding="utf-8") as sfp:
+                erp_code += "\n" + sfp.read()
+
 
 
 test_assert("idempotency_key: incomingIdempotencyKey" in erp_code, "api/erp.ts passes idempotency_key into orders.insert")
@@ -551,8 +558,14 @@ with open(deploy_all_path, "r", encoding="utf-8") as fp:
 test_assert("create_order_atomic" in deploy_all_sql, "Consolidated DEPLOY_ALL_ENTERPRISE_MIGRATIONS.sql includes create_order_atomic")
 
 order_handler_path = os.path.join(ROOT_DIR, "api", "modules", "orders", "createOrderHandler.ts")
+orders_dir = os.path.join(ROOT_DIR, "api", "modules", "orders")
 with open(order_handler_path, "r", encoding="utf-8") as fp:
     oh_code = fp.read()
+if os.path.exists(orders_dir):
+    for f in sorted(os.listdir(orders_dir)):
+        if f.endswith(".ts") and f != "createOrderHandler.ts":
+            with open(os.path.join(orders_dir, f), "r", encoding="utf-8") as sfp:
+                oh_code += "\n" + sfp.read()
 test_assert("create_order_atomic" in oh_code, "createOrderHandler.ts integrates create_order_atomic RPC")
 test_assert("triggerImmediateOutboxSync" in oh_code, "createOrderHandler.ts implements triggerImmediateOutboxSync for sub-second outbox drain")
 

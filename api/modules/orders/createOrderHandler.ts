@@ -10,11 +10,13 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { validateOrderPricing, validateAndPriceOrder, resolveWarehouseId } from '../../lib/pricingValidator';
+import { validateOrderPricing, resolveWarehouseId } from '../../lib/pricingValidator';
 import { releaseAllReservedStock, ReservedStockItem } from '../../lib/saga';
 import { logger } from '../../lib/logger';
 import { dispatchApprovalRequest } from '../../approvals/whatsapp';
 import { recordFailure, recordSuccess } from '../../lib/circuitBreaker';
+import { validateClientCreditExposure } from './exposureValidator';
+import { buildSplitOrdersPayload, insertSequentialSplitOrders, SplitOrderSummary } from './orderSplitter';
 
 export interface CreateOrderContext {
   req: VercelRequest;
@@ -42,8 +44,8 @@ function triggerImmediateOutboxSync(req: VercelRequest, correlationId: string): 
     const fetchPromise = fetch(workerUrl, {
       method: 'GET',
       headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${cronSecret}`,
+        Accept: 'application/json',
+        Authorization: `Bearer ${cronSecret}`,
         'X-Portal-Key': cronSecret,
         'X-Cron-Key': cronSecret,
         'X-Correlation-ID': correlationId,
@@ -120,72 +122,26 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
   }
 
   // 3. Серверный комплаенс-контроль (Кредитный лимит и просрочка)
-  let serverRequiresApproval = false;
-  let complianceReason = '';
   const finalTotalAmount = pricingResult.totalAmount;
   const finalTotalItems = pricingResult.totalItems;
 
-  if (callerAuth.role === 'client') {
-    try {
-      const { data: userProfile } = await supabase
-        .from('profiles')
-        .select('credit_limit_usd, is_blocked_for_orders, overdue_days, impersonation_enabled, status')
-        .eq('partner_id', callerAuth.partnerId)
-        .maybeSingle();
-
-      if (userProfile?.impersonation_enabled === false || userProfile?.status === 'inactive') {
-        res.status(403).json({
-          success: false,
-          error: 'Создание заказа заблокировано: учетная запись контрагента деактивирована в ERP.',
-        });
-        return;
-      }
-
-      if (userProfile?.is_blocked_for_orders) {
-        res.status(403).json({
-          success: false,
-          code: 'CLIENT_BLOCKED',
-          error: 'Оформление новых заказов временно заблокировано в связи с непогашенной задолженностью.',
-        });
-        return;
-      }
-
-      if (userProfile?.overdue_days && userProfile.overdue_days > 14) {
-        res.status(403).json({
-          success: false,
-          code: 'OVERDUE_DEBT',
-          error: `У вас имеется просроченная задолженность (${userProfile.overdue_days} дн.). Отгрузка заблокирована до погашения.`,
-        });
-        return;
-      }
-
-      const clientCreditLimit = Number(userProfile?.credit_limit_usd || 0);
-      let currentDebt = Math.max(0, Number(userProfile?.debt_usd || 0));
-      if (!currentDebt && callerAuth.partnerId) {
-        const { data: pBal } = await supabase
-          .from('partner_balances')
-          .select('balance')
-          .eq('partner_id', String(callerAuth.partnerId))
-          .maybeSingle();
-        if (pBal && typeof pBal.balance === 'number' && pBal.balance < 0) {
-          currentDebt = Math.abs(pBal.balance);
-        }
-      }
-
-      const totalExposure = Math.round((currentDebt + finalTotalAmount) * 100) / 100;
-      if (clientCreditLimit > 0 && totalExposure > clientCreditLimit) {
-        serverRequiresApproval = true;
-        complianceReason = `Превышен кредитный лимит с учетом текущей задолженности (Долг: $${currentDebt} + Заказ: $${finalTotalAmount} = $${totalExposure} > Лимит: $${clientCreditLimit})`;
-      }
-    } catch (profErr) {
-      logger.warn('[Order] Compliance check notice:', profErr as Error);
-    }
+  const exposureCheck = await validateClientCreditExposure(callerAuth, finalTotalAmount, supabase);
+  if (exposureCheck.blocked) {
+    res.status(exposureCheck.statusCode || 403).json({
+      success: false,
+      code: exposureCheck.blockCode,
+      error: exposureCheck.blockError || 'Создание заказа заблокировано.',
+    });
+    return;
   }
+
+  const serverRequiresApproval = Boolean(exposureCheck.requiresApproval);
+  const complianceReason = exposureCheck.complianceReason || '';
 
   // 4. Попытка высокопроизводительного атомарного чекаута через create_order_atomic (PostgreSQL Transaction)
   let outboxOrderId: string | null = null;
   let outboxOrderDoc: string | null = null;
-  let createdSplitOrders: Array<{ doc_number: string; warehouse: string; amount: number; items_count: number }> = [];
+  let createdSplitOrders: SplitOrderSummary[] = [];
   const reservedSkuItems: ReservedStockItem[] = [];
   const primaryWarehouseId = 81;
 
@@ -229,37 +185,9 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
       quantity: Number(it.quantity) || 1,
     }));
 
-    const splitOrdersPayload: any[] = [];
-    if (isMultiWarehouse) {
-      let splitIdx = 1;
-      for (const wh of distinctWarehouses) {
-        const whItems = pricingResult.items.filter(it => (it.warehouse || 'Основной Склад Астана') === wh);
-        const whAmount = Math.round(whItems.reduce((acc, it) => acc + it.total_line, 0) * 100) / 100;
-        const whItemsCount = whItems.reduce((acc, it) => acc + it.quantity, 0);
-        const whSqm = Math.round(whItems.reduce((acc, it) => acc + (it.price_per_sqm > 0 ? (it.price / it.price_per_sqm) * it.quantity : 0), 0) * 100) / 100;
-        const subDoc = `${incomingIdempotencyKey || 'ORD'}-wh-${splitIdx}`;
-
-        splitOrdersPayload.push({
-          doc_number: subDoc,
-          warehouse: wh,
-          notes: `[Мультисклад ${splitIdx}/${distinctWarehouses.length}: ${wh}] ${rawPayload.comment || ''}`.trim(),
-          amount: whAmount,
-          items_count: whItemsCount,
-          sqm: whSqm,
-          idempotency_key: incomingIdempotencyKey ? `${incomingIdempotencyKey}-wh-${splitIdx}` : null,
-          items: whItems.map(it => ({
-            product_id: String(it.productId || it.item_id || it.sku || ''),
-            product_name: String(it.sku || 'Ковровое изделие'),
-            size: String(it.size || 'Стандарт'),
-            sku: String(it.sku || ''),
-            warehouse: wh,
-            price: Number(it.price) || 0,
-            quantity: Number(it.quantity) || 1,
-          })),
-        });
-        splitIdx++;
-      }
-    }
+    const splitOrdersPayload = isMultiWarehouse
+      ? buildSplitOrdersPayload(pricingResult.items, distinctWarehouses, incomingIdempotencyKey, rawPayload.comment)
+      : [];
 
     const { data: atomicData, error: atomicErr } = await supabase.rpc('create_order_atomic', {
       p_order: orderMasterPayload,
@@ -386,55 +314,19 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
       outboxOrderDoc = createdRow.order_number;
 
       if (isMultiWarehouse) {
-        let splitIdx = 1;
-        for (const wh of distinctWarehouses) {
-          const whItems = pricingResult.items.filter(it => (it.warehouse || 'Основной Склад Астана') === wh);
-          const whAmount = Math.round(whItems.reduce((acc, it) => acc + it.total_line, 0) * 100) / 100;
-          const whItemsCount = whItems.reduce((acc, it) => acc + it.quantity, 0);
-          const whSqm = Math.round(whItems.reduce((acc, it) => acc + (it.price_per_sqm > 0 ? (it.price / it.price_per_sqm) * it.quantity : 0), 0) * 100) / 100;
-          const subDoc = `${outboxOrderDoc}-${splitIdx}`;
-
-          const { data: subOrderRow } = await supabase
-            .from('orders')
-            .insert({
-              order_number: subDoc,
-              user_id: resolvedUserId,
-              placed_by_id: callerAuth.userId || resolvedUserId,
-              warehouse: wh,
-              notes: `[Мультисклад ${splitIdx}/${distinctWarehouses.length}: ${wh}] ${rawPayload.comment || ''}`.trim(),
-              total_amount: whAmount,
-              total_items: whItemsCount,
-              total_sqm: whSqm,
-              status: 'pending',
-              idempotency_key: incomingIdempotencyKey ? `${incomingIdempotencyKey}-wh-${splitIdx}` : null,
-              currency: rawPayload.currency || 'USD',
-              contract_id: rawPayload.contract_id || null,
-              parent_order_id: createdRow.id,
-            })
-            .select('id, order_number')
-            .maybeSingle();
-
-          if (subOrderRow) {
-            const subItemRows = whItems.map(it => ({
-              order_id: subOrderRow.id,
-              product_id: String(it.productId || it.item_id || it.sku || ''),
-              product_name: String(it.sku || 'Ковровое изделие'),
-              size: String(it.size || 'Стандарт'),
-              sku: String(it.sku || ''),
-              warehouse: wh,
-              price: Number(it.price) || 0,
-              quantity: Number(it.quantity) || 1,
-            }));
-            await supabase.from('order_items').insert(subItemRows);
-            createdSplitOrders.push({
-              doc_number: subDoc,
-              warehouse: wh,
-              amount: whAmount,
-              items_count: whItemsCount,
-            });
-          }
-          splitIdx++;
-        }
+        createdSplitOrders = await insertSequentialSplitOrders(
+          supabase,
+          pricingResult.items,
+          distinctWarehouses,
+          createdRow.id,
+          outboxOrderDoc,
+          resolvedUserId,
+          callerAuth.userId,
+          incomingIdempotencyKey,
+          rawPayload.currency || 'USD',
+          rawPayload.contract_id || null,
+          rawPayload.comment,
+        );
       } else {
         createdSplitOrders = [{
           doc_number: outboxOrderDoc,
@@ -541,7 +433,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
         'X-Portal-Key': serverErpKey,
         'X-Idempotency-Key': incomingIdempotencyKey || outboxOrderDoc,
         'Idempotency-Key': incomingIdempotencyKey || outboxOrderDoc,
-        'Accept': 'application/json',
+        Accept: 'application/json',
         'X-Correlation-ID': correlationId,
         'X-Forwarded-For': clientIp,
         'X-Real-IP': clientIp,
