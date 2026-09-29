@@ -296,18 +296,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     } catch {}
 
-    const { role = 'admin', user, profile } = body || {};
+    const { role = 'client', user, profile } = body || {};
     const validRoles = ['admin', 'manager_rm', 'manager_lm', 'supplier', 'client'];
-    const effectiveRole = validRoles.includes(role) ? role : (profile?.role && validRoles.includes(profile.role) ? profile.role : 'admin');
-    const userId = String(user?.id || profile?.id || `user-${effectiveRole}`);
+    const effectiveRole = validRoles.includes(role) ? role : (profile?.role && validRoles.includes(profile.role) ? profile.role : 'client');
+
+    // Anti-Bypass P0: Запрет произвольного назначения привилегированных ролей без подтвержденной серверной аутентификации
+    const callerAuth = await authenticateRequest(req, { allowServerKey: true });
+    const isPrivileged = ['admin', 'manager_rm', 'manager_lm', 'supplier'].includes(effectiveRole);
+
+    if (isPrivileged) {
+      if (!callerAuth.isAuthenticated || (!callerAuth.isServer && callerAuth.role !== 'admin' && callerAuth.role !== effectiveRole)) {
+        return res.status(403).json({
+          success: false,
+          error: 'Forbidden: Повышение привилегий до роли сотрудника или администратора запрещено без валидной серверной авторизации.',
+        });
+      }
+    }
+
+    const userId = String(user?.id || profile?.id || callerAuth.userId || `user-${effectiveRole}`);
     const fullName = String(
       profile?.full_name ||
       user?.user_metadata?.full_name ||
+      callerAuth.fullName ||
       (effectiveRole === 'admin' ? 'Администратор портала' : 'Пользователь портала')
     );
-    const partnerId = profile?.partner_id ? String(profile.partner_id) : (effectiveRole === 'supplier' ? '6' : null);
-    const phone = String(profile?.phone || user?.phone || '');
-    const priceType = String(profile?.price_type || 'wholesale');
+    const partnerId = profile?.partner_id ? String(profile.partner_id) : (callerAuth.partnerId || null);
+    const phone = String(profile?.phone || user?.phone || callerAuth.phone || '');
+    const priceType = String(profile?.price_type || callerAuth.priceType || 'wholesale');
 
     const sessionData = {
       user: {
@@ -320,7 +335,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         role: effectiveRole,
         partner_id: partnerId,
         full_name: fullName,
-        company_name: profile?.company_name || 'ТОО «Kilem Khan Synergy»',
+        company_name: profile?.company_name || callerAuth.companyName || 'ТОО «Kilem Khan Synergy»',
         phone,
         price_type: priceType,
         showroom_warehouse_id: profile?.showroom_warehouse_id ?? null,

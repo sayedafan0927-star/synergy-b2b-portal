@@ -2914,7 +2914,8 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
   };
 
   useEffect(() => {
-    if (!profile || profile.role === 'supplier') return;
+    const isClient = profile?.role === 'client' || Boolean(profile?.partner_id);
+    if (!profile || !isClient) return;
     let cancelled = false;
     setLoadingDebt(true);
     fetchClientDebtFromErp({
@@ -3068,7 +3069,8 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
               </div>
             </div>
 
-            {/* Balance & Debt card */}
+            {/* Balance & Debt card (только для клиентов) */}
+            {(profile?.role === 'client' || Boolean(profile?.partner_id)) && (
             <div className="card overflow-hidden">
               <div className="bg-gradient-to-br from-slate-800 to-slate-900 px-5 py-4">
                 <div className="flex items-center justify-between mb-1">
@@ -3213,6 +3215,7 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
                 </div>
               )}
             </div>
+            )}
           </div>
 
           {/* Mobile tab bar */}

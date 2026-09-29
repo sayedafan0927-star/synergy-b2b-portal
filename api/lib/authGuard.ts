@@ -119,9 +119,9 @@ export async function authenticateRequest(
         if (parsed?.data && parsed?.sig) {
           const expectedSig = crypto.createHmac('sha256', SECRET_KEY).update(JSON.stringify(parsed.data)).digest('hex');
           if (parsed.sig === expectedSig) {
-            // Проверка срока жизни токена: сокращено с 24 часов до 2 часов (Enterprise standard T-15)
+            // Проверка срока жизни токена: 24 часа для стабильности B2B-сессий с поддержкой отзыва через Redis (T-15)
             const tokenTs = Number(parsed.data.timestamp || 0);
-            if (!tokenTs || Date.now() - tokenTs <= 2 * 3600 * 1000) {
+            if (!tokenTs || Date.now() - tokenTs <= 24 * 3600 * 1000) {
               const u = parsed.data.user || {};
               const p = parsed.data.profile || {};
               userId = String(u.id || p.id || '');
