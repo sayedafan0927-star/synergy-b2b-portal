@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '../../lib/logger';
 import { recordFailure, recordSuccess } from '../../lib/circuitBreaker';
 import { releaseAllReservedStock, ReservedStockItem } from '../../lib/saga';
+import { patchCachedCatalogStock, StockItemUpdate } from '../../lib/catalogCache';
 import type { SplitOrderSummary } from './orderSplitter';
 
 /**
@@ -124,6 +125,29 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
         orderNumber: outboxOrderDoc || undefined,
         reason: '1C ERP отклонила заказ по причине нехватки остатка (409 Conflict)',
       });
+
+      // Мгновенная инвалидация кэша остатков и бродкаст во все браузеры дилеров
+      try {
+        const stockUpdates: StockItemUpdate[] = reservedSkuItems.map(it => ({
+          sku: it.sku,
+          free_stock: 0,
+          total_stock: 0,
+        }));
+        await patchCachedCatalogStock(stockUpdates, 'catalog_global', Date.now());
+
+        const channel = supabase.channel('portal_live_updates');
+        await channel.send({
+          type: 'broadcast',
+          event: 'stock_changed',
+          payload: {
+            items: stockUpdates,
+            reason: '409_insufficient_stock_reconciled',
+            timestamp: new Date().toISOString(),
+          },
+        });
+      } catch (patchErr) {
+        logger.warn('[Order] Conflict stock invalidation notice:', patchErr as Error);
+      }
 
       res.status(409).json({
         success: false,

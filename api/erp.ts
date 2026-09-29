@@ -11,6 +11,7 @@ import { handleCatalogRequests } from './modules/catalog/catalogHandler';
 import { handleCreateOrder } from './modules/orders/createOrderHandler';
 import { handleCachedClientDebt } from './modules/financial/debtHandler';
 import { handleFinancialBalanceSheet } from './modules/financial/balanceHandler';
+import { handleRefreshClientBalance } from './modules/financial/refreshBalanceHandler';
 import { handleDlqOrders, handleRetryDlqOrder } from './modules/dlq/dlqHandler';
 import {
   handleDisplaySettingsGet,
@@ -119,6 +120,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         targetErpUrl: TARGET_ERP_URL,
         serverErpKey: SERVER_ERP_KEY,
         correlationId,
+      });
+    }
+
+    // 1.1.2. Принудительный онлайн-запрос баланса из 1С дилером или администратором
+    if (action === 'refresh_balance' && (req.method === 'POST' || req.method === 'GET')) {
+      const callerAuth = await authenticateRequest(req, { allowServerKey: true });
+      if (!callerAuth.isAuthenticated) {
+        return res.status(401).json({ success: false, error: 'Требуется авторизация' });
+      }
+      return await handleRefreshClientBalance({
+        req,
+        res,
+        callerAuth,
+        correlationId,
+        supabase,
+        targetErpUrl: TARGET_ERP_URL,
+        serverErpKey: SERVER_ERP_KEY,
       });
     }
 

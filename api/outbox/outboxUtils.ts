@@ -124,3 +124,78 @@ export function computeBackoffNextRetry(nextRetries: number): { nextRetryAt: str
   const nextRetryAt = new Date(Date.now() + backoffMinutes * 60000).toISOString();
   return { nextRetryAt, isDlq };
 }
+
+export type DlqErrorCategory =
+  | 'ERP_TIMEOUT'
+  | 'STOCK_UNAVAILABLE'
+  | 'INVALID_PAYLOAD'
+  | 'AUTH_FAILED'
+  | 'ERP_SERVER_ERROR'
+  | 'NETWORK_ERROR';
+
+export interface CategorizedError {
+  category: DlqErrorCategory;
+  label: string;
+  recommendedAction: string;
+  badgeColor: string;
+}
+
+/**
+ * Парсинг сырого текста ошибки 1С в структурированную категорию с рекомендацией инженеру
+ */
+export function categorizeDlqError(errorText?: string | null): CategorizedError {
+  const err = String(errorText || '').toLowerCase();
+
+  if (err.includes('timeout') || err.includes('таймаут') || err.includes('aborterror')) {
+    return {
+      category: 'ERP_TIMEOUT',
+      label: 'Таймаут 1C',
+      recommendedAction: 'Повторить отправку (шлюз 1С перегружен)',
+      badgeColor: 'bg-amber-100 text-amber-800 border-amber-200',
+    };
+  }
+
+  if (err.includes('409') || err.includes('insufficient') || err.includes('остат') || err.includes('недостаточно')) {
+    return {
+      category: 'STOCK_UNAVAILABLE',
+      label: 'Нехватка остатка',
+      recommendedAction: 'Согласовать замену размера или снять бронь',
+      badgeColor: 'bg-rose-100 text-rose-800 border-rose-200',
+    };
+  }
+
+  if (err.includes('401') || err.includes('403') || err.includes('unauthorized') || err.includes('forbidden') || err.includes('token')) {
+    return {
+      category: 'AUTH_FAILED',
+      label: 'Ошибка авторизации',
+      recommendedAction: 'Проверить X-Portal-Key в настройках 1С',
+      badgeColor: 'bg-purple-100 text-purple-800 border-purple-200',
+    };
+  }
+
+  if (err.includes('400') || err.includes('validation') || err.includes('invalid') || err.includes('некоррект')) {
+    return {
+      category: 'INVALID_PAYLOAD',
+      label: 'Ошибка валидации',
+      recommendedAction: 'Проверить реквизиты клиента и артикулы',
+      badgeColor: 'bg-orange-100 text-orange-800 border-orange-200',
+    };
+  }
+
+  if (err.includes('500') || err.includes('502') || err.includes('503') || err.includes('bad gateway') || err.includes('сервер')) {
+    return {
+      category: 'ERP_SERVER_ERROR',
+      label: 'Сбой сервера 1C',
+      recommendedAction: 'Проверить доступность базы 1С у администратора',
+      badgeColor: 'bg-red-100 text-red-800 border-red-200',
+    };
+  }
+
+  return {
+    category: 'NETWORK_ERROR',
+    label: 'Сетевой сбой',
+    recommendedAction: 'Повторить отправку (временная потеря связи)',
+    badgeColor: 'bg-slate-100 text-slate-800 border-slate-200',
+  };
+}
+

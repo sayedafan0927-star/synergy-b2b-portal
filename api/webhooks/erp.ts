@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 import { applyCorsHeaders } from '../lib/cors';
 import { getErpApiKey } from '../lib/erpKey';
+import { recordAuditLog } from '../audit/logs';
 import { handleStockChanged } from './handlers/stockHandler';
 import { handleOrderStatusChanged } from './handlers/orderStatusHandler';
 import { handlePaymentReceived } from './handlers/paymentHandler';
@@ -108,6 +109,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { event } = payload || {};
 
     if (!event) {
+      await recordAuditLog({
+        eventType: 'webhook_quarantined',
+        direction: 'inbound',
+        status: 'error',
+        statusCode: 400,
+        source: 'ERP Webhook',
+        errorMessage: 'Missing required field: "event" in payload',
+        payload: { rawBody: String(req.body).slice(0, 500) },
+      }).catch(() => {});
+
       return res.status(400).json({
         success: false,
         error: 'Missing required field: "event" is required in payload.',
@@ -212,6 +223,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   } catch (err: any) {
     console.error('[Webhook ERP] Error processing request:', err);
+    await recordAuditLog({
+      eventType: 'webhook_quarantined',
+      direction: 'inbound',
+      status: 'error',
+      statusCode: 500,
+      source: 'ERP Webhook',
+      errorMessage: err?.message || 'Internal server error processing webhook payload',
+      payload: { rawBody: String(req.body).slice(0, 500) },
+    }).catch(() => {});
+
     return res.status(500).json({
       success: false,
       error: 'Internal server error processing webhook payload.',

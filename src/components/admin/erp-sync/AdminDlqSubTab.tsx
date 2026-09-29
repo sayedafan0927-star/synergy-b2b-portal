@@ -83,8 +83,21 @@ export function AdminDlqSubTab({
                       {ord.retry_count || 5} попыток
                     </span>
                   </td>
-                  <td className="py-2.5 px-3 text-red-700 max-w-xs truncate" title={ord.notes || ord.last_error}>
-                    {ord.notes || ord.last_error || 'Timeout / Connection Refused'}
+                  <td className="py-2.5 px-3 max-w-xs">
+                    {ord.error_analysis ? (
+                      <div className="space-y-0.5">
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold border ${ord.error_analysis.badgeColor}`}>
+                          {ord.error_analysis.label}
+                        </span>
+                        <p className="text-[11px] text-slate-600 truncate" title={ord.error_analysis.recommendedAction}>
+                          {ord.error_analysis.recommendedAction}
+                        </p>
+                      </div>
+                    ) : (
+                      <span className="text-red-700 truncate" title={ord.notes || ord.last_error}>
+                        {ord.notes || ord.last_error || 'Timeout / Connection Refused'}
+                      </span>
+                    )}
                   </td>
                   <td className="py-2.5 px-3 text-slate-400 text-[11px]">
                     {ord.updated_at ? new Date(ord.updated_at).toLocaleString('ru-RU') : '—'}

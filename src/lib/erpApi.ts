@@ -54,6 +54,7 @@ export {
   broadcastClientDeactivated,
   fetchClientDebtFromErp,
   updateClientAccessInErp,
+  refreshLiveClientBalance,
 } from './erp/counterpartiesApi';
 
 export {

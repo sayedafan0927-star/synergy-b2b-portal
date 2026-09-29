@@ -723,7 +723,35 @@ mod_res = subprocess.run([sys.executable, modularity_script_path], capture_outpu
 test_assert(mod_res.returncode == 0, "check-modularity-standards.py passes with zero monolithic violations")
 
 # ------------------------------------------------------------------------------
-# 22. Summary Report
+# 22. Verifying Hardened ERP Critical Points (Outbox Recovery, 409 Broadcast, Live Balance & Webhook Quarantine)
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}22. Verifying Hardened ERP Critical Points & Zero-Failure Invariants...{RESET}")
+
+with open(outbox_path, "r", encoding="utf-8") as fp:
+    fresh_outbox_code = fp.read()
+test_assert("staleThreshold" in fresh_outbox_code and "Stale Claim Recovery" in fresh_outbox_code, "api/outbox/sync.ts implements automatic Stale Claim Recovery for crashed workers")
+
+order_disp_path = os.path.join(ROOT_DIR, "api", "modules", "orders", "orderDispatcher.ts")
+with open(order_disp_path, "r", encoding="utf-8") as fp:
+    disp_code = fp.read()
+test_assert("409_insufficient_stock_reconciled" in disp_code and "patchCachedCatalogStock" in disp_code, "orderDispatcher.ts invalidates cached stock and broadcasts Realtime event on 409 Conflict")
+
+with open(erp_ts_path, "r", encoding="utf-8") as fp:
+    fresh_erp_code = fp.read()
+test_assert("refresh_balance" in fresh_erp_code and "handleRefreshClientBalance" in fresh_erp_code, "api/erp.ts routes refresh_balance action for on-demand live debt sync")
+
+webhook_ts_path = os.path.join(ROOT_DIR, "api", "webhooks", "erp.ts")
+with open(webhook_ts_path, "r", encoding="utf-8") as fp:
+    wh_code = fp.read()
+test_assert("webhook_quarantined" in wh_code, "api/webhooks/erp.ts quarantines malformed or unprocessable CDC events in audit_logs")
+
+dlq_handler_path = os.path.join(ROOT_DIR, "api", "modules", "dlq", "dlqHandler.ts")
+with open(dlq_handler_path, "r", encoding="utf-8") as fp:
+    dlq_h_code = fp.read()
+test_assert("categorizeDlqError" in dlq_h_code and "error_analysis" in dlq_h_code, "dlqHandler.ts enriches failed orders with structured error categorization")
+
+# ------------------------------------------------------------------------------
+# 23. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

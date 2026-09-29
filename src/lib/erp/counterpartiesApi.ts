@@ -313,3 +313,20 @@ export async function updateClientAccessInErp(clientId: number | string, accessE
 
   return { success: true };
 }
+
+/**
+ * Принудительное онлайн-обновление актуального баланса дилера из 1C:ERP (минуя локальный кэш)
+ */
+export async function refreshLiveClientBalance(partnerId: string | number): Promise<any> {
+  const response = await erpFetch('refresh_balance', {
+    method: 'POST',
+    body: { partner_id: String(partnerId) },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Ошибка онлайн-запроса баланса из ERP (${response.status})`);
+  }
+
+  return await response.json();
+}
+

@@ -3,6 +3,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { authenticateRequest } from '../../lib/authGuard';
 import { recordAuditLog } from '../../audit/logs';
 
+import { categorizeDlqError } from '../../outbox/outboxUtils';
+
 export async function handleDlqOrders(req: VercelRequest, res: VercelResponse, supabase: SupabaseClient) {
   const auth = await authenticateRequest(req, { requiredRoles: ['admin', 'manager_rm'], allowServerKey: true });
   if (!auth.isAuthenticated || auth.error) {
@@ -18,7 +20,13 @@ export async function handleDlqOrders(req: VercelRequest, res: VercelResponse, s
   if (dlqErr) {
     return res.status(500).json({ success: false, error: dlqErr.message });
   }
-  return res.status(200).json({ success: true, count: dlqList?.length || 0, orders: dlqList || [] });
+
+  const enrichedOrders = (dlqList || []).map(order => ({
+    ...order,
+    error_analysis: categorizeDlqError(order.last_error),
+  }));
+
+  return res.status(200).json({ success: true, count: enrichedOrders.length, orders: enrichedOrders });
 }
 
 export async function handleRetryDlqOrder(

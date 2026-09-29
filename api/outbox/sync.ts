@@ -52,9 +52,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const startTime = Date.now();
-  const nowIso = new Date().toISOString();
-
   try {
+    // 0. Автоматическое освобождение зависших заказов (Stale Claim Recovery)
+    // Если предыдущий воркер аварийно завершился и заказ остался в 'processing_sync' > 5 минут
+    const staleThreshold = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    try {
+      await supabase
+        .from('orders')
+        .update({
+          status: 'pending',
+          last_error: 'Сброс зависшего захвата синхронизации (Stale Claim Recovery)',
+          updated_at: nowIso,
+        })
+        .eq('status', 'processing_sync')
+        .lte('updated_at', staleThreshold);
+    } catch (staleErr) {
+      console.warn('[Outbox Sync] Stale claim recovery warning:', staleErr);
+    }
+
     // 1. Атомарный конкурентно-безопасный захват заказов (FOR UPDATE SKIP LOCKED)
     let pendingOrders: any[] | null = null;
     let claimedViaRpc = false;
