@@ -19,8 +19,8 @@ const CurrencyContext = createContext<CurrencyContextType>({
 });
 
 export const CurrencyProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAdmin, realIsAdmin } = useAuth();
-  const isEffectiveAdmin = Boolean(isAdmin || realIsAdmin);
+  const { isAdmin, isImpersonating } = useAuth();
+  const isEffectiveAdmin = Boolean(isAdmin && !isImpersonating);
 
   const [currency, setCurrencyState] = useState<CurrencyCode>(() => {
     try {

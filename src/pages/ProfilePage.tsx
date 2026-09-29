@@ -166,8 +166,9 @@ function fmtPrice(n: number) {
   try {
     const cur = typeof localStorage !== 'undefined' ? localStorage.getItem('synergy_preferred_currency') : 'USD';
     const session = typeof localStorage !== 'undefined' ? localStorage.getItem('synergy_auth_session') : null;
+    const isImp = typeof sessionStorage !== 'undefined' && Boolean(sessionStorage.getItem('synergy:impersonated_profile'));
     let isAdminUser = false;
-    if (session) {
+    if (session && !isImp) {
       try {
         const parsed = JSON.parse(session);
         isAdminUser = parsed?.profile?.role === 'admin' || parsed?.role === 'admin';

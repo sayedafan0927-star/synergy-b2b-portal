@@ -21,7 +21,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
   const [isSyncingOffline, setIsSyncingOffline] = useState(false);
   const { totalItems } = useCart();
   const { user, profile, isAdmin, realIsAdmin, isImpersonating, stopImpersonation } = useAuth();
-  const isEffectiveAdmin = Boolean(isAdmin || realIsAdmin);
+  const isEffectiveAdmin = Boolean(isAdmin && !isImpersonating);
   const { language, setLanguage, t } = useLanguage();
   const { currency, setCurrency } = useCurrency();
 
