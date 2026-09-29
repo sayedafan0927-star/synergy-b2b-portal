@@ -16,6 +16,7 @@ Runs automated end-to-end verification covering:
 import sys
 import os
 import re
+import subprocess
 
 GREEN = "\033[92m"
 RED = "\033[91m"
@@ -703,7 +704,26 @@ with open(vercel_path, "r", encoding="utf-8") as fp:
 test_assert('"/api/cron/expire-holds"' in vercel_code and '"*/10 * * * *"' in vercel_code, "vercel.json schedules expire-holds cron every 10 minutes")
 
 # ------------------------------------------------------------------------------
-# 21. Summary Report
+# 21. Verifying Modularity Standards & Zero Monolith Invariant
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}21. Verifying Modularity Standards & Zero Monolith Invariant...{RESET}")
+
+modularity_doc_path = os.path.join(ROOT_DIR, "docs", "standards", "MODULARITY_STANDARDS.md")
+test_assert(os.path.exists(modularity_doc_path), "docs/standards/MODULARITY_STANDARDS.md exists")
+with open(modularity_doc_path, "r", encoding="utf-8") as fp:
+    mod_doc_code = fp.read()
+test_assert("Прагматичная модульность без фанатизма" in mod_doc_code, "MODULARITY_STANDARDS.md defines pragmatic modularity principles")
+test_assert("480 строк" in mod_doc_code and "650 строк" in mod_doc_code, "MODULARITY_STANDARDS.md defines explicit line count ceilings")
+
+modularity_script_path = os.path.join(ROOT_DIR, "scripts", "check-modularity-standards.py")
+test_assert(os.path.exists(modularity_script_path), "scripts/check-modularity-standards.py guard exists")
+
+# Execute automated modularity scanner
+mod_res = subprocess.run([sys.executable, modularity_script_path], capture_output=True, text=True)
+test_assert(mod_res.returncode == 0, "check-modularity-standards.py passes with zero monolithic violations")
+
+# ------------------------------------------------------------------------------
+# 22. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

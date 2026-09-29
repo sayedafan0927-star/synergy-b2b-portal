@@ -8,9 +8,10 @@
 - **Цель:** Изменения должны немедленно разворачиваться на боевой среде (Vercel/Production) без необходимости ручного запроса от пользователя.
 
 ## 2. Code Quality & Resilience Invariants
-- Перед пушем проверять отсутствие регрессий (`python3 scripts/test_resilience_and_security.py` и `python3 scripts/check-ui-standards.py`).
+- Перед пушем проверять отсутствие регрессий (`python3 scripts/test_resilience_and_security.py && python3 scripts/check-ui-standards.py && python3 scripts/check-modularity-standards.py`).
 - Строго соблюдать архитектурные стандарты проекта:
   - Свод стандартов и планка качества: [`docs/standards/README.md`](docs/standards/README.md)
+  - Стандарты модульности кода: [`docs/standards/MODULARITY_STANDARDS.md`](docs/standards/MODULARITY_STANDARDS.md)
   - Стандарты Frontend и UI/UX: [`docs/standards/FRONTEND_STANDARDS.md`](docs/standards/FRONTEND_STANDARDS.md) и [`UI_UX_STANDARDS.md`](UI_UX_STANDARDS.md)
   - Стандарты Backend API и безопасности: [`docs/standards/BACKEND_API_STANDARDS.md`](docs/standards/BACKEND_API_STANDARDS.md)
   - Стандарты БД и миграций: [`docs/standards/DATABASE_STANDARDS.md`](docs/standards/DATABASE_STANDARDS.md)

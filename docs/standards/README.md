@@ -83,8 +83,9 @@
 2. [**Backend API & Security Standards**](./BACKEND_API_STANDARDS.md) — принципы Serverless API, защита от IDOR, алгоритмы Anti-Tamper, атомарные транзакции и Outbox.
 3. [**Database & Data Modeling Standards**](./DATABASE_STANDARDS.md) — схемы PostgreSQL/Supabase, GIN-индексы, ежемесячное партиционирование и изоляция WMS.
 4. [**Integration & ERP Protocol Standards**](./INTEGRATION_STANDARDS.md) — протокол обмена с ERP, вебхуки с монотонными таймстемпами, Circuit Breaker и SSO.
-5. [**Definition of Done & Code Review**](./CODE_REVIEW_AND_DOD.md) — чеклист сдачи задач, регламент версионирования и автоматический деплой.
-6. [**Enterprise Quality Bar (6 Core Blocks)**](./ENTERPRISE_QUALITY_BAR.md) — паспорт стандартов качества, Red Lines и матрица зрелости по 6 ключевым блокам платформы.
+5. [**Code Modularity & Architecture Standards**](./MODULARITY_STANDARDS.md) — регламент модульности «без фанатизма», лимиты строк (компоненты <= 480, страницы <= 650, API <= 480), защита от монолитов и автоматический CI-гард.
+6. [**Definition of Done & Code Review**](./CODE_REVIEW_AND_DOD.md) — чеклист сдачи задач, регламент версионирования и автоматический деплой.
+7. [**Enterprise Quality Bar (6 Core Blocks)**](./ENTERPRISE_QUALITY_BAR.md) — паспорт стандартов качества, Red Lines и матрица зрелости по 6 ключевым блокам платформы.
 
 Также обратите внимание на смежные спецификации:
 - [UI_UX_STANDARDS.md](../../UI_UX_STANDARDS.md) — подробные правила верстки карточки товара и галереи.
