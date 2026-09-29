@@ -2,17 +2,69 @@
 -- SYNERGY B2B PORTAL — CONSOLIDATED ENTERPRISE DATABASE MIGRATION SCRIPT
 -- ==============================================================================
 -- Run this script in the Supabase SQL Editor to apply all enterprise schema
--- enhancements: Catalog Staging, Outbox Idempotency, DLQ, and WMS Hold TTL.
--- Safe to run repeatedly (Idempotent DDL / IF NOT EXISTS).
+-- enhancements: Catalog Staging, Outbox Idempotency, DLQ, WMS Hold TTL, 
+-- Contracts, Order Status History, Leads, Auditing & High-load Indexes.
+-- Safe to run repeatedly (100% Idempotent DDL / IF NOT EXISTS / Defensive Guards).
 -- ==============================================================================
 
 BEGIN;
 
 -- ==============================================================================
+-- 0. DEFENSIVE TABLE & COLUMN HARMONIZATION
+-- ==============================================================================
+
+-- 0.1 Ensure profiles table has all required enterprise fields
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'profiles') THEN
+    ALTER TABLE profiles ADD COLUMN IF NOT EXISTS credit_limit_usd numeric DEFAULT 0;
+    ALTER TABLE profiles ADD COLUMN IF NOT EXISTS payment_delay_days integer DEFAULT 0;
+    ALTER TABLE profiles ADD COLUMN IF NOT EXISTS city text DEFAULT '';
+    ALTER TABLE profiles ADD COLUMN IF NOT EXISTS address text DEFAULT '';
+    ALTER TABLE profiles ADD COLUMN IF NOT EXISTS partner_id text;
+    ALTER TABLE profiles ADD COLUMN IF NOT EXISTS password_hash text;
+  END IF;
+END $$;
+
+-- 0.2 Ensure orders table and all required enterprise columns exist
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'orders') THEN
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_amount numeric DEFAULT 0;
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_sqm numeric DEFAULT 0;
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS total_items integer DEFAULT 0;
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS notes text DEFAULT '';
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS warehouse text DEFAULT '';
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS partner_id text;
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS placed_by_id uuid;
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS idempotency_key text UNIQUE;
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS retry_count integer NOT NULL DEFAULT 0;
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS last_error text;
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS next_retry_at timestamptz DEFAULT now();
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS hold_expires_at timestamptz;
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS version integer NOT NULL DEFAULT 1;
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS currency text NOT NULL DEFAULT 'USD';
+  END IF;
+END $$;
+
+-- 0.3 Ensure order_items table and all required columns exist
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'order_items') THEN
+    ALTER TABLE order_items ADD COLUMN IF NOT EXISTS product_id text DEFAULT '';
+    ALTER TABLE order_items ADD COLUMN IF NOT EXISTS product_name text DEFAULT '';
+    ALTER TABLE order_items ADD COLUMN IF NOT EXISTS collection text DEFAULT '';
+    ALTER TABLE order_items ADD COLUMN IF NOT EXISTS size text DEFAULT '';
+    ALTER TABLE order_items ADD COLUMN IF NOT EXISTS sku text DEFAULT '';
+    ALTER TABLE order_items ADD COLUMN IF NOT EXISTS warehouse text DEFAULT '';
+    ALTER TABLE order_items ADD COLUMN IF NOT EXISTS price numeric DEFAULT 0;
+    ALTER TABLE order_items ADD COLUMN IF NOT EXISTS quantity integer DEFAULT 1;
+  END IF;
+END $$;
+
+
+-- ==============================================================================
 -- 1. CATALOG STAGING & INVENTORY BALANCES
 -- ==============================================================================
 
--- 1.1. Table: catalog_cache (High-load Sub-50ms cache)
+-- 1.1 Table: catalog_cache (High-load Sub-50ms cache)
 CREATE TABLE IF NOT EXISTS catalog_cache (
   cache_key text PRIMARY KEY,
   data jsonb NOT NULL,
@@ -40,7 +92,7 @@ CREATE POLICY "admin_service_all_catalog_cache" ON catalog_cache FOR ALL
     EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
   );
 
--- 1.2. Table: inventory_balances (Materialized real-time stock from ERP webhooks)
+-- 1.2 Table: inventory_balances (Materialized real-time stock from ERP webhooks)
 CREATE TABLE IF NOT EXISTS inventory_balances (
   sku text NOT NULL,
   warehouse_id integer NOT NULL DEFAULT 0,
@@ -73,48 +125,10 @@ CREATE POLICY "admin_service_all_inventory_balances" ON inventory_balances FOR A
     EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'admin')
   );
 
--- 1.3. Profiles columns for financial compliance
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'credit_limit_usd') THEN
-    ALTER TABLE profiles ADD COLUMN credit_limit_usd numeric DEFAULT 0;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'payment_delay_days') THEN
-    ALTER TABLE profiles ADD COLUMN payment_delay_days integer DEFAULT 0;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'city') THEN
-    ALTER TABLE profiles ADD COLUMN city text DEFAULT '';
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'address') THEN
-    ALTER TABLE profiles ADD COLUMN address text DEFAULT '';
-  END IF;
-END $$;
-
 
 -- ==============================================================================
 -- 2. OUTBOX RESILIENCE, IDEMPOTENCY & DEAD LETTER QUEUE (DLQ)
 -- ==============================================================================
-
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'idempotency_key') THEN
-    ALTER TABLE orders ADD COLUMN idempotency_key text UNIQUE;
-  END IF;
-
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'retry_count') THEN
-    ALTER TABLE orders ADD COLUMN retry_count integer NOT NULL DEFAULT 0;
-  END IF;
-
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'last_error') THEN
-    ALTER TABLE orders ADD COLUMN last_error text;
-  END IF;
-
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'next_retry_at') THEN
-    ALTER TABLE orders ADD COLUMN next_retry_at timestamptz DEFAULT now();
-  END IF;
-
-  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'hold_expires_at') THEN
-    ALTER TABLE orders ADD COLUMN hold_expires_at timestamptz;
-  END IF;
-END $$;
 
 -- Status constraint expansion
 ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_status_check;
@@ -177,7 +191,7 @@ $$;
 -- 4. RUGSUSA ARCHITECTURAL PATTERNS & CDC VERSIONING
 -- ==============================================================================
 
--- 4.1. Inventory Balances: state_version for out-of-order webhook defense
+-- 4.1 Inventory Balances: state_version for out-of-order webhook defense
 DO $$ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'inventory_balances' AND column_name = 'state_version') THEN
     ALTER TABLE inventory_balances ADD COLUMN state_version bigint NOT NULL DEFAULT 0;
@@ -185,7 +199,7 @@ DO $$ BEGIN
 END $$;
 CREATE INDEX IF NOT EXISTS idx_inventory_balances_version ON inventory_balances(state_version);
 
--- 4.2. Pattern 1: Parent Product Designs (RugsUSA Normalized Master Entity)
+-- 4.2 Pattern 1: Parent Product Designs (RugsUSA Normalized Master Entity)
 CREATE TABLE IF NOT EXISTS product_designs (
   id text PRIMARY KEY,
   collection text NOT NULL,
@@ -209,7 +223,7 @@ DROP POLICY IF EXISTS "anon_select_designs" ON product_designs;
 CREATE POLICY "anon_select_designs" ON product_designs FOR SELECT
   TO anon, authenticated USING (true);
 
--- 4.3. Pattern 3: Size Clusters & Runner Dimensions on product_variants (Conditional)
+-- 4.3 Pattern 3: Size Clusters & Runner Dimensions on product_variants (Conditional)
 DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'product_variants') THEN
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'product_variants' AND column_name = 'width') THEN
@@ -237,16 +251,29 @@ DO $$ BEGIN
     CREATE INDEX IF NOT EXISTS idx_variants_cluster ON product_variants(size_cluster);
     CREATE INDEX IF NOT EXISTS idx_variants_runner ON product_variants(is_runner);
     CREATE INDEX IF NOT EXISTS idx_variants_design ON product_variants(design_id);
-    CREATE INDEX IF NOT EXISTS idx_variants_sku_trgm ON product_variants USING gin (sku gin_trgm_ops);
   END IF;
 END $$;
 
--- 4.4. Pattern 4: High-Performance Trigram GIN Search Indexes (pg_trgm)
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
+-- 4.4 Pattern 4: High-Performance Trigram GIN Search Indexes (pg_trgm)
+DO $$ BEGIN
+  CREATE EXTENSION IF NOT EXISTS pg_trgm;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'pg_trgm extension not available: %', SQLERRM;
+END $$;
 
-CREATE INDEX IF NOT EXISTS idx_designs_trgm ON product_designs USING gin (
-  (collection || ' ' || article || ' ' || coalesce(color, '') || ' ' || manufacturer) gin_trgm_ops
-);
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm') THEN
+    CREATE INDEX IF NOT EXISTS idx_designs_trgm ON product_designs USING gin (
+      (collection || ' ' || article || ' ' || coalesce(color, '') || ' ' || manufacturer) gin_trgm_ops
+    );
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'product_variants') THEN
+      CREATE INDEX IF NOT EXISTS idx_variants_sku_trgm ON product_variants USING gin (sku gin_trgm_ops);
+    END IF;
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'trgm index could not be created: %', SQLERRM;
+END $$;
+
 
 -- ==============================================================================
 -- 5. LEADS & CONTACT FORM SUBMISSIONS
@@ -285,42 +312,61 @@ CREATE POLICY "anyone_insert_leads" ON leads
   TO anon, authenticated
   WITH CHECK (true);
 
+
 -- ==============================================================================
 -- 6. DATA INTEGRITY CHECK CONSTRAINTS & OPTIMISTIC LOCKING
 -- ==============================================================================
 
--- 6.1 Non-negative CHECK Constraints
-ALTER TABLE orders DROP CONSTRAINT IF EXISTS chk_orders_total_amount;
-ALTER TABLE orders ADD CONSTRAINT chk_orders_total_amount CHECK (total_amount >= 0);
+-- 6.1 Non-negative CHECK Constraints (Fully Defensive)
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'total_amount') THEN
+    ALTER TABLE orders DROP CONSTRAINT IF EXISTS chk_orders_total_amount;
+    ALTER TABLE orders ADD CONSTRAINT chk_orders_total_amount CHECK (total_amount >= 0);
+  END IF;
 
-ALTER TABLE orders DROP CONSTRAINT IF EXISTS chk_orders_total_sqm;
-ALTER TABLE orders ADD CONSTRAINT chk_orders_total_sqm CHECK (total_sqm >= 0);
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'total_sqm') THEN
+    ALTER TABLE orders DROP CONSTRAINT IF EXISTS chk_orders_total_sqm;
+    ALTER TABLE orders ADD CONSTRAINT chk_orders_total_sqm CHECK (total_sqm >= 0);
+  END IF;
 
-ALTER TABLE orders DROP CONSTRAINT IF EXISTS chk_orders_total_items;
-ALTER TABLE orders ADD CONSTRAINT chk_orders_total_items CHECK (total_items >= 0);
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'total_items') THEN
+    ALTER TABLE orders DROP CONSTRAINT IF EXISTS chk_orders_total_items;
+    ALTER TABLE orders ADD CONSTRAINT chk_orders_total_items CHECK (total_items >= 0);
+  END IF;
 
-ALTER TABLE order_items DROP CONSTRAINT IF EXISTS chk_order_items_price;
-ALTER TABLE order_items ADD CONSTRAINT chk_order_items_price CHECK (price >= 0);
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'order_items' AND column_name = 'price') THEN
+    ALTER TABLE order_items DROP CONSTRAINT IF EXISTS chk_order_items_price;
+    ALTER TABLE order_items ADD CONSTRAINT chk_order_items_price CHECK (price >= 0);
+  END IF;
 
-ALTER TABLE profiles DROP CONSTRAINT IF EXISTS chk_profiles_credit_limit;
-ALTER TABLE profiles ADD CONSTRAINT chk_profiles_credit_limit CHECK (credit_limit_usd >= 0);
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'credit_limit_usd') THEN
+    ALTER TABLE profiles DROP CONSTRAINT IF EXISTS chk_profiles_credit_limit;
+    ALTER TABLE profiles ADD CONSTRAINT chk_profiles_credit_limit CHECK (credit_limit_usd >= 0);
+  END IF;
 
-ALTER TABLE profiles DROP CONSTRAINT IF EXISTS chk_profiles_delay_days;
-ALTER TABLE profiles ADD CONSTRAINT chk_profiles_delay_days CHECK (payment_delay_days >= 0);
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'payment_delay_days') THEN
+    ALTER TABLE profiles DROP CONSTRAINT IF EXISTS chk_profiles_delay_days;
+    ALTER TABLE profiles ADD CONSTRAINT chk_profiles_delay_days CHECK (payment_delay_days >= 0);
+  END IF;
 
-ALTER TABLE inventory_balances DROP CONSTRAINT IF EXISTS chk_inv_free_stock;
-ALTER TABLE inventory_balances ADD CONSTRAINT chk_inv_free_stock CHECK (free_stock >= 0);
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'inventory_balances') THEN
+    ALTER TABLE inventory_balances DROP CONSTRAINT IF EXISTS chk_inv_free_stock;
+    ALTER TABLE inventory_balances ADD CONSTRAINT chk_inv_free_stock CHECK (free_stock >= 0);
 
-ALTER TABLE inventory_balances DROP CONSTRAINT IF EXISTS chk_inv_reserved_stock;
-ALTER TABLE inventory_balances ADD CONSTRAINT chk_inv_reserved_stock CHECK (reserved_stock >= 0);
+    ALTER TABLE inventory_balances DROP CONSTRAINT IF EXISTS chk_inv_reserved_stock;
+    ALTER TABLE inventory_balances ADD CONSTRAINT chk_inv_reserved_stock CHECK (reserved_stock >= 0);
 
-ALTER TABLE inventory_balances DROP CONSTRAINT IF EXISTS chk_inv_total_stock;
-ALTER TABLE inventory_balances ADD CONSTRAINT chk_inv_total_stock CHECK (total_stock >= 0);
+    ALTER TABLE inventory_balances DROP CONSTRAINT IF EXISTS chk_inv_total_stock;
+    ALTER TABLE inventory_balances ADD CONSTRAINT chk_inv_total_stock CHECK (total_stock >= 0);
+  END IF;
+END $$;
 
 -- 6.2 Optimistic Locking (version columns)
-ALTER TABLE orders ADD COLUMN IF NOT EXISTS version integer NOT NULL DEFAULT 1;
-
 DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'orders') THEN
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS version integer NOT NULL DEFAULT 1;
+  END IF;
+
   IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'products') THEN
     ALTER TABLE products ADD COLUMN IF NOT EXISTS version integer NOT NULL DEFAULT 1;
     CREATE INDEX IF NOT EXISTS idx_products_collection ON products (collection);
@@ -341,14 +387,22 @@ DO $$ BEGIN
   END IF;
 END $$;
 
+
 -- ==============================================================================
 -- 7. HIGH-PERFORMANCE QUERY INDEXES
 -- ==============================================================================
 
 CREATE INDEX IF NOT EXISTS idx_orders_user_created ON orders (user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_order_items_sku ON order_items (sku);
-CREATE INDEX IF NOT EXISTS idx_order_items_product_id ON order_items (product_id);
+
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'order_items' AND column_name = 'product_id') THEN
+    CREATE INDEX IF NOT EXISTS idx_order_items_product_id ON order_items (product_id);
+  END IF;
+END $$;
+
 CREATE INDEX IF NOT EXISTS idx_leads_kanban ON leads (kanban_stage);
+
 
 -- ==============================================================================
 -- 8. AUDIT LOGS (BASE TABLE & PARTITIONED V2)
@@ -419,12 +473,17 @@ DROP POLICY IF EXISTS "service_insert_audit_logs_v2" ON integration_audit_logs_v
 CREATE POLICY "service_insert_audit_logs_v2" ON integration_audit_logs_v2 FOR INSERT
   TO authenticated WITH CHECK (true);
 
+
 -- ==============================================================================
 -- 9. SENSITIVE CREDENTIALS PROTECTION & ADVISORY LOCKS
 -- ==============================================================================
 
 -- 9.1 Ensure password_hash column exists on profiles table
-ALTER TABLE profiles ADD COLUMN IF NOT EXISTS password_hash text;
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'profiles') THEN
+    ALTER TABLE profiles ADD COLUMN IF NOT EXISTS password_hash text;
+  END IF;
+END $$;
 
 -- 9.2 Revoke SELECT privilege on sensitive credentials from client-facing roles
 DO $$ BEGIN
@@ -641,4 +700,3 @@ END $$;
 NOTIFY pgrst, 'reload schema';
 
 COMMIT;
-
