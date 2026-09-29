@@ -90,18 +90,19 @@ function verifyErpToken(tokenStr: string, queryParams?: Record<string, any>): { 
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const correlationId = applyCorrelationId(req, res);
+  try {
+    const correlationId = applyCorrelationId(req, res);
 
-  // Строгий Rate Limiting для SSO (макс 15 попыток в минуту на IP)
-  if (!(await enforceRateLimit(req, res, { limit: 15, windowSeconds: 60, actionPrefix: 'erp_sso' }))) {
-    return;
-  }
+    // Строгий Rate Limiting для SSO (макс 15 попыток в минуту на IP)
+    if (!(await enforceRateLimit(req, res, { limit: 15, windowSeconds: 60, actionPrefix: 'erp_sso' }))) {
+      return;
+    }
 
-  const { token, redirect_to } = req.query;
+    const { token, redirect_to } = req.query;
 
-  if (!token || typeof token !== 'string') {
-    return res.status(400).send('SSO Token is required');
-  }
+    if (!token || typeof token !== 'string') {
+      return res.status(400).send('SSO Token is required');
+    }
 
   const result = verifyErpToken(token, req.query);
   if (!result.valid || !result.payload) {
@@ -187,4 +188,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.error('[ERP SSO] Error provisioning session:', err);
     return res.status(500).send(`Ошибка создания сессии сотрудника: ${err?.message}`);
   }
+} catch (fatalErr: any) {
+  console.error('[ERP SSO Fatal Error]', fatalErr);
+  return res.status(500).send(`Ошибка сервера: ${fatalErr?.message}`);
+}
 }

@@ -56,14 +56,16 @@ export async function checkRateLimit(
       const resetSeconds = Math.max(1, ttl);
       const remaining = Math.max(0, limit - current);
 
-      res.setHeader('X-RateLimit-Limit', limit);
-      res.setHeader('X-RateLimit-Remaining', remaining);
-      res.setHeader('X-RateLimit-Reset', resetSeconds);
+      try {
+        res.setHeader('X-RateLimit-Limit', String(limit));
+        res.setHeader('X-RateLimit-Remaining', String(remaining));
+        res.setHeader('X-RateLimit-Reset', String(resetSeconds));
 
-      if (current > limit) {
-        res.setHeader('Retry-After', resetSeconds);
-        return { allowed: false, remaining: 0, resetSeconds, ip };
-      }
+        if (current > limit) {
+          res.setHeader('Retry-After', String(resetSeconds));
+          return { allowed: false, remaining: 0, resetSeconds, ip };
+        }
+      } catch {}
 
       return { allowed: true, remaining, resetSeconds, ip };
     } catch (redisErr) {
@@ -88,23 +90,27 @@ export async function checkRateLimit(
     ? Math.max(1, Math.ceil((record.timestamps[0] + windowMs - now) / 1000))
     : windowSeconds;
 
-  if (record.timestamps.length >= limit) {
-    res.setHeader('X-RateLimit-Limit', limit);
-    res.setHeader('X-RateLimit-Remaining', 0);
-    res.setHeader('X-RateLimit-Reset', resetSeconds);
-    res.setHeader('Retry-After', resetSeconds);
+  try {
+    if (record.timestamps.length >= limit) {
+      res.setHeader('X-RateLimit-Limit', String(limit));
+      res.setHeader('X-RateLimit-Remaining', '0');
+      res.setHeader('X-RateLimit-Reset', String(resetSeconds));
+      res.setHeader('Retry-After', String(resetSeconds));
 
-    return { allowed: false, remaining: 0, resetSeconds, ip };
+      return { allowed: false, remaining: 0, resetSeconds, ip };
+    }
+
+    record.timestamps.push(now);
+    const remaining = Math.max(0, limit - record.timestamps.length);
+
+    res.setHeader('X-RateLimit-Limit', String(limit));
+    res.setHeader('X-RateLimit-Remaining', String(remaining));
+    res.setHeader('X-RateLimit-Reset', String(resetSeconds));
+
+    return { allowed: true, remaining, resetSeconds, ip };
+  } catch {
+    return { allowed: true, remaining: limit, resetSeconds: 0, ip };
   }
-
-  record.timestamps.push(now);
-  const remaining = Math.max(0, limit - record.timestamps.length);
-
-  res.setHeader('X-RateLimit-Limit', limit);
-  res.setHeader('X-RateLimit-Remaining', remaining);
-  res.setHeader('X-RateLimit-Reset', resetSeconds);
-
-  return { allowed: true, remaining, resetSeconds, ip };
 }
 
 /**
@@ -115,16 +121,21 @@ export async function enforceRateLimit(
   res: VercelResponse,
   options: RateLimitOptions = {}
 ): Promise<boolean> {
-  const result = await checkRateLimit(req, res, options);
+  try {
+    const result = await checkRateLimit(req, res, options);
 
-  if (!result.allowed) {
-    res.status(429).json({
-      success: false,
-      error: 'Превышен лимит запросов к API. Пожалуйста, подождите перед повторной отправкой.',
-      retryAfterSeconds: result.resetSeconds,
-    });
-    return false;
+    if (!result.allowed) {
+      res.status(429).json({
+        success: false,
+        error: 'Превышен лимит запросов к API. Пожалуйста, подождите перед повторной отправкой.',
+        retryAfterSeconds: result.resetSeconds,
+      });
+      return false;
+    }
+
+    return true;
+  } catch (err) {
+    console.warn('[RateLimit] Guard execution notice:', err);
+    return true; // Fail open to guarantee endpoint availability
   }
-
-  return true;
 }

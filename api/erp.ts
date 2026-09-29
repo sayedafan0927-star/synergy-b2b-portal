@@ -56,11 +56,11 @@ let displaySettingsCache: { data: any; expiry: number } | null = null;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const startTime = Date.now();
-
-  // Unified CORS Guard
-  if (!applyCorsHeaders(req, res)) {
-    return;
-  }
+  try {
+    // Unified CORS Guard
+    if (!applyCorsHeaders(req, res)) {
+      return;
+    }
 
   // Reject oversized payloads (10MB limit)
   const bodyStr = JSON.stringify(req.body);
@@ -937,4 +937,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       details: err?.message,
     });
   }
+} catch (fatalErr: any) {
+  console.error('[ERP Proxy Fatal Error]', fatalErr);
+  return res.status(500).json({
+    success: false,
+    error: 'Внутренняя ошибка шлюза API',
+    message: fatalErr?.message,
+  });
+}
 }
