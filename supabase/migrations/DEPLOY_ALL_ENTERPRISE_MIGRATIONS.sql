@@ -382,4 +382,223 @@ DROP POLICY IF EXISTS "service_insert_audit_logs_v2" ON integration_audit_logs_v
 CREATE POLICY "service_insert_audit_logs_v2" ON integration_audit_logs_v2 FOR INSERT
   TO authenticated WITH CHECK (true);
 
+-- ==============================================================================
+-- 9. SENSITIVE CREDENTIALS PROTECTION & ADVISORY LOCKS
+-- ==============================================================================
+
+-- 9.1 Ensure password_hash column exists on profiles table
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS password_hash text;
+
+-- 9.2 Revoke SELECT privilege on sensitive credentials from client-facing roles
+DO $$ BEGIN
+  REVOKE SELECT (password_hash) ON profiles FROM anon;
+  REVOKE SELECT (password_hash) ON profiles FROM authenticated;
+EXCEPTION
+  WHEN OTHERS THEN
+    NULL;
+END $$;
+
+-- 9.3 Explicitly grant full credentials access to service_role
+DO $$ BEGIN
+  GRANT SELECT, UPDATE (password_hash) ON profiles TO service_role;
+EXCEPTION
+  WHEN OTHERS THEN
+    NULL;
+END $$;
+
+-- 9.4 Advisory lock wrapper for bootstrap_admin to eliminate race conditions
+CREATE OR REPLACE FUNCTION bootstrap_admin_safe(p_user_id uuid, p_email text)
+RETURNS boolean
+LANGUAGE plpgsql
+SECURITY DEFINER SET search_path = public
+AS $$
+DECLARE
+  v_admin_count integer;
+BEGIN
+  -- Acquire transaction-level advisory lock (key: 420001)
+  PERFORM pg_advisory_xact_lock(420001);
+
+  SELECT count(*) INTO v_admin_count FROM profiles WHERE role = 'admin';
+  IF v_admin_count > 0 THEN
+    RETURN false;
+  END IF;
+
+  UPDATE profiles
+  SET role = 'admin', updated_at = now()
+  WHERE id = p_user_id;
+
+  RETURN true;
+END;
+$$;
+
+
+-- ==============================================================================
+-- 10. ORDER STATUS HISTORY AUDIT TRAIL & SKIP LOCKED OUTBOX CLAIM
+-- ==============================================================================
+
+-- 10.1 Table order_status_history for immutable audit trail of order lifecycle
+CREATE TABLE IF NOT EXISTS order_status_history (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id uuid NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  previous_status text,
+  new_status text NOT NULL,
+  changed_by uuid REFERENCES profiles(id) ON DELETE SET NULL,
+  correlation_id text,
+  reason text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_order_status_history_order_id ON order_status_history(order_id);
+CREATE INDEX IF NOT EXISTS idx_order_status_history_created_at ON order_status_history(created_at DESC);
+
+ALTER TABLE order_status_history ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "client_view_own_order_status_history" ON order_status_history;
+CREATE POLICY "client_view_own_order_status_history" ON order_status_history
+  FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM orders
+      WHERE orders.id = order_status_history.order_id
+        AND orders.user_id = auth.uid()
+    )
+    OR
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE profiles.id = auth.uid()
+        AND profiles.role IN ('admin', 'manager_rm', 'manager_lm')
+    )
+  );
+
+-- 10.2 Trigger to record every order status transition automatically
+CREATE OR REPLACE FUNCTION log_order_status_transition()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER SET search_path = public
+AS $$
+BEGIN
+  IF (TG_OP = 'UPDATE' AND OLD.status IS DISTINCT FROM NEW.status) THEN
+    INSERT INTO order_status_history (
+      order_id,
+      previous_status,
+      new_status,
+      changed_by,
+      reason,
+      created_at
+    ) VALUES (
+      NEW.id,
+      OLD.status,
+      NEW.status,
+      auth.uid(),
+      COALESCE(NEW.notes, 'Status transitioned in order processing pipeline'),
+      now()
+    );
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_order_status_transition ON orders;
+CREATE TRIGGER trg_order_status_transition
+  AFTER UPDATE OF status ON orders
+  FOR EACH ROW
+  EXECUTE FUNCTION log_order_status_transition();
+
+-- 10.3 Atomic concurrent outbox claim function (FOR UPDATE SKIP LOCKED)
+CREATE OR REPLACE FUNCTION claim_outbox_orders(p_limit integer DEFAULT 10)
+RETURNS SETOF orders
+LANGUAGE plpgsql
+SECURITY DEFINER SET search_path = public
+AS $$
+BEGIN
+  RETURN QUERY
+  WITH locked_orders AS (
+    SELECT id
+    FROM orders
+    WHERE status = 'pending'
+      AND (next_retry_at IS NULL OR next_retry_at <= now())
+    ORDER BY created_at ASC
+    FOR UPDATE SKIP LOCKED
+    LIMIT p_limit
+  )
+  UPDATE orders o
+  SET status = 'processing_sync',
+      updated_at = now()
+  FROM locked_orders lo
+  WHERE o.id = lo.id
+  RETURNING o.*;
+END;
+$$;
+
+
+-- ==============================================================================
+-- 11. CONTRACTS LIFECYCLE & MULTI-CURRENCY SUPPORT
+-- ==============================================================================
+
+-- 11.1 Table contracts for formal B2B agreements, credit limits, price types and payment terms
+CREATE TABLE IF NOT EXISTS contracts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  partner_id text NOT NULL,
+  contract_number text NOT NULL,
+  contract_type text NOT NULL DEFAULT 'prepayment' CHECK (contract_type IN ('prepayment', 'deferred_14', 'deferred_30', 'deferred_60', 'consignment')),
+  price_type text NOT NULL DEFAULT 'wholesale',
+  credit_limit_usd numeric(12,2) NOT NULL DEFAULT 0.00 CHECK (credit_limit_usd >= 0),
+  payment_deferral_days integer NOT NULL DEFAULT 0 CHECK (payment_deferral_days >= 0),
+  valid_from date NOT NULL DEFAULT CURRENT_DATE,
+  valid_to date,
+  status text NOT NULL DEFAULT 'active' CHECK (status IN ('draft', 'active', 'suspended', 'terminated', 'expired')),
+  allowed_warehouses integer[] DEFAULT '{81}',
+  notes text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_contracts_partner_id ON contracts(partner_id);
+CREATE INDEX IF NOT EXISTS idx_contracts_status ON contracts(status);
+
+ALTER TABLE contracts ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "client_view_own_contracts" ON contracts;
+CREATE POLICY "client_view_own_contracts" ON contracts
+  FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE profiles.id = auth.uid()
+        AND (profiles.partner_id = contracts.partner_id OR profiles.role IN ('admin', 'manager_rm', 'manager_lm'))
+    )
+  );
+
+DROP POLICY IF EXISTS "admin_manage_contracts" ON contracts;
+CREATE POLICY "admin_manage_contracts" ON contracts
+  FOR ALL
+  USING (
+    EXISTS (
+      SELECT 1 FROM profiles
+      WHERE profiles.id = auth.uid()
+        AND profiles.role IN ('admin', 'manager_rm')
+    )
+  );
+
+-- 11.2 Multi-currency support on orders table
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'orders' AND column_name = 'currency'
+  ) THEN
+    ALTER TABLE orders ADD COLUMN currency text NOT NULL DEFAULT 'USD' CHECK (currency IN ('USD', 'KZT', 'RUB', 'EUR'));
+  END IF;
+END $$;
+
+-- 11.3 Add contract_id reference to orders
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'orders' AND column_name = 'contract_id'
+  ) THEN
+    ALTER TABLE orders ADD COLUMN contract_id uuid REFERENCES contracts(id) ON DELETE SET NULL;
+  END IF;
+END $$;
+
 COMMIT;
+

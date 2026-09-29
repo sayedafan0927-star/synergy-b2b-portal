@@ -100,22 +100,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const nowIso = new Date().toISOString();
 
   try {
-    // 1. Поиск отложенных заказов, готовых к синхронизации (pending и next_retry_at <= now)
-    const { data: pendingOrders, error: fetchErr } = await supabase
-      .from('orders')
-      .select('*')
-      .eq('status', 'pending')
-      .lte('next_retry_at', nowIso)
-      .order('created_at', { ascending: true })
-      .limit(10);
+    // 1. Атомарный конкурентно-безопасный захват заказов (FOR UPDATE SKIP LOCKED)
+    let pendingOrders: any[] | null = null;
+    let claimedViaRpc = false;
 
-    if (fetchErr) {
-      console.error('[Outbox Sync] Failed to fetch pending orders:', fetchErr);
-      return res.status(500).json({
-        success: false,
-        error: 'Ошибка обращения к очереди заказов в БД',
-        details: fetchErr.message,
-      });
+    const { data: claimedOrders, error: rpcErr } = await supabase.rpc('claim_outbox_orders', { p_limit: 10 });
+    if (!rpcErr && Array.isArray(claimedOrders)) {
+      pendingOrders = claimedOrders;
+      claimedViaRpc = true;
+    } else {
+      // Fallback на селективный claim, если RPC еще не применена в миграциях
+      const { data: fetchedOrders, error: fetchErr } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('status', 'pending')
+        .lte('next_retry_at', nowIso)
+        .order('created_at', { ascending: true })
+        .limit(10);
+
+      if (fetchErr) {
+        console.error('[Outbox Sync] Failed to fetch pending orders:', fetchErr);
+        return res.status(500).json({
+          success: false,
+          error: 'Ошибка обращения к очереди заказов в БД',
+          details: fetchErr.message,
+        });
+      }
+      pendingOrders = fetchedOrders;
     }
 
     if (!pendingOrders || pendingOrders.length === 0) {
@@ -130,21 +141,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const results: Array<{ order_id: string; order_number: string; success: boolean; dlq?: boolean; error?: string }> = [];
 
     for (const order of pendingOrders) {
-      // 2. Атомарный захват заказа (Claim Lock) для исключения параллельной гонки
-      const { data: claimedRow } = await supabase
-        .from('orders')
-        .update({
-          status: 'processing_sync',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', order.id)
-        .eq('status', 'pending')
-        .select('id')
-        .maybeSingle();
+      // Если заказ не был предварительно залочен через SKIP LOCKED RPC — захватываем атомарно
+      if (!claimedViaRpc) {
+        const { data: claimedRow } = await supabase
+          .from('orders')
+          .update({
+            status: 'processing_sync',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', order.id)
+          .eq('status', 'pending')
+          .select('id')
+          .maybeSingle();
 
-      if (!claimedRow) {
-        // Заказ уже перехвачен параллельным воркером
-        continue;
+        if (!claimedRow) {
+          // Заказ уже перехвачен параллельным воркером
+          continue;
+        }
       }
 
       const currentRetries = Number(order.retry_count || 0);

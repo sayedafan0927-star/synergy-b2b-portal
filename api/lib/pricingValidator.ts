@@ -53,6 +53,20 @@ export interface PricingValidationResult {
 }
 
 /**
+ * Разрешение warehouse_id по числовому ID либо наименованию склада
+ */
+export function resolveWarehouseId(rawId?: any, name?: string): number {
+  if (rawId !== undefined && rawId !== null && !isNaN(Number(rawId))) {
+    return Number(rawId);
+  }
+  const wName = (name || '').toLowerCase();
+  if (wName.includes('астана') || wName.includes('основной')) return 81;
+  if (wName.includes('алматы')) return 82;
+  if (wName.includes('шымкент')) return 83;
+  return 81;
+}
+
+/**
  * Расчет скидки по типу договора на основе динамических правил из БД (T-25)
  */
 async function getDynamicDiscountPercent(priceType?: string | null): Promise<number> {
@@ -81,6 +95,19 @@ async function getDynamicDiscountPercent(priceType?: string | null): Promise<num
 
   // Fallback значения
   if (str === 'wholesale' || str === 'price_deferred' || str === 'price_opt' || str === 'оптовая') return 0;
+  if (str.includes('vip') || str.includes('вип')) return 25;
+  if (str.includes('opt3') || str.includes('опт-3') || str.includes('дилер')) return 20;
+  if (str.includes('opt2') || str.includes('опт-2') || str.includes('крупн')) return 15;
+  if (str.includes('opt1') || str.includes('опт-1')) return 10;
+  return 0;
+}
+
+/**
+ * Синхронный расчет скидки по типу цены клиента
+ */
+export function getDiscountPercent(priceType?: string | null): number {
+  if (!priceType) return 0;
+  const str = priceType.toLowerCase().trim();
   if (str.includes('vip') || str.includes('вип')) return 25;
   if (str.includes('opt3') || str.includes('опт-3') || str.includes('дилер')) return 20;
   if (str.includes('opt2') || str.includes('опт-2') || str.includes('крупн')) return 15;
@@ -224,7 +251,7 @@ export async function validateAndPriceOrder(
       length,
       area_sqm: area,
       warehouse: raw.warehouse || 'Основной Склад Астана',
-      warehouse_id: raw.warehouse_id !== undefined ? Number(raw.warehouse_id) : (raw.warehouse && (raw.warehouse.includes('Астана') || raw.warehouse.includes('Основной')) ? 81 : 81),
+      warehouse_id: resolveWarehouseId(raw.warehouse_id, raw.warehouse),
       total_line: lineTotal,
       server_verified: serverVerified,
     });

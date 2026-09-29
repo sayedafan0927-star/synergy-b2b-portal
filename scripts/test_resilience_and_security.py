@@ -158,8 +158,16 @@ test_assert("SKIP LOCKED" in sql_code, "High-concurrency SKIP LOCKED concurrency
 print(f"\n{BOLD}8. Verifying Deep Enterprise Fixes & Integration Standards...{RESET}")
 
 erp_path = os.path.join(ROOT_DIR, "api", "erp.ts")
+order_handler_path = os.path.join(ROOT_DIR, "api", "modules", "orders", "createOrderHandler.ts")
+auth_handler_path = os.path.join(ROOT_DIR, "api", "modules", "auth", "loginHandler.ts")
 with open(erp_path, "r", encoding="utf-8") as fp:
     erp_code = fp.read()
+if os.path.exists(order_handler_path):
+    with open(order_handler_path, "r", encoding="utf-8") as fp:
+        erp_code += "\n" + fp.read()
+if os.path.exists(auth_handler_path):
+    with open(auth_handler_path, "r", encoding="utf-8") as fp:
+        erp_code += "\n" + fp.read()
 
 test_assert("idempotency_key: incomingIdempotencyKey" in erp_code, "api/erp.ts passes idempotency_key into orders.insert")
 test_assert("existingOrder" in erp_code and "Idempotency Key HIT" in erp_code, "api/erp.ts implements fast idempotent order lookup")
@@ -256,6 +264,9 @@ test_assert("authenticateRequest" in ct_code and "401" in ct_code, "api/auth/cli
 
 with open(erp_path, "r", encoding="utf-8") as fp:
     erp_code = fp.read()
+if os.path.exists(order_handler_path):
+    with open(order_handler_path, "r", encoding="utf-8") as fp:
+        erp_code += "\n" + fp.read()
 test_assert("action === 'create_order' ? 2500 : 12000" in erp_code, "api/erp.ts sets 2.5s low-latency checkout timeout for instant fallback")
 test_assert("action === 'login'" in erp_code and "portal_session_token" in erp_code, "api/erp.ts directly generates signed session token on login")
 
@@ -322,8 +333,7 @@ test_assert("variant.is_runner" in ppage_code and "variant.size_cluster" in ppag
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}12. Verifying Sprint 3 ERP Gateway & Integration Specification...{RESET}")
 
-with open(erp_path, "r", encoding="utf-8") as fp:
-    fresh_erp_code = fp.read()
+fresh_erp_code = erp_code
 
 test_assert("https://crm.kilem-khan.kz/api_portal.php" in fresh_erp_code, "api/erp.ts points to production ERP Gateway https://crm.kilem-khan.kz/api_portal.php")
 test_assert("catalog_normalized" in fresh_erp_code and "reconcile_all_balances" in fresh_erp_code, "api/erp.ts includes catalog_normalized and reconcile_all_balances in PUBLIC_ACTIONS")
@@ -353,8 +363,7 @@ test_assert("partner_id:" in fresh_erp_api and "warehouse_id:" in fresh_erp_api,
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}13. Verifying WMS/ERP Address Storage & Order Payload Standard...{RESET}")
 
-with open(erp_path, "r", encoding="utf-8") as fp:
-    current_erp_code = fp.read()
+current_erp_code = erp_code
 
 test_assert("delete itemObj.cell" in current_erp_code and "delete itemObj.rack" in current_erp_code, "api/erp.ts strips cell, cell_code, rack, location from items")
 test_assert("delete (validatedOrderPayload as any).cell" in current_erp_code, "api/erp.ts strips cell fields from root order payload")
