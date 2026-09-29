@@ -71,7 +71,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // 2.2. Синхронизируем статус с 1С:ERP
       if (SERVER_ERP_KEY) {
-        const erpUrl = `${TARGET_ERP_URL}?action=update_order_status&portal_key=${encodeURIComponent(SERVER_ERP_KEY)}`;
+        const erpUrl = `${TARGET_ERP_URL}?action=update_order_status`;
         try {
           await fetch(erpUrl, {
             method: 'POST',

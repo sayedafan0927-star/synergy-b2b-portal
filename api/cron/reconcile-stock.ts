@@ -40,7 +40,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     // 1. Загрузка каталога с остатками из ERP
-    const erpUrl = `${TARGET_ERP_URL}?action=catalog&portal_key=${encodeURIComponent(SERVER_ERP_KEY)}`;
+    const erpUrl = `${TARGET_ERP_URL}?action=catalog`;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 20000);
 

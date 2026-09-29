@@ -628,7 +628,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           // Если по выбранному supplier_id пришло 0 поставок, подгружаем реестр и ищем партии с товарами фабрики (напр. SAYDAM)
           if (jsonData.shipments.length === 0 && req.query.supplier_id && req.query.supplier_id !== '0') {
             try {
-              const allResp = await fetch(`${targetUrl}?action=supplier_inbound_shipments&portal_key=${SERVER_ERP_KEY}`);
+              const allResp = await fetch(`${targetUrl}?action=supplier_inbound_shipments`, {
+                headers: { 'X-Portal-Key': SERVER_ERP_KEY },
+              });
               if (allResp.ok) {
                 const allData = await allResp.json();
                 if (allData.success && Array.isArray(allData.shipments)) {
@@ -739,7 +741,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             if (inputLogin) {
               let managers: any[] = [];
               try {
-                const rmUrl = `${TARGET_ERP_URL}?action=regional_managers&portal_key=${encodeURIComponent(SERVER_ERP_KEY)}`;
+                const rmUrl = `${TARGET_ERP_URL}?action=regional_managers`;
                 const rmRes = await fetch(rmUrl, { headers: { 'X-Portal-Key': SERVER_ERP_KEY } });
                 if (rmRes.ok) {
                   const rmData = await rmRes.json();

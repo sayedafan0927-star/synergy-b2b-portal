@@ -23,7 +23,7 @@ export async function handleReconciliationReport(
   const endDate = (req.query.end_date as string) || new Date().toISOString().split('T')[0];
 
   try {
-    const erpUrl = `${targetErpUrl}?action=get_reconciliation_report&partner_id=${encodeURIComponent(partnerId)}&start_date=${startDate}&end_date=${endDate}&portal_key=${encodeURIComponent(serverErpKey)}`;
+    const erpUrl = `${targetErpUrl}?action=get_reconciliation_report&partner_id=${encodeURIComponent(partnerId)}&start_date=${startDate}&end_date=${endDate}`;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8000);
     const erpRes = await fetch(erpUrl, { headers: { 'X-Portal-Key': serverErpKey }, signal: controller.signal }).finally(() => clearTimeout(timeout));

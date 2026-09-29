@@ -219,7 +219,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       };
 
       try {
-        const erpUrl = `${TARGET_ERP_URL}?action=create_order&portal_key=${encodeURIComponent(SERVER_ERP_KEY)}`;
+        const erpUrl = `${TARGET_ERP_URL}?action=create_order`;
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 10000);
 

@@ -44,8 +44,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } else {
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 4000);
-      const pingUrl = `${TARGET_ERP_URL}?action=ping&portal_key=${encodeURIComponent(SERVER_ERP_KEY)}`;
+      const pingUrl = `${TARGET_ERP_URL}?action=ping`;
       
       const erpRes = await fetch(pingUrl, {
         method: 'GET',
