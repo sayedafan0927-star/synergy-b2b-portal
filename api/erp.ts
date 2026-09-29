@@ -54,6 +54,7 @@ const ADMIN_ACTIONS = new Set([
   'sync_bundle',
 ]);
 let displaySettingsCache: { data: any; expiry: number } | null = null;
+let lastKnownInboundShipments: any = null;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const startTime = Date.now();
@@ -393,6 +394,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (key === 'supplier_id' && (val === '0' || val === 'all' || val === '' || val === 'undefined' || val === 'null')) {
         continue;
       }
+      if (action === 'supplier_inbound_shipments' && key === 'supplier_id') {
+        // В 1C:ERP приходные накладные привязаны к юрлицам перевозчиков (2984, 1),
+        // а принадлежность к фабрике (SAYDAM, ISMEN и др.) определяется по номенклатуре.
+        // Запрашиваем общий реестр, сопоставление выполнит шлюз ниже.
+        continue;
+      }
       if (Array.isArray(val)) {
         val.forEach(v => queryParams.append(key, String(v)));
       } else if (val !== undefined && val !== null && val !== '') {
@@ -683,43 +690,61 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (action === 'supplier_inbound_shipments' && erpResponse.ok && jsonData?.success) {
         if (Array.isArray(jsonData.shipments)) {
+          // 1. Нормализация складов хаба (Основной Склад Астана)
           jsonData.shipments.forEach((s: any) => {
-            if (s.warehouse_id === 81 || (s.warehouse_name && s.warehouse_name.includes('Астана'))) {
+            if (s.warehouse_id === 81 || (s.warehouse_name && s.warehouse_name.includes('Астана')) || !s.city) {
               s.city = 'Астана';
+              s.warehouse_name = 'Основной Склад Астана';
             }
           });
 
-          // Если по выбранному supplier_id пришло 0 поставок, подгружаем реестр и ищем партии с товарами фабрики (напр. SAYDAM)
-          if (jsonData.shipments.length === 0 && req.query.supplier_id && req.query.supplier_id !== '0') {
-            try {
-              const allResp = await fetch(`${targetUrl}?action=supplier_inbound_shipments`, {
-                headers: { 'X-Portal-Key': SERVER_ERP_KEY },
-              });
-              if (allResp.ok) {
-                const allData = await allResp.json();
-                if (allData.success && Array.isArray(allData.shipments)) {
-                  const sId = Number(req.query.supplier_id);
-                  const matched = allData.shipments.filter((s: any) => {
-                    if (s.supplier_id === sId) return true;
-                    return Array.isArray(s.items) && s.items.some((it: any) => {
-                      const iname = (it.name || '').toLowerCase();
-                      if (sId === 11 && (iname.includes('saydam') || iname.includes('flora'))) return true;
-                      return false;
-                    });
-                  });
-                  if (matched.length > 0) {
-                    jsonData.shipments = matched;
-                    jsonData.total_shipments = matched.length;
-                  } else {
-                    // Возвращаем все поступления склада Астана
-                    jsonData.shipments = allData.shipments;
-                    jsonData.total_shipments = allData.shipments.length;
-                    jsonData.filter_notice = 'Показан общий реестр склада Астана';
-                  }
+          // Сохраняем в кэш шлюза для отказоустойчивости (Resilience Fallback)
+          lastKnownInboundShipments = jsonData;
+
+          // 2. Интеллектуальное сопоставление партий с выбранной фабрикой
+          const rawSupplierId = req.query.supplier_id;
+          if (rawSupplierId && rawSupplierId !== '0' && rawSupplierId !== 'all') {
+            const sId = Number(rawSupplierId);
+            const matched = jsonData.shipments.filter((s: any) => {
+              if (s.supplier_id === sId) return true;
+              return Array.isArray(s.items) && s.items.some((it: any) => {
+                const iname = (it.name || '').toLowerCase();
+                const ibrand = (it.brand || '').toLowerCase();
+                if (sId === 11 || sId === 26) {
+                  // SAYDAM (11) или flora (26)
+                  return iname.includes('saydam') || iname.includes('flora') || ibrand.includes('saydam') || ibrand.includes('flora');
                 }
-              }
-            } catch (fallbackErr) {
-              console.warn('[API Proxy ERP] Inbound shipment fallback notice:', fallbackErr);
+                if (sId === 6) {
+                  // ISMEN (6)
+                  return iname.includes('ismen') || iname.includes('linea') || ibrand.includes('ismen');
+                }
+                if (sId === 1 || sId === 7) {
+                  // MERINOS (1 / 7)
+                  return iname.includes('merinos') || iname.includes('octavia') || iname.includes('oslo') || ibrand.includes('merinos');
+                }
+                if (sId === 8 || sId === 9 || sId === 31) {
+                  // IRAN (8) / GHEYTARAN (9)
+                  return iname.includes('iran') || iname.includes('gheytaran') || iname.includes('гейтаран') || iname.includes('исфахан') || iname.includes('afgan');
+                }
+                if (sId === 10) {
+                  // KARMEN HALI (10)
+                  return iname.includes('karmen');
+                }
+                if (sId === 12) {
+                  // LYSANDRA HALI (12)
+                  return iname.includes('lysandra');
+                }
+                return false;
+              });
+            });
+
+            if (matched.length > 0) {
+              jsonData.shipments = matched;
+              jsonData.total_shipments = matched.length;
+              jsonData.supplier_id = sId;
+            } else {
+              // Если по фабрике пока нет привязанных партий, показываем общий реестр хаба с пометкой
+              jsonData.filter_notice = 'Показан общий реестр склада Астана';
             }
           }
         }
@@ -953,6 +978,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.json(fallback.data);
         }
       } catch {}
+    }
+
+    if (action === 'supplier_inbound_shipments' && lastKnownInboundShipments) {
+      res.status(200);
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('X-Cache', 'STALE_FALLBACK');
+      return res.json(lastKnownInboundShipments);
     }
 
     // T-12: Отказоустойчивый возврат сохраненного баланса при сбое ERP

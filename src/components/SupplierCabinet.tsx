@@ -131,6 +131,11 @@ export default function SupplierCabinet({ profile, isAdmin: propIsAdmin }: Suppl
   const [defectFilter, setDefectFilter] = useState<'all' | 'factory_defect' | 'transit_damage' | 'client_return'>('all');
   const [defectStatusFilter, setDefectStatusFilter] = useState<'all' | 'inspecting' | 'discounted' | 'written_off'>('all');
 
+  const selectedSupplierObj = useMemo(
+    () => suppliersList.find(s => s.id === selectedSupplierId),
+    [suppliersList, selectedSupplierId]
+  );
+
   // Счетчик принудительной перезагрузки
   const [reloadCounter, setReloadCounter] = useState(0);
 
@@ -214,8 +219,6 @@ export default function SupplierCabinet({ profile, isAdmin: propIsAdmin }: Suppl
 
   // 3. Загрузка входящих поставок и расхождений с защитой от сбоев
   useEffect(() => {
-    if (activeSubTab !== 'inbound') return;
-
     let cancelled = false;
     setLoadingInbound(true);
     setInboundError(null);
@@ -223,14 +226,13 @@ export default function SupplierCabinet({ profile, isAdmin: propIsAdmin }: Suppl
     // Если selectedSupplierId === 0 — запрашиваем общий реестр всех фабрик
     const querySupplierId = selectedSupplierId > 0 ? selectedSupplierId : undefined;
 
-    fetchSupplierInboundShipments(querySupplierId, { status: inboundFilter })
+    fetchSupplierInboundShipments(querySupplierId, { status: 'all' })
       .then(data => {
         if (cancelled) return;
         if (data && data.success && Array.isArray(data.shipments)) {
           setInboundData(data);
         } else {
-          // Если эндпоинт на сервере ERP еще в процессе деплоя
-          setInboundData({
+          setInboundData(prev => prev || {
             success: true,
             supplier_id: selectedSupplierId,
             supplier_name: selectedSupplierObj?.name || 'Поставщик',
@@ -242,8 +244,7 @@ export default function SupplierCabinet({ profile, isAdmin: propIsAdmin }: Suppl
       .catch((err: any) => {
         if (cancelled) return;
         console.warn('[SupplierCabinet] Inbound shipments endpoint notice:', err);
-        // Fallback на согласованную структуру данных
-        setInboundData({
+        setInboundData(prev => prev || {
           success: true,
           supplier_id: selectedSupplierId,
           supplier_name: selectedSupplierObj?.name || 'Поставщик',
@@ -258,12 +259,10 @@ export default function SupplierCabinet({ profile, isAdmin: propIsAdmin }: Suppl
     return () => {
       cancelled = true;
     };
-  }, [selectedSupplierId, activeSubTab, inboundFilter, reloadCounter]);
+  }, [selectedSupplierId, reloadCounter, selectedSupplierObj]);
 
   // 4. Загрузка реестра брака и рекламаций (action=supplier_defects)
   useEffect(() => {
-    if (activeSubTab !== 'defects') return;
-
     let cancelled = false;
     setLoadingDefects(true);
     setDefectsError(null);
@@ -301,7 +300,7 @@ export default function SupplierCabinet({ profile, isAdmin: propIsAdmin }: Suppl
     return () => {
       cancelled = true;
     };
-  }, [selectedSupplierId, activeSubTab, reloadCounter]);
+  }, [selectedSupplierId, reloadCounter, selectedSupplierObj]);
 
   // 5. Санитайзер данных: устранение коллизии на стороне ERP (ковры SAYDAM внутри ISMEN)
   const sanitizedItems = useMemo(() => {
@@ -442,8 +441,6 @@ export default function SupplierCabinet({ profile, isAdmin: propIsAdmin }: Suppl
       setEndDate(`${curYear}-12-31`);
     }
   };
-
-  const selectedSupplierObj = suppliersList.find(s => s.id === selectedSupplierId);
 
   return (
     <div className="space-y-6">
