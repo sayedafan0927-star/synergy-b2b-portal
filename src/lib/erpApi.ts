@@ -33,39 +33,8 @@ export function deduplicateRequest<T>(key: string, fn: () => Promise<T>): Promis
   return promise;
 }
 
-// ─── 2. Unified Transport (Strictly via Server-Side Proxy /api/erp) ───
-export async function erpFetch(
-  action: string,
-  options: {
-    method?: 'GET' | 'POST';
-    params?: Record<string, string | number | undefined | null>;
-    body?: any;
-    headers?: Record<string, string>;
-  } = {}
-): Promise<Response> {
-  const method = options.method || 'GET';
-  const q = new URLSearchParams();
-  q.set('action', action);
-  if (options.params) {
-    for (const [k, v] of Object.entries(options.params)) {
-      if (v !== undefined && v !== null) {
-        q.set(k, String(v));
-      }
-    }
-  }
-
-  const proxyEndpoint = `${ERP_PROXY_URL}?${q.toString()}`;
-
-  // Генерация сквозного Correlation-ID для трассировки транзакции
-  const correlationId = `trc_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 8)}`;
-
-  const requestHeaders: Record<string, string> = {
-    'Accept': 'application/json',
-    'X-Correlation-ID': correlationId,
-    ...(options.headers || {}),
-  };
-
-  // Автоматическая передача Bearer JWT токена текущей сессии
+export async function getAuthHeaders(): Promise<Record<string, string>> {
+  const requestHeaders: Record<string, string> = {};
   if (typeof window !== 'undefined') {
     try {
       // 1. Ищем токен сессии Supabase Auth в localStorage
@@ -117,6 +86,43 @@ export async function erpFetch(
       }
     } catch {}
   }
+  return requestHeaders;
+}
+
+// ─── 2. Unified Transport (Strictly via Server-Side Proxy /api/erp) ───
+export async function erpFetch(
+  action: string,
+  options: {
+    method?: 'GET' | 'POST';
+    params?: Record<string, string | number | undefined | null>;
+    body?: any;
+    headers?: Record<string, string>;
+  } = {}
+): Promise<Response> {
+  const method = options.method || 'GET';
+  const q = new URLSearchParams();
+  q.set('action', action);
+  if (options.params) {
+    for (const [k, v] of Object.entries(options.params)) {
+      if (v !== undefined && v !== null) {
+        q.set(k, String(v));
+      }
+    }
+  }
+
+  const proxyEndpoint = `${ERP_PROXY_URL}?${q.toString()}`;
+
+  // Генерация сквозного Correlation-ID для трассировки транзакции
+  const correlationId = `trc_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 8)}`;
+
+  const authHeaders = await getAuthHeaders();
+
+  const requestHeaders: Record<string, string> = {
+    'Accept': 'application/json',
+    'X-Correlation-ID': correlationId,
+    ...authHeaders,
+    ...(options.headers || {}),
+  };
 
   if (options.body && method === 'POST') {
     requestHeaders['Content-Type'] = 'application/json';

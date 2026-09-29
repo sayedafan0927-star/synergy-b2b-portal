@@ -61,6 +61,7 @@ import {
   isCounterpartyActive,
   fetchReconciliationReportFromErp,
   erpFetch,
+  getAuthHeaders,
 } from '@/lib/erpApi';
 import SupplierCabinet from '@/components/SupplierCabinet';
 import { triggerCatalogReload, mergeProducts } from '@/hooks/useProductData';
@@ -1629,7 +1630,7 @@ function ClientDemoPanel({ client }: { client: { id: string; full_name: string; 
 }
 
 /* ─── Admin: ERP Sync & Diagnostics Tab ─── */
-function AdminErpSyncTab() {
+function AdminErpSyncTab({ isAdmin = true }: { isAdmin?: boolean }) {
   const [report, setReport] = useState<ErpSyncReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -1649,7 +1650,7 @@ function AdminErpSyncTab() {
   const [dlqMessage, setDlqMessage] = useState<string | null>(null);
 
   const fetchDlqOrders = async () => {
-    if (!adminAccess) return;
+    if (!isAdmin) return;
     setDlqLoading(true);
     try {
       const res = await erpFetch('dlq_orders');
@@ -1670,18 +1671,9 @@ function AdminErpSyncTab() {
     setDlqRetryingId(orderId);
     setDlqMessage(null);
     try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      const sessionStr = sessionStorage.getItem('synergy:auth_session');
-      if (sessionStr) {
-        try {
-          const parsed = JSON.parse(sessionStr);
-          if (parsed?.token) headers['Authorization'] = `Bearer ${parsed.token}`;
-        } catch {}
-      }
-      const res = await fetch('/api/erp?action=retry_dlq_order', {
+      const res = await erpFetch('retry_dlq_order', {
         method: 'POST',
-        headers,
-        body: JSON.stringify({ order_id: orderId }),
+        body: { order_id: orderId },
       });
       const data = await res.json();
       if (data.success) {
@@ -1700,14 +1692,7 @@ function AdminErpSyncTab() {
   const fetchAuditLogs = async () => {
     setLogsLoading(true);
     try {
-      const headers: Record<string, string> = {};
-      const sessionStr = sessionStorage.getItem('synergy:auth_session');
-      if (sessionStr) {
-        try {
-          const parsed = JSON.parse(sessionStr);
-          if (parsed?.token) headers['Authorization'] = `Bearer ${parsed.token}`;
-        } catch {}
-      }
+      const headers = await getAuthHeaders();
       const res = await fetch('/api/audit/logs?limit=100', { headers });
       const data = await res.json();
       if (data.success && Array.isArray(data.logs)) {
@@ -3275,7 +3260,7 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
             {activeTab === 'supplier-portal' && (isSupplier || adminAccess) && (
               <SupplierCabinet profile={profile} isAdmin={adminAccess} />
             )}
-            {activeTab === 'admin-erp' && adminAccess && <AdminErpSyncTab />}
+            {activeTab === 'admin-erp' && adminAccess && <AdminErpSyncTab isAdmin={adminAccess} />}
             {activeTab === 'admin-users' && clientsAccess && <AdminUsersTab onNavigate={onNavigate} />}
             {activeTab === 'admin-display' && adminAccess && <AdminDisplaySettings />}
             {activeTab === 'settings' && (
