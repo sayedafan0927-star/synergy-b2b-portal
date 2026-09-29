@@ -286,6 +286,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
       client_id: clientId,
       partner_id: clientId,
       warehouse_id: effectiveWarehouseId,
+      currency: currency || 'USD',
       buyer: {
         name: clientCompany.trim() || clientName.trim(),
         phone: clientPhone.trim(),

@@ -7,6 +7,7 @@ import WhatsAppWidget from '@/components/WhatsAppWidget';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import MobileNav from '@/components/MobileNav';
+import ErrorBoundary from '@/components/ErrorBoundary';
 
 // Code Splitting: Ленивая загрузка страниц для максимального быстродействия
 const HomePage = lazy(() => import('@/pages/HomePage'));
@@ -264,11 +265,13 @@ export default function App() {
                 <span>Офлайн-режим: данные каталога загружены из локального кэша</span>
               </div>
             )}
-            <MainLayout page={page} navigate={navigate} showFooter={showFooter}>
-              <Suspense fallback={<PageLoadingFallback />}>
-                {renderPage()}
-              </Suspense>
-            </MainLayout>
+            <ErrorBoundary>
+              <MainLayout page={page} navigate={navigate} showFooter={showFooter}>
+                <Suspense fallback={<PageLoadingFallback />}>
+                  {renderPage()}
+                </Suspense>
+              </MainLayout>
+            </ErrorBoundary>
           </CartProvider>
         </CurrencyProvider>
       </AuthProvider>

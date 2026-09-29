@@ -208,6 +208,8 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
         total_sqm: pricingResult.items.reduce((s, it) => s + (it.price_per_sqm > 0 ? (it.price / it.price_per_sqm) * it.quantity : 0), 0),
         status: 'pending',
         idempotency_key: incomingIdempotencyKey || null,
+        currency: rawPayload.currency || 'USD',
+        contract_id: rawPayload.contract_id || null,
       })
       .select('id, order_number')
       .maybeSingle();
@@ -242,6 +244,8 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
             total_sqm: whSqm,
             status: 'pending',
             idempotency_key: incomingIdempotencyKey ? `${incomingIdempotencyKey}-wh-${splitIdx}` : null,
+            currency: rawPayload.currency || 'USD',
+            contract_id: rawPayload.contract_id || null,
           })
           .select('id, order_number')
           .maybeSingle();

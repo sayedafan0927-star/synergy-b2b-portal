@@ -222,6 +222,38 @@ function OrderDetail({
   const [sizeAsc, setSizeAsc] = useState(true);
   const [status, setStatus] = useState(order.statusRaw || 'pending');
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [statusHistory, setStatusHistory] = useState<Array<{
+    id: string;
+    previous_status: string;
+    new_status: string;
+    created_at: string;
+    reason?: string;
+  }>>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadHistory() {
+      if (!order.id) return;
+      setLoadingHistory(true);
+      try {
+        const { data } = await supabase
+          .from('order_status_history')
+          .select('*')
+          .eq('order_id', order.id)
+          .order('created_at', { ascending: true });
+        if (data && isMounted) {
+          setStatusHistory(data);
+        }
+      } catch (err) {
+        console.warn('Failed to load order status history', err);
+      } finally {
+        if (isMounted) setLoadingHistory(false);
+      }
+    }
+    loadHistory();
+    return () => { isMounted = false; };
+  }, [order.id]);
 
   const collections = useMemo(() => Array.from(new Set(order.items.map(i => i.collection))).sort(), [order]);
   const totals = useMemo(() => orderTotals(order.items), [order.items]);
@@ -379,6 +411,58 @@ function OrderDetail({
           <strong className="text-slate-800">Примечание к заказу:</strong> {order.notes}
         </div>
       )}
+
+      {/* Журнал изменений статусов заказа (Audit Timeline) */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
+          <div className="flex items-center gap-2">
+            <Activity className="h-4 w-4 text-brand-700" />
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">История движения заказа</h4>
+          </div>
+          {loadingHistory && <span className="text-[11px] text-slate-400 animate-pulse">Загрузка истории...</span>}
+        </div>
+
+        {statusHistory.length > 0 ? (
+          <div className="relative pl-6 space-y-3 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
+            {statusHistory.map((h, idx) => {
+              const meta = ORDER_STATUS_MAP[h.new_status] || { label: h.new_status, color: 'bg-slate-100 text-slate-700 border-slate-200' };
+              const prevMeta = h.previous_status ? (ORDER_STATUS_MAP[h.previous_status] || { label: h.previous_status }) : null;
+              const dateStr = new Date(h.created_at).toLocaleString('ru-RU', {
+                day: '2-digit', month: '2-digit', year: 'numeric',
+                hour: '2-digit', minute: '2-digit'
+              });
+
+              return (
+                <div key={h.id || idx} className="relative">
+                  <div className="absolute -left-6 top-1.5 h-2.5 w-2.5 rounded-full border-2 border-white bg-brand-600 shadow-sm" />
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="font-mono text-slate-400 text-[11px]">{dateStr}</span>
+                    {prevMeta && (
+                      <>
+                        <span className="text-slate-400 text-[11px]">{prevMeta.label}</span>
+                        <span className="text-slate-300">→</span>
+                      </>
+                    )}
+                    <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-semibold border ${meta.color}`}>
+                      {meta.label}
+                    </span>
+                  </div>
+                  {h.reason && (
+                    <p className="mt-1 text-[11px] text-slate-500 italic bg-slate-50 rounded px-2 py-1 border border-slate-100">
+                      {h.reason}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="flex items-center gap-3 text-xs text-slate-500 py-1">
+            <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
+            <span>Текущий статус: <strong>{order.status}</strong>. Изменения фиксируются автоматически.</span>
+          </div>
+        )}
+      </div>
 
       <div className="grid grid-cols-3 gap-3">
         {[
@@ -2856,6 +2940,43 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
     return () => { cancelled = true; };
   }, [profile]);
 
+  const [clientContracts, setClientContracts] = useState<Array<{
+    id: string;
+    contract_number: string;
+    contract_type: string;
+    price_type: string;
+    credit_limit_usd: number;
+    payment_deferral_days: number;
+    valid_from: string;
+    valid_to?: string;
+    status: string;
+  }>>([]);
+  const [loadingContracts, setLoadingContracts] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadClientContracts() {
+      if (!profile?.partner_id) return;
+      setLoadingContracts(true);
+      try {
+        const { data, error } = await supabase
+          .from('contracts')
+          .select('*')
+          .eq('partner_id', String(profile.partner_id))
+          .order('created_at', { ascending: false });
+        if (!error && data && isMounted) {
+          setClientContracts(data);
+        }
+      } catch (err) {
+        console.warn('Contracts loading error:', err);
+      } finally {
+        if (isMounted) setLoadingContracts(false);
+      }
+    }
+    loadClientContracts();
+    return () => { isMounted = false; };
+  }, [profile?.partner_id]);
+
   if (loading) {
     return (
       <div className="min-h-screen pt-20 pb-24 lg:pb-8 flex items-center justify-center">
@@ -3045,6 +3166,58 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
                   Акт сверки взаиморасчетов
                 </button>
               </div>
+            </div>
+
+            {/* Contracts & Agreements Card */}
+            <div className="card p-4">
+              <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-brand-700" />
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">Договоры и лимиты</h4>
+                </div>
+                {loadingContracts && <span className="text-[10px] text-slate-400 animate-pulse">Загрузка...</span>}
+              </div>
+
+              {clientContracts.length > 0 ? (
+                <div className="space-y-2.5">
+                  {clientContracts.map((c) => (
+                    <div key={c.id} className="rounded-lg bg-slate-50 border border-slate-200/80 p-2.5 text-xs space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-800">№ {c.contract_number}</span>
+                        <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                          c.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
+                        }`}>
+                          {c.status === 'active' ? 'Активен' : c.status}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-500">
+                        Тип: <span className="font-medium text-slate-700">{
+                          c.contract_type === 'prepayment' ? 'Предоплата' :
+                          c.contract_type === 'deferred_14' ? 'Отсрочка 14 дней' :
+                          c.contract_type === 'deferred_30' ? 'Отсрочка 30 дней' :
+                          c.contract_type === 'deferred_60' ? 'Отсрочка 60 дней' : c.contract_type
+                        }</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-slate-600 pt-1 border-t border-slate-200/60">
+                        <span>Кредитный лимит:</span>
+                        <span className="font-bold text-slate-900">${Number(c.credit_limit_usd).toLocaleString('en-US')}</span>
+                      </div>
+                      {c.valid_from && (
+                        <div className="text-[10px] text-slate-400">
+                          Действует с {new Date(c.valid_from).toLocaleDateString('ru-RU')} {c.valid_to ? `по ${new Date(c.valid_to).toLocaleDateString('ru-RU')}` : ''}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-lg bg-slate-50 border border-dashed border-slate-200 p-3 text-center text-xs text-slate-400">
+                  <p>Индивидуальные условия зафиксированы в договоре 1С:ERP</p>
+                  {profile.credit_limit_usd ? (
+                    <p className="font-semibold text-slate-600 mt-1">Лимит: ${Number(profile.credit_limit_usd).toLocaleString('en-US')}</p>
+                  ) : null}
+                </div>
+              )}
             </div>
           </div>
 
