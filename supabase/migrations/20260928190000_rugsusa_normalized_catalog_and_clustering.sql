@@ -90,7 +90,7 @@ CREATE INDEX IF NOT EXISTS idx_variants_design ON product_variants(design_id);
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 CREATE INDEX IF NOT EXISTS idx_designs_trgm ON product_designs USING gin (
-  (collection || ' ' || article || ' ' || coalesce(color, '') || ' ' || manufacturer) gin_trgm_ops
+  ((collection || ' ' || article || ' ' || coalesce(color, '') || ' ' || manufacturer)) gin_trgm_ops
 );
 
 CREATE INDEX IF NOT EXISTS idx_variants_sku_trgm ON product_variants USING gin (

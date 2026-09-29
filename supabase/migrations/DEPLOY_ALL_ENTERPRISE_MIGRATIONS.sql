@@ -257,23 +257,24 @@ DO $$ BEGIN
 END $$;
 
 -- 4.4 Pattern 4: High-Performance Trigram GIN Search Indexes (pg_trgm)
-DO $$ BEGIN
-  CREATE EXTENSION IF NOT EXISTS pg_trgm;
-EXCEPTION WHEN OTHERS THEN
-  RAISE NOTICE 'pg_trgm extension not available: %', SQLERRM;
-END $$;
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm') THEN
-    CREATE INDEX IF NOT EXISTS idx_designs_trgm ON product_designs USING gin (
-      (collection || ' ' || article || ' ' || coalesce(color, '') || ' ' || manufacturer) gin_trgm_ops
-    );
+    BEGIN
+      EXECUTE 'CREATE INDEX IF NOT EXISTS idx_designs_trgm ON product_designs USING gin (((collection || '' '' || article || '' '' || coalesce(color, '''') || '' '' || manufacturer)) gin_trgm_ops)';
+    EXCEPTION WHEN OTHERS THEN
+      RAISE NOTICE 'trgm index on designs skipped: %', SQLERRM;
+    END;
+
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'product_variants') THEN
-      CREATE INDEX IF NOT EXISTS idx_variants_sku_trgm ON product_variants USING gin (sku gin_trgm_ops);
+      BEGIN
+        EXECUTE 'CREATE INDEX IF NOT EXISTS idx_variants_sku_trgm ON product_variants USING gin (sku gin_trgm_ops)';
+      EXCEPTION WHEN OTHERS THEN
+        RAISE NOTICE 'trgm index on variants skipped: %', SQLERRM;
+      END;
     END IF;
   END IF;
-EXCEPTION WHEN OTHERS THEN
-  RAISE NOTICE 'trgm index could not be created: %', SQLERRM;
 END $$;
 
 
