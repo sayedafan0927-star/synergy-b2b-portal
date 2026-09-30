@@ -71,8 +71,8 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
 
   return (
     <header
-      className="fixed top-0 left-0 right-0 z-50 transition-colors duration-300 bg-[#faf6ee]"
-      style={{ backgroundColor: '#faf6ee' }}
+      className="fixed top-0 left-0 right-0 z-50 transition-colors duration-300 bg-white"
+      style={{ backgroundColor: '#ffffff' }}
     >
       {/* Impersonation Banner inside fixed header */}
       {isImpersonating && profile && (
@@ -124,16 +124,16 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
       )}
 
       {/* Mobile Flat Bottom Hairline (Zero protrusion, zero overlap on video or catalog on mobile) */}
-      <div className="sm:hidden absolute inset-x-0 top-full -mt-px h-px bg-[#e7decb]" />
+      <div className="sm:hidden absolute inset-x-0 top-full -mt-px h-px bg-slate-200" />
 
       {/* Desktop Left/Right Bottom Border Lines & Spline Arch */}
       <div
-        className={`hidden sm:block absolute left-0 top-full -mt-px h-px bg-[#e7decb] transition-all duration-300 ${
+        className={`hidden sm:block absolute left-0 top-full -mt-px h-px bg-slate-200 transition-all duration-300 ${
           scrolled ? 'right-[calc(50%+140px)] lg:right-[calc(50%+180px)]' : 'right-[calc(50%+170px)] lg:right-[calc(50%+240px)]'
         }`}
       />
       <div
-        className={`hidden sm:block absolute right-0 top-full -mt-px h-px bg-[#e7decb] transition-all duration-300 ${
+        className={`hidden sm:block absolute right-0 top-full -mt-px h-px bg-slate-200 transition-all duration-300 ${
           scrolled ? 'left-[calc(50%+140px)] lg:left-[calc(50%+180px)]' : 'left-[calc(50%+170px)] lg:left-[calc(50%+240px)]'
         }`}
       />
@@ -148,13 +148,13 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
       >
         <path
           d="M 0,-2 L 500,-2 L 500,0 C 390,0 340,44 250,44 C 160,44 110,0 0,0 Z"
-          fill="#faf6ee"
-          style={{ fill: '#faf6ee' }}
+          fill="#ffffff"
+          style={{ fill: '#ffffff' }}
         />
         <path
           d="M 0,0.5 C 110,0.5 160,44 250,44 C 340,44 390,0.5 500,0.5"
           fill="none"
-          stroke="#e7decb"
+          stroke="#e2e8f0"
           strokeWidth="1.5"
         />
       </svg>
@@ -222,7 +222,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
             {/* Phone link: sleek compact icon button on sm+ */}
             <a
               href="tel:+77785806866"
-              className="hidden sm:flex h-9 w-9 items-center justify-center rounded-lg text-slate-700 hover:bg-black/5 hover:text-brand-700 transition-colors border border-[#e7decb] shrink-0"
+              className="hidden sm:flex h-9 w-9 items-center justify-center rounded-lg text-slate-700 hover:bg-slate-100 hover:text-brand-700 transition-colors border border-slate-200 shrink-0"
               title="Позвонить в отдел продаж: +7 (778) 580-68-66"
               aria-label="Позвонить в отдел продаж"
             >
@@ -230,17 +230,17 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
             </a>
 
             {/* Language Switcher (KZ / RU): visible on sm+ */}
-            <div className="hidden sm:flex items-center rounded-lg bg-black/5 p-0.5 border border-[#e7decb] text-xs font-bold">
+            <div className="hidden sm:flex items-center rounded-lg bg-slate-100 p-0.5 border border-slate-200 text-xs font-bold">
               <button
                 type="button"
                 onClick={() => setLanguage('kz')}
-                className={`rounded-md px-2 py-1 transition-all ${language === 'kz' ? 'bg-[#faf6ee] text-[#003365] shadow-2xs font-bold' : 'text-slate-600 hover:text-slate-900'}`}
+                className={`rounded-md px-2 py-1 transition-all ${language === 'kz' ? 'bg-white text-[#003365] shadow-2xs font-bold' : 'text-slate-600 hover:text-slate-900'}`}
                 title="Қазақ тілі"
               >KZ</button>
               <button
                 type="button"
                 onClick={() => setLanguage('ru')}
-                className={`rounded-md px-2 py-1 transition-all ${language === 'ru' ? 'bg-[#faf6ee] text-[#003365] shadow-2xs font-bold' : 'text-slate-600 hover:text-slate-900'}`}
+                className={`rounded-md px-2 py-1 transition-all ${language === 'ru' ? 'bg-white text-[#003365] shadow-2xs font-bold' : 'text-slate-600 hover:text-slate-900'}`}
                 title="Русский язык"
               >RU</button>
             </div>
@@ -252,7 +252,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
               className={`hidden sm:flex h-9 items-center gap-1.5 px-2.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
                 isShowroomMode
                   ? 'bg-amber-500 border-amber-600 text-white shadow-2xs font-bold'
-                  : 'bg-black/5 hover:bg-black/10 border-[#e7decb] text-slate-700'
+                  : 'bg-slate-100 hover:bg-slate-200/80 border-slate-200 text-slate-700'
               }`}
               title={
                 isShowroomMode
@@ -266,17 +266,17 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
 
             {/* Currency Switcher ($ USD / ₸ KZT) - Скрыт для всех, кроме администратора */}
             {isEffectiveAdmin && (
-              <div className="hidden xl:flex items-center rounded-lg bg-black/5 p-0.5 border border-[#e7decb] text-xs font-bold">
+              <div className="hidden xl:flex items-center rounded-lg bg-slate-100 p-0.5 border border-slate-200 text-xs font-bold">
                 <button
                   type="button"
                   onClick={() => setCurrency('USD')}
-                  className={`rounded-md px-2 py-1 transition-all ${currency === 'USD' ? 'bg-[#faf6ee] text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-800'}`}
+                  className={`rounded-md px-2 py-1 transition-all ${currency === 'USD' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-800'}`}
                   title="Цены в долларах ($)"
                 >$</button>
                 <button
                   type="button"
                   onClick={() => setCurrency('KZT')}
-                  className={`rounded-md px-2 py-1 transition-all ${currency === 'KZT' ? 'bg-[#faf6ee] text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-800'}`}
+                  className={`rounded-md px-2 py-1 transition-all ${currency === 'KZT' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-800'}`}
                   title="Цены в тенге (₸)"
                 >₸</button>
               </div>
@@ -304,8 +304,8 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
               onClick={() => onNavigate(user ? 'profile' : 'login')}
               className={`hidden sm:flex h-9 items-center gap-2 rounded-lg px-2.5 transition-colors border ${
                 user
-                  ? 'border-[#e7decb] bg-black/5 hover:bg-black/10 text-slate-900 shadow-2xs'
-                  : 'border-[#e7decb] text-slate-600 hover:bg-black/5 hover:text-slate-800'
+                  ? 'border-slate-200 bg-slate-100 hover:bg-slate-200/80 text-slate-900 shadow-2xs'
+                  : 'border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-800'
               }`}
             >
               {isAdmin ? (
@@ -315,7 +315,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
               )}
               {user && profile ? (
                 <div className="flex items-center gap-1.5 text-left">
-                  <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-white text-slate-700 border border-[#e7decb] shadow-2xs">
+                  <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-white text-slate-700 border border-slate-200 shadow-2xs">
                     ID {profile.partner_id || (profile as any).erp_id || (profile.id.length < 8 ? profile.id : profile.id.slice(0, 5))}
                   </span>
                   <span className="text-xs font-semibold text-slate-800 max-w-[80px] xl:max-w-[120px] truncate hidden md:block">
@@ -329,7 +329,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
 
             <button
               onClick={() => onNavigate('cart')}
-              className="relative flex h-9 items-center gap-1.5 rounded-lg bg-black/5 px-3 text-[#003365] transition-colors hover:bg-black/10 border border-[#e7decb]"
+              className="relative flex h-9 items-center gap-1.5 rounded-lg bg-slate-100 px-3 text-[#003365] transition-colors hover:bg-slate-200/80 border border-slate-200"
               title="Корзина"
             >
               <ShoppingCart className="h-[18px] w-[18px]" />
@@ -338,7 +338,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
 
             <button
               onClick={() => setMobileOpen(!mobileOpen)}
-              className="flex h-9 items-center gap-1.5 px-2.5 rounded-lg text-slate-700 transition-all hover:bg-black/5 hover:text-brand-700 border border-[#e7decb] cursor-pointer"
+              className="flex h-9 items-center gap-1.5 px-2.5 rounded-lg text-slate-700 transition-all hover:bg-slate-100 hover:text-brand-700 border border-slate-200 cursor-pointer"
               title="Навигационное меню Synergy"
               aria-label="Открыть меню"
             >

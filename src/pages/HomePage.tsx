@@ -85,27 +85,26 @@ export default function HomePage({
       {/* ── Hero Video Banner (Pure animation + Harmonious End-State CTA) ── */}
       <section className="relative w-full bg-slate-950 pt-16 sm:pt-20 lg:pt-24">
         <HeroBannerMedia onNavigate={onNavigate} isReady={isReady} />
+        {/* Mobile Action Bar: Golden button on dark canvas under video */}
+        <div className="block sm:hidden px-4 pb-4 select-none">
+          <button
+            type="button"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onClick={handleCatalogNavigate}
+            className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-slate-950 py-3.5 px-4 text-xs font-bold uppercase tracking-wider shadow-lg shadow-amber-500/25 active:scale-[0.98] transition-all cursor-pointer"
+          >
+            <span>ПЕРЕЙТИ В КАТАЛОГ КОВРОВ</span>
+            <ArrowRight className="w-4 h-4 text-slate-950" />
+          </button>
+        </div>
       </section>
 
-      {/* ── Woven Carpet Kilim Fringe Divider (Dark Hero to Warm Linen) ── */}
+      {/* ── Woven Carpet Kilim Fringe Divider (Dark Hero to Clean White) ── */}
       <CarpetSectionDivider variant="dark-to-linen" />
 
-      {/* ── Mobile Action Bar: Synergy Navy plaque on Warm Linen canvas with organic asymmetrical shape ── */}
-      <div className="block sm:hidden bg-[#faf7f2] px-4 pt-3 pb-2 select-none">
-        <button
-          type="button"
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onClick={handleCatalogNavigate}
-          className="w-full inline-flex items-center justify-center gap-2.5 rounded-[24px_6px_24px_6px] bg-gradient-to-r from-[#002244] via-[#003365] to-[#002244] text-white py-3.5 px-5 text-xs font-bold uppercase tracking-wider shadow-md shadow-[#003365]/20 border border-amber-400/40 active:scale-[0.98] transition-all cursor-pointer"
-        >
-          <span>ПЕРЕЙТИ В КАТАЛОГ КОВРОВ</span>
-          <ArrowRight className="w-4 h-4 text-amber-300 shrink-0" />
-        </button>
-      </div>
-
-      {/* ── 1. Advantages Section (Warm Linen Parchment #faf7f2) ── */}
-      <section className="py-16 lg:py-24 bg-[#faf7f2]">
+      {/* ── 1. Advantages Section (Clean White) ── */}
+      <section className="py-16 lg:py-24 bg-white">
         <div className="container-w">
           <h2 className="section-heading text-center text-slate-900">Почему выбирают нас</h2>
           <p className="section-subheading text-center mx-auto text-slate-600">
@@ -186,8 +185,8 @@ export default function HomePage({
       {/* ── Kilim Border (Deep Midnight Sapphire to Warm Linen Canvas) ── */}
       <CarpetSectionDivider variant="sapphire-to-light" />
 
-      {/* ── 3. Featured Products Section (Warm Linen Canvas #faf6ee) ── */}
-      <section className="py-16 lg:py-24 bg-[#faf6ee]">
+      {/* ── 3. Featured Products Section (Clean Slate-50) ── */}
+      <section className="py-16 lg:py-24 bg-slate-50">
         <div className="container-w">
           <div className="flex items-end justify-between mb-10 lg:mb-14">
             <div>

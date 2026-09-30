@@ -404,8 +404,8 @@ export default function CatalogPage({
                 onClick={() => setSelectedCategory(cat)}
                 className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                   selectedCategory === cat
-                    ? 'bg-[#1b2b3a] text-white shadow-xs ring-2 ring-[#1b2b3a]/20 font-bold'
-                    : 'bg-white border border-[#e2d9c8] text-slate-700 hover:border-[#b58532] hover:bg-[#fbf9f2]'
+                    ? 'bg-brand-700 text-white shadow-xs font-bold'
+                    : 'bg-white border border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50'
                 }`}
               >
                 {label} ({count})
