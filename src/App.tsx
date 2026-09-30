@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, lazy, Suspense } from 'react';
+import { useState, useCallback, useEffect, lazy, Suspense, useTransition } from 'react';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { CartProvider } from '@/contexts/CartContext';
 import { LanguageProvider } from '@/contexts/LanguageContext';
@@ -8,6 +8,11 @@ import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import MobileNav from '@/components/MobileNav';
 import ErrorBoundary from '@/components/ErrorBoundary';
+
+// Основные компактные страницы импортируются напрямую для мгновенных переходов
+import HomePage from '@/pages/HomePage';
+import ContactsPage from '@/pages/ContactsPage';
+import LoginPage from '@/pages/LoginPage';
 
 // Code Splitting с автоматическим обновлением при выкатке новой версии на Vercel
 function lazyWithRetry<T extends React.ComponentType<any>>(
@@ -35,12 +40,9 @@ function lazyWithRetry<T extends React.ComponentType<any>>(
   });
 }
 
-const HomePage = lazyWithRetry(() => import('@/pages/HomePage'));
 const CatalogPage = lazyWithRetry(() => import('@/pages/CatalogPage'));
 const ProductPage = lazyWithRetry(() => import('@/pages/ProductPage'));
 const CartPage = lazyWithRetry(() => import('@/pages/CartPage'));
-const ContactsPage = lazyWithRetry(() => import('@/pages/ContactsPage'));
-const LoginPage = lazyWithRetry(() => import('@/pages/LoginPage'));
 const ProfilePage = lazyWithRetry(() => import('@/pages/ProfilePage'));
 
 import { useNetworkStatus } from '@/registerServiceWorker';
@@ -78,10 +80,19 @@ function PageLoadingFallback({ page }: { page?: PageId }) {
   }
 
   return (
-    <div className="min-h-[50vh] flex flex-col items-center justify-center py-24 px-4">
-      <div className="w-10 h-10 border-3 border-brand-600 border-t-transparent rounded-full animate-spin mb-4" />
-      <div className="skeleton h-4 w-28 rounded-full" />
-    </div>
+    <section className="min-h-screen bg-slate-50 pt-20 pb-24 lg:pb-8">
+      <div className="container-w py-8">
+        <div className="mb-8 space-y-3">
+          <div className="skeleton h-8 w-48" />
+          <div className="skeleton h-4 w-80 max-w-full" />
+        </div>
+        <div className="card p-6 md:p-8 space-y-4">
+          <div className="skeleton h-6 w-1/3" />
+          <div className="skeleton h-4 w-full" />
+          <div className="skeleton h-4 w-3/4" />
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -183,20 +194,23 @@ export default function App() {
   const [catalogCountry, setCatalogCountry] = useState<string | undefined>(undefined);
   const [preloaderDone, setPreloaderDone] = useState(false);
   const isOnline = useNetworkStatus();
+  const [isPending, startTransition] = useTransition();
 
   const navigate = useCallback((target: PageId, id?: string, pushToHistory = true) => {
-    setPage(target);
-    if (target === 'catalog' && id?.startsWith('country:')) {
-      setCatalogCountry(id.slice('country:'.length));
-      setCatalogCollection(undefined);
-    } else if (target === 'catalog' && id) {
-      setCatalogCollection(id);
-      setCatalogCountry(undefined);
-    } else if (target === 'catalog') {
-      setCatalogCollection(undefined);
-      setCatalogCountry(undefined);
-    }
-    if (id && target === 'product') setProductId(id);
+    startTransition(() => {
+      setPage(target);
+      if (target === 'catalog' && id?.startsWith('country:')) {
+        setCatalogCountry(id.slice('country:'.length));
+        setCatalogCollection(undefined);
+      } else if (target === 'catalog' && id) {
+        setCatalogCollection(id);
+        setCatalogCountry(undefined);
+      } else if (target === 'catalog') {
+        setCatalogCollection(undefined);
+        setCatalogCountry(undefined);
+      }
+      if (id && target === 'product') setProductId(id);
+    });
 
     if (pushToHistory) {
       const url = new URL(window.location.href);
@@ -302,6 +316,9 @@ export default function App() {
       <AuthProvider>
         <CurrencyProvider>
           <CartProvider>
+            {isPending && (
+              <div className="fixed top-0 left-0 right-0 z-[99999] h-0.5 bg-gradient-to-r from-brand-600 via-amber-500 to-brand-700 animate-pulse pointer-events-none" />
+            )}
             {!preloaderDone && <Preloader onFinished={handlePreloaderFinished} />}
             {!isOnline && (
               <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 z-[9990] flex items-center gap-2.5 rounded-xl border border-amber-300 bg-amber-500 text-white px-4 py-2.5 shadow-xl text-xs font-semibold backdrop-blur-md">
