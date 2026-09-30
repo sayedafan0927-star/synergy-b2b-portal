@@ -126,10 +126,20 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
         </div>
       )}
 
-      <div className="container-w relative">
-        <div className="flex h-16 sm:h-18 items-center justify-between">
-          {/* Left Navigation Links (Desktop) */}
-          <nav className="hidden lg:flex items-center gap-1.5 shrink-0">
+      {/* Thompson's Tea Signature Curved Parabolic Arch (Ellipse with rounded-[100%]) */}
+      <div
+        className={`absolute left-1/2 -translate-x-1/2 pointer-events-none transition-all duration-400 ease-[cubic-bezier(0.16,1,0.3,1)] bg-[#faf6ee] border-b border-[#e7decb] shadow-2xs ${
+          scrolled
+            ? 'w-[280px] sm:w-[340px] h-[100px] -bottom-[12px] rounded-[100%]'
+            : 'w-[400px] sm:w-[520px] h-[200px] sm:h-[230px] -bottom-[40px] sm:-bottom-[50px] rounded-[100%]'
+        }`}
+        style={{ zIndex: 1 }}
+      />
+
+      <div className="container-w relative" style={{ zIndex: 10 }}>
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center h-16 sm:h-18 w-full gap-2">
+          {/* Left Column (Desktop Navigation Links) */}
+          <nav className="hidden lg:flex items-center gap-1.5 justify-self-start">
             {navLinks.map(({ label, page }) => (
               <button
                 key={page}
@@ -140,7 +150,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
                 onTouchStart={() => {
                   if (page === 'catalog') import('@/pages/CatalogPage');
                 }}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-colors duration-200 cursor-pointer ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-colors duration-200 cursor-pointer ${
                   currentPage === page
                     ? 'text-[#003365] bg-[#003365]/10 font-bold'
                     : 'text-slate-700 hover:text-[#003365] hover:bg-black/5'
@@ -150,55 +160,52 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
               </button>
             ))}
           </nav>
+          {/* Left Column Spacer on Mobile to guarantee absolute center logo */}
+          <div className="lg:hidden justify-self-start" />
 
-          {/* Center Curved Pendant Arch (Exact Thompson's Tea Reference: Full emblem & text at top, collapses to text on scroll) */}
-          <div className="absolute left-1/2 -translate-x-1/2 top-0 flex flex-col items-center pointer-events-auto z-20">
-            <button
-              type="button"
-              onClick={() => onNavigate('home')}
-              className={`relative flex flex-col items-center justify-center bg-[#faf6ee] border-b border-x border-[#e7decb] shadow-xs transition-all duration-300 cursor-pointer ${
-                scrolled
-                  ? 'h-14 sm:h-16 px-4 sm:px-6 rounded-b-2xl'
-                  : 'h-24 sm:h-28 px-5 sm:px-8 rounded-b-[2.5rem] pt-1.5'
+          {/* Center Column: Logo in Parabolic Arch (Full crest & text at top, collapses to text on scroll) */}
+          <button
+            type="button"
+            onClick={() => onNavigate('home')}
+            className="justify-self-center flex flex-col items-center justify-center cursor-pointer transition-all duration-300 py-1 px-3 sm:px-4 min-w-[140px] sm:min-w-[180px]"
+            title="Synergiya Group — Главная"
+            aria-label="Главная страница"
+          >
+            {/* Upper Emblem: Smoothly disappears and collapses height when scrolled */}
+            <div
+              className={`transition-all duration-300 overflow-hidden flex items-center justify-center ${
+                scrolled ? 'h-0 opacity-0 mb-0 scale-75' : 'h-10 sm:h-12 opacity-100 mb-1'
               }`}
-              title="Synergiya Group — Главная"
-              aria-label="Главная страница"
             >
-              {/* Upper Emblem: Smoothly disappears and collapses height when scrolled */}
-              <div
-                className={`transition-all duration-300 overflow-hidden flex items-center justify-center ${
-                  scrolled ? 'h-0 opacity-0 mb-0 scale-75' : 'h-10 sm:h-12 opacity-100 mb-1'
-                }`}
-              >
-                <img
-                  src="/logo-emblem.png"
-                  alt="Synergiya Crest"
-                  className="h-full w-auto max-h-11 object-contain"
-                />
-              </div>
-
-              {/* Brand Wordmark Typography: Always visible and centered */}
               <img
-                src="/logo-text.png"
-                alt="Synergiya Group"
-                className="h-5 sm:h-6 w-auto object-contain transition-all duration-300"
+                src="/logo-emblem.png"
+                alt="Synergiya Crest"
+                className="h-full w-auto max-h-11 object-contain"
               />
-            </button>
-          </div>
+            </div>
 
-          <div className="flex items-center gap-2 shrink-0 ml-auto">
-            {/* Phone link in Header */}
+            {/* Brand Wordmark Typography: Always visible and centered */}
+            <img
+              src="/logo-text.png"
+              alt="Synergiya Group"
+              className="h-5 sm:h-6 w-auto object-contain transition-all duration-300"
+            />
+          </button>
+
+          {/* Right Column: Clean, Uncrowded Controls */}
+          <div className="justify-self-end flex items-center justify-end gap-1.5 sm:gap-2">
+            {/* Phone link: visible on 2xl to avoid any collision on laptops */}
             <a
               href="tel:+77785806866"
-              className="hidden xl:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:text-brand-700 transition-colors"
+              className="hidden 2xl:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-700 hover:bg-black/5 hover:text-brand-700 transition-colors"
               title="Позвонить в отдел продаж"
             >
               <Phone className="h-3.5 w-3.5 text-brand-600" />
               <span>+7 (778) 580-68-66</span>
             </a>
 
-            {/* Language Switcher (KZ / RU) */}
-            <div className="flex items-center rounded-lg bg-black/5 p-0.5 border border-[#e7decb] text-xs font-bold">
+            {/* Language Switcher (KZ / RU): visible on sm+ */}
+            <div className="hidden sm:flex items-center rounded-lg bg-black/5 p-0.5 border border-[#e7decb] text-xs font-bold">
               <button
                 type="button"
                 onClick={() => setLanguage('kz')}
@@ -234,7 +241,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
 
             {/* Currency Switcher ($ USD / ₸ KZT) - Скрыт для всех, кроме администратора */}
             {isEffectiveAdmin && (
-              <div className="flex items-center rounded-lg bg-black/5 p-0.5 border border-[#e7decb] text-xs font-bold">
+              <div className="hidden xl:flex items-center rounded-lg bg-black/5 p-0.5 border border-[#e7decb] text-xs font-bold">
                 <button
                   type="button"
                   onClick={() => setCurrency('USD')}
@@ -250,38 +257,6 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
               </div>
             )}
 
-            {/* 1C:ERP Gateway Health Badge */}
-            <div
-              className="hidden md:flex items-center gap-1.5 px-2 py-1 rounded-lg border border-slate-200/80 bg-slate-50 text-[11px] font-medium text-slate-600 cursor-help"
-              title={
-                systemStatus === 'ok'
-                  ? 'Контур Synergy ERP и база данных синхронизированы в реальном времени'
-                  : systemStatus === 'degraded'
-                  ? 'Замедленный ответ Synergy ERP, активен стейджинг-кэш'
-                  : systemStatus === 'down'
-                  ? 'Регламентные работы в Synergy ERP, активен защитный автономный режим'
-                  : 'Проверка доступности шлюза ERP...'
-              }
-            >
-              <span className="relative flex h-2 w-2">
-                {systemStatus === 'ok' && (
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                )}
-                <span
-                  className={`relative inline-flex rounded-full h-2 w-2 ${
-                    systemStatus === 'ok'
-                      ? 'bg-emerald-500'
-                      : systemStatus === 'degraded'
-                      ? 'bg-amber-500'
-                      : systemStatus === 'down'
-                      ? 'bg-rose-500'
-                      : 'bg-slate-300'
-                  }`}
-                ></span>
-              </span>
-              <span className="hidden xl:inline text-[10px] text-slate-500 font-semibold">ERP</span>
-            </div>
-
             {/* Offline Orders Queue Badge */}
             {offlineCount > 0 && (
               <button
@@ -296,7 +271,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
                 ) : (
                   <CloudOff className="h-3.5 w-3.5 text-amber-600 animate-pulse" />
                 )}
-                <span>Офлайн: {offlineCount}</span>
+                <span className="hidden md:inline">Офлайн: {offlineCount}</span>
               </button>
             )}
 
@@ -304,8 +279,8 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
               onClick={() => onNavigate(user ? 'profile' : 'login')}
               className={`hidden sm:flex h-9 items-center gap-2 rounded-lg px-2.5 transition-colors border ${
                 user
-                  ? 'border-slate-200 bg-slate-50/80 hover:bg-slate-100 text-slate-900 shadow-2xs'
-                  : 'border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                  ? 'border-[#e7decb] bg-black/5 hover:bg-black/10 text-slate-900 shadow-2xs'
+                  : 'border-[#e7decb] text-slate-600 hover:bg-black/5 hover:text-slate-800'
               }`}
             >
               {isAdmin ? (
@@ -315,12 +290,10 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
               )}
               {user && profile ? (
                 <div className="flex items-center gap-1.5 text-left">
-                  {/* Деликатный ID пользователя */}
-                  <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-white text-slate-700 border border-slate-200/90 shadow-2xs">
+                  <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-white text-slate-700 border border-[#e7decb] shadow-2xs">
                     ID {profile.partner_id || (profile as any).erp_id || (profile.id.length < 8 ? profile.id : profile.id.slice(0, 5))}
                   </span>
-                  {/* Имя */}
-                  <span className="text-xs font-semibold text-slate-800 max-w-[100px] xl:max-w-[140px] truncate hidden md:block">
+                  <span className="text-xs font-semibold text-slate-800 max-w-[80px] xl:max-w-[120px] truncate hidden md:block">
                     {profile.full_name || profile.company_name || user.email?.split('@')[0]}
                   </span>
                 </div>
@@ -331,7 +304,8 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
 
             <button
               onClick={() => onNavigate('cart')}
-              className="relative flex h-9 items-center gap-1.5 rounded-lg bg-brand-50 px-3 text-brand-700 transition-colors hover:bg-brand-100"
+              className="relative flex h-9 items-center gap-1.5 rounded-lg bg-black/5 px-3 text-[#003365] transition-colors hover:bg-black/10 border border-[#e7decb]"
+              title="Корзина"
             >
               <ShoppingCart className="h-[18px] w-[18px]" />
               {totalItems > 0 && <span className="text-xs font-bold">{totalItems}</span>}
@@ -339,7 +313,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
 
             <button
               onClick={() => setMobileOpen(!mobileOpen)}
-              className="flex h-9 items-center gap-1.5 px-2.5 rounded-lg text-slate-700 transition-all hover:bg-slate-100 hover:text-brand-700 border border-slate-200/80 cursor-pointer"
+              className="flex h-9 items-center gap-1.5 px-2.5 rounded-lg text-slate-700 transition-all hover:bg-black/5 hover:text-brand-700 border border-[#e7decb] cursor-pointer"
               title="Навигационное меню Synergy"
               aria-label="Открыть меню"
             >
