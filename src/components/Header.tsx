@@ -71,10 +71,10 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
 
   return (
     <header
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ease-apple ${
+      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
         scrolled
-          ? 'bg-white/95 backdrop-blur-md shadow-sm border-b border-slate-100'
-          : 'bg-white'
+          ? 'bg-[#faf6ee]/95 backdrop-blur-md shadow-xs border-b border-[#e7decb]/90'
+          : 'bg-[#faf6ee] border-b border-[#e7decb]/60'
       }`}
     >
       {/* Impersonation Banner inside fixed header */}
@@ -126,20 +126,10 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
         </div>
       )}
 
-      <div className="container-w">
-        <div className="flex h-16 items-center justify-between lg:h-18">
-          <button
-            onClick={() => onNavigate('home')}
-            className="flex items-center gap-2.5 transition-opacity hover:opacity-80 shrink-0"
-          >
-            <img
-              src="/Вектор_Синэнергия.png"
-              alt="Synergiya Group"
-              className="h-12 sm:h-14 w-auto"
-            />
-          </button>
-
-          <nav className="hidden lg:flex items-center gap-1 shrink-0 ml-auto">
+      <div className="container-w relative">
+        <div className="flex h-16 sm:h-18 items-center justify-between">
+          {/* Left Navigation Links (Desktop) */}
+          <nav className="hidden lg:flex items-center gap-1.5 shrink-0">
             {navLinks.map(({ label, page }) => (
               <button
                 key={page}
@@ -150,10 +140,10 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
                 onTouchStart={() => {
                   if (page === 'catalog') import('@/pages/CatalogPage');
                 }}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 ${
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-colors duration-200 cursor-pointer ${
                   currentPage === page
-                    ? 'bg-brand-50 text-brand-700'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    ? 'text-[#003365] bg-[#003365]/10 font-bold'
+                    : 'text-slate-700 hover:text-[#003365] hover:bg-black/5'
                 }`}
               >
                 {label}
@@ -161,7 +151,42 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
             ))}
           </nav>
 
-          <div className="flex items-center gap-2 shrink-0 ml-3">
+          {/* Center Curved Pendant Arch (Exact Thompson's Tea Reference: Full emblem & text at top, collapses to text on scroll) */}
+          <div className="absolute left-1/2 -translate-x-1/2 top-0 flex flex-col items-center pointer-events-auto z-20">
+            <button
+              type="button"
+              onClick={() => onNavigate('home')}
+              className={`relative flex flex-col items-center justify-center bg-[#faf6ee] border-b border-x border-[#e7decb] shadow-xs transition-all duration-300 cursor-pointer ${
+                scrolled
+                  ? 'h-14 sm:h-16 px-4 sm:px-6 rounded-b-2xl'
+                  : 'h-24 sm:h-28 px-5 sm:px-8 rounded-b-[2.5rem] pt-1.5'
+              }`}
+              title="Synergiya Group — Главная"
+              aria-label="Главная страница"
+            >
+              {/* Upper Emblem: Smoothly disappears and collapses height when scrolled */}
+              <div
+                className={`transition-all duration-300 overflow-hidden flex items-center justify-center ${
+                  scrolled ? 'h-0 opacity-0 mb-0 scale-75' : 'h-10 sm:h-12 opacity-100 mb-1'
+                }`}
+              >
+                <img
+                  src="/logo-emblem.png"
+                  alt="Synergiya Crest"
+                  className="h-full w-auto max-h-11 object-contain"
+                />
+              </div>
+
+              {/* Brand Wordmark Typography: Always visible and centered */}
+              <img
+                src="/logo-text.png"
+                alt="Synergiya Group"
+                className="h-5 sm:h-6 w-auto object-contain transition-all duration-300"
+              />
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0 ml-auto">
             {/* Phone link in Header */}
             <a
               href="tel:+77785806866"
@@ -173,31 +198,19 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
             </a>
 
             {/* Language Switcher (KZ / RU) */}
-            <div className="flex items-center rounded-lg bg-slate-100 p-0.5 border border-slate-200/80 text-xs font-bold">
+            <div className="flex items-center rounded-lg bg-black/5 p-0.5 border border-[#e7decb] text-xs font-bold">
               <button
                 type="button"
                 onClick={() => setLanguage('kz')}
-                className={`rounded-md px-2 py-1 transition-all ${
-                  language === 'kz'
-                    ? 'bg-white text-slate-900 shadow-2xs'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
+                className={`rounded-md px-2 py-1 transition-all ${language === 'kz' ? 'bg-[#faf6ee] text-[#003365] shadow-2xs font-bold' : 'text-slate-600 hover:text-slate-900'}`}
                 title="Қазақ тілі"
-              >
-                KZ
-              </button>
+              >KZ</button>
               <button
                 type="button"
                 onClick={() => setLanguage('ru')}
-                className={`rounded-md px-2 py-1 transition-all ${
-                  language === 'ru'
-                    ? 'bg-white text-slate-900 shadow-2xs'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
+                className={`rounded-md px-2 py-1 transition-all ${language === 'ru' ? 'bg-[#faf6ee] text-[#003365] shadow-2xs font-bold' : 'text-slate-600 hover:text-slate-900'}`}
                 title="Русский язык"
-              >
-                RU
-              </button>
+              >RU</button>
             </div>
 
             {/* Showroom Presentation Mode Toggle (Витрина / Без оптовых цен) */}
@@ -207,7 +220,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
                 isShowroomMode
                   ? 'bg-amber-500 border-amber-600 text-white shadow-2xs font-bold'
-                  : 'bg-slate-100 hover:bg-slate-200 border-slate-200/80 text-slate-700'
+                  : 'bg-black/5 hover:bg-black/10 border-[#e7decb] text-slate-700'
               }`}
               title={
                 isShowroomMode
@@ -221,31 +234,19 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
 
             {/* Currency Switcher ($ USD / ₸ KZT) - Скрыт для всех, кроме администратора */}
             {isEffectiveAdmin && (
-              <div className="flex items-center rounded-lg bg-slate-100 p-0.5 border border-slate-200/80 text-xs font-bold">
+              <div className="flex items-center rounded-lg bg-black/5 p-0.5 border border-[#e7decb] text-xs font-bold">
                 <button
                   type="button"
                   onClick={() => setCurrency('USD')}
-                  className={`rounded-md px-2 py-1 transition-all ${
-                    currency === 'USD'
-                      ? 'bg-white text-slate-900 shadow-2xs'
-                      : 'text-slate-500 hover:text-slate-800'
-                  }`}
+                  className={`rounded-md px-2 py-1 transition-all ${currency === 'USD' ? 'bg-[#faf6ee] text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-800'}`}
                   title="Цены в долларах ($)"
-                >
-                  $
-                </button>
+                >$</button>
                 <button
                   type="button"
                   onClick={() => setCurrency('KZT')}
-                  className={`rounded-md px-2 py-1 transition-all ${
-                    currency === 'KZT'
-                      ? 'bg-white text-slate-900 shadow-2xs'
-                      : 'text-slate-500 hover:text-slate-800'
-                  }`}
+                  className={`rounded-md px-2 py-1 transition-all ${currency === 'KZT' ? 'bg-[#faf6ee] text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-800'}`}
                   title="Цены в тенге (₸)"
-                >
-                  ₸
-                </button>
+                >₸</button>
               </div>
             )}
 
@@ -349,20 +350,15 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
         </div>
       </div>
 
-      {/* Fullscreen Curtain Slide-down Drawer (Thompson's Tea Style: Deep Sapphire #003365 + Gold) */}
+      {/* Fullscreen Editorial Curtain Drawer (Exact Thompson's Tea Reference) */}
       <CurtainNavigationDrawer
         isOpen={mobileOpen}
         onClose={() => setMobileOpen(false)}
         currentPage={currentPage}
         onNavigate={onNavigate}
-        navLinks={navLinks}
         user={user}
         profile={profile}
         isAdmin={Boolean(isAdmin)}
-        systemStatus={systemStatus}
-        offlineCount={offlineCount}
-        isSyncingOffline={isSyncingOffline}
-        onSyncOffline={handleSyncOffline}
         isShowroomMode={isShowroomMode}
         toggleShowroomMode={toggleShowroomMode}
         language={language}

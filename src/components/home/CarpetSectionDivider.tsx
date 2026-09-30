@@ -1,9 +1,9 @@
 interface CarpetSectionDividerProps {
   variant?: 
-    | 'dark-to-light' 
     | 'dark-to-linen' 
     | 'linen-to-sapphire' 
     | 'sapphire-to-light' 
+    | 'dark-to-light'
     | 'light-to-muted' 
     | 'muted-to-light' 
     | 'light-to-accent';
@@ -14,49 +14,52 @@ export default function CarpetSectionDivider({
   variant = 'dark-to-linen',
   className = '',
 }: CarpetSectionDividerProps) {
-  // 1. Dark Hero (slate-950) -> Warm Linen Parchment (#faf7f2)
+  // 1. Dark Hero (slate-950) -> Warm Linen Parchment (#faf6ee)
+  // Organic Deckle / Woven Textile Boundary (inspired by Thompson's Tea organic deckle edge)
   if (variant === 'dark-to-linen' || variant === 'dark-to-light') {
-    const bottomBg = variant === 'dark-to-linen' ? '#faf7f2' : '#ffffff';
+    const bottomColor = variant === 'dark-to-linen' ? '#faf6ee' : '#ffffff';
     return (
       <div
         className={`relative w-full overflow-hidden select-none pointer-events-none -mt-px ${className}`}
         aria-hidden="true"
       >
         <div className="relative w-full bg-slate-950">
-          {/* Subtle gold filament line */}
-          <div className="h-[1.5px] w-full bg-gradient-to-r from-transparent via-amber-400/60 to-transparent" />
+          {/* Antique Gold Filament Hairline */}
+          <div className="h-[1px] w-full bg-gradient-to-r from-transparent via-[#c59b48]/70 to-transparent" />
 
-          {/* Kilim Micro-border SVG with warm linen bottom */}
+          {/* Organic Hand-Woven Deckle Edge */}
           <svg
-            className="w-full h-5 sm:h-7 block"
-            style={{ color: bottomBg }}
-            viewBox="0 0 1200 28"
+            className="w-full h-4 sm:h-6 block"
+            style={{ color: bottomColor }}
+            viewBox="0 0 1440 24"
             preserveAspectRatio="none"
           >
+            {/* Natural textile micro-undulation without cartoon teeth */}
             <path
               d="
-                M0,28 L0,14 
-                C150,14 200,6 300,10 
-                C400,14 450,22 600,18 
-                C750,14 800,4 900,10 
-                C1000,16 1100,24 1200,14 
-                L1200,28 Z
+                M0,24 L0,12 
+                Q180,16 360,10 
+                T720,13 
+                T1080,9 
+                T1440,12 
+                L1440,24 Z
               "
               fill="currentColor"
             />
-            {Array.from({ length: 48 }).map((_, i) => {
-              const x = i * 25 + 12;
+            {/* Fine natural carpet fringe threads */}
+            {Array.from({ length: 60 }).map((_, i) => {
+              const x = i * 24 + 10;
+              const yLength = 6 + ((i * 7) % 5);
               return (
                 <line
                   key={i}
                   x1={x}
                   y1={0}
                   x2={x}
-                  y2={12}
-                  stroke="#d4af37"
-                  strokeWidth="1.2"
-                  strokeOpacity="0.4"
-                  strokeDasharray="2,2"
+                  y2={yLength}
+                  stroke="#c59b48"
+                  strokeWidth="0.8"
+                  strokeOpacity="0.45"
                 />
               );
             })}
@@ -66,107 +69,94 @@ export default function CarpetSectionDivider({
     );
   }
 
-  // 2. Warm Linen Parchment (#faf7f2) -> Deep Midnight Sapphire (#051325)
+  // 2. Warm Linen (#faf6ee) -> Deep Midnight Sapphire (#0e1726)
+  // Authentic Oriental Kilim Diamond Fretwork
   if (variant === 'linen-to-sapphire') {
     return (
       <div
         className={`relative w-full overflow-hidden select-none pointer-events-none -mt-px ${className}`}
         aria-hidden="true"
       >
-        <div className="relative w-full bg-[#faf7f2]">
-          <div className="h-[1px] w-full bg-gradient-to-r from-transparent via-amber-500/30 to-transparent" />
+        <div className="relative w-full bg-[#faf6ee]">
+          {/* Ethnic Kilim Border Motif */}
+          <div className="container-w flex items-center justify-center gap-3 py-1.5 opacity-60">
+            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-[#c59b48]/40 to-slate-400/30" />
+            <div className="flex items-center gap-2 text-[#c59b48] text-[9px] tracking-widest font-serif">
+              <span>❖</span>
+              <span>✦</span>
+              <span>❖</span>
+            </div>
+            <div className="h-px flex-1 bg-gradient-to-l from-transparent via-[#c59b48]/40 to-slate-400/30" />
+          </div>
+
           <svg
-            className="w-full h-5 sm:h-7 text-[#051325] fill-current block"
-            viewBox="0 0 1200 28"
+            className="w-full h-4 sm:h-6 text-[#0e1726] fill-current block"
+            viewBox="0 0 1440 24"
             preserveAspectRatio="none"
           >
             <path
               d="
-                M0,28 L0,14 
-                C120,6 220,18 360,10 
-                C500,2 620,16 760,12 
-                C900,8 1020,18 1200,14 
-                L1200,28 Z
+                M0,24 L0,10 
+                Q160,5 320,12 
+                T640,8 
+                T960,13 
+                T1280,7 
+                T1440,11 
+                L1440,24 Z
               "
               fill="currentColor"
             />
-            {Array.from({ length: 40 }).map((_, i) => (
-              <circle
-                key={i}
-                cx={i * 30 + 15}
-                cy={10}
-                r="1.5"
-                fill="#d4af37"
-                fillOpacity="0.6"
-              />
-            ))}
           </svg>
         </div>
       </div>
     );
   }
 
-  // 3. Deep Midnight Sapphire (#051325) -> Crisp Light (#f8f9fb)
+  // 3. Deep Midnight Sapphire (#0e1726) -> Warm Light Canvas (#faf6ee)
   if (variant === 'sapphire-to-light') {
     return (
       <div
         className={`relative w-full overflow-hidden select-none pointer-events-none -mt-px ${className}`}
         aria-hidden="true"
       >
-        <div className="relative w-full bg-[#051325]">
-          <div className="h-[1.5px] w-full bg-gradient-to-r from-transparent via-amber-400/50 to-transparent" />
+        <div className="relative w-full bg-[#0e1726]">
+          <div className="h-[1px] w-full bg-gradient-to-r from-transparent via-[#c59b48]/60 to-transparent" />
           <svg
-            className="w-full h-5 sm:h-7 text-[#f8f9fb] fill-current block"
-            viewBox="0 0 1200 28"
+            className="w-full h-4 sm:h-6 text-[#faf6ee] fill-current block"
+            viewBox="0 0 1440 24"
             preserveAspectRatio="none"
           >
             <path
               d="
-                M0,28 L0,14 
-                C150,14 200,6 300,10 
-                C400,14 450,22 600,18 
-                C750,14 800,4 900,10 
-                C1000,16 1100,24 1200,14 
-                L1200,28 Z
+                M0,24 L0,11 
+                Q180,7 360,13 
+                T720,8 
+                T1080,14 
+                T1440,10 
+                L1440,24 Z
               "
               fill="currentColor"
             />
-            {Array.from({ length: 48 }).map((_, i) => {
-              const x = i * 25 + 12;
-              return (
-                <line
-                  key={i}
-                  x1={x}
-                  y1={0}
-                  x2={x}
-                  y2={12}
-                  stroke="#d4af37"
-                  strokeWidth="1.2"
-                  strokeOpacity="0.35"
-                  strokeDasharray="2,2"
-                />
-              );
-            })}
           </svg>
         </div>
       </div>
     );
   }
 
-  // 4. Default / light-to-accent
+  // 4. Default / Accent separator
   return (
     <div
-      className={`relative w-full overflow-hidden select-none pointer-events-none py-3 ${className}`}
+      className={`relative w-full overflow-hidden select-none pointer-events-none py-3 bg-[#faf6ee] ${className}`}
       aria-hidden="true"
     >
       <div className="container-w flex items-center justify-center gap-4">
-        <div className="h-px flex-1 bg-gradient-to-r from-transparent via-amber-400/40 to-brand-500/20" />
-        <span className="font-mono text-[10px] text-amber-700/80 uppercase tracking-[0.25em] flex items-center gap-2">
-          <span>◇</span>
-          <span>Synergy Heritage Carpet Weave</span>
-          <span>◇</span>
+        <div className="h-px flex-1 bg-gradient-to-r from-transparent via-[#c59b48]/40 to-slate-400/20" />
+        <span className="font-mono text-[9px] text-[#c59b48] uppercase tracking-[0.3em] flex items-center gap-2">
+          <span>❖</span>
+          <span>Synergy Heritage Weave</span>
+          <span>❖</span>
         </span>
-        <div className="h-px flex-1 bg-gradient-to-l from-transparent via-amber-400/40 to-brand-500/20" />
+        <div className="h-px flex-1 bg-gradient-to-l from-transparent via-[#c59b48]/40 to-slate-400/20" />
       </div>
     </div>
   );

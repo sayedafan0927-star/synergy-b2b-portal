@@ -140,11 +140,11 @@ export default function HomePage({
         </div>
       </section>
 
-      {/* ── Kilim Border (Deep Midnight Sapphire to Crisp Light Gallery) ── */}
+      {/* ── Kilim Border (Deep Midnight Sapphire to Warm Linen Canvas) ── */}
       <CarpetSectionDivider variant="sapphire-to-light" />
 
-      {/* ── 3. Featured Products Section (Crisp Light Gallery #f8f9fb) ── */}
-      <section className="py-16 lg:py-24 bg-[#f8f9fb]">
+      {/* ── 3. Featured Products Section (Warm Linen Canvas #faf6ee) ── */}
+      <section className="py-16 lg:py-24 bg-[#faf6ee]">
         <div className="container-w">
           <div className="flex items-end justify-between mb-10 lg:mb-14">
             <div>
