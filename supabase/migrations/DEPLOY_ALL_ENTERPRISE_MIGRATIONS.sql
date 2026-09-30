@@ -1045,6 +1045,31 @@ CREATE POLICY "order_items_update" ON order_items FOR UPDATE
 -- 14. Admin Currency Exchange Rate Configuration (display_settings)
 -- ==============================================================================
 
+CREATE TABLE IF NOT EXISTS public.display_settings (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  target_role text UNIQUE NOT NULL CHECK (target_role IN ('admin', 'manager_rm', 'manager_lm', 'supplier', 'client')),
+  show_stock boolean NOT NULL DEFAULT true,
+  show_reserve boolean NOT NULL DEFAULT false,
+  show_total_pcs boolean NOT NULL DEFAULT true,
+  show_sqm boolean NOT NULL DEFAULT true,
+  show_price boolean NOT NULL DEFAULT true,
+  exchange_rate_usd_kzt numeric(12,4) NOT NULL DEFAULT 520.0000,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  updated_by uuid REFERENCES public.profiles(id)
+);
+
+ALTER TABLE public.display_settings ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "display_settings_select" ON public.display_settings;
+CREATE POLICY "display_settings_select" ON public.display_settings 
+  FOR SELECT TO authenticated, anon USING (true);
+
+DROP POLICY IF EXISTS "display_settings_admin_all" ON public.display_settings;
+CREATE POLICY "display_settings_admin_all" ON public.display_settings 
+  FOR ALL TO authenticated
+  USING (public.is_admin())
+  WITH CHECK (public.is_admin());
+
 ALTER TABLE display_settings ADD COLUMN IF NOT EXISTS exchange_rate_usd_kzt numeric(12,4) DEFAULT 520.0000;
 UPDATE display_settings SET exchange_rate_usd_kzt = 520.0000 WHERE exchange_rate_usd_kzt IS NULL;
 
