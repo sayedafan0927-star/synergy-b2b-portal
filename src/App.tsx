@@ -117,17 +117,13 @@ function Preloader({ onFinished }: { onFinished: () => void }) {
   }, []);
 
   useEffect(() => {
-    if (!imageReady) return;
-    const t1 = setTimeout(() => setPhase('expand'), 950);
-    const t2 = setTimeout(() => {
+    // Zero-Wait TTI: мгновенный переход без искусственных задержек для B2B-пользователей
+    const t = setTimeout(() => {
       setPhase('done');
       onFinished();
-    }, 1350);
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-    };
-  }, [imageReady, onFinished]);
+    }, 50);
+    return () => clearTimeout(t);
+  }, [onFinished]);
 
   return (
     <div

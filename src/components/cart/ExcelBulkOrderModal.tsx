@@ -14,6 +14,7 @@ import { useCurrency } from '@/contexts/CurrencyContext';
 import { useCart } from '@/contexts/CartContext';
 import { useToast } from '@/contexts/ToastContext';
 import { normalizeDimensions } from '@/lib/searchNormalization';
+import { fetchSingleProductFromErp } from '@/lib/erpApi';
 import { BulkParsedRowItem, type ParsedBulkRow } from './bulk/BulkParsedRowItem';
 import type { Product, ProductVariant } from '@/types';
 
@@ -113,6 +114,46 @@ export function ExcelBulkOrderModal({ isOpen, onClose }: ExcelBulkOrderModalProp
     }
 
     setParsedRows(results);
+
+    // Серверное доразрешение артикулов, если их не было в оперативной памяти клиента
+    const notFoundIndices = results
+      .map((r, i) => (r.status === 'not_found' ? i : -1))
+      .filter(i => i >= 0);
+
+    if (notFoundIndices.length > 0) {
+      (async () => {
+        let changed = false;
+        for (const idx of notFoundIndices.slice(0, 20)) {
+          const item = results[idx];
+          try {
+            const fetched = await fetchSingleProductFromErp(item.article);
+            if (fetched && Array.isArray(fetched.variants) && fetched.variants.length > 0) {
+              const cleanSize = item.size.toLowerCase().replace(/\s+/g, '');
+              const vMatch = fetched.variants.find((v: any) => {
+                const vSize = normalizeDimensions(v.size).toLowerCase().replace(/\s+/g, '');
+                return vSize === cleanSize || vSize.includes(cleanSize) || cleanSize.includes(vSize);
+              });
+              if (vMatch) {
+                const stock = vMatch.free_stock ?? vMatch.stock ?? 0;
+                const price = getVariantPrice(fetched.collection, vMatch.size, vMatch.base_price, vMatch.price_per_sqm);
+                results[idx] = {
+                  ...item,
+                  product: fetched,
+                  variant: vMatch,
+                  status: stock >= item.qty ? 'matched' : (stock > 0 ? 'insufficient_stock' : 'not_found'),
+                  availableStock: stock,
+                  price,
+                };
+                changed = true;
+              }
+            }
+          } catch {}
+        }
+        if (changed) {
+          setParsedRows([...results]);
+        }
+      })();
+    }
   };
 
   const handleFileUpload = (file: File) => {

@@ -23,6 +23,7 @@ export interface AuthenticatedContext {
   fullName?: string;
   companyName?: string;
   phone?: string;
+  isTwoFactorVerified?: boolean;
   error?: string;
 }
 
@@ -226,6 +227,11 @@ export async function authenticateRequest(
       }
     }
 
+    const isTwoFactorVerified = Boolean(
+      req.headers['x-2fa-verified'] === 'true' ||
+      req.headers['x-otp-verified'] === 'true'
+    );
+
     return {
       isAuthenticated: true,
       isServer: false,
@@ -237,6 +243,7 @@ export async function authenticateRequest(
       fullName: effectiveFullName,
       companyName: profile?.company_name || effectiveFullName,
       phone: effectivePhone,
+      isTwoFactorVerified,
     };
   } catch (err: any) {
     return {

@@ -363,9 +363,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // Обработка параллельными батчами по 3 заказа (Parallel Concurrency Pool)
+    // Обработка батчами по 3 заказа с защитой от Serverless 504 Timeout (дедлайн 7.5с)
     const BATCH_SIZE = 3;
+    const MAX_EXECUTION_MS = 7500;
+    let deadlineReached = false;
+
     for (let i = 0; i < pendingOrders.length; i += BATCH_SIZE) {
+      if (Date.now() - startTime > MAX_EXECUTION_MS) {
+        deadlineReached = true;
+        break;
+      }
       const batch = pendingOrders.slice(i, i + BATCH_SIZE);
       const batchResults = await Promise.all(batch.map(order => syncSingleOrder(order)));
       for (const res of batchResults) {

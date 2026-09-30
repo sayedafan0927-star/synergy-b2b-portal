@@ -428,8 +428,8 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
             />
           </div>
 
-          {/* Правая колонка: форма оформления и финансовые лимиты */}
-          <div className="lg:col-span-5 xl:col-span-4 sticky top-24">
+          {/* Правая колонка: форма оформления и финансовые лимиты (всегда в поле зрения) */}
+          <div className="lg:col-span-5 xl:col-span-4 lg:sticky lg:top-20 z-10 self-start">
             <CartCheckoutForm
               clientName={clientName}
               setClientName={setClientName}
