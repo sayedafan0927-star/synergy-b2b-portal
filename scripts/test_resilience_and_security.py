@@ -1241,7 +1241,46 @@ with open(os.path.join(ROOT_DIR, "api", "warehouse-rules.ts"), "r", encoding="ut
 test_assert("'manager_rm'" in wr_s10 and "requiredRoles: ['admin', 'manager_rm']" in wr_s10, "api/warehouse-rules.ts permits regional managers to configure warehouse rules")
 
 # ------------------------------------------------------------------------------
-# 35. Summary Report
+# 35. Verifying Stage 11 Redis Unblock, Warehouse 81 Fallbacks, Realtime FX & Orders List Profiles...
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{YELLOW}35. Verifying Stage 11 Redis Unblock, Warehouse 81 Fallbacks, Realtime FX & Orders List Profiles...{RESET}")
+
+with open(os.path.join(ROOT_DIR, "api", "cron", "reconcile-balances.ts"), "r", encoding="utf-8") as fp:
+    rb_s11 = fp.read()
+test_assert("redis.del(`revoked_partner:${partnerId}`)" in rb_s11, "reconcile-balances.ts clears Redis revocation on partner debt clearance")
+
+with open(os.path.join(ROOT_DIR, "api", "webhooks", "handlers", "paymentHandler.ts"), "r", encoding="utf-8") as fp:
+    ph_s11 = fp.read()
+test_assert("redis.del(`revoked_partner:${client_id}`)" in ph_s11, "paymentHandler.ts clears Redis revocation when payment clears client debt")
+test_assert("profileUpdate.is_blocked_for_shipment" in ph_s11, "paymentHandler.ts updates is_blocked_for_shipment on payment reconciliation")
+
+with open(os.path.join(ROOT_DIR, "api", "lib", "pricingValidator.ts"), "r", encoding="utf-8") as fp:
+    pv_s11 = fp.read()
+test_assert("wName.includes('караганд') || wName.includes('karaganda')) return 84" in pv_s11, "pricingValidator.ts resolves Karaganda warehouse ID 84")
+
+with open(os.path.join(ROOT_DIR, "src", "pages", "CartPage.tsx"), "r", encoding="utf-8") as fp:
+    cp_s11 = fp.read()
+test_assert("warehouse_id)?.warehouse_id || 81" in cp_s11, "CartPage.tsx defaults to canonical Astana Hub warehouse ID 81")
+
+with open(os.path.join(ROOT_DIR, "src", "lib", "erp", "ordersApi.ts"), "r", encoding="utf-8") as fp:
+    oa_s11 = fp.read()
+test_assert("warehouse_id || 81" in oa_s11, "ordersApi.ts defaults to canonical Astana Hub warehouse ID 81")
+
+with open(os.path.join(ROOT_DIR, "src", "contexts", "CurrencyContext.tsx"), "r", encoding="utf-8") as fp:
+    cc_s11 = fp.read()
+test_assert("exchange_rate_usd_kzt" in cc_s11 and "currency_rate_updated" in cc_s11, "CurrencyContext.tsx loads exchange rate from display_settings and listens to Realtime")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "profile", "useOrdersList.ts"), "r", encoding="utf-8") as fp:
+    uol_s11 = fp.read()
+test_assert("profiles:user_id(full_name, company_name, phone)" in uol_s11, "useOrdersList.ts joins order owner profile metadata")
+test_assert("profileData?.full_name || profile?.full_name" in uol_s11, "useOrdersList.ts attributes true client name preventing admin impersonation leak")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "createOrderHandler.ts"), "r", encoding="utf-8") as fp:
+    coh_s11 = fp.read()
+test_assert("totalSqm: finalTotalSqm" in coh_s11, "createOrderHandler.ts uses finalTotalSqm in fallback approval dispatch")
+
+# ------------------------------------------------------------------------------
+# 36. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

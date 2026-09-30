@@ -377,7 +377,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
           clientName: rawPayload.client_name || rawPayload.buyer?.name || 'Клиент B2B',
           clientPhone: rawPayload.client_phone || rawPayload.buyer?.phone,
           totalAmount: finalTotalAmount,
-          totalSqm: pricingResult.items.reduce((s, it) => s + (it.price_per_sqm > 0 ? (it.price / it.price_per_sqm) * it.quantity : 0), 0),
+          totalSqm: finalTotalSqm,
           itemsCount: finalTotalItems,
           reason: complianceReason || 'Превышение кредитного лимита (серверный контроль)',
         }).catch(e => logger.warn('[Order Approval Warning]', e as Error));

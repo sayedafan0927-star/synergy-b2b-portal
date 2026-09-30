@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { CurrencyCode, DEFAULT_USD_KZT_RATE, formatCurrency, formatDualCurrency } from '@/lib/pricingEngine';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabase';
 
 interface CurrencyContextType {
   currency: CurrencyCode;
@@ -31,6 +32,50 @@ export const CurrencyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   });
 
+  const [exchangeRate, setExchangeRate] = useState<number>(DEFAULT_USD_KZT_RATE);
+
+  // Динамическая загрузка курса валют из display_settings и синхронизация по Realtime
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadExchangeRate() {
+      try {
+        const { data } = await supabase
+          .from('display_settings')
+          .select('exchange_rate_usd_kzt')
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (data?.exchange_rate_usd_kzt && isMounted) {
+          const val = Number(data.exchange_rate_usd_kzt);
+          if (!isNaN(val) && val > 0) {
+            setExchangeRate(val);
+          }
+        }
+      } catch (err) {
+        console.warn('[CurrencyContext] Failed to fetch exchange rate:', err);
+      }
+    }
+
+    loadExchangeRate();
+
+    const channel = supabase
+      .channel('currency_rate_realtime')
+      .on('broadcast', { event: 'currency_rate_updated' }, (msg: any) => {
+        const newRate = Number(msg?.payload?.exchange_rate_usd_kzt);
+        if (!isNaN(newRate) && newRate > 0 && isMounted) {
+          setExchangeRate(newRate);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
   // Если пользователь не админ, принудительно переключаем на USD и очищаем KZT из localStorage
   useEffect(() => {
     if (!isEffectiveAdmin && currency !== 'USD') {
@@ -40,8 +85,6 @@ export const CurrencyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       } catch {}
     }
   }, [isEffectiveAdmin, currency]);
-
-  const exchangeRate = DEFAULT_USD_KZT_RATE;
 
   const setCurrency = (c: CurrencyCode) => {
     // Пользователям без прав админа запрещено переключаться на KZT

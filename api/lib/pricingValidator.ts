@@ -65,6 +65,7 @@ export function resolveWarehouseId(rawId?: any, name?: string): number {
   if (wName.includes('астана') || wName.includes('основной')) return 81;
   if (wName.includes('алматы')) return 82;
   if (wName.includes('шымкент')) return 83;
+  if (wName.includes('караганд') || wName.includes('karaganda')) return 84;
   return 81;
 }
 

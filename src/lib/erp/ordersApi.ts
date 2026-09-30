@@ -53,7 +53,7 @@ export async function submitOrderToErp(payload: CreateOrderPayload): Promise<Erp
   const rawClientId = payload.client_id;
   const numClientId = rawClientId ? (Number(String(rawClientId).replace(/\D+/g, '')) || Number(rawClientId)) : undefined;
 
-  const defaultWarehouseId = payload.warehouse_id || (payload.items?.[0] as any)?.warehouse_id || 1;
+  const defaultWarehouseId = payload.warehouse_id || (payload.items?.[0] as any)?.warehouse_id || 81;
 
   const normalizedPayload = {
     idempotency_key: idempotencyKey,

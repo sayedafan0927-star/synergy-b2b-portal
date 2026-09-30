@@ -141,7 +141,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
         : ''
     }`;
 
-    const effectiveWarehouseId = items.find(it => (it as any).warehouse_id)?.warehouse_id || 1;
+    const effectiveWarehouseId = items.find(it => (it as any).warehouse_id)?.warehouse_id || 81;
 
     const orderPayload = {
       user_id: effectiveProfile?.id,

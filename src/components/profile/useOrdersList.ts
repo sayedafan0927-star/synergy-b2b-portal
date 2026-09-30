@@ -85,7 +85,7 @@ export function useOrdersList({ isAdmin, isManager }: UseOrdersListOptions) {
       try {
         let q = supabase
           .from('orders')
-          .select('*, order_items(*)')
+          .select('*, order_items(*), profiles:user_id(full_name, company_name, phone)')
           .is('parent_order_id', null)
           .order('created_at', { ascending: false })
           .limit(50);
@@ -127,6 +127,8 @@ export function useOrdersList({ isAdmin, isManager }: UseOrdersListOptions) {
                 quantity: Number(it.quantity) || 1,
               }));
 
+              const profileData = (row as any).profiles;
+
               return {
                 id: String(row.id),
                 orderNumber: row.order_number || row.doc_number || `ORD-${row.id.slice(0, 8)}`,
@@ -138,9 +140,9 @@ export function useOrdersList({ isAdmin, isManager }: UseOrdersListOptions) {
                 statusColor: meta.color,
                 warehouse: row.warehouse || row.warehouse_name || 'Основной Склад Астана',
                 notes: row.notes || row.comment || '',
-                clientName: profile?.full_name || 'Клиент',
-                clientCompany: profile?.company_name || '',
-                clientPhone: profile?.phone || '',
+                clientName: profileData?.full_name || profile?.full_name || 'Клиент',
+                clientCompany: profileData?.company_name || profile?.company_name || '',
+                clientPhone: profileData?.phone || profile?.phone || '',
                 totalAmount: Number(row.total_amount) || 0,
                 totalSqm: Number(row.total_sqm) || items.reduce((s, it) => s + calcSqm(it.size, it.quantity), 0),
                 totalItems: Number(row.total_items) || items.reduce((s, it) => s + it.quantity, 0),
