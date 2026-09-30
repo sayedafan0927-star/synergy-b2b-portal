@@ -156,7 +156,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           `Отменено заказов с истекшим сроком оплаты: *${cancelledOrders.length}*\n` +
           `${orderList}\n\n` +
           `_Складские остатки автоматически возвращены в свободную продажу в каталоге._`;
-        sendWhatsAppMessage(managerPhone, waMsg).catch(waErr => {
+        sendWhatsAppMessage(managerPhone, waMsg, {
+          eventType: 'booking_expired',
+        }).catch(waErr => {
           logger.warn('[WMS Hold Expiry] WhatsApp alert warning:', waErr as Error);
         });
       }

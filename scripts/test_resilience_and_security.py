@@ -1609,6 +1609,15 @@ with open(os.path.join(ROOT_DIR, "src", "components", "cart", "CartCheckoutForm.
     ccf_p20 = fp.read()
 test_assert("onRemoveUnavailableItems" in ccf_p20 and "Удалить позиции без цены" in ccf_p20, "CartCheckoutForm.tsx includes 1-click cleanup button in zero-price warning banner")
 
+with open(os.path.join(ROOT_DIR, "api", "approvals", "whatsapp.ts"), "r", encoding="utf-8") as fp:
+    wa_code = fp.read()
+test_assert("action=send_whatsapp" in wa_code and "77086984543" in wa_code, "whatsapp.ts dispatches via ERP Gateway action=send_whatsapp with duty phone 77086984543")
+test_assert("event_type" in wa_code and "order_doc_number" in wa_code, "whatsapp.ts passes standard event_type and order audit fields to ERP")
+
+with open(os.path.join(ROOT_DIR, "docs", "ERP_INTEGRATION_SPEC.md"), "r", encoding="utf-8") as fp:
+    spec_code = fp.read()
+test_assert("action=send_whatsapp" in spec_code and "13. Единый шлюз WhatsApp-уведомлений" in spec_code, "docs/ERP_INTEGRATION_SPEC.md documents unified ERP WhatsApp gateway specification")
+
 # ------------------------------------------------------------------------------
 # 45. Summary Report
 # ------------------------------------------------------------------------------

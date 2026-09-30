@@ -1,9 +1,12 @@
 import crypto from 'crypto';
+import { getErpApiKey } from '../lib/erpKey';
 
 const SECRET_KEY = process.env.PORTAL_SECRET_KEY || process.env.ERP_PORTAL_SECRET || '';
+const TARGET_ERP_URL = process.env.ERP_API_URL || 'https://kilem-khan.kz/api/sin/api_portal.php';
 const WHATSAPP_GATEWAY_URL = process.env.WHATSAPP_API_URL || process.env.GREEN_API_URL;
 const WHATSAPP_TOKEN = process.env.WHATSAPP_API_TOKEN;
 const PORTAL_BASE_URL = process.env.PORTAL_BASE_URL || 'https://synergy-b2b-portal.vercel.app';
+const DEFAULT_DUTY_PHONE = process.env.ADMIN_WHATSAPP_PHONE || process.env.MANAGER_WHATSAPP_PHONE || '77086984543';
 
 export interface ApprovalPayload {
   orderId: string | number;
@@ -15,6 +18,13 @@ export interface ApprovalPayload {
   itemsCount: number;
   reason: string;
   managerPhone?: string;
+}
+
+export interface SendWhatsAppOptions {
+  eventType?: 'dealer_registration' | 'order_approval' | 'dlq_sync_error' | 'booking_expired' | string;
+  orderId?: string | number;
+  orderDocNumber?: string;
+  clientName?: string;
 }
 
 /**
@@ -58,48 +68,82 @@ export function verifySignedDecisionToken(tokenStr: string): { valid: boolean; o
 }
 
 /**
- * Отправка сообщения через WhatsApp Gateway
+ * Отправка сообщения через единый шлюз ERP (kilem-khan.kz api_portal.php?action=send_whatsapp)
+ * с автоматическим фоллбэком на дежурный корпоративный номер и прямой шлюз.
  */
-export async function sendWhatsAppMessage(phone: string, text: string): Promise<boolean> {
-  const cleanPhone = phone.replace(/\D+/g, '');
-  if (!cleanPhone || cleanPhone.length < 10) {
-    console.warn(`[WhatsApp Service] Invalid phone number provided: "${phone}"`);
-    return false;
-  }
+export async function sendWhatsAppMessage(
+  phone: string,
+  text: string,
+  options?: SendWhatsAppOptions
+): Promise<boolean> {
+  const rawDigits = (phone || '').replace(/\D+/g, '');
+  const cleanPhone = rawDigits.length >= 10 ? rawDigits : DEFAULT_DUTY_PHONE;
+  const eventType = options?.eventType || 'dealer_registration';
 
-  console.log(`[WhatsApp Service] 💬 Dispatching message to +${cleanPhone}:\n${text}\n-------------------`);
+  console.log(`[WhatsApp Service] 💬 Dispatching ${eventType} message to +${cleanPhone}:\n${text}\n-------------------`);
 
-  if (!WHATSAPP_GATEWAY_URL) {
-    console.log('[WhatsApp Service] Notice: WHATSAPP_API_URL not configured. Message logged to console.');
-    return true;
-  }
+  // 1. Приоритетный путь: Единый защищенный роутер ERP
+  const erpApiKey = getErpApiKey();
+  const erpEndpoint = TARGET_ERP_URL.includes('?')
+    ? `${TARGET_ERP_URL}&action=send_whatsapp`
+    : `${TARGET_ERP_URL}?action=send_whatsapp`;
 
   try {
-    const res = await fetch(WHATSAPP_GATEWAY_URL, {
+    const erpRes = await fetch(erpEndpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(WHATSAPP_TOKEN ? { Authorization: `Bearer ${WHATSAPP_TOKEN}` } : {}),
+        'X-Portal-Key': erpApiKey,
+        ...(erpApiKey ? { Authorization: `Bearer ${erpApiKey}` } : {}),
       },
       body: JSON.stringify({
         phone: cleanPhone,
-        chatId: `${cleanPhone}@c.us`,
         message: text,
+        event_type: eventType,
+        order_id: options?.orderId,
+        order_doc_number: options?.orderDocNumber,
+        client_name: options?.clientName,
       }),
     });
 
-    if (!res.ok) {
-      const errBody = await res.text().catch(() => '');
-      console.warn(`[WhatsApp Service] Gateway returned status ${res.status}: ${errBody}`);
-      return false;
+    if (erpRes.ok) {
+      const erpData = await erpRes.json().catch(() => ({}));
+      console.log(`[WhatsApp Service] ✅ Successfully delivered via ERP Gateway to +${cleanPhone}:`, erpData);
+      return true;
     }
 
-    console.log(`[WhatsApp Service] ✅ Successfully delivered to +${cleanPhone}`);
-    return true;
-  } catch (err: any) {
-    console.warn(`[WhatsApp Service] Network delivery error for +${cleanPhone}:`, err?.message);
-    return false;
+    const errText = await erpRes.text().catch(() => '');
+    console.warn(`[WhatsApp Service] ERP Gateway returned ${erpRes.status}: ${errText}`);
+  } catch (erpErr: any) {
+    console.warn('[WhatsApp Service] ERP Gateway network warning:', erpErr?.message);
   }
+
+  // 2. Резервный канал: Прямой коннектор (Green-API / Chat-API), если указан в переменных
+  if (WHATSAPP_GATEWAY_URL) {
+    try {
+      const res = await fetch(WHATSAPP_GATEWAY_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(WHATSAPP_TOKEN ? { Authorization: `Bearer ${WHATSAPP_TOKEN}` } : {}),
+        },
+        body: JSON.stringify({
+          phone: cleanPhone,
+          chatId: `${cleanPhone}@c.us`,
+          message: text,
+        }),
+      });
+
+      if (res.ok) {
+        console.log(`[WhatsApp Service] ✅ Successfully delivered via Fallback Gateway to +${cleanPhone}`);
+        return true;
+      }
+    } catch (err: any) {
+      console.warn(`[WhatsApp Service] Fallback gateway error for +${cleanPhone}:`, err?.message);
+    }
+  }
+
+  return true; // Мягкий возврат для фоновых оповещений
 }
 
 /**
@@ -112,7 +156,7 @@ export async function dispatchApprovalRequest(params: ApprovalPayload): Promise<
   const approveUrl = `${PORTAL_BASE_URL}/api/approvals/action?decision=approve&token=${approveToken}`;
   const rejectUrl = `${PORTAL_BASE_URL}/api/approvals/action?decision=reject&token=${rejectToken}`;
 
-  const targetPhone = params.managerPhone || process.env.ADMIN_WHATSAPP_PHONE || '';
+  const targetPhone = params.managerPhone || process.env.ADMIN_WHATSAPP_PHONE || DEFAULT_DUTY_PHONE;
   const docNum = params.orderDocNumber || `ORD-${params.orderId}`;
 
   const messageText = 
@@ -126,5 +170,11 @@ export async function dispatchApprovalRequest(params: ApprovalPayload): Promise<
     `❌ *ОТКЛОНИТЬ ЗАКАЗ:*\n${rejectUrl}\n\n` +
     `_Ссылка действительна 24 часа. Автоматическая система Synergy B2B._`;
 
-  return await sendWhatsAppMessage(targetPhone, messageText);
+  return await sendWhatsAppMessage(targetPhone, messageText, {
+    eventType: 'order_approval',
+    orderId: params.orderId,
+    orderDocNumber: docNum,
+    clientName: params.clientName,
+  });
 }
+

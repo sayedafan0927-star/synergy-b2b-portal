@@ -34,7 +34,11 @@ export async function dispatchDlqEmergencyAlert(params: DlqAlertParams): Promise
   });
 
   try {
-    await sendWhatsAppMessage(alertPhone, text);
+    await sendWhatsAppMessage(alertPhone, text, {
+      eventType: 'dlq_sync_error',
+      orderId: params.orderId,
+      orderDocNumber: String(params.orderNumber),
+    });
   } catch (e) {
     logger.warn('[DLQ Alert WhatsApp notice]', { orderNumber: params.orderNumber }, e as Error);
   }
@@ -287,7 +291,11 @@ export async function dispatchDlqAlert(
       `Категория: *${category.label}*\n` +
       `Ошибка: ${errorMessage}\n` +
       `Рекомендация: _${category.recommendedAction}_`;
-    sendWhatsAppMessage(alertPhone, waText).catch(waErr => {
+    sendWhatsAppMessage(alertPhone, waText, {
+      eventType: 'dlq_sync_error',
+      orderId: order.id,
+      orderDocNumber: order.order_number,
+    }).catch(waErr => {
       logger.warn('[DLQ Alert WhatsApp notice]', { orderNumber: order.order_number }, waErr as Error);
     });
   }

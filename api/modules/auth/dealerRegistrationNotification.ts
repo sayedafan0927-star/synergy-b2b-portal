@@ -42,23 +42,24 @@ export async function handleNotifyDealerRegistration(
       },
     });
 
-    // 2. Диспетчеризация оперативного WhatsApp-уведомления менеджерам Synergy
+    // 2. Диспетчеризация оперативного WhatsApp-уведомления менеджерам Synergy через шлюз ERP
     const managerPhone = process.env.ADMIN_WHATSAPP_PHONE || process.env.MANAGER_WHATSAPP_PHONE || process.env.WHATSAPP_MANAGER_PHONE || '';
-    if (managerPhone) {
-      const waMsg =
-        `👤 *НОВАЯ РЕГИСТРАЦИЯ B2B-ДИЛЕРА*\n\n` +
-        `🏢 *Компания:* ${companyName || 'Не указана'}\n` +
-        `👤 *Контакт:* ${fullName || 'Не указано'}\n` +
-        `✉️ *Email:* ${email}\n` +
-        (phone ? `📞 *Телефон:* ${phone}\n` : '') +
-        (city ? `📍 *Город:* ${city}\n` : '') +
-        `⏱️ *Время:* ${new Date().toLocaleString('ru-RU', { timeZone: 'Asia/Almaty' })}\n\n` +
-        `_Необходимо проверить карточку в 1С / админ-панели и назначить категорию оптовых цен._`;
+    const waMsg =
+      `👤 *НОВАЯ РЕГИСТРАЦИЯ B2B-ДИЛЕРА*\n\n` +
+      `🏢 *Компания:* ${companyName || 'Не указана'}\n` +
+      `👤 *Контакт:* ${fullName || 'Не указано'}\n` +
+      `✉️ *Email:* ${email}\n` +
+      (phone ? `📞 *Телефон:* ${phone}\n` : '') +
+      (city ? `📍 *Город:* ${city}\n` : '') +
+      `⏱️ *Время:* ${new Date().toLocaleString('ru-RU', { timeZone: 'Asia/Almaty' })}\n\n` +
+      `_Необходимо проверить карточку в 1С / админ-панели и назначить категорию оптовых цен._`;
 
-      sendWhatsAppMessage(managerPhone, waMsg).catch(waErr => {
-        console.warn('[Dealer Registration] WhatsApp alert notice:', waErr);
-      });
-    }
+    sendWhatsAppMessage(managerPhone, waMsg, {
+      eventType: 'dealer_registration',
+      clientName: fullName || companyName,
+    }).catch(waErr => {
+      console.warn('[Dealer Registration] WhatsApp alert notice:', waErr);
+    });
 
     return res.status(200).json({
       success: true,

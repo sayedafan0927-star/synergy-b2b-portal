@@ -87,7 +87,10 @@ export async function handleCreateLead(
       `🏷️ *Источник:* ${source}\n` +
       `⏱️ *Время:* ${new Date().toLocaleString('ru-RU', { timeZone: 'Asia/Almaty' })}`;
 
-    sendWhatsAppMessage(managerPhone, notificationText).catch(waErr => {
+    sendWhatsAppMessage(managerPhone, notificationText, {
+      eventType: 'dealer_registration',
+      clientName: name,
+    }).catch(waErr => {
       console.warn('[API Proxy ERP] WhatsApp lead notification error:', waErr);
     });
 
