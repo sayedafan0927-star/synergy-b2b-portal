@@ -81,11 +81,21 @@ export function createEmployeeUserAndProfile(employee: EmployeeSignInInput): { p
 }
 
 export async function provisionSessionToken(u: unknown, p: Profile, r?: UserRole): Promise<void> {
+  const role = r || p.role;
+  const isPrivileged = ['admin', 'manager_rm', 'manager_lm', 'supplier'].includes(role);
+  if (isPrivileged) {
+    const stored = typeof window !== 'undefined' ? sessionStorage.getItem(AUTH_SESSION_KEY) : null;
+    let hasToken = false;
+    if (stored) {
+      try { hasToken = Boolean(JSON.parse(stored)?.token); } catch {}
+    }
+    if (!hasToken) return;
+  }
   try {
     const res = await fetch('/api/auth/session', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ role: r || p.role, user: u, profile: p }),
+      body: JSON.stringify({ role, user: u, profile: p }),
     });
     if (res.ok) {
       const data = await res.json();

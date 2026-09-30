@@ -157,6 +157,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 if (redis) {
                   redis.set(`revoked_partner:${partnerId}`, '1', { ex: 86400 }).catch(() => {});
                 }
+              } else {
+                const redis = getRedisClient();
+                if (redis) {
+                  redis.del(`revoked_partner:${partnerId}`).catch(() => {});
+                }
               }
 
               discrepanciesList.push({
@@ -257,6 +262,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               const redis = getRedisClient();
               if (redis) {
                 redis.set(`revoked_partner:${partnerId}`, '1', { ex: 86400 }).catch(() => {});
+              }
+            } else {
+              const redis = getRedisClient();
+              if (redis) {
+                redis.del(`revoked_partner:${partnerId}`).catch(() => {});
               }
             }
 

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { recordAuditLog } from '../../audit/logs';
+import { getRedisClient } from '../../lib/redis';
 
 export async function handlePaymentReceived(
   payload: any,
@@ -76,13 +77,26 @@ export async function handlePaymentReceived(
           last_synced_at: new Date().toISOString(),
         }, { onConflict: 'partner_id' });
 
+      const profileUpdate: Record<string, any> = {
+        debt_usd: calculatedDebt,
+        updated_at: new Date().toISOString(),
+      };
+      const shouldUnblock = payload.is_blocked_for_shipment === false || payload.unblock_shipment === true || (calculatedDebt === 0 && payload.is_blocked_for_shipment !== true);
+      if (payload.is_blocked_for_shipment !== undefined || shouldUnblock) {
+        profileUpdate.is_blocked_for_shipment = !shouldUnblock;
+      }
+
       await supabaseServer
         .from('profiles')
-        .update({
-          debt_usd: calculatedDebt,
-          updated_at: new Date().toISOString(),
-        })
+        .update(profileUpdate)
         .eq('partner_id', String(client_id));
+
+      if (shouldUnblock) {
+        const redis = getRedisClient();
+        if (redis) {
+          await redis.del(`revoked_partner:${client_id}`).catch(() => {});
+        }
+      }
     } catch (dbErr) {
       console.warn('[Webhook ERP] partner_balances update notice:', dbErr);
     }

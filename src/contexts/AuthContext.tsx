@@ -91,22 +91,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
 
         if (!parsed.token && (su || sp)) {
-          fetch('/api/auth/session', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              role: sp?.role || su?.role || 'admin',
-              user: su,
-              profile: sp,
-            }),
-          })
-            .then(r => r.json())
-            .then(resData => {
-              if (resData?.token) {
-                saveAuthSession(su, sp, resData.token);
-              }
+          const effectiveRole = sp?.role || (su as any)?.role || 'client';
+          const isPrivileged = ['admin', 'manager_rm', 'manager_lm', 'supplier'].includes(effectiveRole);
+          if (!isPrivileged) {
+            fetch('/api/auth/session', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ role: effectiveRole, user: su, profile: sp }),
             })
-            .catch(() => {});
+              .then(r => r.json())
+              .then(resData => {
+                if (resData?.token) saveAuthSession(su, sp, resData.token);
+              })
+              .catch(() => {});
+          }
         }
         return;
       }

@@ -12,6 +12,11 @@ import { isWarehouseVisibleForClient } from '@/lib/warehouseVisibility';
 import { ChevronLeft, ChevronRight, Lock } from 'lucide-react';
 import ProductImage from '@/components/ProductImage';
 import ProductCardQuickSizes from '@/components/product/ProductCardQuickSizes';
+import { cacheProduct } from '@/lib/productCache';
+
+const prefetchProductPage = () => {
+  import('@/pages/ProductPage');
+};
 
 interface ProductCardProps {
   product: Product;
@@ -173,22 +178,34 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
   const totalStockForCard = product.variants.reduce((sum, v) => sum + getVariantClientStock(v), 0);
   const isOutOfStock = totalStockForCard <= 0;
 
+  const handleCardPrefetch = () => {
+    cacheProduct(product);
+    prefetchProductPage();
+  };
+
+  const handleOpenProduct = () => {
+    cacheProduct(product);
+    onNavigate('product', product.id);
+  };
+
   return (
     <div
       role="button"
       tabIndex={0}
-      onClick={() => onNavigate('product', product.id)}
+      onMouseEnter={handleCardPrefetch}
+      onPointerEnter={handleCardPrefetch}
+      onClick={handleOpenProduct}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault();
-          onNavigate('product', product.id);
+          handleOpenProduct();
         }
       }}
       className={`group card relative flex flex-col overflow-visible text-left cursor-pointer transition-shadow hover:shadow-lg active:scale-[0.99] touch-manipulation ${sizesOpen ? 'z-30' : ''}`}
     >
       {/* Превью фото с возможностью листать */}
       <div 
-        onClick={() => onNavigate('product', product.id)}
+        onClick={handleOpenProduct}
         className="relative aspect-[4/5] sm:aspect-[3/4] overflow-hidden rounded-t-xl bg-slate-50 p-2 sm:p-2.5 flex items-center justify-center cursor-pointer"
       >
         <ProductImage

@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabase';
 import type { Product, StockSummary } from '@/types';
 import { calculateArea } from '@/lib/nomenclatureParser';
 import { mergeProducts } from '@/lib/catalogMerge';
+import { cacheProduct, cacheProducts, getCachedProduct } from '@/lib/productCache';
 
 // Re-export utility functions and constants for full backward compatibility
 export {
@@ -24,6 +25,12 @@ export {
   filterClientWarehouses,
   triggerCatalogReload,
 } from '@/lib/catalogMerge';
+
+export {
+  cacheProduct,
+  cacheProducts,
+  getCachedProduct,
+} from '@/lib/productCache';
 
 export function useProducts(customDealerId?: string | number) {
   const authContext = useContext(AuthContext);
@@ -219,6 +226,7 @@ export function useProducts(customDealerId?: string | number) {
         const erpData = await fetchCatalogFromErp(effectiveDealerId, undefined, bypassCache);
         if (!cancelled && erpData && erpData.success && Array.isArray(erpData.products) && erpData.products.length > 0) {
           const merged = mergeProducts(erpData.products as Product[]);
+          cacheProducts(merged);
           setProducts(merged);
           if (erpData.summary) {
             setSummary(erpData.summary);
@@ -312,14 +320,20 @@ export function useProduct(id: string | undefined, customDealerId?: string | num
     authContext?.profile?.partner_id ??
     undefined;
 
-  const [product, setProduct] = useState<Product | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [product, setProduct] = useState<Product | null>(() => (id ? getCachedProduct(id) : null));
+  const [loading, setLoading] = useState<boolean>(() => !Boolean(id && getCachedProduct(id)));
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) {
       setLoading(false);
       return;
+    }
+
+    const preloaded = getCachedProduct(id);
+    if (preloaded) {
+      setProduct(preloaded);
+      setLoading(false);
     }
 
     let cancelled = false;
@@ -331,6 +345,7 @@ export function useProduct(id: string | undefined, customDealerId?: string | num
         if (!cancelled && single) {
           const merged = mergeProducts([single as Product]);
           if (merged.length > 0) {
+            cacheProduct(merged[0]);
             setProduct(merged[0]);
             setLoading(false);
             return;
@@ -341,6 +356,7 @@ export function useProduct(id: string | undefined, customDealerId?: string | num
         const erpData = await fetchCatalogFromErp(effectiveDealerId);
         if (!cancelled && erpData && erpData.success && Array.isArray(erpData.products)) {
           const merged = mergeProducts(erpData.products as Product[]);
+          cacheProducts(merged);
           const cleanId = decodeURIComponent(String(id || '')).trim().toLowerCase();
           const found = merged.find(p => {
             if (String(p.id).toLowerCase() === cleanId) return true;
@@ -355,6 +371,7 @@ export function useProduct(id: string | undefined, customDealerId?: string | num
             );
           });
           if (found) {
+            cacheProduct(found);
             setProduct(found);
             setLoading(false);
             return;
