@@ -153,8 +153,10 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
 
       {/* Parabolic Spline Arch (Zero straight horizontal cut lines) */}
       <svg
-        className={`hidden sm:block absolute left-1/2 -translate-x-1/2 top-full -mt-px pointer-events-none transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] overflow-visible ${
-          scrolled ? 'w-[280px] lg:w-[360px] h-[14px] lg:h-[18px]' : 'w-[340px] lg:w-[480px] h-[28px] lg:h-[42px]'
+        className={`block absolute left-1/2 -translate-x-1/2 top-full -mt-px pointer-events-none transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] overflow-visible ${
+          scrolled
+            ? 'w-[180px] sm:w-[280px] lg:w-[360px] h-[8px] sm:h-[14px] lg:h-[18px]'
+            : 'w-[240px] sm:w-[340px] lg:w-[480px] h-[13px] sm:h-[28px] lg:h-[42px]'
         }`}
         viewBox="0 0 500 44"
         preserveAspectRatio="none"
@@ -212,7 +214,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
             type="button"
             onClick={() => onNavigate('home')}
             className={`justify-self-center flex flex-col items-center justify-center cursor-pointer transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] py-1 px-2 sm:px-4 min-w-[110px] sm:min-w-[160px] ${
-              scrolled ? 'translate-y-0 sm:translate-y-1' : 'translate-y-0 sm:translate-y-2'
+              scrolled ? 'translate-y-0 sm:translate-y-1' : 'translate-y-1 sm:translate-y-2'
             }`}
             title="Synergiya Group — Главная"
             aria-label="Главная страница"
