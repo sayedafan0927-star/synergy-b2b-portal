@@ -288,6 +288,7 @@ export interface CartItem {
   price_per_sqm?: number;
   area_sqm?: number;
   quantity: number;
+  maxStock?: number;
 }
 
 export type PageId =

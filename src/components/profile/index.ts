@@ -9,3 +9,4 @@ export { ReconciliationModal } from './ReconciliationModal';
 export { RepeatOrderModal } from './RepeatOrderModal';
 export { useRepeatOrder } from './useRepeatOrder';
 export { OrderHoldCountdown } from './OrderHoldCountdown';
+export { CancelOrderModal } from './CancelOrderModal';

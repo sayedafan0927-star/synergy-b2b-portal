@@ -59,6 +59,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // 2. МУТАЦИЯ: Только по методу POST при осознанном клике пользователя
   if (req.method === 'POST') {
     try {
+      // 2.0. ПРОВЕРКА АКТУАЛЬНОСТИ БРОНИ WMS (Hold TTL 24ч)
+      if (supabase && isApprove) {
+        const { data: existingOrder } = await supabase
+          .from('orders')
+          .select('id, order_number, status, reservations_released, created_at')
+          .or(`id.eq.${orderId},order_number.eq.${orderId}`)
+          .maybeSingle();
+
+        if (existingOrder) {
+          const isAlreadyCancelled = existingOrder.status === 'cancelled' || existingOrder.reservations_released === true;
+          const createdMs = new Date(existingOrder.created_at).getTime();
+          const isHoldExpired = !isNaN(createdMs) && (Date.now() - createdMs > 24 * 3600 * 1000);
+
+          if (isAlreadyCancelled || isHoldExpired) {
+            return res.status(409).send(renderHtmlResult(
+              false,
+              `Срок действия складской брони (24ч) для заказа №${existingOrder.order_number || existingOrder.id} истёк. Резерв товаров расформирован в WMS. Одобрение невозможно — клиенту необходимо сформировать новый заказ.`
+            ));
+          }
+        }
+      }
+
       // 2.1. Обновляем статус заказа в Supabase
       const { data: dbOrders, error: dbError } = await supabase
         .from('orders')

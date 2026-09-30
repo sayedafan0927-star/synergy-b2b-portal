@@ -1385,7 +1385,44 @@ with open(os.path.join(ROOT_DIR, "src", "pages", "ProfilePage.tsx"), "r", encodi
 test_assert("useRepeatOrder" in pp_txt and len(pp_txt.splitlines()) < 480, "ProfilePage.tsx integrates useRepeatOrder and satisfies modularity line limits (<480 lines)")
 
 # ------------------------------------------------------------------------------
-# 39. Summary Report
+# 39. Verifying Stage 15 Cart Isolation, Currency Parity, MaxStock & Hold Expiry...
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{YELLOW}39. Verifying Stage 15 Cart Isolation, Currency Parity, MaxStock & Hold Expiry...{RESET}")
+
+with open(os.path.join(ROOT_DIR, "src", "contexts", "CartContext.tsx"), "r", encoding="utf-8") as fp:
+    cart_ctx_txt = fp.read()
+test_assert("synergy-cart:${effectiveUserId}" in cart_ctx_txt, "CartContext.tsx isolates cart localStorage key by effectiveUserId")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "cart", "CartCheckoutForm.tsx"), "r", encoding="utf-8") as fp:
+    ccf_txt = fp.read()
+test_assert("fmtPrice(creditLimit)" in ccf_txt and "fmtPrice(currentDebt)" in ccf_txt, "CartCheckoutForm.tsx formats credit limits and debts with fmtPrice")
+
+with open(os.path.join(ROOT_DIR, "src", "types", "index.ts"), "r", encoding="utf-8") as fp:
+    types_s15 = fp.read()
+test_assert("maxStock?:" in types_s15, "types/index.ts defines maxStock on CartItem")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "cart", "CartItemsTable.tsx"), "r", encoding="utf-8") as fp:
+    cit_txt = fp.read()
+test_assert("item.quantity >= item.maxStock" in cit_txt, "CartItemsTable.tsx disables quantity increment when reaching maxStock")
+
+with open(os.path.join(ROOT_DIR, "api", "approvals", "action.ts"), "r", encoding="utf-8") as fp:
+    action_s15 = fp.read()
+test_assert("isHoldExpired" in action_s15 and "Срок действия складской брони" in action_s15, "api/approvals/action.ts protects against WhatsApp approval of expired WMS holds")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "profile", "CancelOrderModal.tsx"), "r", encoding="utf-8") as fp:
+    com_txt = fp.read()
+test_assert("export function CancelOrderModal" in com_txt and "Portal" in com_txt, "CancelOrderModal.tsx renders in-app order cancellation modal")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "profile", "OrderDetail.tsx"), "r", encoding="utf-8") as fp:
+    od_s15 = fp.read()
+test_assert("<CancelOrderModal" in od_s15 and "confirm(" not in od_s15, "OrderDetail.tsx replaced native confirm() with CancelOrderModal")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "supplier", "CreateDefectModal.tsx"), "r", encoding="utf-8") as fp:
+    cdm_s15 = fp.read()
+test_assert("photo_urls" in cdm_s15 and "photoUrls" in cdm_s15, "CreateDefectModal.tsx supports photo attachments for supplier defects")
+
+# ------------------------------------------------------------------------------
+# 40. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

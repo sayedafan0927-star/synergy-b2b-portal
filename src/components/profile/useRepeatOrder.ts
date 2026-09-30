@@ -143,6 +143,7 @@ export function useRepeatOrder(partnerId?: string | number | null, profileId?: s
           price: currentPrice,
           price_per_sqm: foundVariant.price_per_sqm,
           area_sqm: foundVariant.area_sqm,
+          maxStock: stock,
         }, qtyToAdd);
 
         added.push({

@@ -22,6 +22,7 @@ import {
   orderTotals,
 } from './types';
 import { OrderHoldCountdown } from './OrderHoldCountdown';
+import { CancelOrderModal } from './CancelOrderModal';
 
 export interface OrderDetailProps {
   order: Order;
@@ -44,6 +45,7 @@ export function OrderDetail({
   const [sizeAsc, setSizeAsc] = useState(true);
   const [status, setStatus] = useState(order.statusRaw || 'pending');
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
   const [statusHistory, setStatusHistory] = useState<Array<{
     id: string;
     previous_status: string;
@@ -80,11 +82,13 @@ export function OrderDetail({
   const collections = useMemo(() => Array.from(new Set(order.items.map(i => i.collection))).sort(), [order]);
   const canCancel = !['cancelled', 'shipped', 'delivered'].includes(status);
 
-  const handleCancelOrder = async () => {
-    if (!confirm(`Вы действительно хотите отменить заказ №${order.orderNumber || order.id}? Бронь товаров будет расформирована в ERP.`)) {
-      return;
-    }
+  const handleCancelOrder = () => {
+    setIsCancelModalOpen(true);
+  };
+
+  const handleConfirmCancel = async () => {
     await handleStatusChange('cancelled');
+    setIsCancelModalOpen(false);
   };
 
   const handleStatusChange = async (newStatus: string) => {
@@ -340,6 +344,14 @@ export function OrderDetail({
           </div>
         </div>
       )}
+      {/* Модальное окно подтверждения отмены заказа */}
+      <CancelOrderModal
+        isOpen={isCancelModalOpen}
+        orderNumber={order.orderNumber || order.id}
+        onClose={() => setIsCancelModalOpen(false)}
+        onConfirm={handleConfirmCancel}
+        loading={updatingStatus}
+      />
     </div>
   );
 }

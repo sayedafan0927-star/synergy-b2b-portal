@@ -132,11 +132,18 @@ export function CartItemsTable({
                   <button
                     type="button"
                     onClick={() => onUpdateQuantity(item.productId, item.size, item.warehouse, item.quantity + 1)}
-                    className="flex h-8 w-8 items-center justify-center text-slate-500 transition-colors hover:text-slate-700 cursor-pointer"
+                    disabled={item.maxStock !== undefined && item.quantity >= item.maxStock}
+                    title={item.maxStock !== undefined && item.quantity >= item.maxStock ? `Максимально доступно на складе: ${item.maxStock} шт.` : 'Увеличить количество'}
+                    className="flex h-8 w-8 items-center justify-center text-slate-500 transition-colors hover:text-slate-700 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                   >
                     <Plus className="h-3.5 w-3.5" />
                   </button>
                 </div>
+                {item.maxStock !== undefined && item.quantity >= item.maxStock && (
+                  <span className="hidden sm:inline-block text-[10px] text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded font-medium">
+                    Максимум на складе ({item.maxStock} шт)
+                  </span>
+                )}
                 <span className="w-24 text-right text-sm font-bold text-slate-900">{fmtPrice(lineTotal)}</span>
                 <button
                   type="button"

@@ -103,6 +103,7 @@ export default function ProductPage({
           price,
           price_per_sqm: pricePerSqm,
           area_sqm: variant.area_sqm,
+          maxStock: wh.stock,
         },
         qty,
       );

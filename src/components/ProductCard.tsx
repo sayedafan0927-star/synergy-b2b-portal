@@ -150,6 +150,7 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
       price,
       price_per_sqm: itemSqmPrice,
       area_sqm: variant.area_sqm,
+      maxStock: stock,
     }, quantity);
     setAddedSku(variant.sku);
     window.setTimeout(() => setAddedSku(current => current === variant.sku ? null : current), 1400);
