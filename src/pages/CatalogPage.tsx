@@ -25,6 +25,7 @@ import {
   DecklePaperWrapper,
   CatalogPetroglyphHero,
   CatalogGridPetroglyphs,
+  CatalogMobilePanorama,
   getTotalStock,
   sizeArea,
   type SortOption,
@@ -312,6 +313,7 @@ export default function CatalogPage({
   };
 
   const visibleProducts = useMemo(() => filteredProducts.slice(0, visibleCount), [filteredProducts, visibleCount]);
+  const isDefaultPanorama = selectedCategory === 'all' && !searchQuery.trim() && selectedCollections.size === 0 && selectedCountries.size === 0 && selectedManufacturers.size === 0 && selectedWarehouses.size === 0 && selectedSizes.size === 0;
   const hasMore = filteredProducts.length > visibleCount;
 
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -391,7 +393,7 @@ export default function CatalogPage({
           </div>
         )}
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           {(['all', 'Ковры', 'Дорожки'] as const).map((cat) => {
             const count = cat === 'all'
               ? baseProducts.length
@@ -402,7 +404,7 @@ export default function CatalogPage({
                 key={cat}
                 type="button"
                 onClick={() => setSelectedCategory(cat)}
-                className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                className={`px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer shrink-0 whitespace-nowrap ${
                   selectedCategory === cat
                     ? 'bg-brand-700 text-white shadow-xs font-bold'
                     : 'bg-white border border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50'
@@ -559,11 +561,16 @@ export default function CatalogPage({
         {filteredProducts.length > 0 ? (
           viewMode === 'grid' ? (
             <>
+              {isDefaultPanorama && (
+                <CatalogMobilePanorama products={visibleProducts} onNavigate={handleProductNavigate} />
+              )}
               <div className="relative">
                 <CatalogGridPetroglyphs />
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 gap-4 lg:gap-6">
-                  {visibleProducts.map(p => (
-                    <ProductCard key={p.id} product={p} onNavigate={handleProductNavigate} />
+                  {visibleProducts.map((p, idx) => (
+                    <div key={p.id} className={isDefaultPanorama && idx < 5 ? 'hidden sm:block' : ''}>
+                      <ProductCard product={p} onNavigate={handleProductNavigate} />
+                    </div>
                   ))}
                 </div>
               </div>

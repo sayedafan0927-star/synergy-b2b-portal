@@ -31,44 +31,43 @@ export default function CatalogPetroglyphHero({
         />
       </div>
 
-      {/* Top Header Row: Title on left with thematic subtitle (hidden on mobile for cleanliness) */}
-      <div className="relative mb-2 sm:mb-4">
+      {/* Mobile Top Header: Title on left, Golden Steppe Horse on right on a single harmonious row */}
+      <div className="sm:hidden flex items-center justify-between gap-3 mb-2.5">
+        <h1 className="text-2xl font-serif font-bold text-slate-900 tracking-tight">
+          {title}
+        </h1>
+        <div className="shrink-0 pointer-events-none opacity-95">
+          <img
+            src="/petroglyph-horse.png"
+            alt="Golden Steppe Horse"
+            className="h-10 w-auto object-contain drop-shadow-[0_2px_8px_rgba(197,155,72,0.3)]"
+            loading="lazy"
+          />
+        </div>
+      </div>
+
+      {/* Desktop Top Header Row: Title on left with thematic subtitle */}
+      <div className="hidden sm:block relative mb-2 sm:mb-4">
         <h1 className="text-2xl sm:text-3xl lg:text-4xl font-serif font-bold text-slate-900 tracking-tight">
           {title}
         </h1>
-        <p className="hidden sm:block mt-1 text-xs sm:text-sm text-slate-500 font-sans max-w-xl">
+        <p className="mt-1 text-xs sm:text-sm text-slate-500 font-sans max-w-xl">
           Широкий ассортимент ковров и дорожек оптом от ведущих производителей
         </p>
       </div>
 
-      {/* Mobile-only Spacious Heritage Strip: Golden Horse on left, Petroglyphs on right with generous steppe breathing space */}
-      <div className="sm:hidden flex items-center justify-between w-full pointer-events-none select-none my-2.5 px-0.5">
-        <img
-          src="/petroglyph-horse.png"
-          alt="Golden Steppe Horse"
-          className="h-10 w-auto object-contain drop-shadow-[0_2px_8px_rgba(197,155,72,0.3)]"
-          loading="lazy"
-        />
-        <img
-          src="/petroglyphs-banner.png"
-          alt="Ancient Petroglyphs"
-          className="h-9 w-auto object-contain opacity-85"
-          loading="lazy"
-        />
-      </div>
-
-      {/* Category Pills & Dark Sun Tamga in natural flex flow */}
+      {/* Category Pills & Dark Sun Tamga in non-breaking single horizontal row */}
       {children && (
-        <div className="relative z-10 flex flex-wrap items-center gap-3 sm:gap-4 mt-2 sm:mt-5">
-          <div className="flex items-center gap-2 flex-wrap">
+        <div className="relative z-10 flex items-center gap-2 sm:gap-4 mt-1 sm:mt-5 overflow-x-auto no-scrollbar pb-1">
+          <div className="flex items-center gap-2 shrink-0">
             {children}
           </div>
-          {/* Dark Sun Tamga placed directly beside category pills */}
+          {/* Dark Sun Tamga placed directly beside category pills, never wrapping */}
           <div className="flex items-center shrink-0 opacity-80 pointer-events-none ml-1">
             <img
               src="/petroglyph-sun-dark.png"
               alt="Солярная тамга"
-              className="h-10 w-10 sm:h-12 sm:w-12 object-contain"
+              className="h-9 w-9 sm:h-12 sm:w-12 object-contain"
               loading="lazy"
             />
           </div>
