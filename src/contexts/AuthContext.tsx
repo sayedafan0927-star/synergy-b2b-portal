@@ -13,6 +13,7 @@ import {
   getStoredAuthSession,
   saveAuthSession,
   clearAuthSession,
+  renewSessionIfActive,
 } from './auth/sessionStore';
 import {
   getStoredImpersonation,
@@ -135,6 +136,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => subscription.unsubscribe();
   }, [fetchProfile]);
+
+  // Тихое продление сессии при активной работе дилера (Sliding Session Renewal)
+  useEffect(() => {
+    if (!user || !profile || typeof window === 'undefined') return;
+
+    let lastRenew = Date.now();
+    const handleActivity = () => {
+      const now = Date.now();
+      if (now - lastRenew > 15 * 60 * 1000) {
+        lastRenew = now;
+        renewSessionIfActive(user, profile);
+      }
+    };
+
+    window.addEventListener('pointerdown', handleActivity, { passive: true });
+    window.addEventListener('keydown', handleActivity, { passive: true });
+
+    return () => {
+      window.removeEventListener('pointerdown', handleActivity);
+      window.removeEventListener('keydown', handleActivity);
+    };
+  }, [user, profile]);
 
   const signIn = useCallback(async (email: string, password: string): Promise<string | null> => {
     try {

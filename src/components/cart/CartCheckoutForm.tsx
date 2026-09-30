@@ -19,6 +19,7 @@ interface CartCheckoutFormProps {
   submitting: boolean;
   submitError: string | null;
   stockConflictDetails: { available_qty?: number; requested_qty?: number; sku?: string } | null;
+  hasDepletedItems?: boolean;
   onSubmit: () => void;
   hasMultipleWarehouses: boolean;
   warehousesInCart: Map<string, { count: number; totalAmount: number }>;
@@ -47,6 +48,7 @@ export function CartCheckoutForm({
   submitting,
   submitError,
   stockConflictDetails,
+  hasDepletedItems,
   onSubmit,
   hasMultipleWarehouses,
   warehousesInCart,
@@ -197,14 +199,20 @@ export function CartCheckoutForm({
       <button
         type="button"
         onClick={onSubmit}
-        disabled={submitting}
-        className="btn-primary w-full h-12 text-sm font-bold flex items-center justify-center gap-2 cursor-pointer shadow-md"
+        disabled={submitting || hasDepletedItems}
+        className={`w-full h-12 text-sm font-bold flex items-center justify-center gap-2 rounded-xl transition-all shadow-md ${
+          hasDepletedItems
+            ? 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-80'
+            : 'btn-primary cursor-pointer'
+        }`}
       >
         {submitting ? (
           <>
             <Loader2 className="h-4 w-4 animate-spin" />
             <span>Оформление заказа...</span>
           </>
+        ) : hasDepletedItems ? (
+          <span>Удалите закончившиеся товары</span>
         ) : (
           <>
             <Send className="h-4 w-4" />

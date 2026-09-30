@@ -49,6 +49,7 @@ const ProfilePage = lazyWithRetry(() => import('@/pages/ProfilePage'));
 
 import { useNetworkStatus } from '@/registerServiceWorker';
 import { initOfflineQueueAutoSync } from '@/lib/offlineOrderQueue';
+import OfflineBanner from '@/components/common/OfflineBanner';
 import type { PageId } from '@/types';
 
 function PageLoadingFallback({ page }: { page?: PageId }) {
@@ -340,19 +341,11 @@ export default function App() {
           <CartProvider>
             <ToastProvider>
               <RealtimeNotificationsWatcher />
+              <OfflineBanner />
               {isPending && (
                 <div className="fixed top-0 left-0 right-0 z-[99999] h-0.5 bg-gradient-to-r from-brand-600 via-amber-500 to-brand-700 animate-pulse pointer-events-none" />
               )}
               {!preloaderDone && <Preloader onFinished={handlePreloaderFinished} />}
-              {!isOnline && (
-                <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 z-[9990] flex items-center gap-2.5 rounded-xl border border-amber-300 bg-amber-500 text-white px-4 py-2.5 shadow-xl text-xs font-semibold backdrop-blur-md">
-                  <span className="relative flex h-2.5 w-2.5 shrink-0">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
-                  </span>
-                  <span>Офлайн-режим: данные каталога загружены из локального кэша</span>
-                </div>
-              )}
               <ErrorBoundary>
                 <MainLayout page={page} navigate={navigate} showFooter={showFooter}>
                   <Suspense fallback={<PageLoadingFallback page={page} />}>

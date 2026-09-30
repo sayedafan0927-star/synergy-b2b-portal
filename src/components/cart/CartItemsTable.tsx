@@ -90,8 +90,15 @@ export function CartItemsTable({
           const sqm = calcSqm(item.size, item.quantity);
           const lineTotal = item.price * item.quantity;
 
+          const isDepleted = item.maxStock === 0;
+
           return (
-            <div key={key} className="card flex flex-col gap-4 p-4 sm:flex-row sm:items-center">
+            <div
+              key={key}
+              className={`card flex flex-col gap-4 p-4 sm:flex-row sm:items-center transition-colors ${
+                isDepleted ? 'bg-rose-50/50 border-rose-200 ring-1 ring-rose-300' : ''
+              }`}
+            >
               <ProductImage
                 src={item.image}
                 alt={item.productName}
@@ -101,7 +108,14 @@ export function CartItemsTable({
                 className="h-16 w-16 shrink-0 rounded-lg object-contain bg-slate-50 p-1"
               />
               <div className="flex-1 min-w-0 space-y-1">
-                <h3 className="text-sm font-semibold text-slate-900 truncate">{item.productName}</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-slate-900 truncate">{item.productName}</h3>
+                  {isDepleted && (
+                    <span className="shrink-0 px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 text-[10px] font-bold border border-rose-200">
+                      Закончился на складе
+                    </span>
+                  )}
+                </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="badge">{item.size}</span>
                   <span className="text-xs text-slate-400">{item.warehouse}</span>
@@ -123,7 +137,7 @@ export function CartItemsTable({
                   <button
                     type="button"
                     onClick={() => onUpdateQuantity(item.productId, item.size, item.warehouse, item.quantity - 1)}
-                    disabled={item.quantity <= 1}
+                    disabled={item.quantity <= 1 || isDepleted}
                     className="flex h-8 w-8 items-center justify-center text-slate-500 transition-colors hover:text-slate-700 disabled:opacity-30 cursor-pointer"
                   >
                     <Minus className="h-3.5 w-3.5" />
@@ -132,14 +146,20 @@ export function CartItemsTable({
                   <button
                     type="button"
                     onClick={() => onUpdateQuantity(item.productId, item.size, item.warehouse, item.quantity + 1)}
-                    disabled={item.maxStock !== undefined && item.quantity >= item.maxStock}
-                    title={item.maxStock !== undefined && item.quantity >= item.maxStock ? `Максимально доступно на складе: ${item.maxStock} шт.` : 'Увеличить количество'}
+                    disabled={isDepleted || (item.maxStock !== undefined && item.quantity >= item.maxStock)}
+                    title={
+                      isDepleted
+                        ? 'Товар закончился на складе'
+                        : item.maxStock !== undefined && item.quantity >= item.maxStock
+                        ? `Максимально доступно на складе: ${item.maxStock} шт.`
+                        : 'Увеличить количество'
+                    }
                     className="flex h-8 w-8 items-center justify-center text-slate-500 transition-colors hover:text-slate-700 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                   >
                     <Plus className="h-3.5 w-3.5" />
                   </button>
                 </div>
-                {item.maxStock !== undefined && item.quantity >= item.maxStock && (
+                {item.maxStock !== undefined && item.quantity >= item.maxStock && !isDepleted && (
                   <span className="hidden sm:inline-block text-[10px] text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded font-medium">
                     Максимум на складе ({item.maxStock} шт)
                   </span>
@@ -148,6 +168,7 @@ export function CartItemsTable({
                 <button
                   type="button"
                   onClick={() => onRemoveItem(item.productId, item.size, item.warehouse)}
+                  title="Удалить из корзины"
                   className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500 cursor-pointer"
                 >
                   <Trash2 className="h-4 w-4" />

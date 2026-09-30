@@ -150,9 +150,21 @@ export function getStoredAuthSession(): { user: User; profile: Profile; token?: 
 
 export function saveAuthSession(user: unknown, profile: Profile, token?: string): void {
   if (typeof window === 'undefined') return;
-  const payload = JSON.stringify({ user, profile, token });
+  const payload = JSON.stringify({ user, profile, token, savedAt: Date.now() });
   sessionStorage.setItem(AUTH_SESSION_KEY, payload);
   sessionStorage.setItem(DEMO_AUTH_KEY, payload);
+}
+
+export function renewSessionIfActive(user: unknown, profile: Profile): void {
+  if (typeof window === 'undefined' || !user || !profile) return;
+  const stored = getStoredAuthSession();
+  if (!stored) return;
+  const savedAt = (stored as any).savedAt || 0;
+  const now = Date.now();
+  // Renew if session was issued more than 4 hours ago
+  if (now - savedAt > 4 * 60 * 60 * 1000) {
+    provisionSessionToken(user, profile).catch(() => {});
+  }
 }
 
 export function clearAuthSession(): void {

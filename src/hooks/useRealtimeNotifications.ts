@@ -85,6 +85,34 @@ export function useRealtimeNotifications() {
       supabase.removeChannel(channel);
     };
   }, [user, profile, toast]);
+
+  // 3. Уведомление о выкупе товара из корзины другим клиентом
+  useEffect(() => {
+    const handleCartDepleted = (e: any) => {
+      const detail = e.detail;
+      if (!detail || !detail.item) return;
+
+      const title = detail.item.productName || detail.item.sku || 'Ковровое изделие';
+      const sizeStr = detail.item.size ? ` (${detail.item.size})` : '';
+
+      if (detail.newStock <= 0) {
+        toast.error(
+          `Товар "${title}"${sizeStr} закончился на складе (выкуплен другим покупателем).`,
+          'Товар закончился'
+        );
+      } else if (detail.newStock < detail.item.quantity) {
+        toast.warning(
+          `Доступный остаток для "${title}"${sizeStr} уменьшился до ${detail.newStock} шт.`,
+          'Остаток изменился'
+        );
+      }
+    };
+
+    window.addEventListener('synergy:cart-item-stock-depleted', handleCartDepleted);
+    return () => {
+      window.removeEventListener('synergy:cart-item-stock-depleted', handleCartDepleted);
+    };
+  }, [toast]);
 }
 
 /**

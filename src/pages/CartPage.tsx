@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { ShoppingCart, ArrowLeft, PackageOpen } from 'lucide-react';
+import { ShoppingCart, ArrowLeft, PackageOpen, AlertCircle } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import type { PageId } from '@/types';
@@ -88,6 +88,17 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
       toastInfo(`Цены и доступные остатки для ${count} поз. в корзине актуализированы по прайсу 1С`, 'Синхронизация цен');
     }
   }, [products, items, syncItemPrices, getVariantPrice, getPricePerSqm, toastInfo]);
+
+  // Сброс флага синхронизации при получении фоновых обновлений остатков
+  useEffect(() => {
+    const handler = () => {
+      syncedRef.current = false;
+    };
+    window.addEventListener('synergy:reload-catalog', handler);
+    return () => window.removeEventListener('synergy:reload-catalog', handler);
+  }, []);
+
+  const hasDepletedItems = useMemo(() => items.some(it => it.maxStock === 0), [items]);
 
   // Проверка финансовых блокировок и условий
   const isBlocked = debtReport?.client?.is_blocked_for_shipment === true;
@@ -211,6 +222,13 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
       })),
     };
 
+    if (hasDepletedItems) {
+      setSubmitError('В корзине есть закончившиеся на складе позиции. Пожалуйста, удалите их для продолжения.');
+      setSubmitting(false);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       const queued = enqueueOfflineOrder(orderPayload);
       clearCart();
@@ -307,6 +325,18 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
           </div>
         </div>
 
+        {hasDepletedItems && (
+          <div className="mb-6 flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-800 animate-in fade-in">
+            <AlertCircle className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold text-rose-900">Внимание: некоторые товары закончились на складе</p>
+              <p className="mt-0.5 text-rose-700">
+                Один или несколько товаров в вашей корзине были выкуплены другими клиентами и сейчас отсутствуют на складе. Удалите закончившиеся позиции, чтобы продолжить оформление заказа.
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           {/* Левая колонка: товары и размеры */}
           <div className="lg:col-span-7 xl:col-span-8">
@@ -341,6 +371,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
               submitting={submitting}
               submitError={submitError}
               stockConflictDetails={stockConflictDetails}
+              hasDepletedItems={hasDepletedItems}
               onSubmit={handleSubmit}
               hasMultipleWarehouses={hasMultipleWarehouses}
               warehousesInCart={warehousesInCart}

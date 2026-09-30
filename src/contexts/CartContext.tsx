@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, type React
 import type { CartItem } from '@/types';
 import { calcSqm } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabase';
 
 interface CartContextValue {
   items: CartItem[];
@@ -54,6 +55,71 @@ export function CartProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setItems(loadCart(storageKey));
   }, [storageKey]);
+
+  // Межвкладочная синхронизация корзины в реальном времени (Multi-Tab Sync)
+  useEffect(() => {
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === storageKey && e.newValue) {
+        try {
+          const remoteItems = JSON.parse(e.newValue);
+          if (Array.isArray(remoteItems)) {
+            setItems(remoteItems);
+          }
+        } catch {
+          // safe fallback
+        }
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, [storageKey]);
+
+  // Мониторинг выкупа позиций из корзины другими дилерами через Realtime CDC
+  useEffect(() => {
+    const channel = supabase
+      .channel('portal_cart_stock_watcher')
+      .on('broadcast', { event: 'stock_changed' }, (payload: any) => {
+        const rawItems = payload?.payload?.items || payload?.items;
+        if (!Array.isArray(rawItems) || rawItems.length === 0) return;
+
+        setItems(prevItems => {
+          let updated = false;
+          const next = prevItems.map(cartItem => {
+            const match = rawItems.find(
+              (it: any) =>
+                (it.sku && String(it.sku).toUpperCase() === String(cartItem.sku).toUpperCase()) ||
+                (it.article && String(it.article).toUpperCase() === String(cartItem.sku).toUpperCase())
+            );
+            if (match) {
+              const newFree = Math.max(0, Number(match.free_stock ?? match.stock ?? 0));
+              if (cartItem.maxStock !== newFree) {
+                updated = true;
+                window.dispatchEvent(
+                  new CustomEvent('synergy:cart-item-stock-depleted', {
+                    detail: {
+                      item: cartItem,
+                      previousStock: cartItem.maxStock,
+                      newStock: newFree,
+                    },
+                  })
+                );
+                return {
+                  ...cartItem,
+                  maxStock: newFree,
+                };
+              }
+            }
+            return cartItem;
+          });
+          return updated ? next : prevItems;
+        });
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   useEffect(() => {
     saveCart(storageKey, items);
