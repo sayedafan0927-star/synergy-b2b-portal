@@ -282,18 +282,20 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
 
   if (loading) {
     return (
-      <div className="flex min-h-[50vh] items-center justify-center">
+      <section className="min-h-screen bg-slate-50 pt-20 pb-24 lg:pb-8 flex items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand-700 border-t-transparent" />
-      </div>
+      </section>
     );
   }
 
   if (!user || !profile) {
     return (
-      <div className="mx-auto max-w-md py-16 text-center">
-        <h2 className="text-xl font-bold text-slate-900">Необходима авторизация</h2>
-        <p className="mt-2 text-sm text-slate-500">Войдите в аккаунт для доступа к личному кабинету</p>
-      </div>
+      <section className="min-h-screen bg-slate-50 pt-20 pb-24 lg:pb-8 flex items-center justify-center">
+        <div className="mx-auto max-w-md px-4 py-16 text-center">
+          <h2 className="text-xl font-bold text-slate-900">Необходима авторизация</h2>
+          <p className="mt-2 text-sm text-slate-500">Войдите в аккаунт для доступа к личному кабинету</p>
+        </div>
+      </section>
     );
   }
 
@@ -307,21 +309,22 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
   ];
 
   return (
-    <div className="space-y-6">
-      {/* Page header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-5">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Личный кабинет</h1>
-          <p className="text-sm text-slate-500">Управление заказами, взаиморасчетами и настройками профиля</p>
+    <section className="min-h-screen bg-slate-50 pt-20 pb-24 lg:pb-8">
+      <div className="container-w space-y-6">
+        {/* Page header */}
+        <div className="flex items-center justify-between gap-3 border-b border-slate-200/80 pb-4">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900">Личный кабинет</h1>
+            <p className="text-xs sm:text-sm text-slate-500">Управление заказами, взаиморасчетами и профилем</p>
+          </div>
+          <button
+            onClick={handleSignOut}
+            className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium text-red-600 hover:bg-red-50 transition-colors cursor-pointer shrink-0"
+          >
+            <LogOut className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            Выйти
+          </button>
         </div>
-        <button
-          onClick={handleSignOut}
-          className="flex items-center gap-2 rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
-        >
-          <LogOut className="h-4 w-4" />
-          Выйти
-        </button>
-      </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
         {/* Sidebar */}
@@ -493,25 +496,23 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
           )}
         </div>
 
-        {/* Mobile tab bar */}
-        <div className="lg:hidden">
-          <div className="grid grid-cols-2 gap-2">
+        {/* Mobile tab bar — clean horizontal scrollable pills */}
+        <div className="lg:hidden -mt-2">
+          <div className="-mx-4 px-4 overflow-x-auto no-scrollbar flex items-center gap-2 pb-1">
             {tabs.filter(t => t.show).map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 onClick={() => { setActiveTab(id); setSelectedOrder(null); }}
-                className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors cursor-pointer ${
-                  activeTab === id ? 'bg-brand-700 text-white' : 'bg-white border border-slate-200 text-slate-600'
+                className={`flex items-center gap-1.5 rounded-full px-3.5 py-2 text-xs font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
+                  activeTab === id
+                    ? 'bg-brand-700 text-white shadow-xs'
+                    : 'bg-white border border-slate-200 text-slate-700 hover:border-slate-300'
                 }`}
               >
-                <Icon className="h-4 w-4" />
+                <Icon className="h-3.5 w-3.5" />
                 {label}
               </button>
             ))}
-            <button onClick={handleSignOut} className="flex items-center gap-2 rounded-lg border border-red-200 px-4 py-2.5 text-sm font-medium text-red-500 transition-colors cursor-pointer">
-              <LogOut className="h-4 w-4" />
-              Выйти
-            </button>
           </div>
         </div>
 
@@ -571,6 +572,7 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
         loading={reconciliationLoading}
         data={reconciliationData}
       />
-    </div>
+      </div>
+    </section>
   );
 }
