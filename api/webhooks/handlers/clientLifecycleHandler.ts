@@ -8,7 +8,7 @@ export async function handleClientDeactivated(
   eventId: string | undefined,
   broadcastLiveUpdate: (event: string, payload: any) => Promise<void>,
 ) {
-  const counterpartyId = payload.counterparty_id || payload.client_id;
+  const counterpartyId = payload.counterparty_id || payload.client_id || payload.partner_id;
   if (counterpartyId && supabaseServer) {
     console.log(`[Webhook ERP: client_deactivated] Revoking access and blocking shipments for client ${counterpartyId}`);
     try {
@@ -70,16 +70,28 @@ export async function handleClientSynced(
   eventId: string | undefined,
   broadcastLiveUpdate: (event: string, payload: any) => Promise<void>,
 ) {
-  const counterpartyId = payload.counterparty_id || payload.client_id;
+  const counterpartyId = payload.counterparty_id || payload.client_id || payload.partner_id;
   if (counterpartyId && supabaseServer) {
     try {
+      const updateData: Record<string, any> = {
+        is_blocked_for_shipment: false,
+        impersonation_enabled: true,
+        updated_at: new Date().toISOString(),
+      };
+      if (payload.name) {
+        updateData.full_name = payload.name;
+        updateData.company_name = payload.name;
+      }
+      if (payload.phone) updateData.phone = payload.phone;
+      if (payload.city !== undefined) updateData.city = payload.city;
+      if (payload.address !== undefined) updateData.address = payload.address;
+      if (payload.bin !== undefined) updateData.bin_iin = payload.bin;
+      if (payload.credit_limit_usd !== undefined) updateData.credit_limit_usd = Number(payload.credit_limit_usd) || 0;
+      if (payload.payment_delay_days !== undefined) updateData.payment_delay_days = Number(payload.payment_delay_days) || 0;
+
       await supabaseServer
         .from('profiles')
-        .update({
-          is_blocked_for_shipment: false,
-          impersonation_enabled: true,
-          updated_at: new Date().toISOString(),
-        })
+        .update(updateData)
         .eq('partner_id', String(counterpartyId));
 
       // Удаляем из черного списка Redis при активации

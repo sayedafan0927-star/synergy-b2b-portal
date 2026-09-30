@@ -47,9 +47,10 @@ export default function CatalogPage({
   const [reservationsModalOpen, setReservationsModalOpen] = useState(false);
   const canViewStockSummary = useMemo(() => {
     if (isEffectiveAdmin) return true;
+    if (displaySettings.show_reserve) return true;
     const key = profile?.partner_id || profile?.id;
     return Boolean(key && getClientWarehouseSettings(key)?.showStockSummary);
-  }, [isEffectiveAdmin, profile?.partner_id, profile?.id]);
+  }, [isEffectiveAdmin, displaySettings.show_reserve, profile?.partner_id, profile?.id]);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('popular');
   const [stockWarehouse, setStockWarehouse] = useState('');

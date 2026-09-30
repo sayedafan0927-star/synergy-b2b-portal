@@ -188,6 +188,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const queryParams = new URLSearchParams({
             action: 'client_debt',
             counterparty_id: partnerId,
+            partner_id: partnerId,
           });
           if (SERVER_ERP_KEY) {
             queryParams.set('portal_key', SERVER_ERP_KEY);

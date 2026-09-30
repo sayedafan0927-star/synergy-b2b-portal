@@ -76,7 +76,7 @@ export async function handleCreateLead(
     });
 
     // 3. Отправка оперативного WhatsApp-уведомления менеджеру
-    const managerPhone = process.env.ADMIN_WHATSAPP_PHONE || '';
+    const managerPhone = process.env.ADMIN_WHATSAPP_PHONE || process.env.MANAGER_WHATSAPP_PHONE || process.env.WHATSAPP_MANAGER_PHONE || '';
     const notificationText =
       `📥 *НОВАЯ ЗАЯВКА С B2B ПОРТАЛА*\n\n` +
       `👤 *Имя:* ${name}\n` +

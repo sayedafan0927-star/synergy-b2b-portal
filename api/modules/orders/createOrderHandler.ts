@@ -169,6 +169,11 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
     }
   }
 
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const safeContractId = typeof rawPayload.contract_id === 'string' && UUID_REGEX.test(rawPayload.contract_id.trim())
+    ? rawPayload.contract_id.trim()
+    : null;
+
   let atomicExecuted = false;
   try {
     const orderMasterPayload = {
@@ -182,7 +187,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
       idempotency_key: incomingIdempotencyKey || null,
       currency: rawPayload.currency || 'USD',
       applied_exchange_rate: authoritativeRate,
-      contract_id: rawPayload.contract_id || null,
+      contract_id: safeContractId,
     };
 
     const orderItemsPayload = pricingResult.items.map(it => ({
@@ -312,7 +317,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
           idempotency_key: incomingIdempotencyKey || null,
           currency: rawPayload.currency || 'USD',
           applied_exchange_rate: authoritativeRate,
-          contract_id: rawPayload.contract_id || null,
+          contract_id: safeContractId,
         })
         .select('id, order_number')
         .maybeSingle();
@@ -335,7 +340,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
           callerAuth.userId,
           incomingIdempotencyKey,
           rawPayload.currency || 'USD',
-          rawPayload.contract_id || null,
+          safeContractId,
           rawPayload.comment,
           authoritativeRate,
         );
@@ -355,6 +360,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
         size: String(it.size || 'Стандарт'),
         sku: String(it.sku || ''),
         warehouse: String(it.warehouse || 'Основной Склад Астана'),
+        warehouse_id: resolveWarehouseId(it.warehouse_id, it.warehouse),
         price: Number(it.price) || 0,
         quantity: Number(it.quantity) || 1,
       }));

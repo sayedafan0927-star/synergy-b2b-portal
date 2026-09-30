@@ -785,9 +785,12 @@ BEGIN
     p_order->>'idempotency_key',
     COALESCE(p_order->>'currency', 'USD'),
     v_exchange_rate,
-    CASE WHEN p_order->>'contract_id' IS NOT NULL AND p_order->>'contract_id' <> '' 
-         THEN (p_order->>'contract_id')::uuid 
-         ELSE NULL END
+    CASE 
+      WHEN p_order->>'contract_id' IS NOT NULL 
+           AND p_order->>'contract_id' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      THEN (p_order->>'contract_id')::uuid 
+      ELSE NULL 
+    END
   )
   RETURNING id, order_number INTO v_order_id, v_order_number;
 
@@ -799,6 +802,7 @@ BEGIN
     size,
     sku,
     warehouse,
+    warehouse_id,
     price,
     quantity
   )
@@ -809,6 +813,7 @@ BEGIN
     COALESCE(elem->>'size', 'Стандарт'),
     COALESCE(elem->>'sku', ''),
     COALESCE(elem->>'warehouse', 'Основной Склад Астана'),
+    COALESCE((elem->>'warehouse_id')::integer, 81),
     COALESCE((elem->>'price')::numeric, 0),
     COALESCE((elem->>'quantity')::integer, 1)
   FROM jsonb_array_elements(p_items) AS elem;
@@ -847,9 +852,12 @@ BEGIN
         v_split_elem->>'idempotency_key',
         COALESCE(p_order->>'currency', 'USD'),
         v_exchange_rate,
-        CASE WHEN p_order->>'contract_id' IS NOT NULL AND p_order->>'contract_id' <> '' 
-             THEN (p_order->>'contract_id')::uuid 
-             ELSE NULL END,
+        CASE 
+          WHEN p_order->>'contract_id' IS NOT NULL 
+               AND p_order->>'contract_id' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          THEN (p_order->>'contract_id')::uuid 
+          ELSE NULL 
+        END,
         v_order_id
       )
       RETURNING id INTO v_sub_order_id;
@@ -862,6 +870,7 @@ BEGIN
           size,
           sku,
           warehouse,
+          warehouse_id,
           price,
           quantity
         )
@@ -872,6 +881,7 @@ BEGIN
           COALESCE(s_elem->>'size', 'Стандарт'),
           COALESCE(s_elem->>'sku', ''),
           COALESCE(v_split_elem->>'warehouse', 'Основной Склад Астана'),
+          COALESCE((s_elem->>'warehouse_id')::integer, (v_split_elem->>'warehouse_id')::integer, 81),
           COALESCE((s_elem->>'price')::numeric, 0),
           COALESCE((s_elem->>'quantity')::integer, 1)
         FROM jsonb_array_elements(v_split_elem->'items') AS s_elem;
@@ -910,15 +920,25 @@ AS $$
 DECLARE
   v_item record;
   v_count integer := 0;
+  v_is_already_released boolean;
 BEGIN
+  -- Проверяем, не были ли резервы уже высвобождены ранее
+  SELECT COALESCE(reservations_released, false)
+  INTO v_is_already_released
+  FROM orders
+  WHERE id = p_order_id;
+
+  IF v_is_already_released IS TRUE THEN
+    RETURN 0;
+  END IF;
+
   FOR v_item IN
     SELECT 
       oi.sku,
       SUM(oi.quantity)::integer AS qty,
       COALESCE(oi.warehouse_id, 81) AS warehouse_id
     FROM order_items oi
-    JOIN orders o ON o.id = oi.order_id
-    WHERE (o.id = p_order_id OR o.parent_order_id = p_order_id)
+    WHERE oi.order_id = p_order_id
       AND oi.sku IS NOT NULL AND oi.sku <> ''
       AND oi.quantity > 0
     GROUP BY oi.sku, COALESCE(oi.warehouse_id, 81)
@@ -933,6 +953,12 @@ BEGIN
 
     v_count := v_count + 1;
   END LOOP;
+
+  -- Помечаем и сам заказ, и любые дочерние подзаказы мультисклада как освобожденные
+  UPDATE orders
+  SET reservations_released = true,
+      updated_at = now()
+  WHERE id = p_order_id OR parent_order_id = p_order_id;
 
   RETURN v_count;
 END;
@@ -959,6 +985,7 @@ BEGIN
     SELECT id
     FROM orders
     WHERE status IN ('pending', 'failed_dlq')
+      AND parent_order_id IS NULL
       AND (
         (hold_expires_at IS NOT NULL AND hold_expires_at <= now())
         OR (hold_expires_at IS NULL AND created_at <= now() - INTERVAL '24 hours')
@@ -968,6 +995,14 @@ BEGIN
     FOR UPDATE SKIP LOCKED
   LOOP
     PERFORM release_order_reservations(r.id);
+
+    -- Каскадно отменяем дочерние подзаказы мультисклада
+    UPDATE orders
+    SET 
+      status = 'cancelled',
+      notes = TRIM(COALESCE(notes, '') || ' [Auto-cancelled: Master reservation hold TTL expired (24h)]'),
+      updated_at = now()
+    WHERE parent_order_id = r.id;
 
     RETURN QUERY
     UPDATE orders o

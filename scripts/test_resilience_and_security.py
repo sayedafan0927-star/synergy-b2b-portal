@@ -1077,7 +1077,41 @@ with open(os.path.join(ROOT_DIR, "api", "modules", "erp", "genericProxyHandler.t
 test_assert("action === 'get_client_debt'" in gen_code_s6 and "handleDebtFallbackOnFailure" in gen_code_s6, "genericProxyHandler.ts wires handleDebtFallbackOnFailure on connection drop")
 
 # ------------------------------------------------------------------------------
-# 31. Summary Report
+# 31. Verifying Stage 7 Deep Inventory, Schema & Security Hardening...
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{YELLOW}31. Verifying Stage 7 Deep Inventory, Schema & Security Hardening...{RESET}")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "createOrderHandler.ts"), "r", encoding="utf-8") as fp:
+    coh_s7 = fp.read()
+test_assert("warehouse_id: resolveWarehouseId(it.warehouse_id, it.warehouse)" in coh_s7, "createOrderHandler.ts persists warehouse_id on master order items in sequential fallback")
+test_assert("safeContractId" in coh_s7 and "UUID_REGEX" in coh_s7, "createOrderHandler.ts sanitizes non-UUID contract_id preventing PostgREST crash")
+
+with open(os.path.join(ROOT_DIR, "supabase", "migrations", "DEPLOY_ALL_ENTERPRISE_MIGRATIONS.sql"), "r", encoding="utf-8") as fp:
+    deploy_s7 = fp.read()
+test_assert("COALESCE((elem->>'warehouse_id')::integer, 81)" in deploy_s7, "create_order_atomic inserts warehouse_id into order_items")
+test_assert("reservations_released boolean NOT NULL DEFAULT false" in deploy_s7, "orders table includes reservations_released column")
+test_assert("v_is_already_released boolean" in deploy_s7 and "WHERE oi.order_id = p_order_id" in deploy_s7, "release_order_reservations enforces idempotency and single-count invariant")
+test_assert("parent_order_id = r.id" in deploy_s7 and "cancel_expired_order_holds" in deploy_s7, "cancel_expired_order_holds cascades cancellation to child suborders")
+
+with open(os.path.join(ROOT_DIR, "api", "webhooks", "handlers", "clientLifecycleHandler.ts"), "r", encoding="utf-8") as fp:
+    clh_s7 = fp.read()
+test_assert("payload.partner_id" in clh_s7, "clientLifecycleHandler.ts supports partner_id payload attribute")
+test_assert("updateData.credit_limit_usd" in clh_s7 and "updateData.payment_delay_days" in clh_s7, "clientLifecycleHandler.ts syncs complete financial profile attributes on client_synced")
+
+with open(os.path.join(ROOT_DIR, "api", "approvals", "action.ts"), "r", encoding="utf-8") as fp:
+    app_s7 = fp.read()
+test_assert("reservations_released: true" in app_s7 and "for (const sub of subOrders) {\n              await supabase.rpc('release_order_reservations'" not in app_s7, "api/approvals/action.ts prevents double-release on rejected orders")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "leads.ts"), "r", encoding="utf-8") as fp:
+    leads_s7 = fp.read()
+test_assert("MANAGER_WHATSAPP_PHONE" in leads_s7, "api/modules/leads.ts includes fallback manager WhatsApp phone numbers")
+
+with open(os.path.join(ROOT_DIR, "src", "pages", "CatalogPage.tsx"), "r", encoding="utf-8") as fp:
+    cat_s7 = fp.read()
+test_assert("canViewStockSummary" in cat_s7 and "displaySettings.show_reserve" in cat_s7, "CatalogPage.tsx guards StockSummaryBar with permissions check")
+
+# ------------------------------------------------------------------------------
+# 32. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

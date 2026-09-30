@@ -79,19 +79,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         try {
           await supabase.rpc('release_order_reservations', { p_order_id: targetOrderId });
 
-          // Каскадное снятие резервов и отмена для мультискладских подзаказов
+          // Каскадная отмена для мультискладских подзаказов
           const { data: subOrders } = await supabase
             .from('orders')
             .select('id')
             .eq('parent_order_id', targetOrderId);
 
           if (subOrders && subOrders.length > 0) {
-            for (const sub of subOrders) {
-              await supabase.rpc('release_order_reservations', { p_order_id: sub.id });
-            }
             await supabase
               .from('orders')
-              .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+              .update({
+                status: 'cancelled',
+                reservations_released: true,
+                updated_at: new Date().toISOString(),
+              })
               .eq('parent_order_id', targetOrderId);
           }
         } catch (relErr: any) {
