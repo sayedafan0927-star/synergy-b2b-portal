@@ -185,7 +185,28 @@ export default function CatalogPage({
 
     switch (sortBy) {
       case 'popular':
-        result.sort((a, b) => getTotalStock(b) - getTotalStock(a));
+        result.sort((a, b) => {
+          const getPriority = (p: Product) => {
+            const art = (p.article || '').toUpperCase();
+            const col = (p.collection || '').toUpperCase();
+            const color = (p.color || '').toUpperCase();
+            // 1. FLORA 9568B — L.VIZON / L.VIZON (horses, deer, and suns)
+            if (col.includes('FLORA') && (art.includes('9568B') || art.includes('9568-B'))) return 100;
+            // 2. AFGAN 123D / 123Д CREAM (steppe warriors and diamond medallions)
+            if (col.includes('AFGAN') && (art.includes('123') || color.includes('CREAM'))) return 90;
+            // 3. HYPNOSE DOTLU P1010 MULTI / MULTI (solar tamgas and fine geometric weave)
+            if (col.includes('HYPNOSE') && (art.includes('P1010') || art.includes('1010'))) return 80;
+            // 4. OCTAVIA 75488 071 BEIGE (ancient solar wheel petroglyphs)
+            if (col.includes('OCTAVIA') && (art.includes('75488') || color.includes('071'))) return 70;
+            // 5. FLORA 9568G — GREY / GREY (golden running steppe stallions and golden suns)
+            if (col.includes('FLORA') && (art.includes('9568G') || (art.includes('9114G') && color.includes('GREY')))) return 60;
+            return 0;
+          };
+          const pA = getPriority(a);
+          const pB = getPriority(b);
+          if (pA !== pB) return pB - pA;
+          return getTotalStock(b) - getTotalStock(a);
+        });
         break;
       case 'price-asc':
         result.sort((a, b) => pricing.getMinPricePerSqm(a) - pricing.getMinPricePerSqm(b));
@@ -395,130 +416,6 @@ export default function CatalogPage({
 
         {/* RugsUSA Size Clustering Bar (Pattern 3) activeClusterQuickFilter disabled per user request to prevent mobile layout overflow */}
 
-        {/* Toolbar */}
-        <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3 flex-1">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Поиск по названию, артикулу, штрихкоду..."
-                className="input-field pl-10 text-sm"
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => setDrawerOpen(true)}
-              className="relative flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 hover:border-slate-300 shrink-0 cursor-pointer"
-            >
-              <SlidersHorizontal className="h-4 w-4" />
-              <span>Фильтр</span>
-              {activeFilterCount > 0 && (
-                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-700 px-1 text-[10px] font-bold text-white">
-                  {activeFilterCount}
-                </span>
-              )}
-            </button>
-          </div>
-
-          <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap">
-            {isEffectiveAdmin && (
-              <div className="relative">
-                <select
-                  value={adminStockFilter}
-                  onChange={e => setAdminStockFilter(e.target.value as any)}
-                  className="appearance-none rounded-lg border border-amber-300 bg-amber-50/90 py-2.5 pl-3 pr-8 text-xs font-semibold text-amber-900 focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 outline-none transition-colors cursor-pointer"
-                  title="Режим видимости для администратора"
-                >
-                  <option value="all">📦 Все остатки (админ: {products.length})</option>
-                  <option value="in_stock">✅ Только в наличии ({products.filter(p => isProductInStockForUser(p, profile, false, true)).length})</option>
-                  <option value="out_of_stock">⚠️ Только отсутствующие ({products.filter(p => !isProductInStockForUser(p, profile, false, true)).length})</option>
-                </select>
-                <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-amber-700 pointer-events-none" />
-              </div>
-            )}
-
-            <div className="flex rounded-lg border border-slate-200 bg-white p-0.5">
-              <button
-                type="button"
-                onClick={() => setViewMode('grid')}
-                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
-                  viewMode === 'grid' ? 'bg-brand-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                <LayoutGrid className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Плитка</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('stock')}
-                className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
-                  viewMode === 'stock' ? 'bg-brand-700 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                <Table2 className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Сетка остатков</span>
-              </button>
-            </div>
-
-            {viewMode === 'grid' && (
-              <div className="relative">
-                <select
-                  value={sortBy}
-                  onChange={e => setSortBy(e.target.value as SortOption)}
-                  className="appearance-none rounded-lg border border-slate-200 bg-white py-2.5 pl-3 pr-9 text-sm text-slate-700 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition-colors cursor-pointer"
-                >
-                  <option value="popular">По популярности</option>
-                  <option value="price-asc">Цена: по возрастанию</option>
-                  <option value="price-desc">Цена: по убыванию</option>
-                  <option value="name">По названию</option>
-                </select>
-                <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-              </div>
-            )}
-
-            {viewMode === 'stock' && (
-              <div className="relative">
-                <select
-                  value={stockWarehouse}
-                  onChange={e => setStockWarehouse(e.target.value)}
-                  className="appearance-none rounded-lg border border-slate-200 bg-white py-2.5 pl-3 pr-9 text-sm text-slate-700 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition-colors cursor-pointer"
-                >
-                  {allWarehouses.map(w => (
-                    <option key={w} value={w}>
-                      {w}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Active Filter Chips */}
-        <ActiveFilterChips
-          searchQuery={searchQuery}
-          selectedCategory={selectedCategory}
-          selectedCollections={selectedCollections}
-          selectedCountries={selectedCountries}
-          selectedManufacturers={selectedManufacturers}
-          selectedWarehouses={selectedWarehouses}
-          selectedSizes={selectedSizes}
-          selectedClusters={selectedClusters}
-          onClearSearch={() => setSearchQuery('')}
-          onClearCategory={() => setSelectedCategory('all')}
-          onRemoveCollection={val => setSelectedCollections(s => toggle(s, val))}
-          onRemoveCountry={val => setSelectedCountries(s => toggle(s, val))}
-          onRemoveManufacturer={val => setSelectedManufacturers(s => toggle(s, val))}
-          onRemoveWarehouse={val => setSelectedWarehouses(s => toggle(s, val))}
-          onRemoveSize={val => setSelectedSizes(s => toggle(s, val))}
-          onRemoveCluster={val => setSelectedClusters(s => toggle(s, val))}
-          onResetAll={resetFilters}
-        />
-
         {/* Country filter pills */}
         {allCountries.length > 1 && (
           <div className="mb-4 flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
@@ -549,6 +446,114 @@ export default function CatalogPage({
             />
           </div>
         )}
+
+        {/* Active Filter Chips */}
+        <ActiveFilterChips
+          searchQuery={searchQuery}
+          selectedCategory={selectedCategory}
+          selectedCollections={selectedCollections}
+          selectedCountries={selectedCountries}
+          selectedManufacturers={selectedManufacturers}
+          selectedWarehouses={selectedWarehouses}
+          selectedSizes={selectedSizes}
+          selectedClusters={selectedClusters}
+          onClearSearch={() => setSearchQuery('')}
+          onClearCategory={() => setSelectedCategory('all')}
+          onRemoveCollection={val => setSelectedCollections(s => toggle(s, val))}
+          onRemoveCountry={val => setSelectedCountries(s => toggle(s, val))}
+          onRemoveManufacturer={val => setSelectedManufacturers(s => toggle(s, val))}
+          onRemoveWarehouse={val => setSelectedWarehouses(s => toggle(s, val))}
+          onRemoveSize={val => setSelectedSizes(s => toggle(s, val))}
+          onRemoveCluster={val => setSelectedClusters(s => toggle(s, val))}
+          onResetAll={resetFilters}
+        />
+
+        {/* Toolbar: Search & Filter moved lower, directly adjacent to cards, with Sort neatly placed */}
+        <div className="mb-5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
+          <div className="flex items-center gap-2.5 flex-1 max-w-md">
+            <div className="relative flex-1">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Поиск по названию, артикулу, штрихкоду..."
+                className="input-field pl-10 text-sm bg-white"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setDrawerOpen(true)}
+              className="relative flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 hover:border-slate-300 shrink-0 cursor-pointer shadow-2xs"
+            >
+              <SlidersHorizontal className="h-4 w-4 text-slate-600" />
+              <span>Фильтр</span>
+              {activeFilterCount > 0 && (
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-700 px-1 text-[10px] font-bold text-white">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between sm:justify-end gap-2.5">
+            {viewMode === 'grid' && (
+              <div className="relative">
+                <select
+                  value={sortBy}
+                  onChange={e => setSortBy(e.target.value as SortOption)}
+                  className="appearance-none rounded-lg border border-slate-200 bg-white py-2 pl-3 pr-8 text-xs font-semibold text-slate-700 hover:border-slate-300 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition-colors cursor-pointer shadow-2xs"
+                >
+                  <option value="popular">По популярности</option>
+                  <option value="price-asc">Цена: по возрастанию</option>
+                  <option value="price-desc">Цена: по убыванию</option>
+                  <option value="name">По названию</option>
+                </select>
+                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+              </div>
+            )}
+
+            {viewMode === 'stock' && (
+              <div className="relative">
+                <select
+                  value={stockWarehouse}
+                  onChange={e => setStockWarehouse(e.target.value)}
+                  className="appearance-none rounded-lg border border-slate-200 bg-white py-2 pl-3 pr-8 text-xs font-semibold text-slate-700 hover:border-slate-300 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition-colors cursor-pointer shadow-2xs"
+                >
+                  {allWarehouses.map(w => (
+                    <option key={w} value={w}>
+                      {w}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+              </div>
+            )}
+
+            <div className="flex rounded-lg border border-slate-200 bg-white p-0.5 shadow-2xs">
+              <button
+                type="button"
+                onClick={() => setViewMode('grid')}
+                className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+                  viewMode === 'grid' ? 'bg-[#003365] text-white shadow-xs' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <LayoutGrid className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Плитка</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('stock')}
+                className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+                  viewMode === 'stock' ? 'bg-[#003365] text-white shadow-xs' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <Table2 className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Сетка остатков</span>
+              </button>
+            </div>
+          </div>
+        </div>
 
         {filteredProducts.length > 0 ? (
           viewMode === 'grid' ? (

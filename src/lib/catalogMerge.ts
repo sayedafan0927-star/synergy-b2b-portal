@@ -5,6 +5,49 @@ import { filterWarehousesForClient } from '@/lib/warehouseVisibility';
 import { calculateArea, parse1CNomenclature, getValidImages } from '@/lib/nomenclatureParser';
 
 /**
+ * Resolves authentic carpet photography with ancient steppe petroglyphs,
+ * stallions, and solar tamgas matching the thematic reference design.
+ */
+export function getThematicCarpetImage(collection?: string, article?: string, color?: string): string | undefined {
+  const coll = (collection || '').toUpperCase();
+  const art = (article || '').toUpperCase();
+  const col = (color || '').toUpperCase();
+
+  // 1. FLORA 9568B — L.VIZON / L.VIZON (horses, deer, and suns)
+  if (coll.includes('FLORA') && (art.includes('9568B') || art.includes('9568-B'))) {
+    return '/carpets/flora-9568b.png';
+  }
+  // 2. AFGAN 123D / 123Д CREAM (steppe warriors and diamond medallions)
+  if (coll.includes('AFGAN') && (art.includes('123') || col.includes('CREAM'))) {
+    return '/carpets/afgan-123d.png';
+  }
+  // 3. HYPNOSE DOTLU P1010 MULTI / MULTI (solar tamgas and fine geometric weave)
+  if (coll.includes('HYPNOSE') && (art.includes('P1010') || art.includes('1010'))) {
+    return '/carpets/hypnose-p1010.png';
+  }
+  // 4. OCTAVIA 75488 071 BEIGE (ancient solar wheel petroglyphs)
+  if (coll.includes('OCTAVIA') && (art.includes('75488') || col.includes('071'))) {
+    return '/carpets/octavia-75488.png';
+  }
+  // 5. FLORA 9568G — GREY / GREY (golden running steppe stallions and golden suns)
+  if (coll.includes('FLORA') && (art.includes('9568G') || (art.includes('9114G') && col.includes('GREY')))) {
+    return '/carpets/flora-9568g.png';
+  }
+
+  // Graceful thematic fallbacks when ERP image is missing
+  if (coll.includes('FLORA')) return '/carpets/flora-9568b.png';
+  if (coll.includes('AFGAN')) return '/carpets/afgan-123d.png';
+  if (coll.includes('HYPNOSE')) return '/carpets/hypnose-p1010.png';
+  if (coll.includes('OCTAVIA')) return '/carpets/octavia-75488.png';
+  if (coll.includes('BOBO')) return '/carpets/flora-9568g.png';
+  if (coll.includes('OSLO')) return '/carpets/octavia-75488.png';
+  if (coll.includes('SALOON')) return '/carpets/flora-9568b.png';
+  if (coll.includes('CELESTE')) return '/carpets/afgan-123d.png';
+
+  return undefined;
+}
+
+/**
  * Иерархический группировщик:
  * Коллекция -> Артикул (Дизайн) -> Все доступные размеры с остатками по складам.
  * Карточка в каталоге представляет именно АРТИКУЛ, а не единичный размер!
@@ -126,7 +169,19 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
 
     const existing = map.get(groupKey);
     if (!existing) {
-      const photos = getValidImages(raw.images);
+      let photos = getValidImages(raw.images);
+      const thematic = getThematicCarpetImage(collection, article, color);
+      if (thematic) {
+        if (
+          photos.length === 0 ||
+          (collection.includes('FLORA') && (article.includes('9568B') || article.includes('9568G'))) ||
+          (collection.includes('AFGAN') && article.includes('123')) ||
+          (collection.includes('HYPNOSE') && article.includes('P1010')) ||
+          (collection.includes('OCTAVIA') && article.includes('75488'))
+        ) {
+          photos = [thematic, ...photos.filter(p => p !== thematic)];
+        }
+      }
       const rawPrice = Number(raw.price) > 0 ? Number(raw.price) : (itemVariants[0]?.base_price || 0);
       const rawMinPrice = itemVariants.length > 0 ? Math.min(...itemVariants.map(v => v.base_price)) : rawPrice;
       const rawMaxPrice = itemVariants.length > 0 ? Math.max(...itemVariants.map(v => v.base_price)) : rawPrice;
@@ -146,13 +201,17 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
         min_price: rawMinPrice,
         max_price: rawMaxPrice,
         images: photos,
-        image_thumb: photos.length > 0 ? photos[0] : (raw.image_thumb && !raw.image_thumb.includes('unsplash.com') ? raw.image_thumb : undefined),
+        image_thumb: photos[0] || (raw.image_thumb && !raw.image_thumb.includes('unsplash.com') ? raw.image_thumb : thematic),
         characteristics: raw.characteristics,
         variants: [...itemVariants],
       });
     } else {
       // Обогащаем медиа и характеристики, если они появились у следующего элемента того же дизайна
-      if ((!existing.images || existing.images.length === 0) && raw.images && raw.images.length > 0) {
+      const thematic = getThematicCarpetImage(collection, article, color);
+      if (thematic && (!existing.images || existing.images.length === 0 || !existing.images.includes(thematic))) {
+        existing.images = [thematic, ...(existing.images || []).filter(p => p !== thematic)];
+        existing.image_thumb = thematic;
+      } else if ((!existing.images || existing.images.length === 0) && raw.images && raw.images.length > 0) {
         const photos = getValidImages(raw.images);
         if (photos.length > 0) {
           existing.images = photos;
