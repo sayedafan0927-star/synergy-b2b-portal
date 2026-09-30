@@ -103,7 +103,7 @@ function Preloader({ onFinished }: { onFinished: () => void }) {
   const [imageReady, setImageReady] = useState(false);
 
   useEffect(() => {
-    // Гарантируем полную готовность логотипа перед стартом анимации
+    // Гарантируем полную готовность оптимизированного логотипа перед стартом анимации
     const img = new Image();
     img.src = '/Вектор_Синэнергия.png';
     if (img.complete && img.naturalWidth > 0) {
@@ -112,18 +112,15 @@ function Preloader({ onFinished }: { onFinished: () => void }) {
       img.onload = () => setImageReady(true);
       img.onerror = () => setImageReady(true);
     }
-    // Защитный лимит ожидания 250мс для слабых соединений
-    const safety = setTimeout(() => setImageReady(true), 250);
-    return () => clearTimeout(safety);
   }, []);
 
   useEffect(() => {
     if (!imageReady) return;
-    const t1 = setTimeout(() => setPhase('expand'), 600);
+    const t1 = setTimeout(() => setPhase('expand'), 950);
     const t2 = setTimeout(() => {
       setPhase('done');
       onFinished();
-    }, 850);
+    }, 1350);
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
@@ -132,14 +129,14 @@ function Preloader({ onFinished }: { onFinished: () => void }) {
 
   return (
     <div
-      className={`fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900 transition-opacity duration-300 ease-out ${
+      className={`fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900 transition-opacity duration-400 ease-out ${
         phase === 'done' ? 'opacity-0 pointer-events-none' : 'opacity-100'
       }`}
     >
       {/* Radial glow behind logo */}
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
         <div
-          className={`w-72 h-72 rounded-full bg-brand-600/25 blur-3xl transition-all duration-500 ${
+          className={`w-72 h-72 rounded-full bg-brand-600/30 blur-3xl transition-all duration-700 ${
             phase === 'logo' ? 'scale-100 opacity-100' : 'scale-125 opacity-0'
           }`}
         />
@@ -147,7 +144,7 @@ function Preloader({ onFinished }: { onFinished: () => void }) {
 
       {/* Logo container */}
       <div
-        className={`relative flex flex-col items-center gap-5 transition-all duration-300 ease-out ${
+        className={`relative flex flex-col items-center gap-5 transition-all duration-400 ease-out ${
           phase === 'expand' ? 'scale-105 opacity-0 -translate-y-2' : 'scale-100 opacity-100 translate-y-0'
         }`}
       >
@@ -155,13 +152,13 @@ function Preloader({ onFinished }: { onFinished: () => void }) {
           src="/Вектор_Синэнергия.png"
           alt="Synergiya Group"
           onLoad={() => setImageReady(true)}
-          className={`h-28 sm:h-36 w-auto drop-shadow-2xl brightness-0 invert transition-opacity duration-200 ${
+          className={`h-28 sm:h-36 w-auto drop-shadow-2xl brightness-0 invert transition-opacity duration-300 ${
             imageReady ? 'opacity-100 animate-preloader-logo' : 'opacity-0'
           }`}
         />
-        <div className={`flex items-center gap-2 transition-opacity duration-200 ${imageReady ? 'opacity-100' : 'opacity-0'}`}>
+        <div className={`flex items-center gap-2 transition-opacity duration-300 ${imageReady ? 'opacity-100' : 'opacity-0'}`}>
           <div className="h-0.5 w-8 bg-brand-400 rounded-full animate-preloader-line-left" />
-          <div className="h-1 w-1 rounded-full bg-brand-400 animate-preloader-dot" />
+          <div className="h-1.5 w-1.5 rounded-full bg-brand-400 animate-preloader-dot" />
           <div className="h-0.5 w-8 bg-brand-400 rounded-full animate-preloader-line-right" />
         </div>
       </div>

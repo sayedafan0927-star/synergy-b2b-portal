@@ -59,10 +59,10 @@ export default {
         'fade-up': 'fadeUp 0.6s ease forwards',
         'slide-up': 'slideUp 0.8s ease forwards',
         'scale-in': 'scaleIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards',
-        'preloader-logo': 'preloaderLogo 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards',
-        'preloader-line-left': 'preloaderLineLeft 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards',
-        'preloader-line-right': 'preloaderLineRight 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards',
-        'preloader-dot': 'preloaderDot 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+        'preloader-logo': 'preloaderLogo 0.75s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+        'preloader-line-left': 'preloaderLineLeft 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+        'preloader-line-right': 'preloaderLineRight 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+        'preloader-dot': 'preloaderDot 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards',
       },
       keyframes: {
         fadeIn: {
