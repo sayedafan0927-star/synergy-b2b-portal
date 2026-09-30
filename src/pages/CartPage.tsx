@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
-import { ShoppingCart, ArrowLeft, PackageOpen, AlertCircle, Trash2 } from 'lucide-react';
+import { ShoppingCart, ArrowLeft, PackageOpen, AlertCircle, Trash2, FileSpreadsheet } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import type { PageId } from '@/types';
@@ -13,6 +13,7 @@ import {
   CartSuccessModal,
   CartItemsTable,
   CartCheckoutForm,
+  ExcelBulkOrderModal,
   CITIES,
 } from '@/components/cart';
 
@@ -37,6 +38,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [stockConflictDetails, setStockConflictDetails] = useState<{ available_qty?: number; requested_qty?: number; sku?: string } | null>(null);
+  const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
 
   const [clientName, setClientName] = useState(profile?.full_name ?? '');
   const [clientPhone, setClientPhone] = useState(profile?.phone ?? '');
@@ -167,11 +169,26 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
             <PackageOpen className="h-8 w-8 text-slate-400" />
           </div>
           <h1 className="font-display text-2xl font-bold text-slate-900">Корзина пуста</h1>
-          <p className="mt-2 text-slate-500">Добавьте товары из каталога, чтобы оформить заказ</p>
-          <button type="button" onClick={() => onNavigate('catalog')} className="btn-primary mt-6 cursor-pointer">
-            Перейти в каталог
-          </button>
+          <p className="mt-2 text-slate-500">Добавьте товары из каталога или загрузите смету из файла</p>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <button type="button" onClick={() => onNavigate('catalog')} className="btn-primary cursor-pointer">
+              Перейти в каталог
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsExcelModalOpen(true)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 text-xs font-semibold shadow-2xs transition-all cursor-pointer"
+            >
+              <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+              <span>Загрузить из Excel / CSV</span>
+            </button>
+          </div>
         </div>
+
+        <ExcelBulkOrderModal
+          isOpen={isExcelModalOpen}
+          onClose={() => setIsExcelModalOpen(false)}
+        />
       </div>
     );
   }
@@ -330,7 +347,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
   return (
     <section className="min-h-screen bg-slate-50 pt-20 pb-24 lg:pb-8">
       <div className="container-w">
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <button
               type="button"
@@ -345,6 +362,15 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
               Корзина заказов
             </h1>
           </div>
+
+          <button
+            type="button"
+            onClick={() => setIsExcelModalOpen(true)}
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 text-xs font-semibold shadow-2xs transition-all cursor-pointer self-start sm:self-auto"
+          >
+            <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+            <span>Загрузить из Excel / CSV</span>
+          </button>
         </div>
 
         {hasDepletedItems && (
@@ -439,6 +465,11 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
           </div>
         </div>
       </div>
+
+      <ExcelBulkOrderModal
+        isOpen={isExcelModalOpen}
+        onClose={() => setIsExcelModalOpen(false)}
+      />
     </section>
   );
 }

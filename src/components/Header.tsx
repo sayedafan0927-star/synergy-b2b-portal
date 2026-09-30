@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Menu, X, ShoppingCart, User, Shield, Phone, CloudOff, RefreshCw, Eye, EyeOff } from 'lucide-react';
+import { Menu, X, ShoppingCart, User, Shield, Phone, CloudOff, RefreshCw, Eye, EyeOff, Search } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -8,6 +8,7 @@ import { useShowroomMode } from '@/contexts/ShowroomModeContext';
 import { checkSystemHealth } from '@/lib/erpApi';
 import { getQueuedOfflineOrders, processOfflineOrderQueue, onOfflineQueueChange } from '@/lib/offlineOrderQueue';
 import CurtainNavigationDrawer from '@/components/layout/CurtainNavigationDrawer';
+import { CommandPalette } from '@/components/search';
 import type { PageId } from '@/types';
 
 interface HeaderProps {
@@ -27,6 +28,19 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
   const { language, setLanguage, t } = useLanguage();
   const { currency, setCurrency } = useCurrency();
   const { isShowroomMode, toggleShowroomMode } = useShowroomMode();
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+
+  // Global ⌘K / Ctrl+K keyboard shortcut to open Command Palette from anywhere
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setCommandPaletteOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -300,6 +314,32 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
               </button>
             )}
 
+            {/* Global Quick Search Button (Command Palette ⌘K) - Desktop */}
+            <button
+              type="button"
+              onClick={() => setCommandPaletteOpen(true)}
+              className="hidden sm:flex h-9 items-center gap-2 rounded-lg px-2.5 transition-colors border border-slate-200 bg-slate-100 hover:bg-slate-200/80 text-slate-600 hover:text-slate-900 cursor-pointer shadow-2xs"
+              title="Быстрый поиск по артикулу и каталогу (⌘K / Ctrl+K)"
+              aria-label="Быстрый поиск"
+            >
+              <Search className="h-3.5 w-3.5 text-slate-500" />
+              <span className="hidden xl:inline text-xs font-medium text-slate-500">Поиск SKU...</span>
+              <kbd className="hidden md:inline-flex items-center font-mono text-[10px] font-semibold bg-white border border-slate-250 rounded px-1.5 py-0.5 text-slate-500 shadow-2xs">
+                ⌘K
+              </kbd>
+            </button>
+
+            {/* Mobile Search Icon Button */}
+            <button
+              type="button"
+              onClick={() => setCommandPaletteOpen(true)}
+              className="sm:hidden flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200/80 transition-colors cursor-pointer"
+              title="Поиск"
+              aria-label="Поиск по артикулу"
+            >
+              <Search className="h-4 w-4 text-slate-600" />
+            </button>
+
             <button
               onClick={() => onNavigate(user ? 'profile' : 'login')}
               className={`hidden sm:flex h-9 items-center gap-2 rounded-lg px-2.5 transition-colors border ${
@@ -363,6 +403,13 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
         language={language}
         setLanguage={setLanguage}
         t={t}
+      />
+
+      {/* Global Command Palette (⌘K) Spotlight Modal */}
+      <CommandPalette
+        isOpen={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
+        onNavigate={onNavigate}
       />
     </header>
   );
