@@ -121,79 +121,83 @@ export const StockSummaryBar: React.FC<StockSummaryBarProps> = ({ summary, class
         </div>
       </div>
 
-      {/* ── Mobile View: Sleek Single-Line Horizontal Strip (Desktop Screen 3 Style) ── */}
-      <div className="sm:hidden flex items-center gap-3 overflow-x-auto no-scrollbar py-0.5 text-xs whitespace-nowrap">
-        {/* Найдено */}
-        <div className="flex items-center gap-1.5 pr-2.5 border-r border-slate-200/80 shrink-0">
+      {/* ── Mobile View: Compact Grid with Status Indicators ── */}
+      <div className="sm:hidden space-y-2.5">
+        <div className="flex items-center justify-between pb-2 border-b border-slate-100 text-xs">
           <span className="font-semibold text-slate-700">{labels.found}:</span>
-          <span className="inline-flex items-center justify-center font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 text-xs font-mono">
+          <span className="font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-800 text-xs font-mono">
             {summary.total_items}
           </span>
         </div>
 
-        {/* 1. Свободный остаток */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          <span className="h-2 w-2 rounded-full bg-emerald-500 shrink-0" />
-          <span className="font-medium text-slate-600">{labels.free}:</span>
-          <span className="font-bold text-slate-900 font-mono">
-            {fmtNum(summary.free_stock_qty)} {labels.pcs}
-          </span>
-          <span className="font-semibold text-emerald-700 font-mono">
-            {fmtNum(summary.free_stock_sqm, 2)} м²
-          </span>
-        </div>
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          {/* Свободно */}
+          <div className="rounded-lg bg-emerald-50/50 border border-emerald-100 p-2">
+            <div className="flex items-center gap-1.5 text-emerald-800 font-semibold text-[11px] mb-0.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              <span>{labels.free}</span>
+            </div>
+            <div className="font-bold text-slate-900 text-xs font-mono">
+              {fmtNum(summary.free_stock_qty)} {labels.pcs}
+            </div>
+            <div className="text-[11px] font-medium text-emerald-700 font-mono">
+              {fmtNum(summary.free_stock_sqm, 2)} м²
+            </div>
+          </div>
 
-        <div className="h-3 w-px bg-slate-200/80 shrink-0" />
+          {/* Резерв */}
+          <div
+            onClick={onReserveClick}
+            className={`rounded-lg bg-amber-50/50 border border-amber-100 p-2 transition-all ${
+              onReserveClick ? 'cursor-pointer active:scale-95 hover:bg-amber-100/60' : ''
+            }`}
+          >
+            <div className="flex items-center justify-between text-amber-800 font-semibold text-[11px] mb-0.5">
+              <div className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                <span>{labels.reserve}</span>
+              </div>
+              {onReserveClick && (
+                <span className="text-[9px] font-bold text-amber-700 bg-amber-100/90 px-1 py-0.5 rounded">
+                  клиенты ↗
+                </span>
+              )}
+            </div>
+            <div className="font-bold text-slate-900 text-xs font-mono">
+              {fmtNum(summary.reserved_stock_qty)} {labels.pcs}
+            </div>
+            <div className="text-[11px] font-medium text-amber-700 font-mono">
+              {fmtNum(summary.reserved_stock_sqm, 2)} м²
+            </div>
+          </div>
 
-        {/* 2. В резерве */}
-        <div
-          onClick={onReserveClick}
-          className={`flex items-center gap-1.5 shrink-0 rounded-lg px-1.5 py-0.5 transition-all ${
-            onReserveClick ? 'cursor-pointer active:scale-95 bg-amber-50/70 border border-amber-200/60' : ''
-          }`}
-          title={onReserveClick ? 'Нажмите, чтобы посмотреть клиентов и объём резерва' : undefined}
-        >
-          <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0" />
-          <span className="font-medium text-slate-600">{labels.reserve}:</span>
-          <span className="font-bold text-slate-900 font-mono">
-            {fmtNum(summary.reserved_stock_qty)} {labels.pcs}
-          </span>
-          <span className="font-semibold text-amber-700 font-mono">
-            {fmtNum(summary.reserved_stock_sqm, 2)} м²
-          </span>
-          {onReserveClick && (
-            <span className="text-[9px] font-bold text-amber-800 bg-amber-100/90 px-1 py-0.5 rounded">
-              клиенты ↗
-            </span>
-          )}
-        </div>
+          {/* К отгрузке */}
+          <div className="rounded-lg bg-indigo-50/50 border border-indigo-100 p-2">
+            <div className="flex items-center gap-1.5 text-indigo-800 font-semibold text-[11px] mb-0.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
+              <span>{labels.toShip}</span>
+            </div>
+            <div className="font-bold text-slate-900 text-xs font-mono">
+              {fmtNum(summary.to_ship_qty)} {labels.pcs}
+            </div>
+            <div className="text-[11px] font-medium text-indigo-700 font-mono">
+              {fmtNum(summary.to_ship_sqm, 2)} м²
+            </div>
+          </div>
 
-        <div className="h-3 w-px bg-slate-200/80 shrink-0" />
-
-        {/* 3. К отгрузке */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          <span className="h-2 w-2 rounded-full bg-indigo-500 shrink-0" />
-          <span className="font-medium text-slate-600">{labels.toShip}:</span>
-          <span className="font-bold text-slate-900 font-mono">
-            {fmtNum(summary.to_ship_qty)} {labels.pcs}
-          </span>
-          <span className="font-semibold text-indigo-700 font-mono">
-            {fmtNum(summary.to_ship_sqm, 2)} м²
-          </span>
-        </div>
-
-        <div className="h-3 w-px bg-slate-200/80 shrink-0" />
-
-        {/* 4. Всего */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          <span className="h-2 w-2 rounded-full bg-slate-600 shrink-0" />
-          <span className="font-bold text-slate-800">{labels.total}:</span>
-          <span className="font-bold text-slate-900 font-mono">
-            {fmtNum(summary.total_stock_qty)} {labels.pcs}
-          </span>
-          <span className="font-bold text-slate-700 font-mono">
-            {fmtNum(summary.total_stock_sqm, 2)} м²
-          </span>
+          {/* Всего */}
+          <div className="rounded-lg bg-slate-100/70 border border-slate-200 p-2">
+            <div className="flex items-center gap-1.5 text-slate-800 font-bold text-[11px] mb-0.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-slate-600" />
+              <span>{labels.total}</span>
+            </div>
+            <div className="font-bold text-slate-900 text-xs font-mono">
+              {fmtNum(summary.total_stock_qty)} {labels.pcs}
+            </div>
+            <div className="text-[11px] font-bold text-slate-700 font-mono">
+              {fmtNum(summary.total_stock_sqm, 2)} м²
+            </div>
+          </div>
         </div>
       </div>
     </div>
