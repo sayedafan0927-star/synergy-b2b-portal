@@ -10,6 +10,7 @@ import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import MobileNav from '@/components/MobileNav';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import { ShowroomModeProvider } from '@/contexts/ShowroomModeContext';
 
 // Основные компактные страницы импортируются напрямую для мгновенных переходов
 import HomePage from '@/pages/HomePage';
@@ -337,25 +338,27 @@ export default function App() {
   return (
     <LanguageProvider>
       <AuthProvider>
-        <CurrencyProvider>
-          <CartProvider>
-            <ToastProvider>
-              <RealtimeNotificationsWatcher />
-              <OfflineBanner />
-              {isPending && (
-                <div className="fixed top-0 left-0 right-0 z-[99999] h-0.5 bg-gradient-to-r from-brand-600 via-amber-500 to-brand-700 animate-pulse pointer-events-none" />
-              )}
-              {!preloaderDone && <Preloader onFinished={handlePreloaderFinished} />}
-              <ErrorBoundary>
-                <MainLayout page={page} navigate={navigate} showFooter={showFooter}>
-                  <Suspense fallback={<PageLoadingFallback page={page} />}>
-                    {renderPage()}
-                  </Suspense>
-                </MainLayout>
-              </ErrorBoundary>
-            </ToastProvider>
-          </CartProvider>
-        </CurrencyProvider>
+        <ShowroomModeProvider>
+          <CurrencyProvider>
+            <CartProvider>
+              <ToastProvider>
+                <RealtimeNotificationsWatcher />
+                <OfflineBanner />
+                {isPending && (
+                  <div className="fixed top-0 left-0 right-0 z-[99999] h-0.5 bg-gradient-to-r from-brand-600 via-amber-500 to-brand-700 animate-pulse pointer-events-none" />
+                )}
+                {!preloaderDone && <Preloader onFinished={handlePreloaderFinished} />}
+                <ErrorBoundary>
+                  <MainLayout page={page} navigate={navigate} showFooter={showFooter}>
+                    <Suspense fallback={<PageLoadingFallback page={page} />}>
+                      {renderPage()}
+                    </Suspense>
+                  </MainLayout>
+                </ErrorBoundary>
+              </ToastProvider>
+            </CartProvider>
+          </CurrencyProvider>
+        </ShowroomModeProvider>
       </AuthProvider>
     </LanguageProvider>
   );

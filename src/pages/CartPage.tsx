@@ -99,6 +99,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
   }, []);
 
   const hasDepletedItems = useMemo(() => items.some(it => it.maxStock === 0), [items]);
+  const hasZeroPriceItems = useMemo(() => items.some(it => !it.price || it.price <= 0), [items]);
 
   // Проверка финансовых блокировок и условий
   const isBlocked = debtReport?.client?.is_blocked_for_shipment === true;
@@ -165,6 +166,16 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
   }
 
   const handleSubmit = async () => {
+    if (!user) {
+      setSubmitError('Для оформления оптового заказа необходимо войти в личный кабинет.');
+      return;
+    }
+
+    if (hasZeroPriceItems) {
+      setSubmitError('В корзине есть позиции с неустановленной ценой (0 ₸ / $0). Обратитесь к менеджеру или удалите их для оформления заказа.');
+      return;
+    }
+
     if (!clientName.trim() || !clientPhone.trim()) {
       setSubmitError('Укажите имя и телефон для оформления заказа');
       return;
@@ -337,6 +348,18 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
           </div>
         )}
 
+        {hasZeroPriceItems && (
+          <div className="mb-6 flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-900 animate-in fade-in">
+            <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold text-amber-900">В корзине есть позиции с неустановленной ценой</p>
+              <p className="mt-0.5 text-amber-800">
+                Оформление оптового заказа невозможно для товаров с нулевой стоимостью. Удалите их из корзины или свяжитесь с отделом продаж Synergy для уточнения цены.
+              </p>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           {/* Левая колонка: товары и размеры */}
           <div className="lg:col-span-7 xl:col-span-8">
@@ -372,6 +395,9 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
               submitError={submitError}
               stockConflictDetails={stockConflictDetails}
               hasDepletedItems={hasDepletedItems}
+              hasZeroPriceItems={hasZeroPriceItems}
+              isAuthenticated={Boolean(user)}
+              onLoginRedirect={() => onNavigate('login')}
               onSubmit={handleSubmit}
               hasMultipleWarehouses={hasMultipleWarehouses}
               warehousesInCart={warehousesInCart}

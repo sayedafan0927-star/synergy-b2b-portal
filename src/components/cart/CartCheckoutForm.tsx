@@ -20,6 +20,9 @@ interface CartCheckoutFormProps {
   submitError: string | null;
   stockConflictDetails: { available_qty?: number; requested_qty?: number; sku?: string } | null;
   hasDepletedItems?: boolean;
+  hasZeroPriceItems?: boolean;
+  isAuthenticated?: boolean;
+  onLoginRedirect?: () => void;
   onSubmit: () => void;
   hasMultipleWarehouses: boolean;
   warehousesInCart: Map<string, { count: number; totalAmount: number }>;
@@ -49,6 +52,9 @@ export function CartCheckoutForm({
   submitError,
   stockConflictDetails,
   hasDepletedItems,
+  hasZeroPriceItems,
+  isAuthenticated = true,
+  onLoginRedirect,
   onSubmit,
   hasMultipleWarehouses,
   warehousesInCart,
@@ -177,6 +183,43 @@ export function CartCheckoutForm({
         </div>
       </div>
 
+      {/* Предупреждение для неавторизованных пользователей */}
+      {!isAuthenticated && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-xs text-blue-900 space-y-2">
+          <div className="flex items-center gap-2 font-bold text-blue-950">
+            <AlertCircle className="h-4 w-4 text-blue-700 shrink-0" />
+            <span>Требуется авторизация дилера</span>
+          </div>
+          <p className="text-[11px] text-blue-800 leading-relaxed">
+            Оптовые заказы и резервирование ковров на складах Synergy доступны только авторизованным партнерам.
+          </p>
+          {onLoginRedirect && (
+            <button
+              type="button"
+              onClick={onLoginRedirect}
+              className="w-full py-2 px-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-colors cursor-pointer"
+            >
+              Войти в личный кабинет
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Предупреждение о товарах без цены */}
+      {hasZeroPriceItems && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-xs text-amber-900">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold">В корзине есть позиции с неустановленной ценой</p>
+              <p className="text-[11px] mt-0.5 text-amber-800">
+                Оформление заказа невозможно до подтверждения стоимости менеджером. Удалите позиции с нулевой ценой или свяжитесь с отделом продаж.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Ошибки валидации / остатков */}
       {submitError && (
         <div className="rounded-xl border border-red-200 bg-red-50 p-3.5 text-xs text-red-800">
@@ -199,9 +242,9 @@ export function CartCheckoutForm({
       <button
         type="button"
         onClick={onSubmit}
-        disabled={submitting || hasDepletedItems}
+        disabled={submitting || hasDepletedItems || hasZeroPriceItems || !isAuthenticated}
         className={`w-full h-12 text-sm font-bold flex items-center justify-center gap-2 rounded-xl transition-all shadow-md ${
-          hasDepletedItems
+          hasDepletedItems || hasZeroPriceItems || !isAuthenticated
             ? 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-80'
             : 'btn-primary cursor-pointer'
         }`}
@@ -211,8 +254,12 @@ export function CartCheckoutForm({
             <Loader2 className="h-4 w-4 animate-spin" />
             <span>Оформление заказа...</span>
           </>
+        ) : !isAuthenticated ? (
+          <span>Войдите для оформления заказа</span>
         ) : hasDepletedItems ? (
           <span>Удалите закончившиеся товары</span>
+        ) : hasZeroPriceItems ? (
+          <span>Удалите товары без цены</span>
         ) : (
           <>
             <Send className="h-4 w-4" />

@@ -27,6 +27,7 @@ import {
   type SortOption,
   type ViewMode,
 } from '@/components/catalog';
+import { tokenizeSearchQuery, matchesSearchTokens } from '@/lib/searchNormalization';
 
 export default function CatalogPage({
   onNavigate,
@@ -168,15 +169,15 @@ export default function CatalogPage({
       );
     if (selectedSizes.size > 0) result = result.filter(p => p.variants.some(v => selectedSizes.has(v.size)));
 
-    // RugsUSA Pattern 4: Sub-50ms Faceted Multi-token Search
+    // Sub-10ms Homoglyph, Dimension & Layout Normalized Search
     if (searchQuery.trim()) {
-      const tokens = searchQuery.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      const tokens = tokenizeSearchQuery(searchQuery);
       result = result.filter(p => {
         const searchable =
           `${p.name} ${p.collection} ${p.manufacturer} ${p.country || ''} ${p.article || ''} ${p.color || ''} ${p.variants
             .map(v => `${v.size} ${v.article || ''} ${v.sku || ''} ${v.barcode || ''} ${v.code || ''}`)
-            .join(' ')}`.toLowerCase();
-        return tokens.every(tok => searchable.includes(tok));
+            .join(' ')}`;
+        return matchesSearchTokens(searchable, tokens);
       });
     }
 

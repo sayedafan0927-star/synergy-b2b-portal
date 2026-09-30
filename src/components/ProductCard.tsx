@@ -13,6 +13,7 @@ import { ChevronLeft, ChevronRight, Lock } from 'lucide-react';
 import ProductImage from '@/components/ProductImage';
 import ProductCardQuickSizes from '@/components/product/ProductCardQuickSizes';
 import { cacheProduct } from '@/lib/productCache';
+import { useShowroomMode } from '@/contexts/ShowroomModeContext';
 
 const prefetchProductPage = () => {
   import('@/pages/ProductPage');
@@ -72,6 +73,7 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
   const isEffectiveAdmin = isAdmin && !isImpersonating;
   const clientContext = isEffectiveAdmin ? true : profile;
   const { settings: displaySettings } = useDisplaySettings();
+  const { isShowroomMode } = useShowroomMode();
   const { addItem } = useCart();
   const { language, t } = useLanguage();
   const { formatPrice } = useCurrency();
@@ -231,7 +233,7 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
         )}
 
         {/* Бейдж для админа: если у товара 0 остаток и он скрыт от клиентов */}
-        {isEffectiveAdmin && isOutOfStock && (
+        {isEffectiveAdmin && isOutOfStock && !isShowroomMode && (
           <div className="absolute top-2.5 right-2.5 z-10 pointer-events-none">
             <span className="inline-flex items-center gap-1 rounded-md bg-amber-600/90 backdrop-blur-sm px-2 py-0.5 text-[10px] font-bold text-white shadow-sm" title="Товар с нулевым остатком скрыт от клиентов">
               ⚠️ 0 шт · Скрыт от клиентов
@@ -344,7 +346,13 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
         {/* Блок цены и размера ВСЕГДА зафиксирован по единой нижней линии (mt-auto) */}
         <div className="mt-auto border-t border-slate-100 pt-2.5 flex items-center justify-between">
           <div>
-            {user ? (
+            {isShowroomMode ? (
+              <div className="flex items-center gap-1.5 leading-tight">
+                <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/80 px-2 py-0.5 text-xs font-bold shadow-2xs">
+                  В наличии
+                </span>
+              </div>
+            ) : user ? (
               <div className="flex items-baseline gap-1 leading-tight flex-wrap">
                 <span className={`text-sm sm:text-base font-bold ${isOnSale ? 'text-red-600' : 'text-slate-900'}`}>
                   {formatPrice(pricePerSqm)}

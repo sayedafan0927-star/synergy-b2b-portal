@@ -10,6 +10,7 @@ import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useCurrency } from '@/contexts/CurrencyContext';
+import { useShowroomMode } from '@/contexts/ShowroomModeContext';
 import { formatProductTitle } from '@/components/ProductCard';
 import {
   ProductGallery,
@@ -36,6 +37,7 @@ export default function ProductPage({
   const { language, t } = useLanguage();
   const { currency, formatPrice: fmtPrice } = useCurrency();
   const pricing = useUserPricing();
+  const { isShowroomMode } = useShowroomMode();
 
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [addedKeys, setAddedKeys] = useState<Record<string, boolean>>({});
@@ -312,7 +314,7 @@ export default function ProductPage({
           </div>
         )}
 
-        {isOutOfStockForClient && isEffectiveAdmin && (
+        {isOutOfStockForClient && isEffectiveAdmin && !isShowroomMode && (
           <div className="mb-6 rounded-xl border border-amber-300 bg-amber-50/80 px-4 py-3 flex items-center justify-between gap-3 text-xs text-amber-900 shadow-2xs">
             <div className="flex items-center gap-2">
               <span className="font-bold">⚠️ Внимание администратора:</span>
@@ -366,7 +368,7 @@ export default function ProductPage({
               displaySettings={displaySettings}
             />
 
-            {hasDealerStock && (
+            {hasDealerStock && !isShowroomMode && (
               <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50/50 p-4">
                 <p className="text-xs font-bold uppercase tracking-wider text-emerald-900 mb-2.5 flex items-center gap-1.5">
                   <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
@@ -444,7 +446,11 @@ export default function ProductPage({
 
           <div className="flex items-baseline justify-between mb-2">
             <h1 className="font-display text-xl font-bold text-slate-900 leading-tight">{cleanTitle}</h1>
-            {user ? (
+            {isShowroomMode ? (
+              <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 text-xs font-bold shrink-0 ml-3">
+                В наличии
+              </span>
+            ) : user ? (
               <div className="flex items-baseline gap-1 shrink-0 ml-3">
                 <span className="text-xl font-bold text-brand-700">{fmtPrice(mainPricePerSqm)}</span>
                 <span className="text-xs text-slate-400">/ м²</span>

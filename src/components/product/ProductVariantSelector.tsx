@@ -1,6 +1,7 @@
 import { Ruler, Lock } from 'lucide-react';
 import type { Product, ProductVariant } from '@/types';
 import { filterClientWarehouses } from '@/hooks/useProductData';
+import { useShowroomMode } from '@/contexts/ShowroomModeContext';
 import { getVariantShape } from './types';
 
 interface ProductVariantSelectorProps {
@@ -48,6 +49,7 @@ export function ProductVariantSelector({
   displaySettings,
   isMobile = false,
 }: ProductVariantSelectorProps) {
+  const { isShowroomMode } = useShowroomMode();
   const getShapeDisplay = (shape: string) => {
     if (language !== 'kz') return shape;
     const lower = shape.toLowerCase();
@@ -101,7 +103,13 @@ export function ProductVariantSelector({
           <span className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 block mb-0.5">
             {t('product.sqm_price')}
           </span>
-          {user ? (
+          {isShowroomMode ? (
+            <div className="flex items-center gap-2 mt-1">
+              <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200/90 px-3 py-1 text-sm font-bold shadow-2xs">
+                В наличии в каталоге
+              </span>
+            </div>
+          ) : user ? (
             <div className="flex items-baseline gap-2 flex-wrap">
               <span className={`text-3xl font-extrabold tracking-tight ${activeVariant?.is_on_sale ? 'text-red-600' : 'text-brand-700'}`}>
                 {fmtPrice(mainPricePerSqm)}
@@ -125,7 +133,7 @@ export function ProductVariantSelector({
           )}
         </div>
 
-        {user && activeVariant && (
+        {!isShowroomMode && user && activeVariant && (
           <div className="text-right">
             <span className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 block mb-0.5">
               {t('product.total_price')} ({activeVariant.size})

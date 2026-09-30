@@ -91,12 +91,17 @@ export function CartItemsTable({
           const lineTotal = item.price * item.quantity;
 
           const isDepleted = item.maxStock === 0;
+          const isZeroPrice = !item.price || item.price <= 0;
 
           return (
             <div
               key={key}
               className={`card flex flex-col gap-4 p-4 sm:flex-row sm:items-center transition-colors ${
-                isDepleted ? 'bg-rose-50/50 border-rose-200 ring-1 ring-rose-300' : ''
+                isDepleted
+                  ? 'bg-rose-50/50 border-rose-200 ring-1 ring-rose-300'
+                  : isZeroPrice
+                  ? 'bg-amber-50/40 border-amber-200 ring-1 ring-amber-300/60'
+                  : ''
               }`}
             >
               <ProductImage
@@ -115,6 +120,11 @@ export function CartItemsTable({
                       Закончился на складе
                     </span>
                   )}
+                  {isZeroPrice && !isDepleted && (
+                    <span className="shrink-0 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold border border-amber-300">
+                      ⚠️ Цена не установлена
+                    </span>
+                  )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="badge">{item.size}</span>
@@ -128,7 +138,10 @@ export function CartItemsTable({
                     М²: <span className="font-medium text-slate-700">{fmt2(sqm)}</span>
                   </span>
                   <span>
-                    Сумма: <span className="font-medium text-slate-700">{fmtPrice(lineTotal)}</span>
+                    Сумма:{' '}
+                    <span className="font-medium text-slate-700">
+                      {isZeroPrice ? <span className="text-amber-700 font-semibold">Уточняется</span> : fmtPrice(lineTotal)}
+                    </span>
                   </span>
                 </div>
               </div>
@@ -164,7 +177,9 @@ export function CartItemsTable({
                     Максимум на складе ({item.maxStock} шт)
                   </span>
                 )}
-                <span className="w-24 text-right text-sm font-bold text-slate-900">{fmtPrice(lineTotal)}</span>
+                <span className="w-24 text-right text-sm font-bold text-slate-900">
+                  {isZeroPrice ? <span className="text-xs font-semibold text-amber-700">Уточняется</span> : fmtPrice(lineTotal)}
+                </span>
                 <button
                   type="button"
                   onClick={() => onRemoveItem(item.productId, item.size, item.warehouse)}

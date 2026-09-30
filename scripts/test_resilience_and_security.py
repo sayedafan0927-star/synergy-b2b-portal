@@ -365,6 +365,10 @@ with open(catalog_page_path, "r", encoding="utf-8") as fp:
 if os.path.exists(catalog_drawer_path):
     with open(catalog_drawer_path, "r", encoding="utf-8") as fp:
         catalog_code += fp.read()
+catalog_search_norm_path = os.path.join(ROOT_DIR, "src", "lib", "searchNormalization.ts")
+if os.path.exists(catalog_search_norm_path):
+    with open(catalog_search_norm_path, "r", encoding="utf-8") as fp:
+        catalog_code += fp.read()
 test_assert("activeClusterQuickFilter" in catalog_code and "RugsUSA Size Clustering Bar" in catalog_code, "CatalogPage.tsx renders RugsUSA Size Clustering Bar with quick filter pills")
 test_assert("selectedClusters" in catalog_code and "КЛАСТЕРЫ РАЗМЕРОВ" in catalog_code, "CatalogPage.tsx FilterDrawer supports multi-select size cluster filtering")
 test_assert("split(/\\s+/)" in catalog_code and "searchable" in catalog_code, "CatalogPage.tsx implements sub-50ms multi-token search engine")
@@ -1518,7 +1522,59 @@ test_assert("useCatalogStatePersistence" in cp_s18 and "saveCatalogSnapshot" in 
 test_assert("handleProductNavigate" in cp_s18 and "attemptScrollRestoration" in cp_s18, "CatalogPage.tsx restores scroll and preserves state on product navigate")
 
 # ------------------------------------------------------------------------------
-# 43. Summary Report
+# 43. Stage 19: Search Homoglyph Normalization, Showroom Mode & Cart Price Guards
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 43. STAGE 19: HOMOGLYPH SEARCH, SHOWROOM MODE & CART GUARDS ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "src", "lib", "searchNormalization.ts"), "r", encoding="utf-8") as fp:
+    sn_txt = fp.read()
+test_assert("CYRILLIC_TO_LATIN_HOMOGLYPHS" in sn_txt and "normalizeHomoglyphs" in sn_txt, "searchNormalization.ts defines Cyrillic/Latin homoglyphs map and normalization")
+test_assert("normalizeDimensions" in sn_txt and "tokenizeSearchQuery" in sn_txt and "matchesSearchTokens" in sn_txt, "searchNormalization.ts supports carpet dimensions canonicalization and multi-token matching")
+
+with open(os.path.join(ROOT_DIR, "src", "contexts", "ShowroomModeContext.tsx"), "r", encoding="utf-8") as fp:
+    smc_txt = fp.read()
+test_assert("ShowroomModeProvider" in smc_txt and "useShowroomMode" in smc_txt and "synergy:showroom_client_mode" in smc_txt, "ShowroomModeContext.tsx provides showroom client mode with multi-tab persistence")
+
+with open(os.path.join(ROOT_DIR, "src", "App.tsx"), "r", encoding="utf-8") as fp:
+    app_s19 = fp.read()
+test_assert("ShowroomModeProvider" in app_s19, "App.tsx wraps app tree with ShowroomModeProvider")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "Header.tsx"), "r", encoding="utf-8") as fp:
+    hdr_s19 = fp.read()
+test_assert("useShowroomMode" in hdr_s19 and "Витрина" in hdr_s19 and "Режим витрины активен" in hdr_s19, "Header.tsx includes Showroom Mode toggle button and client presentation banner")
+
+with open(os.path.join(ROOT_DIR, "src", "pages", "CatalogPage.tsx"), "r", encoding="utf-8") as fp:
+    cp_s19 = fp.read()
+test_assert("tokenizeSearchQuery" in cp_s19 and "matchesSearchTokens" in cp_s19, "CatalogPage.tsx uses homoglyph & dimension normalized search matcher")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "ProductCard.tsx"), "r", encoding="utf-8") as fp:
+    pc_s19 = fp.read()
+test_assert("useShowroomMode" in pc_s19 and "isShowroomMode" in pc_s19, "ProductCard.tsx guards wholesale pricing in showroom mode")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "product", "ProductVariantSelector.tsx"), "r", encoding="utf-8") as fp:
+    pvs_s19 = fp.read()
+test_assert("useShowroomMode" in pvs_s19 and "В наличии в каталоге" in pvs_s19, "ProductVariantSelector.tsx displays retail availability badge without wholesale price in showroom mode")
+
+with open(os.path.join(ROOT_DIR, "src", "pages", "ProfilePage.tsx"), "r", encoding="utf-8") as fp:
+    pp_s19 = fp.read()
+test_assert("useShowroomMode" in pp_s19 and "!isShowroomMode" in pp_s19, "ProfilePage.tsx hides wholesale price type, debt status, and credit limits in showroom mode")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "cart", "CartCheckoutForm.tsx"), "r", encoding="utf-8") as fp:
+    ccf_s19 = fp.read()
+test_assert("isAuthenticated" in ccf_s19 and "hasZeroPriceItems" in ccf_s19, "CartCheckoutForm.tsx accepts auth and zero-price validation flags")
+test_assert("Требуется авторизация дилера" in ccf_s19 and "Войти в личный кабинет" in ccf_s19, "CartCheckoutForm.tsx warns unauthorized users with login prompt")
+test_assert("В корзине есть позиции с неустановленной ценой" in ccf_s19, "CartCheckoutForm.tsx warns and blocks order submission for zero-price items")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "cart", "CartItemsTable.tsx"), "r", encoding="utf-8") as fp:
+    cit_s19 = fp.read()
+test_assert("isZeroPrice" in cit_s19 and "Цена не установлена" in cit_s19, "CartItemsTable.tsx flags zero/missing price items and hides numeric total")
+
+with open(os.path.join(ROOT_DIR, "src", "pages", "CartPage.tsx"), "r", encoding="utf-8") as fp:
+    cartp_s19 = fp.read()
+test_assert("hasZeroPriceItems" in cartp_s19 and "В корзине есть позиции с неустановленной ценой" in cartp_s19 and "!user" in cartp_s19, "CartPage.tsx strictly blocks checkout submission if user is unauthenticated or cart contains zero-price items")
+
+# ------------------------------------------------------------------------------
+# 44. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

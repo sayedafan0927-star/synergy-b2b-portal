@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Menu, X, ShoppingCart, User, Shield, Phone, CloudOff, RefreshCw } from 'lucide-react';
+import { Menu, X, ShoppingCart, User, Shield, Phone, CloudOff, RefreshCw, Eye, EyeOff } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useCurrency } from '@/contexts/CurrencyContext';
+import { useShowroomMode } from '@/contexts/ShowroomModeContext';
 import { checkSystemHealth } from '@/lib/erpApi';
 import { getQueuedOfflineOrders, processOfflineOrderQueue, onOfflineQueueChange } from '@/lib/offlineOrderQueue';
 import type { PageId } from '@/types';
@@ -24,6 +25,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
   const isEffectiveAdmin = Boolean(isAdmin && !isImpersonating);
   const { language, setLanguage, t } = useLanguage();
   const { currency, setCurrency } = useCurrency();
+  const { isShowroomMode, toggleShowroomMode } = useShowroomMode();
 
   useEffect(() => {
     let mounted = true;
@@ -95,6 +97,25 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
           >
             <span className="hidden sm:inline">Вернуться в свой аккаунт</span>
             <span className="sm:hidden">Выйти</span>
+          </button>
+        </div>
+      )}
+
+      {/* Showroom Mode Banner */}
+      {isShowroomMode && (
+        <div className="bg-amber-600 text-white px-3 sm:px-4 py-1.5 text-xs flex items-center justify-between gap-2 shadow-xs border-b border-amber-700/40">
+          <div className="flex items-center gap-2 min-w-0">
+            <EyeOff className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">
+              <strong>Режим витрины:</strong> оптовые цены и баланс скрыты для клиента в салоне
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={toggleShowroomMode}
+            className="rounded bg-white/20 hover:bg-white/30 text-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer shrink-0"
+          >
+            Выйти
           </button>
         </div>
       )}
@@ -172,6 +193,25 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
                 RU
               </button>
             </div>
+
+            {/* Showroom Presentation Mode Toggle (Витрина / Без оптовых цен) */}
+            <button
+              type="button"
+              onClick={toggleShowroomMode}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
+                isShowroomMode
+                  ? 'bg-amber-500 border-amber-600 text-white shadow-2xs font-bold'
+                  : 'bg-slate-100 hover:bg-slate-200 border-slate-200/80 text-slate-700'
+              }`}
+              title={
+                isShowroomMode
+                  ? 'Режим витрины активен: оптовые цены и баланс скрыты. Нажмите для выхода'
+                  : 'Включить режим витрины: скрыть оптовые цены для показа каталога клиенту'
+              }
+            >
+              {isShowroomMode ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+              <span className="hidden sm:inline">{isShowroomMode ? 'Витрина вкл' : 'Витрина'}</span>
+            </button>
 
             {/* Currency Switcher ($ USD / ₸ KZT) - Скрыт для всех, кроме администратора */}
             {isEffectiveAdmin && (

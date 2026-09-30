@@ -19,6 +19,7 @@ import {
   type ClientDebtReport,
   fetchReconciliationReportFromErp,
 } from '@/lib/erpApi';
+import { useShowroomMode } from '@/contexts/ShowroomModeContext';
 import SupplierCabinet from '@/components/SupplierCabinet';
 import { AdminDisplaySettingsTab, AdminUsersTab, AdminErpSyncTab } from '@/components/admin';
 import {
@@ -45,6 +46,7 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [clientDebt, setClientDebt] = useState<ClientDebtReport | null>(null);
   const [loadingDebt, setLoadingDebt] = useState<boolean>(false);
+  const { isShowroomMode } = useShowroomMode();
   const {
     repeatingOrderId,
     repeatResult,
@@ -222,7 +224,7 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
                   <span>{profile.phone}</span>
                 </div>
               )}
-              {profile.price_type && profile.role === 'client' && (
+              {profile.price_type && profile.role === 'client' && !isShowroomMode && (
                 <div className="flex items-center gap-2">
                   <DollarSign className="h-3.5 w-3.5 text-slate-400" />
                   <span>Тип цены: <strong className="text-slate-700">{profile.price_type === 'optom_1' ? 'Опт 1' : profile.price_type === 'optom_2' ? 'Опт 2' : profile.price_type === 'optom_3' ? 'Опт 3' : profile.price_type === 'wholesale' ? 'Базовый опт' : profile.price_type}</strong></span>
@@ -252,7 +254,7 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
           </div>
 
           {/* Client Financial Widget */}
-          {profile.role === 'client' && (
+          {profile.role === 'client' && !isShowroomMode && (
             <div className="card p-4 space-y-3">
               <div className="flex items-center justify-between pb-2 border-b border-slate-100">
                 <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Взаиморасчеты (ERP)</span>
@@ -309,7 +311,7 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
           )}
 
           {/* Contracts & Agreements Card */}
-          {profile.role === 'client' && (
+          {profile.role === 'client' && !isShowroomMode && (
             <div className="card p-4">
               <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
                 <div className="flex items-center gap-2">
