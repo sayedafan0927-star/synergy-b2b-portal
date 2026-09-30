@@ -111,7 +111,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // 1.1. Прямой опрос кэша финансового баланса контрагента (PostgreSQL)
-    if (action === 'client_debt' && req.method === 'GET' && supabase) {
+    if ((action === 'client_debt' || action === 'get_client_debt') && req.method === 'GET' && supabase) {
       const handled = await handleCachedClientDebt(req, res, supabase);
       if (handled) return;
     }

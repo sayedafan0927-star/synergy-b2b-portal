@@ -16,6 +16,7 @@ import {
   handleErpLoginToken,
   handleErpLoginFallback,
 } from './upstreamProxy';
+import { handleDebtFallbackOnFailure } from '../financial/debtHandler';
 
 let lastKnownInboundShipments: any = null;
 
@@ -240,8 +241,8 @@ export async function handleGenericErpProxy(
         updateDisplaySettingsCache(jsonData, 60000);
       }
 
-      if (action === 'client_debt' && erpResponse.ok && jsonData?.success) {
-        const pId = String(req.query.counterparty_id || req.query.client_id || jsonData.client?.partner_id || jsonData.partner_id || '');
+      if ((action === 'client_debt' || action === 'get_client_debt') && erpResponse.ok && jsonData?.success) {
+        const pId = String(req.query.partner_id || req.query.counterparty_id || req.query.client_id || jsonData.client?.partner_id || jsonData.partner_id || '').trim();
         const fin = jsonData.financials || {};
         const bal = typeof fin.balance_usd === 'number' ? fin.balance_usd : (typeof jsonData.balance_usd === 'number' ? jsonData.balance_usd : -Number(fin.total_debt_usd || jsonData.debt_usd || 0));
         const isOverdue = Boolean(fin.is_overdue || jsonData.is_overdue);
@@ -320,36 +321,9 @@ export async function handleGenericErpProxy(
       return;
     }
 
-    if (action === 'client_debt' && supabase) {
-      const pId = String(req.query.counterparty_id || req.query.client_id || '');
-      if (pId) {
-        try {
-          const { data: cachedBal } = await supabase
-            .from('partner_balances')
-            .select('*')
-            .eq('partner_id', pId)
-            .maybeSingle();
-
-          if (cachedBal) {
-            res.status(200);
-            res.setHeader('Content-Type', 'application/json');
-            res.setHeader('X-Cache', 'STALE_FALLBACK');
-            res.json({
-              success: true,
-              found: true,
-              client: { partner_id: pId, is_overdue: Boolean(cachedBal.is_overdue) },
-              financials: {
-                balance_usd: Number(cachedBal.balance || 0),
-                total_debt_usd: Math.max(0, -Number(cachedBal.balance || 0)),
-                is_overdue: Boolean(cachedBal.is_overdue),
-                overdue_days: Number(cachedBal.overdue_days || 0),
-              },
-              source: 'stale_partner_balances',
-            });
-            return;
-          }
-        } catch {}
-      }
+    if ((action === 'client_debt' || action === 'get_client_debt') && supabase) {
+      const handled = await handleDebtFallbackOnFailure(req, res, supabase);
+      if (handled) return;
     }
 
     await recordAuditLog({

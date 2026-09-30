@@ -9,8 +9,23 @@ export async function handlePaymentReceived(
   broadcastLiveUpdate: (event: string, payload: any) => Promise<void>,
 ) {
   const { client_name, currency, payment_doc_number } = payload;
-  const client_id = payload.partner_id || payload.client_id;
+  const paymentDoc = payment_doc_number || payload.payment_doc || 'ПП';
+  let client_id = payload.counterparty_id || payload.partner_id || payload.client_id;
   const amount = Number(payload.amount_usd ?? payload.amount ?? 0);
+
+  // Если partner_id не передан явно, ищем по номеру телефона
+  if (!client_id && payload.client_phone && supabaseServer) {
+    try {
+      const { data: p } = await supabaseServer
+        .from('profiles')
+        .select('partner_id')
+        .eq('phone', payload.client_phone)
+        .maybeSingle();
+      if (p?.partner_id) {
+        client_id = p.partner_id;
+      }
+    } catch {}
+  }
 
   // Канонический расчет финансового сальдо (Balance) и долга (Debt):
   // - Положительный баланс (> 0) = Аванс / переплата клиента
@@ -19,9 +34,10 @@ export async function handlePaymentReceived(
   let calculatedDebt = 0;
   let calculatedBalance = 0;
 
-  if (payload.debt_usd !== undefined && payload.debt_usd !== null) {
-    calculatedDebt = Math.max(0, Number(payload.debt_usd));
-    calculatedBalance = (payload.balance_usd !== undefined || payload.new_balance_usd !== undefined)
+  const rawDebt = payload.new_total_debt_usd ?? payload.total_debt_usd ?? payload.debt_usd;
+  if (rawDebt !== undefined && rawDebt !== null) {
+    calculatedDebt = Math.max(0, Number(rawDebt));
+    calculatedBalance = (payload.new_balance_usd !== undefined || payload.balance_usd !== undefined)
       ? Number(payload.new_balance_usd ?? payload.balance_usd)
       : -calculatedDebt;
   } else if (payload.new_balance_usd !== undefined || payload.balance_usd !== undefined) {
@@ -34,7 +50,7 @@ export async function handlePaymentReceived(
   const debt_usd = calculatedDebt;
 
   console.log(
-    `[Webhook ERP: payment_received] Client: ${client_name} (ID ${client_id}) paid ${amount} ${currency || 'USD'} (Doc: ${payment_doc_number}). New balance: ${balance_usd}, Debt: ${debt_usd}`,
+    `[Webhook ERP: payment_received] Client: ${client_name} (ID ${client_id}) paid ${amount} ${currency || 'USD'} (Doc: ${paymentDoc}). New balance: ${balance_usd}, Debt: ${debt_usd}`,
   );
 
   // Сквозная трансляция в Realtime-шину браузеров

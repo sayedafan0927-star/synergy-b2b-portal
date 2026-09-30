@@ -4,6 +4,7 @@ import { recordAuditLog } from '../audit/logs';
 import { applyCorrelationId } from '../lib/trace';
 import { applyCorsHeaders } from '../lib/cors';
 import { getErpApiKey } from '../lib/erpKey';
+import { getRedisClient } from '../lib/redis';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
@@ -151,6 +152,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 })
                 .eq('id', client.id);
 
+              if (isBlocked) {
+                const redis = getRedisClient();
+                if (redis) {
+                  redis.set(`revoked_partner:${partnerId}`, '1', { ex: 86400 }).catch(() => {});
+                }
+              }
+
               discrepanciesList.push({
                 partner_id: partnerId,
                 company: client.company_name || client.full_name,
@@ -215,13 +223,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               : (erpDebt === 0 && Number(debtData.balance_usd ?? debtData.balance ?? 0) > 0 ? Number(debtData.balance_usd ?? debtData.balance) : 0)
           );
 
+          const isBlocked = Boolean(debtData.client?.is_blocked_for_shipment);
           const localDebt = Number(client.debt_usd || 0);
           const localBalance = localBalanceMap.get(partnerId) ?? 0;
 
           const debtDiff = Math.abs(localDebt - erpDebt);
           const balanceDiff = Math.abs(localBalance - erpBalance);
 
-          if (debtDiff > 0.01 || balanceDiff > 0.01) {
+          if (debtDiff > 0.01 || balanceDiff > 0.01 || (client as any).is_blocked_for_shipment !== isBlocked) {
             fixedDiscrepancies++;
 
             await supabase
@@ -238,9 +247,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               .update({
                 debt_usd: erpDebt,
                 credit_limit_usd: erpCreditLimit,
+                is_blocked_for_shipment: isBlocked,
                 updated_at: new Date().toISOString(),
               })
               .eq('id', client.id);
+
+            if (isBlocked) {
+              const redis = getRedisClient();
+              if (redis) {
+                redis.set(`revoked_partner:${partnerId}`, '1', { ex: 86400 }).catch(() => {});
+              }
+            }
 
             discrepanciesList.push({
               partner_id: partnerId,
@@ -249,6 +266,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               erp_debt: erpDebt,
               local_balance: localBalance,
               erp_balance: erpBalance,
+              is_blocked: isBlocked,
             });
           } else {
             matchedCount++;

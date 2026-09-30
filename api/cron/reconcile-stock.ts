@@ -79,20 +79,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const localReservedMap = new Map<string, number>();
     if (supabase) {
       try {
-        const { data: dbBalances } = await supabase
+        const { data: dbBalances, error: qErr } = await supabase
           .from('inventory_balances')
-          .select('sku, stock_reserved')
-          .gt('stock_reserved', 0)
+          .select('sku, reserved_stock')
+          .gt('reserved_stock', 0)
           .limit(5000);
-        if (dbBalances) {
-          for (const b of dbBalances) {
-            if (b.sku && Number(b.stock_reserved) > 0) {
-              localReservedMap.set(String(b.sku).trim().toUpperCase(), Number(b.stock_reserved));
+
+        let activeBalances = (!qErr && dbBalances) ? dbBalances : null;
+        if (!activeBalances) {
+          const { data: fallbackBalances } = await supabase
+            .from('inventory_balances')
+            .select('sku, stock_reserved')
+            .gt('stock_reserved', 0)
+            .limit(5000);
+          activeBalances = fallbackBalances;
+        }
+
+        if (activeBalances) {
+          for (const b of activeBalances) {
+            const resStock = Number((b as any).reserved_stock ?? (b as any).stock_reserved ?? 0);
+            if (b.sku && resStock > 0) {
+              const skuUpper = String(b.sku).trim().toUpperCase();
+              localReservedMap.set(skuUpper, (localReservedMap.get(skuUpper) || 0) + resStock);
             }
           }
         }
       } catch (balErr) {
-        console.warn('[Stock Reconciliation] Notice fetching db stock_reserved:', balErr);
+        console.warn('[Stock Reconciliation] Notice fetching db stock_reserved / reserved_stock:', balErr);
       }
     }
 

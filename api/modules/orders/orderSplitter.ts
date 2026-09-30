@@ -101,6 +101,7 @@ export async function insertSequentialSplitOrders(
         size: String(it.size || 'Стандарт'),
         sku: String(it.sku || ''),
         warehouse: wh,
+        warehouse_id: resolveWarehouseId(it.warehouse_id, it.warehouse || wh),
         price: Number(it.price) || 0,
         quantity: Number(it.quantity) || 1,
       }));

@@ -232,10 +232,14 @@ export async function patchCachedCatalogStock(
   const cached = await getCachedCatalog(cacheKey);
 
   if (cached && cached.data && Array.isArray(cached.data.products)) {
-    const itemMap = new Map<string, StockItemUpdate>();
+    const skuUpdatesMap = new Map<string, StockItemUpdate[]>();
     for (const it of items) {
       const s = String(it.sku || it.article || it.code || '').trim().toUpperCase();
-      if (s) itemMap.set(s, it);
+      if (s) {
+        const list = skuUpdatesMap.get(s) || [];
+        list.push(it);
+        skuUpdatesMap.set(s, list);
+      }
     }
 
     let deltaTotalStock = 0;
@@ -252,14 +256,72 @@ export async function patchCachedCatalogStock(
         const artKey = String(v.article || '').trim().toUpperCase();
         const codeKey = String(v.code || '').trim().toUpperCase();
 
-        const update = itemMap.get(skuKey) || itemMap.get(artKey) || itemMap.get(codeKey);
-        if (update) {
+        const matchingUpdates = skuUpdatesMap.get(skuKey) || skuUpdatesMap.get(artKey) || skuUpdatesMap.get(codeKey);
+        if (matchingUpdates && matchingUpdates.length > 0) {
           prodModified = true;
           anyProductModified = true;
 
-          const newFree = Number(update.free_stock ?? update.total_stock ?? v.free_stock ?? 0);
-          const newReserved = Number(update.reserved_stock ?? v.reserved_stock ?? 0);
-          const newTotal = Number(update.total_stock ?? (newFree + newReserved));
+          const existingWhs = Array.isArray(v.warehouses) ? [...v.warehouses] : [];
+          const whUpdateMap = new Map<number, StockItemUpdate>();
+
+          for (const u of matchingUpdates) {
+            let uWhId = Number(u.warehouse_id || 0);
+            if (uWhId <= 0) {
+              const wLow = String(u.warehouse_name || (u as any).warehouse || '').toLowerCase();
+              if (wLow.includes('алматы')) uWhId = 82;
+              else if (wLow.includes('шымкент')) uWhId = 83;
+              else uWhId = 81;
+            }
+            whUpdateMap.set(uWhId, u);
+          }
+
+          const updatedWarehouses = existingWhs.map((w: any) => {
+            const u = whUpdateMap.get(Number(w.warehouse_id));
+            if (u) {
+              const wFree = Number(u.free_stock ?? u.total_stock ?? w.free_stock ?? 0);
+              const wReserved = Number(u.reserved_stock ?? w.reserved_stock ?? 0);
+              const wTotal = Number(u.total_stock ?? (wFree + wReserved));
+              return {
+                ...w,
+                stock: wFree,
+                free_stock: wFree,
+                reserved_stock: wReserved,
+                total_stock: wTotal,
+              };
+            }
+            return w;
+          });
+
+          for (const [uWhId, u] of whUpdateMap.entries()) {
+            if (!updatedWarehouses.some((w: any) => Number(w.warehouse_id) === uWhId)) {
+              const wFree = Number(u.free_stock ?? u.total_stock ?? 0);
+              const wReserved = Number(u.reserved_stock ?? 0);
+              const wTotal = Number(u.total_stock ?? (wFree + wReserved));
+              updatedWarehouses.push({
+                warehouse_id: uWhId,
+                warehouse_name: u.warehouse_name || (uWhId === 81 ? 'Основной Склад Астана' : (uWhId === 82 ? 'Склад Алматы' : 'Склад Шымкент')),
+                stock: wFree,
+                free_stock: wFree,
+                reserved_stock: wReserved,
+                total_stock: wTotal,
+              });
+            }
+          }
+
+          let newFree = 0;
+          let newReserved = 0;
+          let newTotal = 0;
+
+          if (updatedWarehouses.length > 0) {
+            newFree = updatedWarehouses.reduce((acc, w) => acc + (Number(w.free_stock) || 0), 0);
+            newReserved = updatedWarehouses.reduce((acc, w) => acc + (Number(w.reserved_stock) || 0), 0);
+            newTotal = updatedWarehouses.reduce((acc, w) => acc + (Number(w.total_stock) || 0), 0);
+          } else {
+            const firstU = matchingUpdates[0];
+            newFree = Number(firstU.free_stock ?? firstU.total_stock ?? v.free_stock ?? 0);
+            newReserved = Number(firstU.reserved_stock ?? v.reserved_stock ?? 0);
+            newTotal = Number(firstU.total_stock ?? (newFree + newReserved));
+          }
 
           deltaFreeStock += (newFree - (v.free_stock || 0));
           deltaReservedStock += (newReserved - (v.reserved_stock || 0));
@@ -271,18 +333,7 @@ export async function patchCachedCatalogStock(
             stock: newFree,
             reserved_stock: newReserved,
             total_stock: newTotal,
-            warehouses: (v.warehouses || []).map((w: any) => {
-              if (w.warehouse_id === 81 || w.is_hub || update.warehouse_id === w.warehouse_id) {
-                return {
-                  ...w,
-                  stock: newFree,
-                  free_stock: newFree,
-                  reserved_stock: newReserved,
-                  total_stock: newTotal,
-                };
-              }
-              return w;
-            }),
+            warehouses: updatedWarehouses,
           };
         }
         return v;

@@ -1028,7 +1028,56 @@ with open(os.path.join(ROOT_DIR, "api", "auth", "erp-sso.ts"), "r", encoding="ut
 test_assert("is_blocked_for_shipment" in sso_code_fresh and "revoked_partner" in sso_code_fresh, "api/auth/erp-sso.ts verifies client blocking status before issuing SSO session")
 
 # ------------------------------------------------------------------------------
-# 30. Summary Report
+# 30. Verifying Deep ERP Gateway Invariants & Security Hardening (Stage 6)...
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}30. Verifying Deep ERP Gateway Invariants & Security Hardening (Stage 6)...{RESET}")
+
+with open(os.path.join(ROOT_DIR, "api", "lib", "authGuard.ts"), "r", encoding="utf-8") as fp:
+    auth_guard_code = fp.read()
+test_assert("price_type, is_blocked_for_shipment" in auth_guard_code and "profile?.is_blocked_for_shipment === true" in auth_guard_code, "authGuard.ts selects and enforces is_blocked_for_shipment")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "auth", "loginHandler.ts"), "r", encoding="utf-8") as fp:
+    login_h_code = fp.read()
+test_assert("is_blocked_for_shipment" in login_h_code and "onConflict: 'phone'" not in login_h_code, "loginHandler.ts rejects blocked clients and fixes employee profile upsert")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "orderDispatcher.ts"), "r", encoding="utf-8") as fp:
+    disp_code_s6 = fp.read()
+test_assert(".eq('parent_order_id', outboxOrderId)" in disp_code_s6, "orderDispatcher.ts cascades synchronous checkout status to child suborders")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "orderSplitter.ts"), "r", encoding="utf-8") as fp:
+    split_code_s6 = fp.read()
+test_assert("resolveWarehouseId" in split_code_s6 and "warehouse_id:" in split_code_s6, "orderSplitter.ts preserves warehouse_id on split suborder items")
+
+with open(os.path.join(ROOT_DIR, "api", "lib", "catalogCache.ts"), "r", encoding="utf-8") as fp:
+    cache_code_s6 = fp.read()
+test_assert("skuUpdatesMap" in cache_code_s6 and "updatedWarehouses.reduce" in cache_code_s6, "catalogCache.ts aggregates multi-warehouse stock without single-hub overwrite")
+
+with open(os.path.join(ROOT_DIR, "api", "cron", "reconcile-stock.ts"), "r", encoding="utf-8") as fp:
+    rec_st_code = fp.read()
+test_assert(".select('sku, reserved_stock')" in rec_st_code and ".gt('reserved_stock', 0)" in rec_st_code, "reconcile-stock.ts queries canonical reserved_stock column")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "financial", "balanceHandler.ts"), "r", encoding="utf-8") as fp:
+    bal_code_s6 = fp.read()
+test_assert("free_stock, reserved_stock" in bal_code_s6, "balanceHandler.ts queries canonical free_stock and reserved_stock columns")
+
+with open(os.path.join(ROOT_DIR, "api", "cron", "reconcile-balances.ts"), "r", encoding="utf-8") as fp:
+    rec_bal_code = fp.read()
+test_assert("revoked_partner:${partnerId}" in rec_bal_code, "reconcile-balances.ts revokes Redis session on blocked clients")
+
+with open(os.path.join(ROOT_DIR, "api", "webhooks", "handlers", "paymentHandler.ts"), "r", encoding="utf-8") as fp:
+    pay_code_s6 = fp.read()
+test_assert("payload.counterparty_id" in pay_code_s6 and "new_total_debt_usd" in pay_code_s6, "paymentHandler.ts supports counterparty_id and new_total_debt_usd per ERP spec")
+
+with open(os.path.join(ROOT_DIR, "api", "erp.ts"), "r", encoding="utf-8") as fp:
+    erp_code_s6 = fp.read()
+test_assert("action === 'get_client_debt'" in erp_code_s6, "api/erp.ts routes get_client_debt to debt handler")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "erp", "genericProxyHandler.ts"), "r", encoding="utf-8") as fp:
+    gen_code_s6 = fp.read()
+test_assert("action === 'get_client_debt'" in gen_code_s6 and "handleDebtFallbackOnFailure" in gen_code_s6, "genericProxyHandler.ts wires handleDebtFallbackOnFailure on connection drop")
+
+# ------------------------------------------------------------------------------
+# 31. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

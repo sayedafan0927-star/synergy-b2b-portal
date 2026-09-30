@@ -86,14 +86,15 @@ export async function handleFinancialBalanceSheet(
     (async () => {
       const { data, error } = await supabase
         .from('inventory_balances')
-        .select('warehouse_id, stock_free, stock_reserved, product_variants(price_per_sqm, area_sqm, base_price)');
+        .select('warehouse_id, free_stock, reserved_stock, product_variants(price_per_sqm, area_sqm, base_price)');
       if (error) throw error;
       
       let hubValue = 0;
       let showroomValue = 0;
 
       for (const row of data || []) {
-        const qty = (Number(row.stock_free) || 0) + (Number(row.stock_reserved) || 0);
+        const qty = (Number(row.free_stock) || Number((row as any).stock_free) || 0) +
+                    (Number(row.reserved_stock) || Number((row as any).stock_reserved) || 0);
         if (qty <= 0) continue;
         const variant = (row as any).product_variants;
         const unitPrice = Number(variant?.base_price) || (Number(variant?.price_per_sqm || 15) * Number(variant?.area_sqm || 3.68));

@@ -12,7 +12,7 @@ export async function handleCachedClientDebt(
   supabase: SupabaseClient
 ): Promise<boolean> {
   const isRefresh = req.query.refresh === 'true' || req.query.refresh === '1';
-  const pId = String(req.query.counterparty_id || req.query.client_id || '');
+  const pId = String(req.query.partner_id || req.query.counterparty_id || req.query.client_id || (req.body && (req.body.partner_id || req.body.counterparty_id || req.body.client_id)) || '').trim();
 
   if (pId && !isRefresh) {
     try {
@@ -56,7 +56,7 @@ export async function handleDebtFallbackOnFailure(
   res: VercelResponse,
   supabase: SupabaseClient
 ): Promise<boolean> {
-  const pId = String(req.query.counterparty_id || req.query.client_id || '');
+  const pId = String(req.query.partner_id || req.query.counterparty_id || req.query.client_id || (req.body && (req.body.partner_id || req.body.counterparty_id || req.body.client_id)) || '').trim();
   if (pId) {
     try {
       const { data: cachedBal } = await supabase
