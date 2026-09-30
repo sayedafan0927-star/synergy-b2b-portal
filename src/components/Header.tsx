@@ -259,18 +259,15 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
               </button>
             )}
 
-            {/* Quick Search Button (⌘K Spotlight) - Sleek icon with ⌘K badge, zero text clutter */}
+            {/* Quick Search Button (Spotlight) - Clean icon-only */}
             <button
               type="button"
               onClick={() => setCommandPaletteOpen(true)}
-              className="hidden sm:flex h-9 items-center gap-1.5 rounded-lg px-2.5 transition-colors border border-slate-200 bg-slate-100 hover:bg-slate-200/80 text-slate-700 hover:text-slate-900 cursor-pointer shadow-2xs shrink-0"
+              className="hidden sm:flex h-9 w-9 items-center justify-center rounded-lg transition-colors border border-slate-200 bg-slate-100 hover:bg-slate-200/80 text-slate-700 hover:text-slate-900 cursor-pointer shadow-2xs shrink-0"
               title="Быстрый поиск по каталогу (⌘K / Ctrl+K)"
               aria-label="Быстрый поиск"
             >
-              <Search className="h-4 w-4 text-slate-600 shrink-0" />
-              <kbd className="hidden md:inline-flex items-center font-mono text-[10px] font-semibold bg-white border border-slate-200 rounded px-1.5 py-0.5 text-slate-500 shadow-2xs">
-                ⌘K
-              </kbd>
+              <Search className="h-4 w-4 text-slate-600" />
             </button>
 
             {/* Account / Login Button */}
