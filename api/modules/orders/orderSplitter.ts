@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { resolveWarehouseId } from '../../lib/pricingValidator';
 
 export interface SplitOrderSummary {
   doc_number: string;

@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef } from 'react';
 import type { Product, ProductVariant } from '@/types';
 import { Check, ShoppingCart } from 'lucide-react';
 
@@ -20,11 +21,25 @@ export default function ProductCardQuickSizes({
   onAdd,
   getVariantStock,
 }: ProductCardQuickSizesProps) {
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const [alignRight, setAlignRight] = useState(false);
   const availableVariants = product.variants.filter(v => getVariantStock(v) > 0);
+
+  useEffect(() => {
+    if (popoverRef.current) {
+      const rect = popoverRef.current.getBoundingClientRect();
+      if (rect.right > (typeof window !== 'undefined' ? window.innerWidth : 380) - 12) {
+        setAlignRight(true);
+      }
+    }
+  }, []);
 
   return (
     <div
-      className="absolute left-0 right-0 sm:-left-3 sm:-right-3 top-full z-40 -mt-1 rounded-xl bg-white p-3 shadow-xl ring-1 ring-slate-200/80 border border-slate-100 min-w-[290px]"
+      ref={popoverRef}
+      className={`absolute top-full z-40 -mt-1 rounded-xl bg-white p-3 shadow-xl ring-1 ring-slate-200/80 border border-slate-100 w-[280px] max-w-[calc(100vw-1.5rem)] sm:w-auto sm:min-w-[290px] ${
+        alignRight ? 'right-0 left-auto sm:-right-3 sm:left-auto' : 'left-0 sm:-left-3 right-auto'
+      }`}
       onClick={event => event.stopPropagation()}
     >
       <div className="space-y-1.5 max-h-60 overflow-y-auto overflow-x-hidden pr-0.5 select-none">

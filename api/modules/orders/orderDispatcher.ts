@@ -117,6 +117,15 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
             updated_at: new Date().toISOString(),
           })
           .eq('id', outboxOrderId);
+
+        await supabase
+          .from('orders')
+          .update({
+            status: 'cancelled',
+            notes: `[Отклонено ERP: Недостаточно остатка] ${jsonData?.error || ''}`,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('parent_order_id', outboxOrderId);
       }
 
       // SAGA: Откат всех локальных резервов
@@ -177,6 +186,15 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
             updated_at: new Date().toISOString(),
           })
           .eq('id', outboxOrderId);
+
+        await supabase
+          .from('orders')
+          .update({
+            status: 'failed_dlq',
+            last_error: `[Фатальный сбой ERP (${erpResponse.status})] ${fatalErrorText}`,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('parent_order_id', outboxOrderId);
       }
 
       // SAGA: Освобождаем локальные резервы
@@ -207,15 +225,44 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
 
     if (erpResponse.ok && jsonData?.success) {
       await recordSuccess('erp_gateway');
-      if (outboxOrderId && jsonData.order?.doc_number) {
+      const docNumber = jsonData.order?.doc_number || jsonData.order_id || outboxOrderDoc;
+      if (outboxOrderId) {
         await supabase
           .from('orders')
           .update({
-            order_number: jsonData.order.doc_number,
+            order_number: docNumber,
             status: 'processing',
             updated_at: new Date().toISOString(),
           })
           .eq('id', outboxOrderId);
+
+        // Каскадное подтверждение и нумерация дочерних подзаказов мультисклада
+        try {
+          const splitListFromErp = Array.isArray(jsonData?.split_orders) ? jsonData.split_orders : [];
+          const { data: childOrders } = await supabase
+            .from('orders')
+            .select('id, warehouse')
+            .eq('parent_order_id', outboxOrderId);
+
+          if (childOrders && childOrders.length > 0) {
+            for (const child of childOrders) {
+              const matchingSplit = splitListFromErp.find((s: any) =>
+                s.warehouse === child.warehouse || String(s.warehouse_id) === String(child.warehouse)
+              );
+              const childDocNumber = matchingSplit?.doc_number || `${docNumber}-${child.id.slice(0, 6).toUpperCase()}`;
+              await supabase
+                .from('orders')
+                .update({
+                  status: 'processing',
+                  order_number: childDocNumber,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', child.id);
+            }
+          }
+        } catch (splitSyncErr) {
+          logger.warn('[Order Dispatcher] Multi-warehouse suborder update notice:', splitSyncErr as Error);
+        }
       }
 
       if (jsonData && typeof jsonData === 'object' && createdSplitOrders.length > 0) {

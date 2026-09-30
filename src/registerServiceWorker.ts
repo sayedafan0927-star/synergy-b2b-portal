@@ -10,6 +10,21 @@ export function registerServiceWorker() {
         .register('/sw.js')
         .then((reg) => {
           console.log('[PWA] Service Worker registered with scope:', reg.scope);
+          
+          // Активная проверка наличия новой версии при старте
+          reg.update().catch(() => {});
+
+          // Проверка обновлений при возврате на вкладку на мобильном устройстве
+          document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+              reg.update().catch(() => {});
+            }
+          });
+
+          // Периодическая проверка раз в 1 час
+          setInterval(() => {
+            reg.update().catch(() => {});
+          }, 60 * 60 * 1000);
         })
         .catch((err) => {
           console.warn('[PWA] Service Worker registration failed:', err);

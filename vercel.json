@@ -2,7 +2,16 @@
   "version": 2,
   "headers": [
     {
-      "source": "/(.*\\.html|sw\\.js)",
+      "source": "/(catalog|product|cart|contacts|login|profile|admin|sw\\.js|manifest\\.json|index\\.html)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/",
       "headers": [
         {
           "key": "Cache-Control",

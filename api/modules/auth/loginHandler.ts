@@ -58,9 +58,22 @@ export async function handleLoginFallback(
   // 2. Поиск хэша пароля в profiles
   const { data: dbProfile } = await supabase
     .from('profiles')
-    .select('id, password_hash, role')
+    .select('id, password_hash, role, is_blocked_for_shipment')
     .or(`phone.eq.${matchedClient.phone},partner_id.eq.${matchedClient.id}`)
     .maybeSingle();
+
+  if (dbProfile?.is_blocked_for_shipment === true) {
+    logger.warn('[Auth] Blocked login attempt: client profile is blocked for shipment', {
+      clientId: matchedClient.id,
+      correlationId,
+    });
+    res.status(403).json({
+      success: false,
+      code: 'CLIENT_DEACTIVATED',
+      error: 'Доступ к оптовому порталу заблокирован администратором.',
+    });
+    return true;
+  }
 
   // КРИТИЧЕСКИЙ ФИКС P0-1: Если password_hash не установлен, вход категорически ЗАПРЕЩЕН
   if (!dbProfile?.password_hash) {
@@ -333,8 +346,7 @@ export async function handleEmployeeLoginFallback(
   const sessionToken = generateSessionToken(sessionData);
 
   try {
-    await supabase.from('profiles').upsert({
-      id: dbProfile?.id || crypto.randomUUID(),
+    const empProfilePayload = {
       role: empRole,
       full_name: empName,
       company_name: 'Synergy Group (ERP)',
@@ -342,7 +354,15 @@ export async function handleEmployeeLoginFallback(
       manager_id: String(empId),
       impersonation_enabled: true,
       updated_at: new Date().toISOString(),
-    }, { onConflict: 'phone' });
+    };
+    if (dbProfile?.id) {
+      await supabase.from('profiles').update(empProfilePayload).eq('id', dbProfile.id);
+    } else {
+      await supabase.from('profiles').insert({
+        id: crypto.randomUUID(),
+        ...empProfilePayload,
+      });
+    }
   } catch (e) {
     logger.warn('[Auth] Employee profile sync notice:', e as Error);
   }

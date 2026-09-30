@@ -156,7 +156,7 @@ export async function authenticateRequest(
     if (userId) {
       const { data: dbProfile } = await supabaseAdmin
         .from('profiles')
-        .select('id, role, partner_id, erp_id, full_name, company_name, phone, price_type')
+        .select('id, role, partner_id, erp_id, full_name, company_name, phone, price_type, is_blocked_for_shipment')
         .eq('id', userId)
         .maybeSingle();
       
@@ -166,7 +166,7 @@ export async function authenticateRequest(
       if (!profile && fallbackPartnerId) {
         const { data: pByPartner } = await supabaseAdmin
           .from('profiles')
-          .select('id, role, partner_id, erp_id, full_name, company_name, phone, price_type')
+          .select('id, role, partner_id, erp_id, full_name, company_name, phone, price_type, is_blocked_for_shipment')
           .eq('partner_id', fallbackPartnerId)
           .maybeSingle();
         profile = pByPartner;
