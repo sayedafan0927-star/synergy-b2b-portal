@@ -158,6 +158,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
   const primaryWarehouseId = 81;
 
   const distinctWarehouses = Array.from(new Set(pricingResult.items.map(it => it.warehouse || 'Основной Склад Астана')));
+  const isMultiWarehouse = distinctWarehouses.length > 1;
   const isManagerOrAdmin = callerAuth.role === 'admin' || callerAuth.role === 'manager_rm' || callerAuth.role === 'manager_lm';
   const resolvedUserId = isManagerOrAdmin && rawPayload.user_id
     ? rawPayload.user_id
