@@ -46,14 +46,11 @@ export default function CatalogPetroglyphHero({
         </div>
       </div>
 
-      {/* Desktop Top Header Row: Title on left with thematic subtitle */}
+      {/* Desktop Top Header Row: Title on left */}
       <div className="hidden sm:block relative mb-2 sm:mb-4">
         <h1 className="text-2xl sm:text-3xl lg:text-4xl font-serif font-bold text-slate-900 tracking-tight">
           {title}
         </h1>
-        <p className="mt-1 text-xs sm:text-sm text-slate-500 font-sans max-w-xl">
-          Широкий ассортимент ковров и дорожек оптом от ведущих производителей
-        </p>
       </div>
 
       {/* Category Pills & Dark Sun Tamga in non-breaking single horizontal row */}
