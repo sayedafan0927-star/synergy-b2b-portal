@@ -1234,7 +1234,7 @@ test_assert("Number(it.area_sqm) > 0 ? Number(it.area_sqm) * it.quantity" in os_
 
 with open(os.path.join(ROOT_DIR, "api", "modules", "supplier", "supplierHandler.ts"), "r", encoding="utf-8") as fp:
     sh_s10 = fp.read()
-test_assert("s.warehouse_id === 82" in sh_s10 and "s.warehouse_id === 83" in sh_s10, "supplierHandler.ts preserves Almaty and Shymkent regional warehouses in shipments")
+test_assert("s.warehouse_id === 82" in sh_s10 and "s.warehouse_id === 83" in sh_s10 and "s.warehouse_id === 84" in sh_s10, "supplierHandler.ts preserves Almaty, Shymkent and Karaganda regional warehouses in shipments")
 
 with open(os.path.join(ROOT_DIR, "api", "warehouse-rules.ts"), "r", encoding="utf-8") as fp:
     wr_s10 = fp.read()

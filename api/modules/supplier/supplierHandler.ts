@@ -34,6 +34,9 @@ export function filterSupplierShipments(jsonData: any, rawSupplierId: string | s
     } else if (s.warehouse_id === 83 || (s.warehouse_name && s.warehouse_name.includes('Шымкент'))) {
       s.city = 'Шымкент';
       s.warehouse_name = 'Филиал Шымкент';
+    } else if (s.warehouse_id === 84 || (s.warehouse_name && (s.warehouse_name.includes('Караганд') || s.warehouse_name.includes('Karaganda')))) {
+      s.city = 'Караганда';
+      s.warehouse_name = 'Филиал Караганда';
     } else if (!s.city) {
       s.city = 'Астана';
       s.warehouse_name = s.warehouse_name || 'Основной Склад Астана';
