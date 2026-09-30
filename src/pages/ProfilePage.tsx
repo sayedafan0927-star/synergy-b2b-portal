@@ -164,27 +164,37 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
           continue;
         }
 
-        // Stock in Astana / main warehouse
-        const wh = foundVariant.warehouses?.find((w: any) =>
-          w.warehouse_id === 81 ||
-          (w.city && w.city.toLowerCase().includes('астан')) ||
-          (w.warehouse_name && (w.warehouse_name.toLowerCase().includes('астан') || w.warehouse_name.toLowerCase().includes('основной'))) ||
-          w.is_hub
+        // Мультискладской подбор остатка: приоритет оригинальному складу заказа, затем хабам
+        const itemWhId = (item as any).warehouse_id;
+        const itemWhName = (item.warehouse || '').toLowerCase().trim();
+        let wh = foundVariant.warehouses?.find((w: any) =>
+          ((itemWhId && w.warehouse_id === itemWhId) ||
+           (itemWhName && (w.warehouse_name?.toLowerCase().includes(itemWhName) || w.city?.toLowerCase().includes(itemWhName)))) &&
+          (w.stock || 0) > 0
         );
-        const stock = wh ? (wh.stock ?? 0) : (foundVariant.warehouses?.reduce((s: number, w: any) => s + (w.stock || 0), 0) ?? 0);
+
+        if (!wh && Array.isArray(foundVariant.warehouses)) {
+          wh = foundVariant.warehouses.find((w: any) => (w.warehouse_id === 81 || w.is_hub) && (w.stock || 0) > 0)
+            || foundVariant.warehouses.find((w: any) => (w.stock || 0) > 0);
+        }
+
+        const stock = wh ? (wh.stock ?? 0) : (foundVariant.warehouses?.reduce((s: number, w: any) => s + (w.stock || 0), 0) ?? (foundVariant.stock || 0));
 
         if (stock <= 0) {
           missing.push({
             name: foundProd.name || item.productName,
             size: item.size,
             requestedQty: item.quantity,
-            reason: 'Нет в наличии на складе в Астане',
+            reason: 'Нет в наличии на складах',
           });
           continue;
         }
 
         const qtyToAdd = Math.min(item.quantity, stock);
         const prodImg = (foundProd.images && foundProd.images.length > 0) ? foundProd.images[0] : (foundProd.image_thumb || '');
+        const resolvedWhName = wh?.warehouse_name || wh?.city || item.warehouse || 'Основной Склад Астана';
+        const resolvedWhId = wh?.warehouse_id || (item as any).warehouse_id || 81;
+        const currentPrice = Number(foundVariant.price || foundVariant.base_price || item.price || 0);
 
         addItem({
           productId: foundProd.id,
@@ -194,9 +204,9 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
           image: prodImg,
           size: foundVariant.size,
           sku: foundVariant.sku,
-          warehouse: wh?.warehouse_name || wh?.city || 'Основной Склад Астана',
-          warehouse_id: wh?.warehouse_id || 81,
-          price: item.price || foundVariant.price || foundVariant.base_price,
+          warehouse: resolvedWhName,
+          warehouse_id: resolvedWhId,
+          price: currentPrice,
           price_per_sqm: foundVariant.price_per_sqm,
           area_sqm: foundVariant.area_sqm,
         }, qtyToAdd);

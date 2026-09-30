@@ -26,7 +26,7 @@ export function RepeatOrderModal({
             </div>
             <div>
               <h3 className="font-bold text-slate-900 text-base">Повтор заказа #{repeatResult.orderNumber}</h3>
-              <p className="text-xs text-slate-500">Проверка актуальных складских остатков в Астане</p>
+              <p className="text-xs text-slate-500">Проверка актуальных складских остатков</p>
             </div>
           </div>
           <button
@@ -80,7 +80,7 @@ export function RepeatOrderModal({
 
         {repeatResult.added.length === 0 && repeatResult.missing.length > 0 && (
           <p className="text-xs text-slate-500 text-center py-2">
-            К сожалению, ни одной позиции из данного заказа сейчас нет в наличии на складе в Астане.
+            К сожалению, ни одной позиции из данного заказа сейчас нет в наличии на складах.
           </p>
         )}
 

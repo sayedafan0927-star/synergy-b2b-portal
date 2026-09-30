@@ -120,7 +120,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     let discrepanciesFixed = 0;
-    const driftedSkus: Array<{ sku: string; local: number; erp: number; reserved: number; diff: number }> = [];
+    const driftedSkus: Array<{ sku: string; local: number; erp: number; reserved: number; diff: number; warehouse_id: number; warehouse_name: string }> = [];
 
     // 3. Сверка остатков по каждому SKU с учетом активных холдов (Zero Reservation Leak)
     for (const p of erpProducts) {
@@ -134,6 +134,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const expectedFreeStock = Math.max(0, erpStock - currentReserved);
         const localStock = localStockMap.get(v.sku);
 
+        const mainWh = (v.warehouses && v.warehouses.length > 0) ? v.warehouses[0] : null;
+        const whId = Number(mainWh?.warehouse_id || v.warehouse_id || 81);
+        const whName = String(mainWh?.warehouse_name || v.warehouse_name || v.warehouse || 'Основной склад Астана');
+
         if (localStock !== undefined && Math.abs(localStock - expectedFreeStock) > 0) {
           discrepanciesFixed++;
           driftedSkus.push({
@@ -142,6 +146,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             erp: expectedFreeStock,
             reserved: currentReserved,
             diff: expectedFreeStock - localStock,
+            warehouse_id: whId,
+            warehouse_name: whName,
           });
         }
       }
@@ -153,11 +159,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await saveCachedCatalog(erpData, 'catalog_global');
       }
 
-      // Пакетная синхронизация расхождений непосредственно в таблицу inventory_balances с сохранением резервов
+      // Пакетная синхронизация расхождений непосредственно в таблицу inventory_balances с сохранением складов и резервов
       if (driftedSkus.length > 0) {
         try {
           const patchItems = driftedSkus.map(d => ({
             sku: d.sku,
+            warehouse_id: d.warehouse_id,
+            warehouse_name: d.warehouse_name,
             free_stock: d.erp,
             reserved_stock: d.reserved,
             total_stock: d.erp + d.reserved,

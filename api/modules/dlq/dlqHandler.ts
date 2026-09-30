@@ -14,6 +14,7 @@ export async function handleDlqOrders(req: VercelRequest, res: VercelResponse, s
     .from('orders')
     .select('id, order_number, user_id, warehouse, total_amount, total_items, notes, retry_count, last_error, updated_at, created_at')
     .eq('status', 'failed_dlq')
+    .is('parent_order_id', null)
     .order('created_at', { ascending: false })
     .limit(100);
 
@@ -44,14 +45,17 @@ export async function handleRetryDlqOrder(
     return res.status(400).json({ success: false, error: 'Параметр order_id обязателен.' });
   }
 
+  const retryNotes = `[Ручной перезапуск администратором: ${auth.fullName || auth.userId}]`;
+  const nowIso = new Date().toISOString();
+
   const { data: updated, error: updErr } = await supabase
     .from('orders')
     .update({
       status: 'pending',
       retry_count: 0,
-      next_retry_at: new Date().toISOString(),
-      notes: `[Ручной перезапуск администратором: ${auth.fullName || auth.userId}]`,
-      updated_at: new Date().toISOString(),
+      next_retry_at: nowIso,
+      notes: retryNotes,
+      updated_at: nowIso,
     })
     .eq('id', orderId)
     .eq('status', 'failed_dlq')
@@ -60,6 +64,22 @@ export async function handleRetryDlqOrder(
 
   if (updErr || !updated) {
     return res.status(500).json({ success: false, error: updErr?.message || 'Заказ не найден в очереди DLQ.' });
+  }
+
+  // Каскадный возврат дочерних подзаказов мультисклада в очередь
+  try {
+    await supabase
+      .from('orders')
+      .update({
+        status: 'pending',
+        retry_count: 0,
+        next_retry_at: nowIso,
+        notes: retryNotes,
+        updated_at: nowIso,
+      })
+      .eq('parent_order_id', orderId);
+  } catch (subErr) {
+    console.warn('[DLQ Retry] Suborder cascade notice:', subErr);
   }
 
   await recordAuditLog({

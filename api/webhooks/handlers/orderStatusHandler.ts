@@ -182,6 +182,7 @@ export async function handleOrderStatusChanged(
 
       const updatePayload: Record<string, any> = {
         status: targetStatus,
+        reservations_released: targetStatus === 'cancelled' ? true : undefined,
         updated_at: new Date().toISOString(),
       };
       if (orderNotes) {

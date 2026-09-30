@@ -1158,7 +1158,45 @@ with open(os.path.join(ROOT_DIR, "AGENTS.md"), "r", encoding="utf-8") as fp:
 test_assert("ORDER_LIFECYCLE_AND_STOCK_RESERVATIONS.md" in agents_s8, "AGENTS.md links ORDER_LIFECYCLE_AND_STOCK_RESERVATIONS.md")
 
 # ------------------------------------------------------------------------------
-# 33. Summary Report
+# 33. Verifying Stage 9 Multi-Warehouse Repeat Order, DLQ Cascades & Reservation Parity...
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{YELLOW}33. Verifying Stage 9 Multi-Warehouse Repeat Order, DLQ Cascades & Reservation Parity...{RESET}")
+
+with open(os.path.join(ROOT_DIR, "src", "pages", "ProfilePage.tsx"), "r", encoding="utf-8") as fp:
+    prof_s9 = fp.read()
+test_assert("itemWhId" in prof_s9 and "itemWhName" in prof_s9, "ProfilePage.tsx supports multi-warehouse matching for repeat orders")
+test_assert("Нет в наличии на складе в Астане" not in prof_s9, "ProfilePage.tsx eliminated hardcoded Astana-only restriction on repeat order")
+test_assert("currentPrice = Number(foundVariant.price || foundVariant.base_price" in prof_s9, "ProfilePage.tsx prioritizes current catalog price over stale order price")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "profile", "RepeatOrderModal.tsx"), "r", encoding="utf-8") as fp:
+    rep_mod_s9 = fp.read()
+test_assert("в Астане" not in rep_mod_s9, "RepeatOrderModal.tsx displays accurate multi-warehouse stock messages")
+
+with open(os.path.join(ROOT_DIR, "api", "approvals", "action.ts"), "r", encoding="utf-8") as fp:
+    act_s9 = fp.read()
+test_assert("parent_order_id', targetOrderId" in act_s9 and "status: 'confirmed'" in act_s9, "action.ts cascades approval confirmation to child suborders")
+test_assert("reservations_released: !isApprove ? true : undefined" in act_s9, "action.ts marks reservations_released on master order upon rejection")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "orderDispatcher.ts"), "r", encoding="utf-8") as fp:
+    disp_s9 = fp.read()
+test_assert("status: 'cancelled',\n            reservations_released: true" in disp_s9, "orderDispatcher.ts sets reservations_released: true on 409 conflict rollback")
+test_assert("status: 'failed_dlq',\n            reservations_released: true" in disp_s9, "orderDispatcher.ts sets reservations_released: true on fatal error DLQ transition")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "dlq", "dlqHandler.ts"), "r", encoding="utf-8") as fp:
+    dlq_s9 = fp.read()
+test_assert(".is('parent_order_id', null)" in dlq_s9, "dlqHandler.ts filters out child suborders from DLQ list")
+test_assert(".eq('parent_order_id', orderId)" in dlq_s9, "dlqHandler.ts cascades manual DLQ retry to child suborders")
+
+with open(os.path.join(ROOT_DIR, "api", "webhooks", "handlers", "orderStatusHandler.ts"), "r", encoding="utf-8") as fp:
+    osh_s9 = fp.read()
+test_assert("reservations_released: targetStatus === 'cancelled' ? true : undefined" in osh_s9, "orderStatusHandler.ts records reservations_released: true on cancelled status")
+
+with open(os.path.join(ROOT_DIR, "api", "cron", "reconcile-stock.ts"), "r", encoding="utf-8") as fp:
+    rec_s9 = fp.read()
+test_assert("warehouse_id: d.warehouse_id" in rec_s9 and "warehouse_name: d.warehouse_name" in rec_s9, "reconcile-stock.ts preserves warehouse identity in drifted stock patches")
+
+# ------------------------------------------------------------------------------
+# 34. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

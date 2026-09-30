@@ -64,6 +64,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .from('orders')
         .update({
           status: newStatus,
+          reservations_released: !isApprove ? true : undefined,
           updated_at: new Date().toISOString(),
         })
         .or(`id.eq.${orderId},order_number.eq.${orderId}`)
@@ -73,9 +74,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.warn('[Approval Action] Supabase update warning:', dbError.message);
       }
 
+      const targetOrderId = dbOrders?.[0]?.id || orderId;
+
+      // При одобрении заказа каскадно подтверждаем мультискладские подзаказы
+      if (isApprove) {
+        try {
+          await supabase
+            .from('orders')
+            .update({
+              status: 'confirmed',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('parent_order_id', targetOrderId);
+        } catch (subApproveErr) {
+          console.warn('[Approval Action] Error cascading approval to suborders:', subApproveErr);
+        }
+      }
+
       // При отклонении заказа немедленно освобождаем резервы склада в PostgreSQL
       if (!isApprove) {
-        const targetOrderId = dbOrders?.[0]?.id || orderId;
         try {
           await supabase.rpc('release_order_reservations', { p_order_id: targetOrderId });
 

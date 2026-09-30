@@ -113,6 +113,7 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
           .from('orders')
           .update({
             status: 'cancelled',
+            reservations_released: true,
             notes: `[Отклонено ERP: Недостаточно остатка] ${jsonData?.error || ''}`,
             updated_at: new Date().toISOString(),
           })
@@ -122,6 +123,7 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
           .from('orders')
           .update({
             status: 'cancelled',
+            reservations_released: true,
             notes: `[Отклонено ERP: Недостаточно остатка] ${jsonData?.error || ''}`,
             updated_at: new Date().toISOString(),
           })
@@ -182,6 +184,7 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
           .from('orders')
           .update({
             status: 'failed_dlq',
+            reservations_released: true,
             last_error: `[Фатальный сбой ERP (${erpResponse.status})] ${fatalErrorText}`,
             updated_at: new Date().toISOString(),
           })
@@ -191,6 +194,7 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
           .from('orders')
           .update({
             status: 'failed_dlq',
+            reservations_released: true,
             last_error: `[Фатальный сбой ERP (${erpResponse.status})] ${fatalErrorText}`,
             updated_at: new Date().toISOString(),
           })
