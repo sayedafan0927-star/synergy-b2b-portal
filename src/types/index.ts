@@ -304,6 +304,8 @@ export interface Category {
   id: string;
   name: string;
   image: string;
+  video?: string;
+  poster?: string;
   count: number;
 }
 

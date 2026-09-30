@@ -51,6 +51,17 @@ export default function HomePage({
     return available.slice(0, 4);
   }, [products, profile, isEffectiveAdmin, hideOutOfStock]);
 
+  const countryCounts = useMemo(() => {
+    const counts: Record<string, number> = { 'Турция': 0, 'Иран': 0, 'Китай': 0 };
+    for (const p of products) {
+      const c = p.country?.trim() || '';
+      if (c.toLowerCase().includes('турц') || c.toLowerCase().includes('turkey')) counts['Турция']++;
+      else if (c.toLowerCase().includes('иран') || c.toLowerCase().includes('iran')) counts['Иран']++;
+      else if (c.toLowerCase().includes('китай') || c.toLowerCase().includes('china')) counts['Китай']++;
+    }
+    return counts;
+  }, [products]);
+
   // Touch scroll guard to prevent accidental navigation while swiping
   const touchStartY = useRef<number | null>(null);
   const touchStartX = useRef<number | null>(null);
@@ -150,34 +161,61 @@ export default function HomePage({
             </p>
           </div>
 
-          <div className="mt-10 lg:mt-14 grid grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-            {categories.map((category) => (
-              <button
-                key={category.id}
-                onClick={() => onNavigate('catalog')}
-                className="group relative aspect-[4/3] overflow-hidden rounded-2xl border border-white/10 hover:border-amber-400/50 shadow-xl transition-all duration-300"
-              >
-                <img
-                  src={category.image}
-                  alt={category.name}
-                  loading="lazy"
-                  decoding="async"
-                  className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-110"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/30 to-transparent" />
-                <div className="absolute inset-x-0 bottom-0 p-4 sm:p-5 text-left">
-                  <h3 className="font-display text-base sm:text-lg font-semibold text-white drop-shadow-sm">
-                    {category.name}
-                  </h3>
-                  <span className="inline-flex items-center gap-1 font-mono text-[11px] text-amber-200 bg-amber-400/20 border border-amber-400/30 px-2 py-0.5 rounded-full mt-1.5">
-                    {category.count} товаров
-                  </span>
-                </div>
-                <div className="absolute top-3 right-3 w-8 h-8 rounded-full bg-amber-400/20 border border-amber-400/40 backdrop-blur-sm flex items-center justify-center opacity-0 translate-x-2 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-0">
-                  <ArrowRight className="h-4 w-4 text-amber-300" />
-                </div>
-              </button>
-            ))}
+          <div className="mt-10 lg:mt-14 flex sm:grid sm:grid-cols-3 gap-4 sm:gap-6 overflow-x-auto sm:overflow-visible pb-4 sm:pb-0 snap-x snap-mandatory scroll-smooth no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0">
+            {categories.map((category) => {
+              const actualCount = countryCounts[category.name] || category.count || 0;
+              return (
+                <button
+                  key={category.id}
+                  type="button"
+                  onClick={() => onNavigate('catalog', category.id)}
+                  className="group relative min-w-[84vw] sm:min-w-0 snap-center aspect-[4/3] sm:aspect-[4/3] overflow-hidden rounded-2xl border border-white/10 hover:border-amber-400/50 shadow-2xl transition-all duration-300 bg-slate-900 cursor-pointer text-left focus:outline-hidden"
+                >
+                  {category.video ? (
+                    <video
+                      autoPlay
+                      loop
+                      muted
+                      playsInline
+                      preload="metadata"
+                      poster={category.poster || category.image}
+                      className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
+                    >
+                      <source src={category.video} type="video/mp4" />
+                    </video>
+                  ) : (
+                    <img
+                      src={category.image}
+                      alt={category.name}
+                      loading="lazy"
+                      className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-110"
+                    />
+                  )}
+
+                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/20 to-black/20 group-hover:via-slate-950/10 transition-all duration-300 pointer-events-none" />
+
+                  <div className="absolute inset-x-0 bottom-0 p-4 sm:p-5 text-left pointer-events-none">
+                    <div className="flex items-end justify-between gap-2">
+                      <div>
+                        <span className="font-mono text-[10px] text-amber-300/80 uppercase tracking-widest block mb-0.5">
+                          Прямые поставки
+                        </span>
+                        <h3 className="font-display text-lg sm:text-xl font-bold text-white drop-shadow-md">
+                          {category.name}
+                        </h3>
+                      </div>
+                      <span className="inline-flex items-center gap-1 font-mono text-[11px] text-amber-200 bg-amber-500/20 border border-amber-400/40 backdrop-blur-md px-2.5 py-1 rounded-full shadow-xs shrink-0">
+                        {actualCount > 0 ? `${actualCount} товаров` : 'В наличии'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="absolute top-3.5 right-3.5 w-8 h-8 rounded-full bg-slate-900/60 border border-amber-400/40 backdrop-blur-md flex items-center justify-center transition-all duration-300 group-hover:scale-110 group-hover:bg-amber-400 group-hover:border-amber-400">
+                    <ArrowRight className="h-4 w-4 text-amber-300 group-hover:text-slate-950 transition-colors" />
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
       </section>

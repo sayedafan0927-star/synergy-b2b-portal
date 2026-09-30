@@ -79,7 +79,7 @@ export default function CurtainNavigationDrawer({
       aria-hidden={!isOpen ? true : undefined}
       // @ts-expect-error React 18 inert attribute support
       inert={!isOpen ? '' : undefined}
-      className={`fixed inset-0 z-50 transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+      className={`fixed inset-0 z-[70] transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
         isOpen
           ? 'opacity-100 pointer-events-auto visible'
           : 'opacity-0 pointer-events-none invisible'
@@ -95,7 +95,7 @@ export default function CurtainNavigationDrawer({
 
       {/* Pure Editorial Curtain Panel (Exact Thompson's Tea Reference: Matte Midnight Slate #161824) */}
       <div
-        className={`relative w-full h-[100dvh] max-h-[100dvh] overflow-y-auto bg-[#161824] text-white shadow-2xl flex flex-col justify-between p-6 sm:p-12 transform transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+        className={`relative w-full h-[100dvh] max-h-[100dvh] overflow-y-auto bg-[#161824] text-white shadow-2xl flex flex-col justify-between p-6 sm:p-12 pb-[max(2.5rem,calc(env(safe-area-inset-bottom)+2rem))] transform transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
           isOpen ? 'translate-y-0' : '-translate-y-full'
         }`}
       >
