@@ -31,35 +31,35 @@ export default function CatalogPetroglyphHero({
         />
       </div>
 
-      {/* Top Header Row: Title on left with thematic subtitle */}
-      <div className="relative mb-3 sm:mb-4">
+      {/* Top Header Row: Title on left with thematic subtitle (hidden on mobile for cleanliness) */}
+      <div className="relative mb-2 sm:mb-4">
         <h1 className="text-2xl sm:text-3xl lg:text-4xl font-serif font-bold text-slate-900 tracking-tight">
           {title}
         </h1>
-        <p className="mt-1 text-xs sm:text-sm text-slate-500 font-sans max-w-xl">
+        <p className="hidden sm:block mt-1 text-xs sm:text-sm text-slate-500 font-sans max-w-xl">
           Широкий ассортимент ковров и дорожек оптом от ведущих производителей
         </p>
+      </div>
 
-        {/* Mobile-only organic art: Golden Horse & Petroglyph Banner floating freely on linen canvas */}
-        <div className="sm:hidden flex items-center gap-2 pointer-events-none opacity-85 mt-2">
-          <img
-            src="/petroglyph-horse.png"
-            alt="Golden Steppe Horse"
-            className="h-8 w-auto object-contain drop-shadow-[0_2px_6px_rgba(197,155,72,0.25)]"
-            loading="lazy"
-          />
-          <img
-            src="/petroglyphs-banner.png"
-            alt="Ancient Petroglyphs"
-            className="h-8 w-auto object-contain max-w-[130px]"
-            loading="lazy"
-          />
-        </div>
+      {/* Mobile-only Spacious Heritage Strip: Golden Horse on left, Petroglyphs on right with generous steppe breathing space */}
+      <div className="sm:hidden flex items-center justify-between w-full pointer-events-none select-none my-2.5 px-0.5">
+        <img
+          src="/petroglyph-horse.png"
+          alt="Golden Steppe Horse"
+          className="h-10 w-auto object-contain drop-shadow-[0_2px_8px_rgba(197,155,72,0.3)]"
+          loading="lazy"
+        />
+        <img
+          src="/petroglyphs-banner.png"
+          alt="Ancient Petroglyphs"
+          className="h-9 w-auto object-contain opacity-85"
+          loading="lazy"
+        />
       </div>
 
       {/* Category Pills & Dark Sun Tamga in natural flex flow */}
       {children && (
-        <div className="relative z-10 flex flex-wrap items-center gap-3 sm:gap-4 mt-3 sm:mt-5">
+        <div className="relative z-10 flex flex-wrap items-center gap-3 sm:gap-4 mt-2 sm:mt-5">
           <div className="flex items-center gap-2 flex-wrap">
             {children}
           </div>
