@@ -1004,7 +1004,14 @@ CREATE POLICY "order_items_update" ON order_items FOR UPDATE
   USING (public.is_admin())
   WITH CHECK (public.is_admin());
 
--- 13.1 Reload PostgREST schema cache immediately
+-- ==============================================================================
+-- 14. Admin Currency Exchange Rate Configuration (display_settings)
+-- ==============================================================================
+
+ALTER TABLE display_settings ADD COLUMN IF NOT EXISTS exchange_rate_usd_kzt numeric(12,4) DEFAULT 520.0000;
+UPDATE display_settings SET exchange_rate_usd_kzt = 520.0000 WHERE exchange_rate_usd_kzt IS NULL;
+
+-- 14.1 Reload PostgREST schema cache immediately
 NOTIFY pgrst, 'reload schema';
 
 COMMIT;

@@ -104,6 +104,47 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
     return;
   }
 
+  // 3.1. Валидация прав доступа дилера к указанным складам (Anti-Bypass)
+  if (callerAuth.role === 'client') {
+    try {
+      const { data: clientRules } = await supabase
+        .from('display_settings')
+        .select('hidden_warehouses')
+        .eq('target_role', 'client')
+        .maybeSingle();
+
+      const forbiddenWhs = Array.isArray(clientRules?.hidden_warehouses) ? clientRules.hidden_warehouses : [];
+      for (const it of pricingResult.items) {
+        const whId = resolveWarehouseId(it.warehouse_id, it.warehouse);
+        if (forbiddenWhs.includes(whId)) {
+          return res.status(403).json({
+            success: false,
+            error: `Заказ со склада "${it.warehouse || whId}" недоступен для вашей учетной записи.`,
+            code: 'FORBIDDEN_WAREHOUSE',
+          });
+        }
+      }
+    } catch (whErr) {
+      logger.warn('[Order] Warehouse check notice:', whErr as Error);
+    }
+  }
+
+  // 3.2. Авторитетный курс валют из базы данных (display_settings)
+  let authoritativeRate = 520.00;
+  try {
+    const { data: dispSettings } = await supabase
+      .from('display_settings')
+      .select('exchange_rate_usd_kzt')
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (dispSettings?.exchange_rate_usd_kzt) {
+      authoritativeRate = Number(dispSettings.exchange_rate_usd_kzt);
+    }
+  } catch {
+    // fallback
+  }
+
   const serverRequiresApproval = Boolean(exposureCheck.requiresApproval);
   const complianceReason = exposureCheck.complianceReason || '';
 
@@ -139,7 +180,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
       total_sqm: pricingResult.items.reduce((s, it) => s + (it.price_per_sqm > 0 ? (it.price / it.price_per_sqm) * it.quantity : 0), 0),
       idempotency_key: incomingIdempotencyKey || null,
       currency: rawPayload.currency || 'USD',
-      applied_exchange_rate: Number(rawPayload.applied_exchange_rate || rawPayload.exchange_rate || 1.0),
+      applied_exchange_rate: authoritativeRate,
       contract_id: rawPayload.contract_id || null,
     };
 
@@ -269,7 +310,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
           status: 'pending',
           idempotency_key: incomingIdempotencyKey || null,
           currency: rawPayload.currency || 'USD',
-          applied_exchange_rate: Number(rawPayload.applied_exchange_rate || rawPayload.exchange_rate || 1.0),
+          applied_exchange_rate: authoritativeRate,
           contract_id: rawPayload.contract_id || null,
         })
         .select('id, order_number')

@@ -83,6 +83,7 @@ export function AdminDisplaySettingsTab() {
 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [exchangeRate, setExchangeRate] = useState<number>(520.00);
   const [clients, setClients] = useState<any[]>([]);
   const [clientSearch, setClientSearch] = useState('');
   const [quickModalClient, setQuickModalClient] = useState<any | null>(null);
@@ -107,6 +108,9 @@ export function AdminDisplaySettingsTab() {
     // Загрузка глобальных серверных настроек из ERP (action=display_settings)
     fetchDisplaySettingsFromErp().then(erpSettings => {
       if (erpSettings) {
+        if ((erpSettings as any).exchange_rate_usd_kzt) {
+          setExchangeRate(Number((erpSettings as any).exchange_rate_usd_kzt));
+        }
         setSettings(prev => {
           const clientPrev = prev.client || defaultMap.client;
           return {
@@ -152,22 +156,21 @@ export function AdminDisplaySettingsTab() {
     setSaved(false);
 
     const clientSettings = settings['client'];
-    if (clientSettings) {
-      try {
-        await saveDisplaySettingsToErp({
-          show_free_stock: clientSettings.show_stock,
-          show_reserved_stock: clientSettings.show_reserve,
-          show_to_ship_stock: clientSettings.show_total_pcs,
-          show_total_stock: clientSettings.show_total_pcs,
-          show_prices: clientSettings.show_price,
-          show_price_per_sqm: clientSettings.show_sqm,
-          show_discounts: true,
-          show_dealer_showroom: clientSettings.show_showroom_warehouse !== false,
-          allow_orders_when_zero_stock: false,
-        });
-      } catch (err) {
-        console.warn('[AdminDisplaySettings] Save to ERP warning:', err);
-      }
+    try {
+      await saveDisplaySettingsToErp({
+        show_free_stock: clientSettings?.show_stock,
+        show_reserved_stock: clientSettings?.show_reserve,
+        show_to_ship_stock: clientSettings?.show_total_pcs,
+        show_total_stock: clientSettings?.show_total_pcs,
+        show_prices: clientSettings?.show_price,
+        show_price_per_sqm: clientSettings?.show_sqm,
+        show_discounts: true,
+        show_dealer_showroom: clientSettings?.show_showroom_warehouse !== false,
+        allow_orders_when_zero_stock: false,
+        exchange_rate_usd_kzt: exchangeRate,
+      } as any);
+    } catch (err) {
+      console.warn('[AdminDisplaySettings] Save to ERP warning:', err);
     }
 
     if (typeof window !== 'undefined') {
@@ -197,6 +200,44 @@ export function AdminDisplaySettingsTab() {
         <div>
           <h2 className="text-lg font-bold text-slate-900">Видимость данных и складов</h2>
           <p className="text-sm text-slate-500">Настройте, что видит каждая роль в каталоге, карточках товаров и сетке остатков</p>
+        </div>
+      </div>
+
+      {/* Официальный курс валюты USD / KZT */}
+      <div className="card p-4 bg-gradient-to-r from-amber-50/70 to-orange-50/50 border border-amber-200/80 rounded-xl shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-900 bg-amber-200/80 px-1.5 py-0.5 rounded">
+                Финансовый контур
+              </span>
+              <h3 className="text-sm font-bold text-slate-900">Официальный курс валюты (USD / KZT)</h3>
+            </div>
+            <p className="text-xs text-slate-600 mt-0.5">
+              Установленный курс фиксируется при оформлении каждого заказа дилером (applied_exchange_rate).
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 bg-white border border-amber-300 rounded-lg px-2.5 py-1.5 shadow-sm">
+              <span className="text-xs font-semibold text-slate-500">1 USD =</span>
+              <input
+                type="number"
+                step="0.01"
+                min="1"
+                value={exchangeRate}
+                onChange={e => setExchangeRate(Number(e.target.value) || 0)}
+                className="w-20 text-right font-bold text-slate-900 focus:outline-none text-xs"
+              />
+              <span className="text-xs font-semibold text-slate-700">KZT</span>
+            </div>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="px-3 py-1.5 text-xs font-semibold bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors shadow-sm cursor-pointer disabled:opacity-50"
+            >
+              {saved ? 'Курс сохранён!' : 'Сохранить курс'}
+            </button>
+          </div>
         </div>
       </div>
 

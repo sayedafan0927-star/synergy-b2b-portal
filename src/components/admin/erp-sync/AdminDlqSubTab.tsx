@@ -1,4 +1,5 @@
-import { AlertTriangle, RefreshCw, X, CheckCircle2 } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { AlertTriangle, RefreshCw, X, CheckCircle2, Filter } from 'lucide-react';
 
 export interface AdminDlqSubTabProps {
   dlqOrders: any[];
@@ -12,6 +13,16 @@ export interface AdminDlqSubTabProps {
   onClearMessage: () => void;
 }
 
+const CATEGORIES = [
+  { id: 'ALL', label: 'Все сбои' },
+  { id: 'STOCK_UNAVAILABLE', label: 'Нехватка остатка' },
+  { id: 'ERP_TIMEOUT', label: 'Таймаут 1C' },
+  { id: 'INVALID_PAYLOAD', label: 'Валидация' },
+  { id: 'AUTH_FAILED', label: 'Авторизация' },
+  { id: 'ERP_SERVER_ERROR', label: 'Сбой 1C' },
+  { id: 'NETWORK_ERROR', label: 'Сетевой сбой' },
+];
+
 export function AdminDlqSubTab({
   dlqOrders,
   dlqLoading,
@@ -23,6 +34,13 @@ export function AdminDlqSubTab({
   onRetryAll,
   onClearMessage,
 }: AdminDlqSubTabProps) {
+  const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
+
+  const filteredOrders = useMemo(() => {
+    if (categoryFilter === 'ALL') return dlqOrders;
+    return dlqOrders.filter(o => o.error_analysis?.category === categoryFilter);
+  }, [dlqOrders, categoryFilter]);
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 bg-red-50/60 border border-red-200/80 rounded-xl p-3">
@@ -68,6 +86,34 @@ export function AdminDlqSubTab({
         </div>
       )}
 
+      {dlqOrders.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[11px] font-semibold text-slate-500 mr-1 flex items-center gap-1">
+            <Filter className="h-3 w-3" /> Фильтр:
+          </span>
+          {CATEGORIES.map(cat => {
+            const count = cat.id === 'ALL'
+              ? dlqOrders.length
+              : dlqOrders.filter(o => o.error_analysis?.category === cat.id).length;
+            if (cat.id !== 'ALL' && count === 0) return null;
+            const active = categoryFilter === cat.id;
+            return (
+              <button
+                key={cat.id}
+                onClick={() => setCategoryFilter(cat.id)}
+                className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-colors cursor-pointer ${
+                  active
+                    ? 'bg-slate-900 text-white'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {cat.label} ({count})
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
@@ -83,7 +129,7 @@ export function AdminDlqSubTab({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {dlqOrders.map((ord: any) => (
+              {filteredOrders.map((ord: any) => (
                 <tr key={ord.id} className="hover:bg-red-50/20 transition-colors">
                   <td className="py-2.5 px-3 font-mono font-bold text-slate-800">
                     {ord.order_number}

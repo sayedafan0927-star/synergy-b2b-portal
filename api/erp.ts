@@ -96,13 +96,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleRetryAllDlqOrders(req, res, supabase, correlationId);
     }
 
-    // 0.9. Кэш настроек отображения (60s TTL)
+    // 0.9. Кэш настроек отображения и официального курса валюты (60s TTL)
     if (action === 'display_settings' && req.method === 'GET') {
-      if (await handleDisplaySettingsGet(req, res)) return;
+      if (await handleDisplaySettingsGet(req, res, supabase)) return;
     }
 
     if (action === 'display_settings' && req.method === 'POST') {
-      if (await handleDisplaySettingsPost(req, res)) return;
+      if (await handleDisplaySettingsPost(req, res, supabase)) return;
     }
 
     // 1.0. Каталог, карточка товара и серверная пагинация (модульный обработчик)

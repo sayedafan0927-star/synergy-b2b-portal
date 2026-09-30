@@ -798,7 +798,48 @@ with open(use_orders_path, "r", encoding="utf-8") as fp:
 test_assert("release_order_reservations" in uol_code, "useOrdersList.ts triggers release_order_reservations when dealer cancels order")
 
 # ------------------------------------------------------------------------------
-# 24. Summary Report
+# 24. Verifying Admin Exchange Rate, Warehouse Authorization, DLQ Filter & CDC Monotonicity
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}24. Verifying Admin Exchange Rate, Warehouse Auth & DLQ Filter...{RESET}")
+
+ex_rate_sql_path = os.path.join(ROOT_DIR, "supabase", "migrations", "20260930110000_add_exchange_rate_to_display_settings.sql")
+test_assert(os.path.exists(ex_rate_sql_path), "20260930110000_add_exchange_rate_to_display_settings.sql migration exists")
+with open(ex_rate_sql_path, "r", encoding="utf-8") as fp:
+    ex_sql_txt = fp.read()
+test_assert("exchange_rate_usd_kzt" in ex_sql_txt, "migration defines exchange_rate_usd_kzt in display_settings")
+
+with open(deploy_all_path, "r", encoding="utf-8") as fp:
+    deploy_sql_fresh = fp.read()
+test_assert("exchange_rate_usd_kzt" in deploy_sql_fresh, "DEPLOY_ALL_ENTERPRISE_MIGRATIONS.sql includes exchange_rate_usd_kzt")
+
+disp_handler_path = os.path.join(ROOT_DIR, "api", "modules", "display", "displaySettingsHandler.ts")
+with open(disp_handler_path, "r", encoding="utf-8") as fp:
+    dsh_code = fp.read()
+test_assert("exchange_rate_usd_kzt" in dsh_code, "displaySettingsHandler.ts reads and updates exchange_rate_usd_kzt")
+
+create_order_h_path = os.path.join(ROOT_DIR, "api", "modules", "orders", "createOrderHandler.ts")
+with open(create_order_h_path, "r", encoding="utf-8") as fp:
+    coh_code = fp.read()
+test_assert("authoritativeRate" in coh_code and "applied_exchange_rate: authoritativeRate" in coh_code, "createOrderHandler.ts strictly enforces authoritative exchange rate from DB")
+test_assert("FORBIDDEN_WAREHOUSE" in coh_code, "createOrderHandler.ts validates client warehouse authorization")
+
+admin_disp_path = os.path.join(ROOT_DIR, "src", "components", "admin", "AdminDisplaySettingsTab.tsx")
+with open(admin_disp_path, "r", encoding="utf-8") as fp:
+    ad_code = fp.read()
+test_assert("exchangeRate" in ad_code and "Официальный курс валюты (USD / KZT)" in ad_code, "AdminDisplaySettingsTab.tsx renders official currency exchange rate input")
+
+admin_dlq_path = os.path.join(ROOT_DIR, "src", "components", "admin", "erp-sync", "AdminDlqSubTab.tsx")
+with open(admin_dlq_path, "r", encoding="utf-8") as fp:
+    adq_code = fp.read()
+test_assert("categoryFilter" in adq_code and "filteredOrders" in adq_code, "AdminDlqSubTab.tsx implements category filtering pills")
+
+webhook_clients_path = os.path.join(ROOT_DIR, "api", "webhooks", "clients.ts")
+with open(webhook_clients_path, "r", encoding="utf-8") as fp:
+    whc_code = fp.read()
+test_assert("ignored_stale_version" in whc_code, "api/webhooks/clients.ts protects against stale CDC counterparty payloads")
+
+# ------------------------------------------------------------------------------
+# 25. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

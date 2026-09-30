@@ -199,3 +199,57 @@ export function categorizeDlqError(errorText?: string | null): CategorizedError 
   };
 }
 
+/**
+ * Диспетчеризация критического оповещения при переводе заказа в DLQ
+ */
+export async function dispatchDlqAlert(
+  order: any,
+  errorMessage: string,
+  category: CategorizedError,
+  correlationId?: string,
+): Promise<void> {
+  const alertPayload = {
+    order_id: order.id,
+    order_number: order.order_number,
+    total_amount: order.total_amount,
+    retry_count: order.retry_count,
+    last_error: errorMessage,
+    category: category.category,
+    label: category.label,
+    recommendedAction: category.recommendedAction,
+    timestamp: new Date().toISOString(),
+  };
+
+  // 1. Фиксация в журнале аудита с критическим приоритетом
+  await recordAuditLog({
+    eventType: 'dlq_poison_alert',
+    direction: 'outbound',
+    status: 'failed',
+    statusCode: 500,
+    source: 'DLQ Alert Dispatcher',
+    correlationId,
+    payload: alertPayload,
+  });
+
+  // 2. Внешний webhook (Telegram / Slack / Monitoring), если задан в переменных окружения
+  const alertWebhookUrl = process.env.DLQ_ALERT_WEBHOOK_URL;
+  if (alertWebhookUrl) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 3000);
+      await fetch(alertWebhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: `🚨 [Synergy B2B DLQ Alert] Заказ ${order.order_number} исчерпал лимит попыток отправки в ERP!\nКатегория: ${category.label}\nОшибка: ${errorMessage}\nРекомендация: ${category.recommendedAction}`,
+          details: alertPayload,
+        }),
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeout));
+    } catch (e) {
+      console.warn('[DLQ Alert] External webhook dispatch notice:', e);
+    }
+  }
+}
+
+

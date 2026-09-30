@@ -139,6 +139,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         login: p.portal_login,
       });
 
+      // Проверка монотонности версий для предотвращения перезаписи свежих данных устаревшими пакетами
+      const incomingTimestamp = Number(p.version_timestamp || (p.updated_at ? new Date(p.updated_at).getTime() : 0));
+      if (incomingTimestamp > 0) {
+        const { data: existingProf } = await supabase
+          .from('profiles')
+          .select('updated_at')
+          .eq('partner_id', String(p.counterparty_id))
+          .maybeSingle();
+
+        if (existingProf?.updated_at && new Date(existingProf.updated_at).getTime() > incomingTimestamp) {
+          console.warn(`[Webhook clients] Stale counterparty CDC payload ignored for partner ${p.counterparty_id}`);
+          return res.status(200).json({
+            success: true,
+            status: 'ignored_stale_version',
+            message: 'Incoming counterparty payload is older than current database record.',
+          });
+        }
+      }
+
       // Сохраняем в Supabase profiles расширенные атрибуты контрагента
       try {
         await supabase
