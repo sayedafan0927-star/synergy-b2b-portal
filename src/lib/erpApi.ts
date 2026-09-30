@@ -35,6 +35,10 @@ export {
   fetchClientOrdersFromErp,
   updateOrderStatusInErp,
   submitLeadToErp,
+  fetchActiveReservations,
+  type ActiveReservation,
+  type ActiveReservationItem,
+  type ActiveReservationsResponse,
 } from './erp/ordersApi';
 
 export {

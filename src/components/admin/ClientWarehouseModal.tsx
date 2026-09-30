@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Building2, Boxes, X, CheckCircle2, Check } from 'lucide-react';
+import { Building2, Boxes, X, CheckCircle2, Check, BarChart2 } from 'lucide-react';
 import {
   getClientWarehouseSettings,
   saveClientWarehouseSettings,
@@ -27,6 +27,7 @@ export function ClientWarehouseModal({ client, onClose }: ClientWarehouseModalPr
   const [mode, setMode] = useState<'auto' | 'custom'>(initialSettings.mode || 'auto');
   const [showCentral, setShowCentral] = useState<boolean>(initialSettings.showCentralWarehouse !== false);
   const [showShowroom, setShowShowroom] = useState<boolean>(initialSettings.showShowroomWarehouse !== false);
+  const [showStockSummary, setShowStockSummary] = useState<boolean>(initialSettings.showStockSummary === true);
   const [saved, setSaved] = useState(false);
 
   const showroomId = client.showroom_warehouse_id;
@@ -37,6 +38,7 @@ export function ClientWarehouseModal({ client, onClose }: ClientWarehouseModalPr
       mode,
       showCentralWarehouse: showCentral,
       showShowroomWarehouse: showShowroom,
+      showStockSummary,
     });
     setSaved(true);
     setTimeout(() => {
@@ -50,6 +52,7 @@ export function ClientWarehouseModal({ client, onClose }: ClientWarehouseModalPr
     setMode('auto');
     setShowCentral(true);
     setShowShowroom(true);
+    setShowStockSummary(false);
     setSaved(true);
     setTimeout(() => {
       setSaved(false);
@@ -204,6 +207,37 @@ export function ClientWarehouseModal({ client, onClose }: ClientWarehouseModalPr
             </div>
           </div>
         )}
+
+        {/* Permission: Stock Summary & Reservations Bar */}
+        <div className="card p-3.5 flex items-center justify-between gap-3 border-slate-200 bg-slate-50/70">
+          <div className="flex items-center gap-3">
+            <div className={`flex h-9 w-9 items-center justify-center rounded-lg shrink-0 ${showStockSummary ? 'bg-indigo-50 text-indigo-700' : 'bg-slate-100 text-slate-400'}`}>
+              <BarChart2 className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-slate-900">
+                Виджет сводки остатков и резервы
+              </p>
+              <p className="text-[11px] text-slate-500">
+                Разрешить клиенту видеть общую сводку остатков (Свободно / Резерв / Отгрузка)
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowStockSummary(v => !v)}
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+              showStockSummary ? 'bg-indigo-600' : 'bg-slate-200'
+            }`}
+            title="Включить или выключить виджет сводки остатков для этого клиента"
+          >
+            <span
+              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                showStockSummary ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
 
         {/* Footer actions */}
         <div className="border-t border-slate-100 pt-4 flex flex-wrap items-center justify-between gap-3">

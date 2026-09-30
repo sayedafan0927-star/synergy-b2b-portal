@@ -16,6 +16,7 @@ export interface WarehouseRuleRecord {
   mode: 'auto' | 'custom';
   show_central_warehouse: boolean;
   show_showroom_warehouse: boolean;
+  show_stock_summary?: boolean;
   allowed_warehouse_ids: number[];
   hidden_warehouse_ids: number[];
   custom_name?: string;
@@ -56,6 +57,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           mode: r.mode || 'auto',
           showCentralWarehouse: r.show_central_warehouse !== false,
           showShowroomWarehouse: r.show_showroom_warehouse !== false,
+          showStockSummary: r.show_stock_summary === true,
           allowedWarehouseIds: r.allowed_warehouse_ids || [],
           hiddenWarehouseIds: r.hidden_warehouse_ids || [],
           customName: r.custom_name,
@@ -96,6 +98,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         mode: settings.mode || 'auto',
         show_central_warehouse: settings.showCentralWarehouse !== false,
         show_showroom_warehouse: settings.showShowroomWarehouse !== false,
+        show_stock_summary: Boolean(settings.showStockSummary),
         allowed_warehouse_ids: Array.isArray(settings.allowedWarehouseIds) ? settings.allowedWarehouseIds : [],
         hidden_warehouse_ids: Array.isArray(settings.hiddenWarehouseIds) ? settings.hiddenWarehouseIds : [],
         custom_name: settings.customName || null,

@@ -4,6 +4,7 @@ export interface ClientWarehouseSettings {
   mode: 'auto' | 'custom';
   showCentralWarehouse: boolean; // default true
   showShowroomWarehouse: boolean; // default true
+  showStockSummary?: boolean; // default false for clients, true for admin: gives visibility to stock summary & reservations
   allowedWarehouseIds?: number[]; // explicit list of other allowed warehouse IDs
   hiddenWarehouseIds?: number[];  // explicit list of hidden warehouse IDs
   customName?: string;
@@ -69,6 +70,7 @@ export function getClientWarehouseSettings(clientIdOrPartnerId?: string | number
     mode: 'auto',
     showCentralWarehouse: true,
     showShowroomWarehouse: true,
+    showStockSummary: false,
   };
 
   if (!clientIdOrPartnerId) return defaultAuto;

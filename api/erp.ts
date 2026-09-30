@@ -13,6 +13,7 @@ import { handleCachedClientDebt } from './modules/financial/debtHandler';
 import { handleFinancialBalanceSheet } from './modules/financial/balanceHandler';
 import { handleRefreshClientBalance } from './modules/financial/refreshBalanceHandler';
 import { handleDlqOrders, handleRetryDlqOrder, handleRetryAllDlqOrders } from './modules/dlq/dlqHandler';
+import { handleActiveReservations } from './modules/orders/activeReservationsHandler';
 import {
   handleDisplaySettingsGet,
   handleDisplaySettingsPost,
@@ -136,6 +137,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         targetErpUrl: TARGET_ERP_URL,
         serverErpKey: SERVER_ERP_KEY,
       });
+    }
+
+    // 1.1.3. Активные резервы склада (клиенты, товары, объемы)
+    if (action === 'active_reservations' && req.method === 'GET') {
+      const callerAuth = await authenticateRequest(req, { allowServerKey: true });
+      if (!callerAuth.isAuthenticated) {
+        return res.status(401).json({ success: false, error: 'Требуется авторизация' });
+      }
+      return await handleActiveReservations(req, res, supabase, callerAuth);
     }
 
     // 1.2. Быстрое создание лида из модалки каталога

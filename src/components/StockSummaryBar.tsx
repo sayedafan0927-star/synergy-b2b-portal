@@ -6,6 +6,7 @@ import { CheckCircle2, Clock, Truck, Boxes, Layers } from 'lucide-react';
 interface StockSummaryBarProps {
   summary: StockSummary;
   className?: string;
+  onReserveClick?: () => void;
 }
 
 function fmtNum(n: number, decimals = 0): string {
@@ -16,7 +17,7 @@ function fmtNum(n: number, decimals = 0): string {
   });
 }
 
-export const StockSummaryBar: React.FC<StockSummaryBarProps> = ({ summary, className = '' }) => {
+export const StockSummaryBar: React.FC<StockSummaryBarProps> = ({ summary, className = '', onReserveClick }) => {
   const { language } = useLanguage();
 
   const labels = {
@@ -61,7 +62,15 @@ export const StockSummaryBar: React.FC<StockSummaryBarProps> = ({ summary, class
         <div className="h-3.5 w-px bg-slate-200/80 hidden md:block" />
 
         {/* 2. В резерве */}
-        <div className="flex items-center gap-2">
+        <div
+          onClick={onReserveClick}
+          className={`flex items-center gap-2 rounded-lg px-2 py-1 -my-1 transition-all ${
+            onReserveClick
+              ? 'cursor-pointer hover:bg-amber-50 active:scale-95 border border-transparent hover:border-amber-200'
+              : ''
+          }`}
+          title={onReserveClick ? 'Нажмите, чтобы посмотреть клиентов и объём резерва' : undefined}
+        >
           <div className="flex items-center gap-1.5">
             <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0" />
             <span className="font-medium text-slate-600">{labels.reserve}:</span>
@@ -72,6 +81,11 @@ export const StockSummaryBar: React.FC<StockSummaryBarProps> = ({ summary, class
           <span className="font-semibold text-amber-700 font-mono">
             {fmtNum(summary.reserved_stock_sqm, 2)} м²
           </span>
+          {onReserveClick && (
+            <span className="text-[10px] font-medium text-amber-800 bg-amber-100/80 px-1.5 py-0.5 rounded-full hover:bg-amber-200">
+              клиенты ↗
+            </span>
+          )}
         </div>
 
         <div className="h-3.5 w-px bg-slate-200/80 hidden md:block" />
@@ -132,10 +146,22 @@ export const StockSummaryBar: React.FC<StockSummaryBarProps> = ({ summary, class
           </div>
 
           {/* Резерв */}
-          <div className="rounded-lg bg-amber-50/50 border border-amber-100 p-2">
-            <div className="flex items-center gap-1.5 text-amber-800 font-semibold text-[11px] mb-0.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-              <span>{labels.reserve}</span>
+          <div
+            onClick={onReserveClick}
+            className={`rounded-lg bg-amber-50/50 border border-amber-100 p-2 transition-all ${
+              onReserveClick ? 'cursor-pointer active:scale-95 hover:bg-amber-100/60' : ''
+            }`}
+          >
+            <div className="flex items-center justify-between text-amber-800 font-semibold text-[11px] mb-0.5">
+              <div className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                <span>{labels.reserve}</span>
+              </div>
+              {onReserveClick && (
+                <span className="text-[9px] font-bold text-amber-700 bg-amber-100/90 px-1 py-0.5 rounded">
+                  клиенты ↗
+                </span>
+              )}
             </div>
             <div className="font-bold text-slate-900 text-xs font-mono">
               {fmtNum(summary.reserved_stock_qty)} {labels.pcs}

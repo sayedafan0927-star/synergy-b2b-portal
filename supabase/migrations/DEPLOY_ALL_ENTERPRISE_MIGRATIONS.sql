@@ -43,9 +43,11 @@ DO $$ BEGIN
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS version integer NOT NULL DEFAULT 1;
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS currency text NOT NULL DEFAULT 'USD';
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS parent_order_id uuid REFERENCES orders(id) ON DELETE CASCADE;
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS reservations_released boolean NOT NULL DEFAULT false;
   END IF;
 END $$;
 CREATE INDEX IF NOT EXISTS idx_orders_parent_order_id ON orders(parent_order_id);
+CREATE INDEX IF NOT EXISTS idx_orders_reservations_released ON orders(reservations_released);
 
 -- 0.3 Ensure order_items table and all required columns exist
 DO $$ BEGIN
@@ -1011,7 +1013,13 @@ CREATE POLICY "order_items_update" ON order_items FOR UPDATE
 ALTER TABLE display_settings ADD COLUMN IF NOT EXISTS exchange_rate_usd_kzt numeric(12,4) DEFAULT 520.0000;
 UPDATE display_settings SET exchange_rate_usd_kzt = 520.0000 WHERE exchange_rate_usd_kzt IS NULL;
 
--- 14.1 Reload PostgREST schema cache immediately
+-- ==============================================================================
+-- 15. Client Stock Summary Visibility Permission
+-- ==============================================================================
+
+ALTER TABLE client_warehouse_rules ADD COLUMN IF NOT EXISTS show_stock_summary boolean NOT NULL DEFAULT false;
+
+-- 15.1 Reload PostgREST schema cache immediately
 NOTIFY pgrst, 'reload schema';
 
 COMMIT;

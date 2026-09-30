@@ -15,10 +15,11 @@ import ProductCard from '@/components/ProductCard';
 import StockSummaryBar from '@/components/StockSummaryBar';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
-import { filterWarehousesForClient, isProductInStockForUser } from '@/lib/warehouseVisibility';
+import { filterWarehousesForClient, isProductInStockForUser, getClientWarehouseSettings } from '@/lib/warehouseVisibility';
 import {
   FilterDrawer,
   CatalogStockTable,
+  StockReservationsModal,
   getTotalStock,
   sizeArea,
   type SortOption,
@@ -43,6 +44,12 @@ export default function CatalogPage({
 
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [reservationsModalOpen, setReservationsModalOpen] = useState(false);
+  const canViewStockSummary = useMemo(() => {
+    if (isEffectiveAdmin) return true;
+    const key = profile?.partner_id || profile?.id;
+    return Boolean(key && getClientWarehouseSettings(key)?.showStockSummary);
+  }, [isEffectiveAdmin, profile?.partner_id, profile?.id]);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('popular');
   const [stockWarehouse, setStockWarehouse] = useState('');
@@ -551,9 +558,14 @@ export default function CatalogPage({
         )}
 
         {/* Stock Summary Bar (Сводка: свободно, в брони, к отгрузке, всего) */}
-        <div className="mb-4">
-          <StockSummaryBar summary={currentSummary} />
-        </div>
+        {canViewStockSummary && (
+          <div className="mb-4">
+            <StockSummaryBar
+              summary={currentSummary}
+              onReserveClick={() => setReservationsModalOpen(true)}
+            />
+          </div>
+        )}
 
         {filteredProducts.length > 0 ? (
           viewMode === 'grid' ? (
@@ -622,6 +634,13 @@ export default function CatalogPage({
         allWarehouses={allWarehouses}
         allSizes={allSizes}
       />
+
+      {canViewStockSummary && (
+        <StockReservationsModal
+          isOpen={reservationsModalOpen}
+          onClose={() => setReservationsModalOpen(false)}
+        />
+      )}
     </section>
   );
 }

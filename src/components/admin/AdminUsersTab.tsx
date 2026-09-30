@@ -240,6 +240,17 @@ export function AdminUsersTab({ onNavigate }: AdminUsersTabProps) {
                       </span>
                     );
                   })()}
+                  {(() => {
+                    const s = getClientWarehouseSettings(u.partner_id || u.id);
+                    if (s.showStockSummary) {
+                      return (
+                        <span className="badge bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px]" title="Клиент имеет персональный доступ к виджету остатков и резервам">
+                          📊 Сводка остатков вкл.
+                        </span>
+                      );
+                    }
+                    return null;
+                  })()}
                 </div>
               </div>
 
