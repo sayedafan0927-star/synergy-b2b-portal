@@ -95,7 +95,7 @@ export default function ProductPage({
           item_id: (variant as any).item_id || (Number(variant.id) > 0 ? Number(variant.id) : (Number(product.id) > 0 ? Number(product.id) : undefined)),
           productName: product.name,
           collection: product.collection,
-          image: product.images[0] || product.image_thumb,
+          image: product.images[0] || product.image_thumb || '',
           size: variant.size,
           sku: variant.sku,
           warehouse: whLabel,
@@ -359,7 +359,7 @@ export default function ProductPage({
               fmtPrice={fmtPrice}
               language={language}
               t={t}
-              myShowroomId={myShowroomId}
+              myShowroomId={myShowroomId ?? undefined}
               myShowroomName={myShowroomName}
               clientContext={clientContext}
               displaySettings={displaySettings}
@@ -419,7 +419,7 @@ export default function ProductPage({
           currency={currency}
           fmtPrice={fmtPrice}
           pricing={pricing}
-          myShowroomId={myShowroomId}
+          myShowroomId={myShowroomId ?? undefined}
           myShowroomName={myShowroomName}
           clientContext={clientContext}
           displaySettings={displaySettings}
@@ -483,7 +483,7 @@ export default function ProductPage({
             fmtPrice={fmtPrice}
             language={language}
             t={t}
-            myShowroomId={myShowroomId}
+            myShowroomId={myShowroomId ?? undefined}
             myShowroomName={myShowroomName}
             clientContext={clientContext}
             displaySettings={displaySettings}
@@ -530,7 +530,7 @@ export default function ProductPage({
             currency={currency}
             fmtPrice={fmtPrice}
             pricing={pricing}
-            myShowroomId={myShowroomId}
+            myShowroomId={myShowroomId ?? undefined}
             myShowroomName={myShowroomName}
             clientContext={clientContext}
             displaySettings={displaySettings}

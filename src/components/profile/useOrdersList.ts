@@ -61,7 +61,7 @@ export function useOrdersList({ isAdmin, isManager }: UseOrdersListOptions) {
               orderNumber: o.doc_number || `ORD-${o.id}`,
               userId: String(o.client_id || ''),
               date: dateStr,
-              rawDate: o.date || o.created_at || new Date().toISOString(),
+              rawDate: o.date || (o as any).created_at || new Date().toISOString(),
               status: o.status || meta.label,
               statusRaw: st,
               statusColor: meta.color,

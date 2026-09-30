@@ -292,22 +292,22 @@ export function ClientDemoPanel({ client }: ClientDemoPanelProps) {
               <div className="flex items-center justify-between">
                 <span className="text-xs text-slate-500">Задолженность</span>
                 <span className="text-sm font-bold text-red-600">
-                  {fmtPrice(debt.financials.total_debt_usd)}
+                  {fmtPrice(debt.financials?.total_debt_usd ?? 0)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-slate-500">Оплачено</span>
                 <span className="text-sm font-bold text-emerald-600">
-                  {fmtPrice(debt.financials.total_paid_usd)}
+                  {fmtPrice(debt.financials?.total_paid_usd ?? 0)}
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-slate-500">Просрочено</span>
                 <span className="text-sm font-bold text-amber-600">
-                  {fmtPrice(debt.financials.overdue_usd)}
+                  {fmtPrice(debt.financials?.overdue_usd ?? 0)}
                 </span>
               </div>
-              {debt.financials.is_overdue && (
+              {debt.financials?.is_overdue && (
                 <div className="flex items-center gap-1.5 rounded-md bg-red-50 px-2 py-1 text-[11px] text-red-700">
                   <AlertTriangle className="h-3 w-3" />
                   Просрочка {debt.financials.max_overdue_days} дн.

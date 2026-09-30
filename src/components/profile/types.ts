@@ -1,6 +1,6 @@
 import type { UserRole } from '@/contexts/AuthContext';
 import { calcSqm, parseSizeDimensions } from '@/types';
-import { formatCurrency } from '@/lib/currency';
+import { formatCurrency } from '@/lib/pricingEngine';
 
 export interface OrderItem {
   id?: string;

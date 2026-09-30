@@ -60,7 +60,7 @@ export function AdminCounterpartiesSubTab({
         }
         onRefreshCounterparties?.();
       } else {
-        alert('Ошибка обновления статуса в ERP: ' + (res.error || 'неизвестная ошибка'));
+        alert('Ошибка обновления статуса в ERP: ' + ((res as any)?.error || 'неизвестная ошибка'));
       }
     } catch (err: any) {
       alert('Сбой сети при запросе к ERP: ' + (err.message || ''));

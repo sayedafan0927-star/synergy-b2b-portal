@@ -7,12 +7,12 @@ export function rowKey(sku: string, city: string): string {
 
 export function getVariantShape(v: ProductVariant, productName = '', productCategory = ''): string {
   const s = (v.size || '').toLowerCase();
-  const name = (productName + ' ' + (v.name || '')).toLowerCase();
+  const name = (productName + ' ' + ((v as any).name || '')).toLowerCase();
   const { w, h } = parseSizeDimensions(v.size);
 
   if (name.includes('овал') || s.includes('овал')) return 'Овальный';
   if (name.includes('круг') || s.includes('круг')) return 'Круглый';
-  if (v.type === 'Рулон' || productCategory.toLowerCase().includes('дорожк') || name.includes('дорожк')) {
+  if ((v as any).type === 'Рулон' || productCategory.toLowerCase().includes('дорожк') || name.includes('дорожк')) {
     return 'Дорожка';
   }
   if (w > 0 && h > 0) {

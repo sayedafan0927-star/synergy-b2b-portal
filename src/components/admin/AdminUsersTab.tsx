@@ -59,7 +59,7 @@ export function AdminUsersTab({ onNavigate }: AdminUsersTabProps) {
       try {
         const cpData = await fetchCounterpartiesFromErp({ limit: 300, includeArchived: true });
         if (!cancelled && cpData && cpData.success && Array.isArray(cpData.counterparties) && cpData.counterparties.length > 0) {
-          const mappedUsers = cpData.counterparties.map((cp) => {
+          const mappedUsers = cpData.counterparties.map((cp: any) => {
             const isAccessOn = cp.portal_access_enabled !== 0 && cp.is_active !== 0 && cp.status !== 'inactive' && cp.access !== 'disabled';
             const isArchived = isCounterpartyArchivedOrMailing(cp);
             return {

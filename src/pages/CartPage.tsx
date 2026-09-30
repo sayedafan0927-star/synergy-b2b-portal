@@ -195,8 +195,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
         }
         const buffered = Boolean(
           data.order?.is_buffered ||
-            (data.order as any)?.is_buffered_offline ||
-            data.is_buffered ||
+            (data as any)?.is_buffered ||
             (data as any)?.is_buffered_offline,
         );
         setIsServerBuffered(buffered);

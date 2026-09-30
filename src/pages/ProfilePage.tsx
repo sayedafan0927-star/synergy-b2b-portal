@@ -232,7 +232,7 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
       try {
         const phone = profile.phone || user?.phone || (user?.user_metadata?.phone as string) || undefined;
         const partnerId = profile.partner_id ? Number(profile.partner_id) : (!isNaN(Number(profile.id)) ? Number(profile.id) : undefined);
-        const res = await fetchClientDebtFromErp({ phone, partnerId });
+        const res = await fetchClientDebtFromErp({ phone, counterpartyId: partnerId });
         if (!cancelled && res.success) {
           setClientDebt(res);
         }
@@ -387,9 +387,9 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
               <div className="flex items-center justify-between pb-2 border-b border-slate-100">
                 <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Взаиморасчеты (ERP)</span>
                 <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
-                  (clientDebt?.debt_usd ?? 0) > 0 ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'
+                  (clientDebt?.financials?.total_debt_usd ?? 0) > 0 ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'
                 }`}>
-                  {(clientDebt?.debt_usd ?? 0) > 0 ? 'Задолженность' : 'Нет долга'}
+                  {(clientDebt?.financials?.total_debt_usd ?? 0) > 0 ? 'Задолженность' : 'Нет долга'}
                 </span>
               </div>
 
@@ -397,28 +397,28 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
                 <div className="flex justify-between items-center">
                   <span className="text-slate-500">Текущий долг:</span>
                   <span className={`font-bold ${
-                    (clientDebt?.debt_usd ?? 0) > 0 ? 'text-red-600' : 'text-slate-900'
+                    (clientDebt?.financials?.total_debt_usd ?? 0) > 0 ? 'text-red-600' : 'text-slate-900'
                   }`}>
-                    {fmtPrice(clientDebt?.debt_usd ?? 0)}
+                    {fmtPrice(clientDebt?.financials?.total_debt_usd ?? 0)}
                   </span>
                 </div>
 
                 <div className="flex justify-between items-center">
                   <span className="text-slate-500">Кредитный лимит:</span>
                   <span className="font-semibold text-slate-700">
-                    {fmtPrice(clientDebt?.credit_limit_usd ?? profile.credit_limit_usd ?? 0)}
+                    {fmtPrice(clientDebt?.client?.credit_limit_usd ?? profile.credit_limit_usd ?? 0)}
                   </span>
                 </div>
 
                 <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all ${
-                      (clientDebt?.debt_usd ?? 0) > (clientDebt?.credit_limit_usd ?? profile.credit_limit_usd ?? 1)
+                      (clientDebt?.financials?.total_debt_usd ?? 0) > (clientDebt?.client?.credit_limit_usd ?? profile.credit_limit_usd ?? 1)
                         ? 'bg-red-500'
                         : 'bg-emerald-500'
                     }`}
                     style={{
-                      width: `${Math.min(100, Math.max(0, ((clientDebt?.debt_usd ?? 0) / (clientDebt?.credit_limit_usd ?? profile.credit_limit_usd ?? 1)) * 100))}%`
+                      width: `${Math.min(100, Math.max(0, ((clientDebt?.financials?.total_debt_usd ?? 0) / (clientDebt?.client?.credit_limit_usd ?? profile.credit_limit_usd ?? 1)) * 100))}%`
                     }}
                   />
                 </div>

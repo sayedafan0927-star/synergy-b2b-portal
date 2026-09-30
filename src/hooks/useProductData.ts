@@ -327,7 +327,7 @@ export function useProduct(id: string | undefined, customDealerId?: string | num
     async function load() {
       try {
         // 1. Попытка быстрой точечной загрузки одного товара (минуя дамп всего каталога)
-        const single = await fetchSingleProductFromErp(id).catch(() => null);
+        const single = await fetchSingleProductFromErp(id!).catch(() => null);
         if (!cancelled && single) {
           const merged = mergeProducts([single as Product]);
           if (merged.length > 0) {
