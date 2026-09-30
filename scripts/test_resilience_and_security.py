@@ -1619,7 +1619,32 @@ with open(os.path.join(ROOT_DIR, "docs", "ERP_INTEGRATION_SPEC.md"), "r", encodi
 test_assert("action=send_whatsapp" in spec_code and "13. Единый шлюз WhatsApp-уведомлений" in spec_code, "docs/ERP_INTEGRATION_SPEC.md documents unified ERP WhatsApp gateway specification")
 
 # ------------------------------------------------------------------------------
-# 45. Summary Report
+# 45. Stage 21: Mobile Search Centering & Smart Enter/Done Routing
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 45. STAGE 21: MOBILE SEARCH CENTERING & SMART ROUTING ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "search", "CommandPalette.tsx"), "r", encoding="utf-8") as fp:
+    cp_code = fp.read()
+test_assert("executeSearch" in cp_code and "productByArticle" in cp_code, "CommandPalette.tsx defines smart executeSearch matching product articles and SKUs")
+test_assert("matchedCol" in cp_code and "onNavigate('catalog', matchedCol)" in cp_code, "CommandPalette.tsx routes collection search directly to catalog page with collection pre-selected")
+test_assert("enterKeyHint=\"search\"" in cp_code and "role=\"search\"" in cp_code, "CommandPalette.tsx wraps search in standard form with enterKeyHint for mobile keyboards")
+test_assert("text-base" in cp_code, "CommandPalette.tsx enforces 16px font-size on mobile input preventing iOS Safari auto-zoom shift")
+test_assert("document.body.style.overflow = 'hidden'" in cp_code, "CommandPalette.tsx locks body scroll preventing mobile background viewport shift")
+
+with open(os.path.join(ROOT_DIR, "src", "App.tsx"), "r", encoding="utf-8") as fp:
+    app_s21 = fp.read()
+test_assert("catalogSearch" in app_s21 and "search:" in app_s21, "App.tsx supports search query parameter in catalog routing")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "catalog", "useCatalogStatePersistence.ts"), "r", encoding="utf-8") as fp:
+    ucsp_s21 = fp.read()
+test_assert("initialSearch" in ucsp_s21, "useCatalogStatePersistence supports initialSearch option")
+
+with open(os.path.join(ROOT_DIR, "src", "pages", "CatalogPage.tsx"), "r", encoding="utf-8") as fp:
+    cp_p21 = fp.read()
+test_assert("initialSearch" in cp_p21, "CatalogPage passes initialSearch to state persistence")
+
+# ------------------------------------------------------------------------------
+# 46. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

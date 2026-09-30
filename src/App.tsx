@@ -192,6 +192,9 @@ function parseUrlState(): { page: PageId; id?: string } {
     const country = params.get('country');
     if (country) return { page: 'catalog', id: `country:${country}` };
 
+    const search = params.get('search');
+    if (search) return { page: 'catalog', id: `search:${search}` };
+
     const collection = params.get('collection');
     if (collection) return { page: 'catalog', id: collection };
 
@@ -216,6 +219,7 @@ export default function App() {
   const [productId, setProductId] = useState<string>('');
   const [catalogCollection, setCatalogCollection] = useState<string | undefined>(undefined);
   const [catalogCountry, setCatalogCountry] = useState<string | undefined>(undefined);
+  const [catalogSearch, setCatalogSearch] = useState<string | undefined>(undefined);
   const [preloaderDone, setPreloaderDone] = useState(false);
   const isOnline = useNetworkStatus();
   const [isPending, startTransition] = useTransition();
@@ -226,12 +230,19 @@ export default function App() {
       if (target === 'catalog' && id?.startsWith('country:')) {
         setCatalogCountry(id.slice('country:'.length));
         setCatalogCollection(undefined);
+        setCatalogSearch(undefined);
+      } else if (target === 'catalog' && id?.startsWith('search:')) {
+        setCatalogSearch(id.slice('search:'.length));
+        setCatalogCollection(undefined);
+        setCatalogCountry(undefined);
       } else if (target === 'catalog' && id) {
         setCatalogCollection(id);
         setCatalogCountry(undefined);
+        setCatalogSearch(undefined);
       } else if (target === 'catalog') {
         setCatalogCollection(undefined);
         setCatalogCountry(undefined);
+        setCatalogSearch(undefined);
       }
       if (id && target === 'product') setProductId(id);
     });
@@ -244,6 +255,8 @@ export default function App() {
       } else if (target === 'catalog') {
         if (id?.startsWith('country:')) {
           url.searchParams.set('country', id.slice('country:'.length));
+        } else if (id?.startsWith('search:')) {
+          url.searchParams.set('search', id.slice('search:'.length));
         } else if (id) {
           url.searchParams.set('collection', id);
         } else {
@@ -323,7 +336,15 @@ export default function App() {
   const renderPage = () => {
     switch (page) {
       case 'home': return <HomePage onNavigate={navigate} isReady={preloaderDone} />;
-      case 'catalog': return <CatalogPage key={catalogCollection ?? catalogCountry ?? 'all'} onNavigate={navigate} initialCollection={catalogCollection} initialCountry={catalogCountry} />;
+      case 'catalog': return (
+        <CatalogPage
+          key={catalogCollection ?? catalogCountry ?? catalogSearch ?? 'all'}
+          onNavigate={navigate}
+          initialCollection={catalogCollection}
+          initialCountry={catalogCountry}
+          initialSearch={catalogSearch}
+        />
+      );
       case 'product': return <ProductPage key={productId} productId={productId} onNavigate={navigate} />;
       case 'cart': return <CartPage onNavigate={navigate} />;
       case 'contacts': return <ContactsPage onNavigate={navigate} />;

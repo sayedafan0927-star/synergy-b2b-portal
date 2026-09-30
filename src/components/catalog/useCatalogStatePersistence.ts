@@ -91,21 +91,22 @@ export function restoreCatalogScroll(productId?: string | null, scrollY?: number
 export interface UseCatalogStatePersistenceOptions {
   initialCollection?: string;
   initialCountry?: string;
+  initialSearch?: string;
 }
 
 export function useCatalogStatePersistence(options: UseCatalogStatePersistenceOptions = {}) {
-  const { initialCollection, initialCountry } = options;
+  const { initialCollection, initialCountry, initialSearch } = options;
 
-  // Retrieve saved snapshot if not an explicit navigation link (such as banner click)
+  // Retrieve saved snapshot if not an explicit navigation link (such as banner click or search redirect)
   const savedState = useMemo(() => {
-    if (initialCollection || initialCountry) {
+    if (initialCollection || initialCountry || initialSearch) {
       return null;
     }
     return readCatalogState();
-  }, [initialCollection, initialCountry]);
+  }, [initialCollection, initialCountry, initialSearch]);
 
   const [viewMode, setViewMode] = useState<ViewMode>(() => savedState?.viewMode || 'grid');
-  const [searchQuery, setSearchQuery] = useState<string>(() => savedState?.searchQuery || '');
+  const [searchQuery, setSearchQuery] = useState<string>(() => initialSearch || savedState?.searchQuery || '');
   const [sortBy, setSortBy] = useState<SortOption>(() => savedState?.sortBy || 'popular');
   const [visibleCount, setVisibleCount] = useState<number>(() => savedState?.visibleCount || 12);
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'Ковры' | 'Дорожки'>(

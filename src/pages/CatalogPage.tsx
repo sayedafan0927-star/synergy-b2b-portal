@@ -36,10 +36,12 @@ export default function CatalogPage({
   onNavigate,
   initialCollection,
   initialCountry,
+  initialSearch,
 }: {
   onNavigate: (page: PageId, productId?: string) => void;
   initialCollection?: string;
   initialCountry?: string;
+  initialSearch?: string;
 }) {
   const { products, summary: serverSummary, loading, error: loadError } = useProducts();
   const pricing = useUserPricing();
@@ -79,7 +81,7 @@ export default function CatalogPage({
     resetFilters,
     saveCatalogSnapshot,
     attemptScrollRestoration,
-  } = useCatalogStatePersistence({ initialCollection, initialCountry });
+  } = useCatalogStatePersistence({ initialCollection, initialCountry, initialSearch });
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [reservationsModalOpen, setReservationsModalOpen] = useState(false);
