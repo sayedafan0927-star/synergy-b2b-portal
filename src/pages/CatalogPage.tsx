@@ -22,6 +22,8 @@ import {
   StockReservationsModal,
   ActiveFilterChips,
   useCatalogStatePersistence,
+  DecklePaperWrapper,
+  CatalogPetroglyphHero,
   getTotalStock,
   sizeArea,
   type SortOption,
@@ -352,26 +354,25 @@ export default function CatalogPage({
   }
 
   return (
-    <section className="min-h-screen bg-slate-50 pt-20 pb-24 lg:pb-8">
-      <div className="container-w">
-        <div className="mb-8">
-          <h1 className="section-heading">Каталог продукции</h1>
-          <p className="section-subheading">Широкий ассортимент ковров и дорожек оптом от ведущих производителей</p>
-          {selectedCollections.size === 1 && (
-            <div className="mt-3 inline-flex items-center gap-2 rounded-lg bg-brand-50 px-3 py-1.5">
-              <span className="text-sm font-medium text-brand-700">Коллекция: {[...selectedCollections][0]}</span>
-              <button
-                type="button"
-                onClick={() => setSelectedCollections(new Set())}
-                className="text-brand-400 hover:text-brand-600 cursor-pointer"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          )}
-        </div>
+    <DecklePaperWrapper>
+      <CatalogPetroglyphHero
+        title="Каталог продукции"
+        subtitle="Широкий ассортимент ковров и дорожек оптом от ведущих производителей"
+      >
+        {selectedCollections.size === 1 && (
+          <div className="mb-3 inline-flex items-center gap-2 rounded-lg bg-[#003365]/10 border border-[#003365]/20 px-3 py-1.5">
+            <span className="text-sm font-medium text-[#003365]">Коллекция: {[...selectedCollections][0]}</span>
+            <button
+              type="button"
+              onClick={() => setSelectedCollections(new Set())}
+              className="text-slate-400 hover:text-slate-600 cursor-pointer"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
 
-        <div className="mb-5 flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {(['all', 'Ковры', 'Дорожки'] as const).map((cat) => {
             const count = cat === 'all'
               ? baseProducts.length
@@ -384,8 +385,8 @@ export default function CatalogPage({
                 onClick={() => setSelectedCategory(cat)}
                 className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                   selectedCategory === cat
-                    ? 'bg-brand-700 text-white shadow-sm ring-2 ring-brand-700/20'
-                    : 'bg-white border border-slate-200 text-slate-700 hover:border-brand-500 hover:bg-slate-50'
+                    ? 'bg-[#1b2b3a] text-white shadow-xs ring-2 ring-[#1b2b3a]/20 font-bold'
+                    : 'bg-white border border-[#e2d9c8] text-slate-700 hover:border-[#b58532] hover:bg-[#fbf9f2]'
                 }`}
               >
                 {label} ({count})
@@ -393,6 +394,7 @@ export default function CatalogPage({
             );
           })}
         </div>
+      </CatalogPetroglyphHero>
 
         {/* RugsUSA Size Clustering Bar (Pattern 3) activeClusterQuickFilter disabled per user request to prevent mobile layout overflow */}
 
@@ -591,7 +593,6 @@ export default function CatalogPage({
             </button>
           </div>
         )}
-      </div>
 
       <FilterDrawer
         open={drawerOpen}
@@ -625,6 +626,6 @@ export default function CatalogPage({
           onClose={() => setReservationsModalOpen(false)}
         />
       )}
-    </section>
+    </DecklePaperWrapper>
   );
 }

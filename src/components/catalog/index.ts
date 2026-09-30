@@ -10,5 +10,6 @@ export {
   restoreCatalogScroll,
   CATALOG_STATE_STORAGE_KEY,
 } from './useCatalogStatePersistence';
+export { default as DecklePaperWrapper } from './DecklePaperWrapper';
+export { default as CatalogPetroglyphHero } from './CatalogPetroglyphHero';
 export * from './types';
-
