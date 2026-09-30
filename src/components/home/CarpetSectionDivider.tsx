@@ -14,27 +14,23 @@ export default function CarpetSectionDivider({
   variant = 'dark-to-linen',
   className = '',
 }: CarpetSectionDividerProps) {
-  // 1. Dark Hero (slate-950) -> Warm Linen Parchment (#faf6ee)
-  // Organic Deckle / Woven Textile Boundary (inspired by Thompson's Tea organic deckle edge)
+  // 1. Dark Hero (slate-950) -> Warm Linen Parchment (#faf7f2)
+  // Pure seamless organic transition without any hatch lines or border strokes
   if (variant === 'dark-to-linen' || variant === 'dark-to-light') {
-    const bottomColor = variant === 'dark-to-linen' ? '#faf6ee' : '#ffffff';
+    const bottomColor = variant === 'dark-to-linen' ? '#faf7f2' : '#ffffff';
     return (
       <div
         className={`relative w-full overflow-hidden select-none pointer-events-none -mt-px ${className}`}
         aria-hidden="true"
       >
         <div className="relative w-full bg-slate-950">
-          {/* Antique Gold Filament Hairline */}
-          <div className="h-[1px] w-full bg-gradient-to-r from-transparent via-[#c59b48]/70 to-transparent" />
-
-          {/* Organic Hand-Woven Deckle Edge */}
+          {/* Smooth organic curve transition */}
           <svg
             className="w-full h-4 sm:h-6 block"
             style={{ color: bottomColor }}
             viewBox="0 0 1440 24"
             preserveAspectRatio="none"
           >
-            {/* Natural textile micro-undulation without cartoon teeth */}
             <path
               d="
                 M0,24 L0,12 
@@ -46,23 +42,6 @@ export default function CarpetSectionDivider({
               "
               fill="currentColor"
             />
-            {/* Fine natural carpet fringe threads */}
-            {Array.from({ length: 60 }).map((_, i) => {
-              const x = i * 24 + 10;
-              const yLength = 6 + ((i * 7) % 5);
-              return (
-                <line
-                  key={i}
-                  x1={x}
-                  y1={0}
-                  x2={x}
-                  y2={yLength}
-                  stroke="#c59b48"
-                  strokeWidth="0.8"
-                  strokeOpacity="0.45"
-                />
-              );
-            })}
           </svg>
         </div>
       </div>

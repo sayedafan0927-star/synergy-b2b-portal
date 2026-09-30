@@ -230,20 +230,14 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
         </button>
       </div>
 
-      {/* ── Mobile Action Bar: Smoothly unfolds only when video finishes, with touch scroll drag protection ── */}
-      <div 
-        className={`block sm:hidden bg-slate-950 transition-all duration-700 ease-out overflow-hidden ${
-          isEnded 
-            ? 'max-h-24 opacity-100 py-2.5 px-4 border-b border-slate-900/80 pointer-events-auto' 
-            : 'max-h-0 opacity-0 py-0 px-4 pointer-events-none'
-        }`}
-      >
+      {/* ── Mobile Action Bar: Static, elegant, golden button under the video (exact reference from user Image 2) ── */}
+      <div className="block sm:hidden bg-slate-950 px-4 py-3 select-none">
         <button
           type="button"
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onClick={handleCatalogNavigate}
-          className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-slate-950 py-3 px-4 text-xs font-bold uppercase tracking-wider shadow-lg shadow-amber-400/20 active:scale-[0.98] transition-all cursor-pointer"
+          className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-slate-950 py-3 px-4 text-xs font-bold uppercase tracking-wider shadow-lg shadow-amber-500/25 active:scale-[0.98] transition-all cursor-pointer"
         >
           <span>ПЕРЕЙТИ В КАТАЛОГ КОВРОВ</span>
           <ArrowRight className="w-4 h-4 text-slate-950" />
