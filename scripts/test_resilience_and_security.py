@@ -1494,7 +1494,31 @@ with open(os.path.join(ROOT_DIR, "src", "contexts", "auth", "sessionStore.ts"), 
 test_assert("renewSessionIfActive" in ss_s17 and "savedAt:" in ss_s17, "sessionStore.ts supports sliding session renewal for active dealers")
 
 # ------------------------------------------------------------------------------
-# 42. Summary Report
+# 42. Stage 18: Catalog State & Scroll Persistence (Zero-Flicker Back-Navigation)
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 42. STAGE 18: CATALOG STATE & SCROLL PERSISTENCE ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "catalog", "useCatalogStatePersistence.ts"), "r", encoding="utf-8") as fp:
+    ucsp_txt = fp.read()
+test_assert("CATALOG_STATE_STORAGE_KEY" in ucsp_txt and "readCatalogState" in ucsp_txt and "writeCatalogState" in ucsp_txt, "useCatalogStatePersistence.ts defines sessionStorage state persistence")
+test_assert("isInitialMount" in ucsp_txt and "restoreCatalogScroll" in ucsp_txt, "useCatalogStatePersistence.ts guards initial mount visibleCount and restores scroll")
+test_assert("ring-amber-500/80" in ucsp_txt and "scrollIntoView" in ucsp_txt, "useCatalogStatePersistence.ts provides visual focus ring highlight on target product card")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "ProductCard.tsx"), "r", encoding="utf-8") as fp:
+    pc_s18 = fp.read()
+test_assert('data-product-id={product.id}' in pc_s18, "ProductCard.tsx marks root element with data-product-id attribute for scroll targeting")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "catalog", "CatalogStockTable.tsx"), "r", encoding="utf-8") as fp:
+    cst_s18 = fp.read()
+test_assert('data-product-id={product.id}' in cst_s18, "CatalogStockTable.tsx marks rows with data-product-id attribute for scroll targeting")
+
+with open(os.path.join(ROOT_DIR, "src", "pages", "CatalogPage.tsx"), "r", encoding="utf-8") as fp:
+    cp_s18 = fp.read()
+test_assert("useCatalogStatePersistence" in cp_s18 and "saveCatalogSnapshot" in cp_s18, "CatalogPage.tsx integrates useCatalogStatePersistence hook")
+test_assert("handleProductNavigate" in cp_s18 and "attemptScrollRestoration" in cp_s18, "CatalogPage.tsx restores scroll and preserves state on product navigate")
+
+# ------------------------------------------------------------------------------
+# 43. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

@@ -21,6 +21,7 @@ import {
   CatalogStockTable,
   StockReservationsModal,
   ActiveFilterChips,
+  useCatalogStatePersistence,
   getTotalStock,
   sizeArea,
   type SortOption,
@@ -43,33 +44,48 @@ export default function CatalogPage({
   const { settings: displaySettings } = useDisplaySettings();
   const myShowroomName = profile?.showroom_warehouse_name || 'В моем магазине';
 
-  const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const {
+    viewMode,
+    setViewMode,
+    searchQuery,
+    setSearchQuery,
+    sortBy,
+    setSortBy,
+    visibleCount,
+    setVisibleCount,
+    selectedCategory,
+    setSelectedCategory,
+    selectedCollections,
+    setSelectedCollections,
+    selectedManufacturers,
+    setSelectedManufacturers,
+    selectedCountries,
+    setSelectedCountries,
+    selectedClusters,
+    setSelectedClusters,
+    selectedWarehouses,
+    setSelectedWarehouses,
+    selectedSizes,
+    setSelectedSizes,
+    activeClusterQuickFilter,
+    adminStockFilter,
+    setAdminStockFilter,
+    toggle,
+    activeFilterCount,
+    resetFilters,
+    saveCatalogSnapshot,
+    attemptScrollRestoration,
+  } = useCatalogStatePersistence({ initialCollection, initialCountry });
+
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [reservationsModalOpen, setReservationsModalOpen] = useState(false);
+  const [stockWarehouse, setStockWarehouse] = useState('');
   const canViewStockSummary = useMemo(() => {
     if (isEffectiveAdmin) return true;
     if (displaySettings.show_reserve) return true;
     const key = profile?.partner_id || profile?.id;
     return Boolean(key && getClientWarehouseSettings(key)?.showStockSummary);
   }, [isEffectiveAdmin, displaySettings.show_reserve, profile?.partner_id, profile?.id]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState<SortOption>('popular');
-  const [stockWarehouse, setStockWarehouse] = useState('');
-  const [visibleCount, setVisibleCount] = useState(12);
-  const [selectedCategory, setSelectedCategory] = useState<'all' | 'Ковры' | 'Дорожки'>('all');
-
-  const [selectedCollections, setSelectedCollections] = useState<Set<string>>(() =>
-    initialCollection ? new Set([initialCollection]) : new Set(),
-  );
-  const [selectedManufacturers, setSelectedManufacturers] = useState<Set<string>>(new Set());
-  const [selectedCountries, setSelectedCountries] = useState<Set<string>>(() =>
-    initialCountry ? new Set([initialCountry]) : new Set(),
-  );
-  const [selectedClusters, setSelectedClusters] = useState<Set<string>>(new Set());
-  const [selectedWarehouses, setSelectedWarehouses] = useState<Set<string>>(new Set());
-  const [selectedSizes, setSelectedSizes] = useState<Set<string>>(new Set());
-  const [activeClusterQuickFilter] = useState<'all' | 'small' | 'medium' | 'large' | 'oversize' | 'runner'>('all');
-  const [adminStockFilter, setAdminStockFilter] = useState<'all' | 'in_stock' | 'out_of_stock'>('all');
   const hideOutOfStockSetting = displaySettings.hide_out_of_stock_products !== false;
 
   const baseProducts = useMemo(() => {
@@ -119,33 +135,6 @@ export default function CatalogPage({
     if (!stockWarehouse && allWarehouses.length > 0) setStockWarehouse(allWarehouses[0]);
   }, [allWarehouses, stockWarehouse]);
 
-  const toggle = (set: Set<string>, val: string) => {
-    const next = new Set(set);
-    if (next.has(val)) next.delete(val);
-    else next.add(val);
-    return next;
-  };
-
-  const activeFilterCount =
-    (selectedCategory !== 'all' ? 1 : 0) +
-    (activeClusterQuickFilter !== 'all' ? 1 : 0) +
-    selectedCollections.size +
-    selectedManufacturers.size +
-    selectedCountries.size +
-    selectedWarehouses.size +
-    selectedSizes.size +
-    selectedClusters.size;
-
-  const resetFilters = () => {
-    setSearchQuery('');
-    setSelectedCategory('all');
-    setSelectedClusters(new Set());
-    setSelectedCollections(new Set());
-    setSelectedManufacturers(new Set());
-    setSelectedCountries(new Set());
-    setSelectedWarehouses(new Set());
-    setSelectedSizes(new Set());
-  };
 
   const filteredProducts = useMemo(() => {
     let result = [...baseProducts];
@@ -284,22 +273,18 @@ export default function CatalogPage({
     selectedCountries.size,
   ]);
 
-  // Reset visible count when filters/search/sort change
   useEffect(() => {
-    setVisibleCount(12);
-  }, [
-    selectedCategory,
-    activeClusterQuickFilter,
-    selectedClusters,
-    selectedCollections,
-    selectedManufacturers,
-    selectedCountries,
-    selectedWarehouses,
-    selectedSizes,
-    searchQuery,
-    sortBy,
-    viewMode,
-  ]);
+    if (!loading && products.length > 0) {
+      attemptScrollRestoration(true);
+    }
+  }, [loading, products.length, attemptScrollRestoration]);
+
+  const handleProductNavigate = (targetPage: PageId, targetProductId?: string) => {
+    if (targetPage === 'product') {
+      saveCatalogSnapshot(targetProductId);
+    }
+    onNavigate(targetPage, targetProductId);
+  };
 
   const visibleProducts = useMemo(() => filteredProducts.slice(0, visibleCount), [filteredProducts, visibleCount]);
   const hasMore = filteredProducts.length > visibleCount;
@@ -570,7 +555,7 @@ export default function CatalogPage({
             <>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5 min-[1800px]:grid-cols-6 gap-4 lg:gap-6">
                 {visibleProducts.map(p => (
-                  <ProductCard key={p.id} product={p} onNavigate={onNavigate} />
+                  <ProductCard key={p.id} product={p} onNavigate={handleProductNavigate} />
                 ))}
               </div>
               {hasMore && (
@@ -590,7 +575,7 @@ export default function CatalogPage({
             <CatalogStockTable
               filteredProducts={filteredProducts}
               selectedWarehouse={stockWarehouse}
-              onNavigate={onNavigate}
+              onNavigate={handleProductNavigate}
             />
           )
         ) : (

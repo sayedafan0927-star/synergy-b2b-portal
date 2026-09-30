@@ -193,6 +193,7 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
     <div
       role="button"
       tabIndex={0}
+      data-product-id={product.id}
       onMouseEnter={handleCardPrefetch}
       onPointerEnter={handleCardPrefetch}
       onClick={handleOpenProduct}

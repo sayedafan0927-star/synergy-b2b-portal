@@ -202,7 +202,7 @@ export function CatalogStockTable({
                     const pricePerSqm = pricing.getMinPricePerSqm(product);
 
                     return (
-                      <tr key={product.id} className="hover:bg-slate-25 group">
+                      <tr key={product.id} data-product-id={product.id} className="hover:bg-slate-25 group">
                         <td className="sticky left-0 z-10 bg-white group-hover:bg-slate-50 py-2 pl-4 pr-3 transition-colors">
                           <button type="button" onClick={() => onNavigate('product', product.id)} className="text-left cursor-pointer">
                             <div className="flex items-center gap-2.5">
