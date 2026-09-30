@@ -88,6 +88,7 @@
 7. [**Enterprise Quality Bar (6 Core Blocks)**](./ENTERPRISE_QUALITY_BAR.md) — паспорт стандартов качества, Red Lines и матрица зрелости по 6 ключевым блокам платформы.
 8. [**Order Lifecycle & Stock Reservations Standards**](./ORDER_LIFECYCLE_AND_STOCK_RESERVATIONS.md) — жизненный цикл заказов, FSM статусов, мультискладское расщепление, идемпотентное снятие броней и матрица отмен.
 9. [**End-to-End Process Flows & Architecture Diagrams**](./END_TO_END_PROCESS_FLOWS.md) — полный свод сквозных бизнес-процессов, блок-схем всех сценариев, матрица UI/UX состояний и обработка точек отказа.
+10. [**Page Transitions & Zero-Flicker Loading Standards**](./PAGE_TRANSITIONS_AND_LOADING_STANDARDS.md) — регламент бесшовных переходов (React useTransition, 3-уровневый prefetch, запрет текстовых заглушек загрузки и контекстные скелетоны).
 
 Также обратите внимание на смежные спецификации:
 - [UI_UX_STANDARDS.md](../../UI_UX_STANDARDS.md) — подробные правила верстки карточки товара и галереи.

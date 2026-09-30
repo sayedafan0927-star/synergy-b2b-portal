@@ -1305,7 +1305,42 @@ with open(os.path.join(ROOT_DIR, "AGENTS.md"), "r", encoding="utf-8") as fp:
 test_assert("END_TO_END_PROCESS_FLOWS.md" in agents_s12, "AGENTS.md links END_TO_END_PROCESS_FLOWS.md")
 
 # ------------------------------------------------------------------------------
-# 37. Summary Report
+# 37. Verifying Page Transitions & Zero-Flicker Loading Standard...
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{YELLOW}37. Verifying Page Transitions & Zero-Flicker Loading Standard...{RESET}")
+
+page_trans_std_path = os.path.join(ROOT_DIR, "docs", "standards", "PAGE_TRANSITIONS_AND_LOADING_STANDARDS.md")
+test_assert(os.path.exists(page_trans_std_path), "PAGE_TRANSITIONS_AND_LOADING_STANDARDS.md exists")
+with open(page_trans_std_path, "r", encoding="utf-8") as fp:
+    pt_std_txt = fp.read()
+test_assert("useTransition" in pt_std_txt and "Zero-Flicker" in pt_std_txt, "PAGE_TRANSITIONS_AND_LOADING_STANDARDS.md defines useTransition invariants")
+test_assert("Red Lines" in pt_std_txt and "Idle Prefetching" in pt_std_txt, "PAGE_TRANSITIONS_AND_LOADING_STANDARDS.md includes Red Lines and 3-level prefetch")
+
+with open(os.path.join(ROOT_DIR, "docs", "standards", "FRONTEND_STANDARDS.md"), "r", encoding="utf-8") as fp:
+    front_std_txt = fp.read()
+test_assert("PAGE_TRANSITIONS_AND_LOADING_STANDARDS.md" in front_std_txt, "FRONTEND_STANDARDS.md links PAGE_TRANSITIONS_AND_LOADING_STANDARDS.md")
+
+with open(os.path.join(ROOT_DIR, "docs", "standards", "README.md"), "r", encoding="utf-8") as fp:
+    readme_s13 = fp.read()
+test_assert("PAGE_TRANSITIONS_AND_LOADING_STANDARDS.md" in readme_s13, "docs/standards/README.md links PAGE_TRANSITIONS_AND_LOADING_STANDARDS.md")
+
+with open(os.path.join(ROOT_DIR, "AGENTS.md"), "r", encoding="utf-8") as fp:
+    agents_s13 = fp.read()
+test_assert("PAGE_TRANSITIONS_AND_LOADING_STANDARDS.md" in agents_s13, "AGENTS.md links PAGE_TRANSITIONS_AND_LOADING_STANDARDS.md")
+
+with open(os.path.join(ROOT_DIR, "src", "App.tsx"), "r", encoding="utf-8") as fp:
+    app_tsx_txt = fp.read()
+test_assert("useTransition" in app_tsx_txt and "startTransition" in app_tsx_txt, "App.tsx utilizes React Concurrent useTransition for navigation")
+test_assert("import ContactsPage from '@/pages/ContactsPage'" in app_tsx_txt, "App.tsx statically imports ContactsPage eliminating lazy loading flicker")
+test_assert("import LoginPage from '@/pages/LoginPage'" in app_tsx_txt, "App.tsx statically imports LoginPage")
+test_assert("Загрузка раздела..." not in app_tsx_txt, "App.tsx eliminated raw 'Загрузка раздела...' text")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "Header.tsx"), "r", encoding="utf-8") as fp:
+    header_tsx_txt = fp.read()
+test_assert("onMouseEnter" in header_tsx_txt and "onTouchStart" in header_tsx_txt, "Header.tsx implements hover & touch prefetching for catalog")
+
+# ------------------------------------------------------------------------------
+# 38. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

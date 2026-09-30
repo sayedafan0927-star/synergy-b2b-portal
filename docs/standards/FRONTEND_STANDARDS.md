@@ -145,3 +145,16 @@ const matches = items.filter(item =>
   tokens.every(token => item.searchIndex.includes(token))
 );
 ```
+
+---
+
+## 6. Бесшовная навигация и Zero-Flicker Transitions
+
+Полный регламент описан в [**PAGE_TRANSITIONS_AND_LOADING_STANDARDS.md**](./PAGE_TRANSITIONS_AND_LOADING_STANDARDS.md).
+
+### Ключевые требования:
+1. **Concurrent Transitions**: Все переключения страниц в `App.tsx` выполняются через `React.startTransition`, сохраняя текущий экран активным до полной загрузки нового.
+2. **Запрет текстовых заглушек**: Полный запрет на текст `«Загрузка раздела...»` или пустые белые экраны при переходах. При холодном старте отображается только структурный `skeleton`.
+3. **Статические импорты легковесных страниц**: Страницы размером < 300 строк (`HomePage`, `ContactsPage`, `LoginPage`) импортируются напрямую в бандл без `React.lazy`.
+4. **Prefetching**: Автоматическая фоновая предзагрузка чанков в моменты простоя (`requestIdleCallback`) и при наведении/касании кнопок меню (`onMouseEnter`, `onTouchStart`).
+
