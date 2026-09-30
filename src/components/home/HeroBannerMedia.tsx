@@ -2,8 +2,9 @@ import { useRef, useState, useEffect } from 'react';
 import { RotateCcw, ArrowRight, Sparkles } from 'lucide-react';
 import type { PageId } from '@/types';
 
-const VIDEO_MP4 = '/assets/hero-video-desktop-v3.mp4';
-const VIDEO_WEBM = '/assets/hero-video-desktop-v3.webm';
+// Lightweight, hardware-optimized 2.7MB stream for buttery-smooth 60fps playback
+const VIDEO_MP4 = '/assets/hero-video-desktop-v4.mp4';
+const VIDEO_WEBM = '/assets/hero-video-desktop-v4.webm';
 const POSTER = '/assets/hero-poster-desktop-v2.webp';
 
 interface HeroBannerMediaProps {
@@ -19,7 +20,7 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
     const video = videoRef.current;
     if (!video) return;
 
-    // Direct DOM property enforcement required by iOS Safari / Android for muted autoplay
+    // Strict DOM properties required by iOS Safari & Android for immediate silent autoplay
     video.muted = true;
     video.defaultMuted = true;
     video.playsInline = true;
@@ -28,12 +29,12 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
     video.setAttribute('playsinline', '');
     video.setAttribute('webkit-playsinline', 'true');
 
-    // Never call video.pause() on mount to preserve iOS Safari autoplay eligibility!
+    // Never call video.pause() on mount to preserve browser autoplay eligibility
     const attemptPlay = () => {
       const playPromise = video.play();
       if (playPromise !== undefined) {
         playPromise.catch(() => {
-          // If browser policy or low-power mode blocks autoplay, fallback touch handler will activate it
+          // Autoplay blocked by battery saver / browser policy; fallback gesture will start it
         });
       }
     };
@@ -86,6 +87,8 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
         Video Viewport:
         - Mobile (< sm): aspect-[16/9] renders 100% of the video frame with zero clipping (full leopard + carpet).
         - Desktop (sm+): full-height hero banner sm:h-[72vh] lg:h-[82vh] with object-cover.
+        - Pure Cinema (Option B / Thompson's Tea aesthetic): No watermarks or badges cluttering the video.
+          The header already provides clear brand identity.
       */}
       <div className="relative w-full aspect-[16/9] sm:aspect-auto sm:h-[72vh] lg:h-[82vh] sm:min-h-[480px] max-h-[860px] overflow-hidden bg-slate-950">
         <video
@@ -106,22 +109,10 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
         </video>
 
         {/* 
-          Corner Brand Hallmark (Option 2):
-          Luxury hallmark in top-left corner without solid background or box.
-          Preserves 100% of the carpet visual and animation completely unobstructed.
-        */}
-        <div className="absolute top-3 left-4 sm:top-5 sm:left-8 z-20 pointer-events-none select-none">
-          <img 
-            src="/Вектор_Синэнергия.png" 
-            alt="Synergy Group" 
-            className="h-7 sm:h-9 w-auto brightness-0 invert opacity-80 drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]" 
-          />
-        </div>
-
-        {/* 
           Harmonious End-State Interactive Overlay (Desktop sm+):
-          Ultra-transparent luxury glass overlay:
-          Preserves 100% of the oriental carpet visual while providing crystal-clear readability.
+          Heritage & Luxury Editorial Overlay (Thompson's Tea inspired):
+          - Ultra-transparent glass preserving the oriental carpet visual
+          - Refined typography with letter-spaced gold eyebrow and serif headings
         */}
         <div 
           className={`hidden sm:flex absolute inset-0 items-center transition-all duration-700 ease-out z-20 ${
@@ -135,34 +126,40 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
           />
 
           <div className="relative container-w py-6 sm:py-10">
-            <div className="max-w-lg p-6 sm:p-8 rounded-3xl bg-slate-950/25 backdrop-blur-md border border-white/10 shadow-2xl transition-all duration-500">
-              <div className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-medium text-brand-300 border border-white/15 backdrop-blur-sm mb-4">
-                <Sparkles className="w-3.5 h-3.5 text-brand-400" />
-                Оптовый поставщик • В наличии на складах
+            <div className="max-w-lg p-6 sm:p-8 rounded-2xl bg-slate-950/20 backdrop-blur-md border border-white/10 shadow-2xl transition-all duration-500">
+              <div className="inline-flex items-center gap-2 mb-3.5">
+                <span className="text-[10px] tracking-[0.22em] uppercase font-semibold text-brand-300/90 border-b border-brand-400/30 pb-0.5">
+                  Оптовые поставки ковровых покрытий
+                </span>
+                <span className="text-white/30">•</span>
+                <span className="text-[11px] text-slate-300 font-medium flex items-center gap-1">
+                  <Sparkles className="w-3 h-3 text-brand-400" />
+                  В наличии
+                </span>
               </div>
 
-              <h1 className="font-display text-2xl sm:text-4xl font-bold text-white leading-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)]">
-                Оптовые поставки <span className="text-brand-300">ковровых покрытий</span>
+              <h1 className="font-display text-2xl sm:text-4xl font-bold text-white leading-tight drop-shadow-[0_2px_10px_rgba(0,0,0,0.9)]">
+                Прямые поставки от ведущих фабрик
               </h1>
 
-              <p className="mt-3 text-xs sm:text-sm text-slate-200 font-body leading-relaxed drop-shadow-[0_1px_5px_rgba(0,0,0,0.85)]">
-                Широкий ассортимент ковров от ведущих производителей Турции, Бельгии и Ирана. 
-                Более 1500 наименований в наличии. Отгрузка за 24 часа.
+              <p className="mt-3 text-xs sm:text-sm text-slate-200 font-body leading-relaxed drop-shadow-[0_1px_6px_rgba(0,0,0,0.9)] font-light">
+                Широкий ассортимент ковров от производителей Турции, Бельгии и Ирана. 
+                Более 1500 наименований в наличии. Отгрузка за 24 часа со складов по Казахстану.
               </p>
 
               <div className="mt-6 flex flex-wrap gap-3">
                 <button
                   type="button"
                   onClick={() => onNavigate?.('catalog')}
-                  className="btn-primary inline-flex items-center justify-center gap-2 text-sm px-5 py-2.5 shadow-lg shadow-brand-500/25"
+                  className="btn-primary inline-flex items-center justify-center gap-2 text-xs uppercase tracking-wider font-semibold px-5 py-2.5 shadow-lg shadow-brand-500/20 transition-all duration-200 hover:-translate-y-0.5"
                 >
                   Перейти в каталог
-                  <ArrowRight className="w-4 h-4" />
+                  <ArrowRight className="w-3.5 h-3.5" />
                 </button>
                 <button
                   type="button"
                   onClick={() => onNavigate?.('contacts')}
-                  className="btn-secondary border-white/20 bg-white/10 text-white backdrop-blur-md hover:bg-white/20 inline-flex items-center justify-center gap-2 text-sm px-5 py-2.5"
+                  className="btn-secondary border-white/20 bg-white/10 text-white backdrop-blur-md hover:bg-white/20 inline-flex items-center justify-center gap-2 text-xs uppercase tracking-wider font-semibold px-5 py-2.5 transition-all duration-200"
                 >
                   Связаться с нами
                 </button>
@@ -185,15 +182,15 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
         </button>
       </div>
 
-      {/* ── Mobile Permanent Action Bar (Clean, unclipped, directly below the 16:9 video) ── */}
-      <div className="block sm:hidden bg-slate-950 px-4 py-3 border-b border-slate-900/80">
+      {/* ── Mobile Action Bar (Thompson's Tea style: refined, compact, single ergonomic row) ── */}
+      <div className="block sm:hidden bg-slate-950 px-4 py-2.5 border-b border-slate-900/80">
         <button
           type="button"
           onClick={() => onNavigate?.('catalog')}
-          className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 hover:bg-brand-500 active:scale-[0.98] text-white py-2.5 px-4 text-xs font-semibold shadow-md shadow-brand-500/20 transition-all duration-200"
+          className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-brand-600/90 hover:bg-brand-600 active:scale-[0.99] text-white py-2.5 px-4 text-xs font-semibold tracking-wider shadow-md shadow-brand-950/40 border border-brand-400/20 transition-all duration-200"
         >
-          <span>Перейти в каталог ковров</span>
-          <ArrowRight className="w-3.5 h-3.5" />
+          <span>ПЕРЕЙТИ В КАТАЛОГ КОВРОВ</span>
+          <ArrowRight className="w-3.5 h-3.5 text-brand-300" />
         </button>
       </div>
     </div>
