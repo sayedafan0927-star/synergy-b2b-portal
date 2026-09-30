@@ -52,66 +52,29 @@ export default function HomePage({ onNavigate }: { onNavigate: (page: PageId, pr
 
   return (
     <div className="pb-16 lg:pb-0">
-      {/* ── Hero Video Banner (Pure, clean, unobscured) ── */}
+      {/* ── Hero Video Banner (Pure animation + Harmonious End-State CTA) ── */}
       <section className="relative w-full bg-slate-950 pt-16">
-        <HeroBannerMedia />
+        <HeroBannerMedia onNavigate={onNavigate} />
       </section>
 
-      {/* ── Offer & Quick Actions Bar ── */}
-      <section className="relative bg-slate-900 border-b border-slate-800 text-white py-12 lg:py-16">
+      {/* ── Quick Stats Strip ── */}
+      <div className="bg-slate-900 border-b border-slate-800 py-6 text-white">
         <div className="container-w">
-          <div className="grid lg:grid-cols-12 gap-8 items-center justify-between">
-            <div className="lg:col-span-7">
-              <div className="inline-flex items-center gap-3 rounded-full bg-white/10 backdrop-blur-sm border border-white/10 pl-3 pr-5 py-2 mb-6">
-                <img
-                  src="/Вектор_Синэнергия.png"
-                  alt=""
-                  className="h-6 w-auto brightness-0 invert"
-                />
-                <span className="text-xs font-medium text-white/80 tracking-wide uppercase">Оптовый поставщик</span>
-              </div>
-
-              <h1 className="font-display text-2xl sm:text-3xl lg:text-4xl font-bold text-white leading-tight">
-                Оптовые поставки <span className="text-brand-400">ковровых покрытий</span>
-              </h1>
-              <p className="mt-3 text-sm sm:text-base text-slate-300 font-body leading-relaxed max-w-xl">
-                Широкий ассортимент ковров от ведущих производителей Турции, Бельгии и Ирана.
-                Всё в наличии на складах — отгрузка в течение 24 часов.
-              </p>
-
-              <div className="mt-6 flex flex-wrap gap-3">
-                <button
-                  onClick={() => onNavigate('catalog')}
-                  className="btn-primary inline-flex items-center justify-center gap-2"
-                >
-                  Перейти в каталог
-                  <ArrowRight className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => onNavigate('contacts')}
-                  className="btn-secondary border-white/30 bg-white/10 text-white backdrop-blur-sm hover:bg-white/20 inline-flex items-center justify-center gap-2"
-                >
-                  Связаться с нами
-                </button>
-              </div>
-            </div>
-
-            <div className="lg:col-span-5 grid grid-cols-3 gap-4 lg:gap-6 bg-slate-950/40 p-6 rounded-2xl border border-white/10">
-              {stats.map((stat) => (
-                <div key={stat.label} className="text-center sm:text-left">
-                  <div className="flex items-center justify-center sm:justify-start gap-2 mb-1">
-                    <stat.icon className="h-4 w-4 text-brand-400 hidden sm:block" />
-                    <span className="font-display text-xl sm:text-2xl font-bold text-white">
-                      {stat.value}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-400 font-body">{stat.label}</p>
+          <div className="grid grid-cols-3 gap-4 sm:gap-8 max-w-2xl mx-auto">
+            {stats.map((stat) => (
+              <div key={stat.label} className="text-center">
+                <div className="flex items-center justify-center gap-1.5 sm:gap-2 mb-1">
+                  <stat.icon className="h-4 w-4 text-brand-400 hidden sm:block" />
+                  <span className="font-display text-xl sm:text-2xl font-bold text-white">
+                    {stat.value}
+                  </span>
                 </div>
-              ))}
-            </div>
+                <p className="text-[11px] sm:text-xs text-slate-400 font-body">{stat.label}</p>
+              </div>
+            ))}
           </div>
         </div>
-      </section>
+      </div>
 
       {/* ── Advantages Section ── */}
       <section className="py-16 lg:py-24 bg-white">
