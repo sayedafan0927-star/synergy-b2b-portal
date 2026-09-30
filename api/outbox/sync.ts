@@ -87,7 +87,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .select('*')
         .eq('status', 'pending')
         .is('parent_order_id', null)
-        .lte('next_retry_at', nowIso)
+        .or(`next_retry_at.is.null,next_retry_at.lte.${nowIso}`)
         .order('created_at', { ascending: true })
         .limit(10);
 
@@ -245,6 +245,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             .from('orders')
             .update({
               status: isDlq ? 'failed_dlq' : 'pending',
+              reservations_released: isDlq ? true : undefined,
               retry_count: nextRetries,
               last_error: isFatal
                 ? `[Fatal Business Error] ERP ${erpRes.status}: ${errText.slice(0, 200)}`
@@ -260,6 +261,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 .from('orders')
                 .update({
                   status: 'failed_dlq',
+                  reservations_released: true,
                   last_error: isFatal
                     ? `[Fatal Business Error] ERP ${erpRes.status}: ${errText.slice(0, 200)}`
                     : `ERP ${erpRes.status}: ${errText.slice(0, 200)}`,
@@ -318,6 +320,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .from('orders')
           .update({
             status: isDlq ? 'failed_dlq' : 'pending',
+            reservations_released: isDlq ? true : undefined,
             retry_count: nextRetries,
             last_error: `Сетевой сбой: ${reqErr?.message || 'Network error'}`,
             next_retry_at: nextRetryAt,
@@ -331,6 +334,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               .from('orders')
               .update({
                 status: 'failed_dlq',
+                reservations_released: true,
                 last_error: `Сетевой сбой: ${reqErr?.message || 'Network error'}`,
                 updated_at: new Date().toISOString(),
               })

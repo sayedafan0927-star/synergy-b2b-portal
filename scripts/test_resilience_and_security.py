@@ -1275,9 +1275,13 @@ with open(os.path.join(ROOT_DIR, "src", "components", "profile", "useOrdersList.
 test_assert("profiles:user_id(full_name, company_name, phone)" in uol_s11, "useOrdersList.ts joins order owner profile metadata")
 test_assert("profileData?.full_name || profile?.full_name" in uol_s11, "useOrdersList.ts attributes true client name preventing admin impersonation leak")
 
-with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "createOrderHandler.ts"), "r", encoding="utf-8") as fp:
-    coh_s11 = fp.read()
 test_assert("totalSqm: finalTotalSqm" in coh_s11, "createOrderHandler.ts uses finalTotalSqm in fallback approval dispatch")
+test_assert("isManagerOrAdmin && rawPayload.user_id" in coh_s11, "createOrderHandler.ts assigns order to client under manager/admin impersonation")
+
+with open(os.path.join(ROOT_DIR, "api", "outbox", "sync.ts"), "r", encoding="utf-8") as fp:
+    sync_s11 = fp.read()
+test_assert("next_retry_at.is.null" in sync_s11, "api/outbox/sync.ts supports new orders with NULL next_retry_at")
+test_assert("reservations_released: isDlq ? true : undefined" in sync_s11 and "reservations_released: true" in sync_s11, "api/outbox/sync.ts marks reservations_released upon DLQ transitions")
 
 # ------------------------------------------------------------------------------
 # 36. Summary Report

@@ -58,15 +58,19 @@ export async function getAuthHeaders(forceRefresh = false): Promise<Record<strin
       const parsedSession = JSON.parse(sessionStr);
       let token = parsedSession?.token;
 
-      // Если токена нет, он принудительно обновляется или истек — запрашиваем свежий токен с сервера
-      if (!token || forceRefresh || !isTokenValid(token)) {
+      const role = parsedSession.profile?.role || parsedSession.user?.role || 'client';
+      const isPrivileged = ['admin', 'manager_rm', 'manager_lm', 'supplier'].includes(role);
+
+      // Запрашиваем токен сессии только для клиентских сессий, так как для административных ролей
+      // анонимный запрос без существующей авторизации блокируется серверным Anti-Bypass P0 (403 Forbidden)
+      if ((!token || forceRefresh || !isTokenValid(token)) && !isPrivileged) {
         if (parsedSession?.user || parsedSession?.profile) {
           try {
             const res = await fetch('/api/auth/session', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                role: parsedSession.profile?.role || parsedSession.user?.role || 'admin',
+                role,
                 user: parsedSession.user,
                 profile: parsedSession.profile,
               }),

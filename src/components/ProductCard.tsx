@@ -283,7 +283,7 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
       <div className="flex-1 flex flex-col p-3 sm:p-4">
         {/* Название товара: Артикул — Цвет (фиксированная 2-строчная высота для идеального выравнивания) */}
         <h3 
-          onClick={() => onNavigate('product', product.id)}
+          onClick={handleOpenProduct}
           className="text-xs sm:text-sm font-bold text-slate-900 leading-snug line-clamp-2 min-h-[2.5rem] sm:min-h-[2.75rem] flex items-center group-hover:text-brand-700 transition-colors cursor-pointer"
         >
           {formatProductTitle(product, language)}
