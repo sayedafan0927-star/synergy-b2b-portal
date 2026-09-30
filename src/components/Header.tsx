@@ -197,8 +197,18 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
               </button>
             ))}
           </nav>
-          {/* Left Column Spacer on Mobile to guarantee absolute center logo */}
-          <div className="lg:hidden justify-self-start" />
+          {/* Left Column Mobile Controls (Variant 1: Symmetric Search) */}
+          <div className="lg:hidden justify-self-start flex items-center">
+            <button
+              type="button"
+              onClick={() => setCommandPaletteOpen(true)}
+              className="sm:hidden flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200/80 transition-colors cursor-pointer"
+              title="Поиск"
+              aria-label="Поиск по артикулу"
+            >
+              <Search className="h-4 w-4 text-slate-600" />
+            </button>
+          </div>
 
           {/* Center Column: Logo in Parabolic Arch (Compact on mobile, perfectly dipped on scroll) */}
           <button
@@ -329,17 +339,6 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
               </kbd>
             </button>
 
-            {/* Mobile Search Icon Button */}
-            <button
-              type="button"
-              onClick={() => setCommandPaletteOpen(true)}
-              className="sm:hidden flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200/80 transition-colors cursor-pointer"
-              title="Поиск"
-              aria-label="Поиск по артикулу"
-            >
-              <Search className="h-4 w-4 text-slate-600" />
-            </button>
-
             <button
               onClick={() => onNavigate(user ? 'profile' : 'login')}
               className={`hidden sm:flex h-9 items-center gap-2 rounded-lg px-2.5 transition-colors border ${
@@ -367,18 +366,20 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
               )}
             </button>
 
+            {/* Cart Button: Visible on sm+, hidden on mobile (since Cart is in bottom MobileNav) */}
             <button
               onClick={() => onNavigate('cart')}
-              className="relative flex h-9 items-center gap-1.5 rounded-lg bg-slate-100 px-3 text-[#003365] transition-colors hover:bg-slate-200/80 border border-slate-200"
+              className="hidden sm:flex relative h-9 items-center gap-1.5 rounded-lg bg-slate-100 px-3 text-[#003365] transition-colors hover:bg-slate-200/80 border border-slate-200"
               title="Корзина"
             >
               <ShoppingCart className="h-[18px] w-[18px]" />
               {totalItems > 0 && <span className="text-xs font-bold">{totalItems}</span>}
             </button>
 
+            {/* Menu Button: 36x36px on mobile, full width on desktop */}
             <button
               onClick={() => setMobileOpen(!mobileOpen)}
-              className="flex h-9 items-center gap-1.5 px-2.5 rounded-lg text-slate-700 transition-all hover:bg-slate-100 hover:text-brand-700 border border-slate-200 cursor-pointer"
+              className="flex h-9 w-9 sm:w-auto items-center justify-center gap-1.5 px-0 sm:px-2.5 rounded-lg text-slate-700 transition-all hover:bg-slate-100 hover:text-brand-700 border border-slate-200 cursor-pointer"
               title="Навигационное меню Synergy"
               aria-label="Открыть меню"
             >
