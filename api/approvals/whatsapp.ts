@@ -2,7 +2,8 @@ import crypto from 'crypto';
 import { getErpApiKey } from '../lib/erpKey';
 
 const SECRET_KEY = process.env.PORTAL_SECRET_KEY || process.env.ERP_PORTAL_SECRET || '';
-const TARGET_ERP_URL = process.env.ERP_API_URL || 'https://kilem-khan.kz/api/sin/api_portal.php';
+const TARGET_ERP_URL = process.env.ERP_API_URL || 'https://kilem-khan.kz/api/sin/public/api_portal.php';
+const ERP_FALLBACK_URL = 'https://kilem-khan.kz/api/sin/api_portal.php';
 const WHATSAPP_GATEWAY_URL = process.env.WHATSAPP_API_URL || process.env.GREEN_API_URL;
 const WHATSAPP_TOKEN = process.env.WHATSAPP_API_TOKEN;
 const PORTAL_BASE_URL = process.env.PORTAL_BASE_URL || 'https://synergy-b2b-portal.vercel.app';
@@ -84,38 +85,41 @@ export async function sendWhatsAppMessage(
 
   // 1. Приоритетный путь: Единый защищенный роутер ERP
   const erpApiKey = getErpApiKey();
-  const erpEndpoint = TARGET_ERP_URL.includes('?')
-    ? `${TARGET_ERP_URL}&action=send_whatsapp`
-    : `${TARGET_ERP_URL}?action=send_whatsapp`;
+  const erpUrls = [TARGET_ERP_URL, ERP_FALLBACK_URL];
 
-  try {
-    const erpRes = await fetch(erpEndpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Portal-Key': erpApiKey,
-        ...(erpApiKey ? { Authorization: `Bearer ${erpApiKey}` } : {}),
-      },
-      body: JSON.stringify({
-        phone: cleanPhone,
-        message: text,
-        event_type: eventType,
-        order_id: options?.orderId,
-        order_doc_number: options?.orderDocNumber,
-        client_name: options?.clientName,
-      }),
-    });
+  for (const baseErpUrl of erpUrls) {
+    const erpEndpoint = baseErpUrl.includes('?')
+      ? `${baseErpUrl}&action=send_whatsapp`
+      : `${baseErpUrl}?action=send_whatsapp`;
 
-    if (erpRes.ok) {
-      const erpData = await erpRes.json().catch(() => ({}));
-      console.log(`[WhatsApp Service] ✅ Successfully delivered via ERP Gateway to +${cleanPhone}:`, erpData);
-      return true;
+    try {
+      const erpRes = await fetch(erpEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Portal-Key': erpApiKey,
+          ...(erpApiKey ? { Authorization: `Bearer ${erpApiKey}` } : {}),
+        },
+        body: JSON.stringify({
+          phone: cleanPhone,
+          message: text,
+          event_type: eventType,
+          order_id: options?.orderId,
+          order_doc_number: options?.orderDocNumber,
+          client_name: options?.clientName,
+        }),
+      });
+
+      if (erpRes.ok) {
+        const erpData = await erpRes.json().catch(() => ({}));
+        if (erpData && erpData.success !== false) {
+          console.log(`[WhatsApp Service] ✅ Delivered via ERP (${erpEndpoint}) to +${cleanPhone}:`, erpData);
+          return true;
+        }
+      }
+    } catch (erpErr: any) {
+      console.warn(`[WhatsApp Service] Notice: ERP route ${erpEndpoint} error:`, erpErr?.message);
     }
-
-    const errText = await erpRes.text().catch(() => '');
-    console.warn(`[WhatsApp Service] ERP Gateway returned ${erpRes.status}: ${errText}`);
-  } catch (erpErr: any) {
-    console.warn('[WhatsApp Service] ERP Gateway network warning:', erpErr?.message);
   }
 
   // 2. Резервный канал: Прямой коннектор (Green-API / Chat-API), если указан в переменных
