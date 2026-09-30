@@ -118,10 +118,15 @@ export async function authenticateRequest(
         const parsed = JSON.parse(raw);
         if (parsed?.data && parsed?.sig) {
           const expectedSig = crypto.createHmac('sha256', SECRET_KEY).update(JSON.stringify(parsed.data)).digest('hex');
-          if (parsed.sig === expectedSig) {
-            // Проверка срока жизни токена: 24 часа для стабильности B2B-сессий с поддержкой отзыва через Redis (T-15)
+          const sigBuf = Buffer.from(String(parsed.sig || ''), 'hex');
+          const expSigBuf = Buffer.from(expectedSig, 'hex');
+          const isSigValid = sigBuf.length === expSigBuf.length && crypto.timingSafeEqual(sigBuf, expSigBuf);
+
+          if (isSigValid) {
+            // Проверка срока жизни токена: до 24 часов с защитой от токенов из будущего (clock drift > 60s)
             const tokenTs = Number(parsed.data.timestamp || 0);
-            if (!tokenTs || Date.now() - tokenTs <= 24 * 3600 * 1000) {
+            const now = Date.now();
+            if (tokenTs > 0 && tokenTs <= now + 60 * 1000 && now - tokenTs <= 24 * 3600 * 1000) {
               const u = parsed.data.user || {};
               const p = parsed.data.profile || {};
               userId = String(u.id || p.id || '');

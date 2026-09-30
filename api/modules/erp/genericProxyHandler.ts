@@ -121,6 +121,7 @@ export async function handleGenericErpProxy(
 
     // Таймаут запроса к ERP: 2.5 секунды для чекаута (быстрый fallback в Outbox) и 12 секунд для каталога
     const erpTimeoutMs = action === 'create_order' ? 2500 : 12000;
+    const effectiveTimeoutMs = Math.min(erpTimeoutMs, 8500);
 
     let fetchOptions: RequestInit = {
       method: req.method,
@@ -136,9 +137,10 @@ export async function handleGenericErpProxy(
       };
     }
 
-    async function sendRequestToErp(url: string): Promise<Response> {
+    async function sendRequestToErp(url: string, maxMs?: number): Promise<Response> {
+      const budgetMs = maxMs ?? effectiveTimeoutMs;
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), erpTimeoutMs);
+      const timeoutId = setTimeout(() => controller.abort(), budgetMs);
       try {
         return await fetch(url, { ...fetchOptions, signal: controller.signal });
       } finally {
@@ -151,18 +153,20 @@ export async function handleGenericErpProxy(
       erpResponse = await sendRequestToErp(targetUrl);
       const isHtmlResponse = (erpResponse.headers.get('content-type') || '').includes('text/html');
       if ((erpResponse.status >= 500 || isHtmlResponse) && ERP_FALLBACK_URL && ERP_FALLBACK_URL !== TARGET_ERP_URL) {
-        console.warn(`[ERP Failover] Primary returned ${erpResponse.status} (isHtml: ${isHtmlResponse}). Attempting fallback endpoint: ${ERP_FALLBACK_URL}`);
+        const remainingBudget = Math.max(1500, 8500 - (Date.now() - startTime));
+        console.warn(`[ERP Failover] Primary returned ${erpResponse.status} (isHtml: ${isHtmlResponse}). Attempting fallback endpoint with remaining budget ${remainingBudget}ms`);
         const fallbackTargetUrl = `${ERP_FALLBACK_URL}?${queryParams.toString()}`;
-        const fallbackResp = await sendRequestToErp(fallbackTargetUrl);
+        const fallbackResp = await sendRequestToErp(fallbackTargetUrl, remainingBudget);
         if (fallbackResp.ok) {
           erpResponse = fallbackResp;
         }
       }
     } catch (primaryFetchErr) {
       if (ERP_FALLBACK_URL && ERP_FALLBACK_URL !== TARGET_ERP_URL) {
-        console.warn(`[ERP Failover] Primary connection failed. Attempting fallback endpoint: ${ERP_FALLBACK_URL}`);
+        const remainingBudget = Math.max(1500, 8500 - (Date.now() - startTime));
+        console.warn(`[ERP Failover] Primary connection failed. Attempting fallback endpoint with remaining budget ${remainingBudget}ms: ${ERP_FALLBACK_URL}`);
         const fallbackTargetUrl = `${ERP_FALLBACK_URL}?${queryParams.toString()}`;
-        erpResponse = await sendRequestToErp(fallbackTargetUrl);
+        erpResponse = await sendRequestToErp(fallbackTargetUrl, remainingBudget);
       } else {
         throw primaryFetchErr;
       }
@@ -338,7 +342,7 @@ export async function handleGenericErpProxy(
 
     res.status(502).json({
       success: false,
-      error: err?.name === 'AbortError' ? 'Сервер ERP не ответил вовремя (Таймаут 12с)' : 'Ошибка соединения с сервером ERP (Bad Gateway)',
+      error: err?.name === 'AbortError' ? 'Сервер ERP не ответил вовремя (Таймаут шлюза ERP 8.5с)' : 'Ошибка соединения с сервером ERP (Bad Gateway)',
       details: err?.message,
     });
   }

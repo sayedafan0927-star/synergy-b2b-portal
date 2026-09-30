@@ -120,6 +120,37 @@
       ]
     }
     </script>
+
+    <!-- B2B WholesaleStore & Catalog Schema (JSON-LD) -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WholesaleStore",
+      "name": "Synergy B2B Carpet Wholesale Portal",
+      "alternateName": "Синергия Оптовый Портал Ковров",
+      "url": "https://b2b.synergy.kz",
+      "currenciesAccepted": "KZT, USD",
+      "paymentAccepted": "Bank Transfer, Credit Line, Invoice",
+      "areaServed": {
+        "@type": "AdministrativeArea",
+        "name": "Казахстан и страны СНГ"
+      },
+      "hasOfferCatalog": {
+        "@type": "OfferCatalog",
+        "name": "Оптовый каталог ковров и напольных покрытий",
+        "itemListElement": [
+          {
+            "@type": "OfferCatalog",
+            "name": "Ковры классические и современные (Турция, Иран, Бельгия)"
+          },
+          {
+            "@type": "OfferCatalog",
+            "name": "Ковровые дорожки и рулонные покрытия"
+          }
+        ]
+      }
+    }
+    </script>
   </head>
   <body>
     <div id="root"></div>
