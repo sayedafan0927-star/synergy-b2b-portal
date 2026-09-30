@@ -13,7 +13,7 @@ export async function handleReconciliationReport(
     return res.status(401).json({ success: false, error: authCtx.error || 'Требуется авторизация' });
   }
 
-  let partnerId = String(req.query.partner_id || req.query.counterpartyId || '');
+  let partnerId = String(req.query.partner_id || req.query.counterpartyId || req.body?.partner_id || req.body?.counterpartyId || '');
   if (authCtx.role === 'client') {
     // Клиент может запрашивать акт сверки ТОЛЬКО по своему подтвержденному partner_id (Anti-IDOR)
     partnerId = String(authCtx.partnerId || '');
@@ -29,8 +29,8 @@ export async function handleReconciliationReport(
   }
 
   const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
-  const rawStartDate = String(req.query.start_date || '').trim();
-  const rawEndDate = String(req.query.end_date || '').trim();
+  const rawStartDate = String(req.query.start_date || req.body?.start_date || '').trim();
+  const rawEndDate = String(req.query.end_date || req.body?.end_date || '').trim();
 
   const defaultEnd = new Date().toISOString().split('T')[0];
   const defaultStart = new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];

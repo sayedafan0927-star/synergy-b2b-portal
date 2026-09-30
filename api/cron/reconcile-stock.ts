@@ -81,7 +81,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       try {
         const { data: dbBalances } = await supabase
           .from('inventory_balances')
-          .select('sku, stock_reserved');
+          .select('sku, stock_reserved')
+          .gt('stock_reserved', 0)
+          .limit(5000);
         if (dbBalances) {
           for (const b of dbBalances) {
             if (b.sku && Number(b.stock_reserved) > 0) {

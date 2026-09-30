@@ -90,17 +90,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       report.erp.status = 'unhealthy';
       report.erp.error = `HTTP ${erpRes.status}`;
       report.status = report.database.status === 'unhealthy' ? 'unhealthy' : 'degraded';
-      await recordFailure('erp').catch(() => {});
+      await recordFailure('erp_gateway').catch(() => {});
     } else {
       // Проактивное самоисцеление: переводим Circuit Breaker из OPEN/HALF_OPEN в CLOSED
-      await recordSuccess('erp').catch(() => {});
+      await recordSuccess('erp_gateway').catch(() => {});
     }
   } catch (err: any) {
     report.erp.latencyMs = Date.now() - erpStart;
     report.erp.status = 'unhealthy';
     report.erp.error = err?.name === 'AbortError' ? 'Timeout (5s)' : (err?.message || 'ERP gateway unreachable');
     report.status = report.database.status === 'unhealthy' ? 'unhealthy' : 'degraded';
-    await recordFailure('erp').catch(() => {});
+    await recordFailure('erp_gateway').catch(() => {});
   }
 
   // 3. Если обнаружен инцидент — отправляем тревожный алерт дежурному инженеру

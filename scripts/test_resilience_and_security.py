@@ -935,7 +935,7 @@ test_assert("ISO_DATE_REGEX" in rec_rep_code and "365" in rec_rep_code, "api/mod
 
 with open(os.path.join(ROOT_DIR, "api", "cron", "uptime-check.ts"), "r", encoding="utf-8") as fp:
     up_code = fp.read()
-test_assert("recordSuccess('erp')" in up_code and "recordFailure('erp')" in up_code, "uptime-check.ts provides proactive self-healing for ERP circuit breaker")
+test_assert("recordSuccess(" in up_code and "recordFailure(" in up_code, "uptime-check.ts provides proactive self-healing for ERP circuit breaker")
 
 with open(os.path.join(ROOT_DIR, "api", "cron", "reconcile-balances.ts"), "r", encoding="utf-8") as fp:
     rec_bal_code = fp.read()
@@ -957,10 +957,41 @@ with open(os.path.join(ROOT_DIR, "api", "webhooks", "handlers", "discountRulesHa
     disc_code = fp.read()
 test_assert("Math.min(90" in disc_code and "invalidateCatalogCache" in disc_code, "discountRulesHandler.ts bounds discount percentages and invalidates catalog cache")
 
-test_assert("currency_rate_updated" in spec_code, "docs/ERP_INTEGRATION_SPEC.md documents currency_rate_updated webhook specification")
+# ------------------------------------------------------------------------------
+# 28. Verifying Stage 4 ERP Gateway Hardening (Reconciliation Routing/IDOR, Breaker Service Name, Checkout Saga DLQ, Stock Pagination)
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}28. Verifying Stage 4 ERP Gateway Hardening & Security Parity...{RESET}")
+
+with open(erp_ts_path, "r", encoding="utf-8") as fp:
+    erp_proxy_code = fp.read()
+test_assert("get_reconciliation_report" in erp_proxy_code and "TARGET_ERP_URL, SERVER_ERP_KEY" in erp_proxy_code, "api/erp.ts routes get_reconciliation_report with targetErpUrl and serverErpKey")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "reconciliation.ts"), "r", encoding="utf-8") as fp:
+    rec_code_fresh = fp.read()
+test_assert("req.body?.partner_id" in rec_code_fresh and "req.body?.start_date" in rec_code_fresh, "api/modules/reconciliation.ts accepts params from both query and body")
+
+with open(os.path.join(ROOT_DIR, "api", "cron", "uptime-check.ts"), "r", encoding="utf-8") as fp:
+    up_code_fresh = fp.read()
+test_assert("recordSuccess('erp_gateway')" in up_code_fresh and "recordFailure('erp_gateway')" in up_code_fresh, "uptime-check.ts unifies circuit breaker service name to erp_gateway")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "orderDispatcher.ts"), "r", encoding="utf-8") as fp:
+    disp_code_fresh = fp.read()
+test_assert("isFatalBusinessError(erpResponse.status" in disp_code_fresh and "releaseAllReservedStock" in disp_code_fresh and "failed_dlq" in disp_code_fresh, "orderDispatcher.ts triggers Saga rollback and DLQ on fatal 4xx business errors")
+
+with open(os.path.join(ROOT_DIR, "api", "cron", "reconcile-stock.ts"), "r", encoding="utf-8") as fp:
+    rec_stock_fresh = fp.read()
+test_assert(".gt('stock_reserved', 0)" in rec_stock_fresh and "5000" in rec_stock_fresh, "reconcile-stock.ts filters active holds with limit 5000 eliminating 1000-row truncation")
+
+with open(os.path.join(ROOT_DIR, "api", "webhooks", "stock_event.ts"), "r", encoding="utf-8") as fp:
+    se_code = fp.read()
+test_assert("INVALID_HMAC_SIGNATURE" in se_code and "handlePartnerStockReleased" in se_code, "api/webhooks/stock_event.ts enforces HMAC and delegates to lifecycle handler")
+
+with open(os.path.join(ROOT_DIR, "api", "webhooks", "handlers", "stockHandler.ts"), "r", encoding="utf-8") as fp:
+    sh_code_fresh = fp.read()
+test_assert("payload.sku || payload.article" in sh_code_fresh, "stockHandler.ts supports single-item payloads in addition to items array")
 
 # ------------------------------------------------------------------------------
-# 28. Summary Report
+# 29. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

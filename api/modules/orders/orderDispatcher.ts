@@ -5,6 +5,7 @@ import { recordFailure, recordSuccess } from '../../lib/circuitBreaker';
 import { releaseAllReservedStock, ReservedStockItem } from '../../lib/saga';
 import { patchCachedCatalogStock, StockItemUpdate } from '../../lib/catalogCache';
 import type { SplitOrderSummary } from './orderSplitter';
+import { isFatalBusinessError, dispatchDlqEmergencyAlert } from '../../outbox/outboxUtils';
 
 /**
  * Неблокирующий вызов воркера Outbox для мгновенного сброса заказа в ERP (sub-second sync)
@@ -153,6 +154,55 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
         success: false,
         code: 'INSUFFICIENT_STOCK',
         error: jsonData?.error || '1C:ERP отклонила заказ: недостаточно товара на складе.',
+      });
+      return;
+    }
+
+    // Обработка фатальных бизнес-ошибок (400, 404, 422, клиент заблокирован) -> немедленный откат Saga и DLQ
+    const fatalErrorText = jsonData?.error || jsonData?.message || '';
+    if (isFatalBusinessError(erpResponse.status, fatalErrorText)) {
+      logger.error('[Order] 1C:ERP rejected order with fatal business error. Triggering Saga rollback and DLQ', {
+        orderDoc: outboxOrderDoc,
+        status: erpResponse.status,
+        error: fatalErrorText,
+        correlationId,
+      });
+
+      if (outboxOrderId) {
+        await supabase
+          .from('orders')
+          .update({
+            status: 'failed_dlq',
+            last_error: `[Фатальный сбой ERP (${erpResponse.status})] ${fatalErrorText}`,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', outboxOrderId);
+      }
+
+      // SAGA: Освобождаем локальные резервы
+      await releaseAllReservedStock(reservedSkuItems, {
+        correlationId,
+        orderId: outboxOrderId || undefined,
+        orderNumber: outboxOrderDoc || undefined,
+        reason: `Фатальный отказ 1C:ERP (${erpResponse.status}): ${fatalErrorText}`,
+      });
+
+      // Тревожный алерт дежурной смене
+      dispatchDlqEmergencyAlert({
+        id: outboxOrderId || outboxOrderDoc,
+        order_number: outboxOrderDoc,
+        retry_count: 0,
+        last_error: `[Fatal Checkout Error ${erpResponse.status}] ${fatalErrorText}`,
+        created_at: new Date().toISOString(),
+        total_amount: outboundPayload.total_amount,
+        user_id: outboundPayload.user_id,
+      }, fatalErrorText).catch(() => {});
+
+      const httpStatus = erpResponse.status >= 400 && erpResponse.status < 500 ? erpResponse.status : 422;
+      res.status(httpStatus).json({
+        success: false,
+        code: jsonData?.error_code || 'FATAL_BUSINESS_ERROR',
+        error: fatalErrorText || '1C:ERP отклонила оформление заказа по бизнес-причинам.',
       });
       return;
     }

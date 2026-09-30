@@ -149,9 +149,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return await handleCreateLead(req, res, correlationId);
     }
 
-    // 1.3. Серверная генерация акта сверки взаиморасчетов
-    if (action === 'reconciliation_report' && req.method === 'POST') {
-      return await handleReconciliationReport(req, res, correlationId);
+    // 1.3. Серверная генерация акта сверки взаиморасчетов (Anti-IDOR и клампинг периода)
+    if (
+      (action === 'reconciliation_report' || action === 'get_reconciliation_report') &&
+      (req.method === 'GET' || req.method === 'POST')
+    ) {
+      return await handleReconciliationReport(req, res, TARGET_ERP_URL, SERVER_ERP_KEY);
     }
 
     // 1.4. Серверный запрос согласования заказа через WhatsApp

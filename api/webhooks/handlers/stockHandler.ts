@@ -9,7 +9,9 @@ export async function handleStockChanged(
   timestamp: string,
   broadcastLiveUpdate: (event: string, payload: any) => Promise<void>,
 ) {
-  const rawItems = Array.isArray(payload.items) ? payload.items : [];
+  const rawItems = Array.isArray(payload.items)
+    ? payload.items
+    : (payload.sku || payload.article || payload.code || payload.barcode ? [payload] : []);
   const items = rawItems.map((it: any) => ({
     ...it,
     sku: String(it.sku || it.article || it.code || it.barcode || '').trim(),
