@@ -1459,7 +1459,42 @@ with open(os.path.join(ROOT_DIR, "src", "lib", "offlineOrderQueue.ts"), "r", enc
 test_assert("payload.idempotency_key ||" in ooq_s16 and "res.order_number" in ooq_s16, "offlineOrderQueue.ts pins idempotency key and supports idempotent order replay")
 
 # ------------------------------------------------------------------------------
-# 41. Summary Report
+# 41. Stage 17: PWA Top Offline Banner, Multi-Tab Cart Sync, Stock Depletion Alert & Sliding Session
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 41. STAGE 17: PWA OFFLINE BANNER, MULTI-TAB SYNC & REALTIME STOCK DEPLETION ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "common", "OfflineBanner.tsx"), "r", encoding="utf-8") as fp:
+    ob_txt = fp.read()
+test_assert("Офлайн-режим: просмотр сохраненных остатков, заказы будут отправлены при подключении" in ob_txt, "OfflineBanner.tsx defines standard PWA offline notification banner")
+test_assert("sticky top-0" in ob_txt and "bg-amber-500" in ob_txt, "OfflineBanner.tsx pins to top header with amber background")
+
+with open(os.path.join(ROOT_DIR, "src", "App.tsx"), "r", encoding="utf-8") as fp:
+    app_s17 = fp.read()
+test_assert("<OfflineBanner />" in app_s17 and "OfflineBanner" in app_s17, "App.tsx integrates top-header OfflineBanner replacing clunky bottom pill")
+
+with open(os.path.join(ROOT_DIR, "src", "contexts", "CartContext.tsx"), "r", encoding="utf-8") as fp:
+    cc_s17 = fp.read()
+test_assert("window.addEventListener('storage', handleStorage)" in cc_s17, "CartContext.tsx provides real-time multi-tab synchronization via storage event")
+test_assert("portal_cart_stock_watcher" in cc_s17 and "synergy:cart-item-stock-depleted" in cc_s17, "CartContext.tsx monitors realtime stock depletion when another buyer orders item")
+
+with open(os.path.join(ROOT_DIR, "src", "hooks", "useRealtimeNotifications.ts"), "r", encoding="utf-8") as fp:
+    urn_s17 = fp.read()
+test_assert("synergy:cart-item-stock-depleted" in urn_s17 and "закончился на складе (выкуплен другим покупателем)" in urn_s17, "useRealtimeNotifications.ts fires warning toast on item stock depletion")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "cart", "CartItemsTable.tsx"), "r", encoding="utf-8") as fp:
+    cit_s17 = fp.read()
+test_assert("Закончился на складе" in cit_s17 and "isDepleted" in cit_s17, "CartItemsTable.tsx highlights depleted stock items with warning pill")
+
+with open(os.path.join(ROOT_DIR, "src", "pages", "CartPage.tsx"), "r", encoding="utf-8") as fp:
+    cp_s17 = fp.read()
+test_assert("hasDepletedItems" in cp_s17 and "В корзине есть закончившиеся на складе позиции" in cp_s17, "CartPage.tsx protects against ordering depleted items")
+
+with open(os.path.join(ROOT_DIR, "src", "contexts", "auth", "sessionStore.ts"), "r", encoding="utf-8") as fp:
+    ss_s17 = fp.read()
+test_assert("renewSessionIfActive" in ss_s17 and "savedAt:" in ss_s17, "sessionStore.ts supports sliding session renewal for active dealers")
+
+# ------------------------------------------------------------------------------
+# 42. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests
