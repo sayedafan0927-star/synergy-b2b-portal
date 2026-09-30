@@ -161,57 +161,58 @@ export default function HomePage({
             </p>
           </div>
 
-          <div className="mt-10 lg:mt-14 flex sm:grid sm:grid-cols-3 gap-4 sm:gap-6 overflow-x-auto sm:overflow-visible pb-4 sm:pb-0 snap-x snap-mandatory scroll-smooth no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0">
-            {categories.map((category) => {
+          <div className="mt-8 lg:mt-12 grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-6">
+            {categories.map((category, idx) => {
+              const isFirst = idx === 0;
               const actualCount = countryCounts[category.name] || category.count || 0;
               return (
                 <button
                   key={category.id}
                   type="button"
                   onClick={() => onNavigate('catalog', category.id)}
-                  className="group relative min-w-[84vw] sm:min-w-0 snap-center aspect-[4/3] sm:aspect-[4/3] overflow-hidden rounded-2xl border border-white/10 hover:border-amber-400/50 shadow-2xl transition-all duration-300 bg-slate-900 cursor-pointer text-left focus:outline-hidden"
+                  className={`group flex flex-col items-center rounded-2xl cursor-pointer transition-all duration-300 text-center ${
+                    isFirst
+                      ? 'col-span-2 md:col-span-1 bg-white/[0.03] border border-amber-500/30 hover:border-amber-400/60 p-3 md:p-4 shadow-xl'
+                      : 'col-span-1 bg-white/[0.02] border border-white/10 hover:border-amber-400/50 p-2.5 md:p-4 shadow-md'
+                  }`}
                 >
-                  {category.video ? (
-                    <video
-                      autoPlay
-                      loop
-                      muted
-                      playsInline
-                      preload="metadata"
-                      poster={category.poster || category.image}
-                      className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
-                    >
-                      <source src={category.video} type="video/mp4" />
-                    </video>
-                  ) : (
-                    <img
-                      src={category.image}
-                      alt={category.name}
-                      loading="lazy"
-                      className="h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-110"
-                    />
-                  )}
-
-                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/20 to-black/20 group-hover:via-slate-950/10 transition-all duration-300 pointer-events-none" />
-
-                  <div className="absolute inset-x-0 bottom-0 p-4 sm:p-5 text-left pointer-events-none">
-                    <div className="flex items-end justify-between gap-2">
-                      <div>
-                        <span className="font-mono text-[10px] text-amber-300/80 uppercase tracking-widest block mb-0.5">
-                          Прямые поставки
-                        </span>
-                        <h3 className="font-display text-lg sm:text-xl font-bold text-white drop-shadow-md">
-                          {category.name}
-                        </h3>
-                      </div>
-                      <span className="inline-flex items-center gap-1 font-mono text-[11px] text-amber-200 bg-amber-500/20 border border-amber-400/40 backdrop-blur-md px-2.5 py-1 rounded-full shadow-xs shrink-0">
-                        {actualCount > 0 ? `${actualCount} товаров` : 'В наличии'}
-                      </span>
-                    </div>
+                  {/* Video Frame Box - 100% full square frame visible, zero text overlay */}
+                  <div className={`aspect-square rounded-xl overflow-hidden bg-black/40 border border-white/5 ${
+                    isFirst ? 'w-[180px] sm:w-[220px] md:w-full' : 'w-full'
+                  }`}>
+                    {category.video ? (
+                      <video
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                        preload="metadata"
+                        poster={category.poster || category.image}
+                        className="h-full w-full object-contain transition-transform duration-500 group-hover:scale-105"
+                      >
+                        <source src={category.video} type="video/mp4" />
+                      </video>
+                    ) : (
+                      <img
+                        src={category.image}
+                        alt={category.name}
+                        loading="lazy"
+                        className="h-full w-full object-contain transition-transform duration-500 group-hover:scale-105"
+                      />
+                    )}
                   </div>
 
-                  <div className="absolute top-3.5 right-3.5 w-8 h-8 rounded-full bg-slate-900/60 border border-amber-400/40 backdrop-blur-md flex items-center justify-center transition-all duration-300 group-hover:scale-110 group-hover:bg-amber-400 group-hover:border-amber-400">
-                    <ArrowRight className="h-4 w-4 text-amber-300 group-hover:text-slate-950 transition-colors" />
+                  {/* Centered Text strictly UNDER the animation */}
+                  <div className="mt-2.5 md:mt-3 flex flex-col items-center">
+                    <span className="font-mono text-[9px] md:text-[10px] text-amber-300/80 uppercase tracking-widest block mb-0.5">
+                      {isFirst ? 'Прямые поставки • Хит продаж' : 'Прямые поставки'}
+                    </span>
+                    <h3 className="font-display text-base md:text-xl font-bold text-white group-hover:text-amber-300 transition-colors">
+                      {isFirst ? 'Ковры Турции' : category.name}
+                    </h3>
+                    <span className="inline-block mt-1 md:mt-2 font-mono text-[9px] md:text-[11px] font-semibold text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 md:py-1 rounded-full">
+                      {actualCount > 0 ? (isFirst ? `${actualCount} товаров в наличии` : `${actualCount} товаров`) : 'В наличии'}
+                    </span>
                   </div>
                 </button>
               );
