@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Truck, Shield, Clock, Warehouse, ArrowRight, Package, MapPin, CalendarCheck } from 'lucide-react';
+import { Truck, Shield, Clock, Warehouse, ArrowRight } from 'lucide-react';
 import type { PageId } from '@/types';
 import { categories } from '@/data/categories';
 import { useProducts } from '@/hooks/useProductData';
@@ -32,12 +32,6 @@ const advantages = [
   },
 ];
 
-const stats = [
-  { icon: Package, value: '1500+', label: 'товаров в наличии' },
-  { icon: MapPin, value: '3', label: 'склада по Казахстану' },
-  { icon: CalendarCheck, value: '8+', label: 'лет на рынке' },
-];
-
 export default function HomePage({ 
   onNavigate, 
   isReady = true 
@@ -62,25 +56,6 @@ export default function HomePage({
       <section className="relative w-full bg-slate-950 pt-16">
         <HeroBannerMedia onNavigate={onNavigate} isReady={isReady} />
       </section>
-
-      {/* ── Quick Stats Strip ── */}
-      <div className="bg-slate-900 border-b border-slate-800 py-6 text-white">
-        <div className="container-w">
-          <div className="grid grid-cols-3 gap-4 sm:gap-8 max-w-2xl mx-auto">
-            {stats.map((stat) => (
-              <div key={stat.label} className="text-center">
-                <div className="flex items-center justify-center gap-1.5 sm:gap-2 mb-1">
-                  <stat.icon className="h-4 w-4 text-brand-400 hidden sm:block" />
-                  <span className="font-display text-xl sm:text-2xl font-bold text-white">
-                    {stat.value}
-                  </span>
-                </div>
-                <p className="text-[11px] sm:text-xs text-slate-400 font-body">{stat.label}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
 
       {/* ── Advantages Section ── */}
       <section className="py-16 lg:py-24 bg-white">

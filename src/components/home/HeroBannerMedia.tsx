@@ -100,32 +100,32 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
 
         {/* 
           Harmonious End-State Interactive Overlay (Desktop sm+):
-          Fades in smoothly when video freezes at final frame, covering left side
-          while keeping oriental carpet visual on the right fully visible.
+          Ultra-transparent luxury glass overlay:
+          Preserves 100% of the oriental carpet visual while providing crystal-clear readability.
         */}
         <div 
           className={`hidden sm:flex absolute inset-0 items-center transition-all duration-700 ease-out ${
             isEnded ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
           }`}
         >
-          {/* Soft dark left vignette that blends into the video */}
+          {/* Subtle soft dark left vignette that gently darkens background for text readability without washing out carpet */}
           <div 
             aria-hidden="true"
-            className="absolute inset-0 bg-gradient-to-r from-slate-950/80 via-slate-950/40 to-transparent pointer-events-none" 
+            className="absolute inset-0 bg-gradient-to-r from-black/50 via-black/20 to-transparent pointer-events-none" 
           />
 
           <div className="relative container-w py-6 sm:py-10">
-            <div className="max-w-lg p-6 sm:p-8 rounded-2xl sm:rounded-3xl bg-slate-950/80 backdrop-blur-md border border-white/15 shadow-2xl transition-all duration-500">
-              <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 mb-4 text-xs font-medium text-brand-400 border border-white/10">
+            <div className="max-w-lg p-6 sm:p-8 rounded-3xl bg-slate-950/25 backdrop-blur-md border border-white/10 shadow-2xl transition-all duration-500">
+              <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 mb-4 text-xs font-medium text-brand-300 border border-white/15 backdrop-blur-sm">
                 <Sparkles className="w-3.5 h-3.5 text-brand-400" />
                 Оптовый поставщик • В наличии на складах
               </div>
 
-              <h1 className="font-display text-2xl sm:text-4xl font-bold text-white leading-tight">
-                Оптовые поставки <span className="text-brand-400">ковровых покрытий</span>
+              <h1 className="font-display text-2xl sm:text-4xl font-bold text-white leading-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)]">
+                Оптовые поставки <span className="text-brand-300">ковровых покрытий</span>
               </h1>
 
-              <p className="mt-3 text-xs sm:text-sm text-slate-300 font-body leading-relaxed">
+              <p className="mt-3 text-xs sm:text-sm text-slate-200 font-body leading-relaxed drop-shadow-[0_1px_5px_rgba(0,0,0,0.85)]">
                 Широкий ассортимент ковров от ведущих производителей Турции, Бельгии и Ирана. 
                 Более 1500 наименований в наличии. Отгрузка за 24 часа.
               </p>
@@ -134,7 +134,7 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
                 <button
                   type="button"
                   onClick={() => onNavigate?.('catalog')}
-                  className="btn-primary inline-flex items-center justify-center gap-2 text-sm px-5 py-2.5 shadow-lg shadow-brand-500/20"
+                  className="btn-primary inline-flex items-center justify-center gap-2 text-sm px-5 py-2.5 shadow-lg shadow-brand-500/25"
                 >
                   Перейти в каталог
                   <ArrowRight className="w-4 h-4" />
@@ -142,7 +142,7 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
                 <button
                   type="button"
                   onClick={() => onNavigate?.('contacts')}
-                  className="btn-secondary border-white/20 bg-white/10 text-white backdrop-blur-sm hover:bg-white/20 inline-flex items-center justify-center gap-2 text-sm px-5 py-2.5"
+                  className="btn-secondary border-white/20 bg-white/10 text-white backdrop-blur-md hover:bg-white/20 inline-flex items-center justify-center gap-2 text-sm px-5 py-2.5"
                 >
                   Связаться с нами
                 </button>
@@ -152,52 +152,38 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
         </div>
 
         {/* 
+          Mobile Floating Glass CTA (Variant A):
+          Ultra-clean, compact floating pill at the bottom edge of the video.
+          Zero clutter, 100% video/carpet visibility, seamless luxury feel.
+        */}
+        <div 
+          className={`sm:hidden absolute inset-x-0 bottom-3 px-4 flex items-center justify-center transition-all duration-500 ease-out z-20 ${
+            isEnded ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-2 pointer-events-none'
+          }`}
+        >
+          <button
+            type="button"
+            onClick={() => onNavigate?.('catalog')}
+            className="w-full max-w-xs inline-flex items-center justify-center gap-2 rounded-full bg-slate-950/75 hover:bg-slate-900/90 active:scale-95 text-white border border-white/20 backdrop-blur-md px-5 py-2.5 text-xs font-semibold shadow-xl shadow-black/60 transition-all duration-200"
+          >
+            <span>Перейти в каталог ковров</span>
+            <ArrowRight className="w-3.5 h-3.5 text-brand-400" />
+          </button>
+        </div>
+
+        {/* 
           Minimalist, non-intrusive replay button:
-          Tiny icon button in the bottom-right corner without text or visual noise.
+          Positioned top-right on mobile so it never collides with bottom pill,
+          bottom-right on desktop.
         */}
         <button
           type="button"
           onClick={handleReplay}
-          className="absolute bottom-3 right-3 sm:bottom-4 sm:right-4 z-30 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-black/40 hover:bg-black/80 text-white/60 hover:text-white border border-white/15 backdrop-blur-md flex items-center justify-center shadow transition-all duration-200 group/btn"
+          className="absolute top-3 right-3 sm:top-auto sm:bottom-4 sm:right-4 z-30 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-black/40 hover:bg-black/80 text-white/60 hover:text-white border border-white/15 backdrop-blur-md flex items-center justify-center shadow transition-all duration-200 group/btn"
           title="Повторить видео с начала"
         >
           <RotateCcw className="w-3.5 h-3.5 transition-transform duration-300 group-hover/btn:-rotate-90" />
         </button>
-      </div>
-
-      {/* ── Mobile Action Block (Clean, unclipped layout directly under the full-frame video) ── */}
-      <div className="block sm:hidden px-4 pt-4 pb-6 bg-slate-950 border-t border-slate-900/60 text-white">
-        <div className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-1 mb-2.5 text-[11px] font-medium text-brand-400 border border-white/10">
-          <Sparkles className="w-3 h-3 text-brand-400" />
-          Оптовый поставщик • В наличии на складах
-        </div>
-
-        <h1 className="font-display text-xl font-bold text-white leading-tight">
-          Оптовые поставки <span className="text-brand-400">ковровых покрытий</span>
-        </h1>
-
-        <p className="mt-2 text-xs text-slate-300 font-body leading-relaxed">
-          Широкий ассортимент ковров от ведущих производителей Турции, Бельгии и Ирана. 
-          Более 1500 наименований в наличии. Отгрузка за 24 часа.
-        </p>
-
-        <div className="mt-4 grid grid-cols-2 gap-2.5">
-          <button
-            type="button"
-            onClick={() => onNavigate?.('catalog')}
-            className="btn-primary inline-flex items-center justify-center gap-1.5 text-xs py-2.5 px-3 font-semibold shadow-lg shadow-brand-500/20"
-          >
-            В каталог
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => onNavigate?.('contacts')}
-            className="btn-secondary border-white/20 bg-white/10 text-white backdrop-blur-sm hover:bg-white/20 inline-flex items-center justify-center text-xs py-2.5 px-3"
-          >
-            Контакты
-          </button>
-        </div>
       </div>
     </div>
   );
