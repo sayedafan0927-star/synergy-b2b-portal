@@ -8,7 +8,6 @@ import { useDisplaySettings } from '@/hooks/useDisplaySettings';
 import { isProductInStockForUser } from '@/lib/warehouseVisibility';
 import ProductCard from '@/components/ProductCard';
 import HeroBannerMedia from '@/components/home/HeroBannerMedia';
-import CarpetSectionDivider from '@/components/home/CarpetSectionDivider';
 
 const advantages = [
   {
@@ -94,10 +93,10 @@ export default function HomePage({
   return (
     <div className="pb-16 lg:pb-0">
       {/* ── Hero Video Banner (Pure animation + Harmonious End-State CTA) ── */}
-      <section className="relative w-full bg-slate-950 pt-16 sm:pt-20 lg:pt-24">
+      <section className="relative w-full bg-slate-950 pt-16 sm:pt-20 lg:pt-24 overflow-hidden">
         <HeroBannerMedia onNavigate={onNavigate} isReady={isReady} />
         {/* Mobile Action Bar: Golden button on dark canvas under video */}
-        <div className="block sm:hidden px-4 pb-4 select-none">
+        <div className="block sm:hidden px-4 pb-8 select-none relative z-20">
           <button
             type="button"
             onTouchStart={handleTouchStart}
@@ -109,10 +108,22 @@ export default function HomePage({
             <ArrowRight className="w-4 h-4 text-slate-950" />
           </button>
         </div>
-      </section>
 
-      {/* ── Woven Carpet Kilim Fringe Divider (Dark Hero to Clean White) ── */}
-      <CarpetSectionDivider variant="dark-to-linen" />
+        {/* ── Bottom Organic Wave: Seamless transition to Advantages (#ffffff) with ZERO lines ── */}
+        <div className="absolute bottom-0 inset-x-0 pointer-events-none select-none z-10 -mb-[1px]">
+          <svg
+            className="w-full h-8 sm:h-12 lg:h-16 block"
+            viewBox="0 0 1440 96"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M 0,50 C 290,15 490,95 720,55 C 950,15 1150,95 1440,50 L 1440,96 L 0,96 Z"
+              fill="#ffffff"
+            />
+          </svg>
+        </div>
+      </section>
 
       {/* ── 1. Advantages Section (Clean White) ── */}
       <section className="py-16 lg:py-24 bg-white">
@@ -159,12 +170,12 @@ export default function HomePage({
         <div className="absolute top-0 inset-x-0 pointer-events-none select-none z-10 -mt-[1px]">
           <svg
             className="w-full h-8 sm:h-12 lg:h-16 block"
-            viewBox="0 0 1440 64"
+            viewBox="0 0 1440 96"
             preserveAspectRatio="none"
             aria-hidden="true"
           >
             <path
-              d="M 0,0 L 1440,0 L 1440,28 Q 1100,56 720,24 T 0,32 Z"
+              d="M 0,0 L 1440,0 L 1440,50 C 1150,95 950,15 720,55 C 490,95 290,15 0,50 Z"
               fill="#ffffff"
             />
           </svg>
@@ -174,12 +185,12 @@ export default function HomePage({
         <div className="absolute bottom-0 inset-x-0 pointer-events-none select-none z-10 -mb-[1px]">
           <svg
             className="w-full h-8 sm:h-12 lg:h-16 block"
-            viewBox="0 0 1440 64"
+            viewBox="0 0 1440 96"
             preserveAspectRatio="none"
             aria-hidden="true"
           >
             <path
-              d="M 0,36 Q 360,12 720,44 T 1440,30 L 1440,64 L 0,64 Z"
+              d="M 0,50 C 290,15 490,95 720,55 C 950,15 1150,95 1440,50 L 1440,96 L 0,96 Z"
               fill="#f8fafc"
             />
           </svg>

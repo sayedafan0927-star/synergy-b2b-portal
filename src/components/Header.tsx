@@ -151,17 +151,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
         </div>
       )}
 
-      {/* Desktop Left/Right Subtle Border Lines & Spline Arch */}
-      <div
-        className={`hidden sm:block absolute left-0 top-full -mt-px h-px transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-          scrolled ? 'bg-slate-200/60 right-[calc(50%+140px)] lg:right-[calc(50%+180px)]' : 'bg-slate-200/30 right-[calc(50%+170px)] lg:right-[calc(50%+240px)]'
-        }`}
-      />
-      <div
-        className={`hidden sm:block absolute right-0 top-full -mt-px h-px transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-          scrolled ? 'bg-slate-200/60 left-[calc(50%+140px)] lg:left-[calc(50%+180px)]' : 'bg-slate-200/30 left-[calc(50%+170px)] lg:left-[calc(50%+240px)]'
-        }`}
-      />
+      {/* Parabolic Spline Arch (Zero straight horizontal cut lines) */}
       <svg
         className={`hidden sm:block absolute left-1/2 -translate-x-1/2 top-full -mt-px pointer-events-none transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] overflow-visible ${
           scrolled ? 'w-[280px] lg:w-[360px] h-[14px] lg:h-[18px]' : 'w-[340px] lg:w-[480px] h-[28px] lg:h-[42px]'
@@ -175,12 +165,6 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
           d="M 0,-2 L 500,-2 L 500,0 C 390,0 340,44 250,44 C 160,44 110,0 0,0 Z"
           fill="#ffffff"
           style={{ fill: '#ffffff' }}
-        />
-        <path
-          d="M 0,0.5 C 110,0.5 160,44 250,44 C 340,44 390,0.5 500,0.5"
-          fill="none"
-          stroke="#e2e8f0"
-          strokeWidth="1.5"
         />
       </svg>
 
