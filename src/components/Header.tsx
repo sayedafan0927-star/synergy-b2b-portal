@@ -71,10 +71,8 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
 
   return (
     <header
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        scrolled
-          ? 'bg-[#faf6ee]/95 backdrop-blur-md shadow-xs border-b border-[#e7decb]/90'
-          : 'bg-[#faf6ee] border-b border-[#e7decb]/60'
+      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 bg-[#faf6ee] ${
+        scrolled ? 'shadow-xs' : ''
       }`}
     >
       {/* Impersonation Banner inside fixed header */}
@@ -126,17 +124,35 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
         </div>
       )}
 
-      {/* Thompson's Tea Signature Editorial Spline Arch (Flawless cubic-bezier continuous transition) */}
+      {/* Left Bottom Border Line (Stops precisely where arch begins, eliminating horizontal line behind logo) */}
+      <div
+        className={`absolute left-0 top-full -mt-px h-px bg-[#e7decb] transition-all duration-300 ${
+          scrolled
+            ? 'right-[calc(50%+90px)] sm:right-[calc(50%+140px)] lg:right-[calc(50%+180px)]'
+            : 'right-[calc(50%+110px)] sm:right-[calc(50%+170px)] lg:right-[calc(50%+240px)]'
+        }`}
+      />
+
+      {/* Right Bottom Border Line (Starts precisely where arch ends) */}
+      <div
+        className={`absolute right-0 top-full -mt-px h-px bg-[#e7decb] transition-all duration-300 ${
+          scrolled
+            ? 'left-[calc(50%+90px)] sm:left-[calc(50%+140px)] lg:left-[calc(50%+180px)]'
+            : 'left-[calc(50%+110px)] sm:left-[calc(50%+170px)] lg:left-[calc(50%+240px)]'
+        }`}
+      />
+
+      {/* Center Arch SVG (Continuous organic spline with identical #faf6ee fill, compact on mobile) */}
       <svg
-        className="absolute left-1/2 -translate-x-1/2 top-full -mt-px pointer-events-none transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
-        style={{
-          zIndex: 1,
-          width: scrolled ? '360px' : '480px',
-          height: scrolled ? '18px' : '44px',
-        }}
+        className={`absolute left-1/2 -translate-x-1/2 top-full -mt-px pointer-events-none transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+          scrolled
+            ? 'w-[180px] sm:w-[280px] lg:w-[360px] h-[10px] sm:h-[14px] lg:h-[18px]'
+            : 'w-[220px] sm:w-[340px] lg:w-[480px] h-[14px] sm:h-[28px] lg:h-[42px]'
+        }`}
         viewBox="0 0 500 44"
         preserveAspectRatio="none"
         aria-hidden="true"
+        style={{ zIndex: 1 }}
       >
         <path
           d="M 0,0 C 110,0 160,44 250,44 C 340,44 390,0 500,0 L 500,-4 L 0,-4 Z"
@@ -177,12 +193,12 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
           {/* Left Column Spacer on Mobile to guarantee absolute center logo */}
           <div className="lg:hidden justify-self-start" />
 
-          {/* Center Column: Logo in Parabolic Arch (Full crest & text at top, collapses to text dipping in curve on scroll) */}
+          {/* Center Column: Logo in Parabolic Arch (Compact on mobile, perfectly dipped on scroll) */}
           <button
             type="button"
             onClick={() => onNavigate('home')}
-            className={`justify-self-center flex flex-col items-center justify-center cursor-pointer transition-all duration-300 py-1 px-3 sm:px-4 min-w-[130px] sm:min-w-[160px] ${
-              scrolled ? 'translate-y-1.5 sm:translate-y-2' : 'translate-y-2 sm:translate-y-3'
+            className={`justify-self-center flex flex-col items-center justify-center cursor-pointer transition-all duration-300 py-1 px-2 sm:px-4 min-w-[110px] sm:min-w-[160px] ${
+              scrolled ? 'translate-y-0.5 sm:translate-y-1.5' : 'translate-y-1 sm:translate-y-2'
             }`}
             title="Synergiya Group — Главная"
             aria-label="Главная страница"
@@ -190,30 +206,30 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
             {/* Upper Emblem: Smoothly disappears and collapses height when scrolled */}
             <div
               className={`transition-all duration-300 overflow-hidden flex items-center justify-center ${
-                scrolled ? 'h-0 opacity-0 mb-0 scale-75' : 'h-10 sm:h-12 opacity-100 mb-1'
+                scrolled ? 'h-0 opacity-0 mb-0 scale-75' : 'h-8 sm:h-10 lg:h-12 opacity-100 mb-0.5 sm:mb-1'
               }`}
             >
               <img
                 src="/logo-emblem.png"
                 alt="Synergiya Crest"
-                className="h-full w-auto max-h-11 object-contain"
+                className="h-full w-auto max-h-8 sm:max-h-11 object-contain"
               />
             </div>
 
-            {/* Brand Wordmark Typography: Always visible and centered */}
+            {/* Brand Wordmark Typography */}
             <img
               src="/logo-text.png"
               alt="Synergiya Group"
-              className="h-5 sm:h-6 w-auto object-contain transition-all duration-300"
+              className="h-4 sm:h-5 lg:h-6 w-auto object-contain transition-all duration-300"
             />
           </button>
 
-          {/* Right Column: Clean, Uncrowded Controls */}
+          {/* Right Column: Clean, Uncrowded Controls (Mobile shows Cart + Menu for zero clutter) */}
           <div className="justify-self-end flex items-center justify-end gap-1.5 sm:gap-2">
-            {/* Phone link: sleek compact icon button with phone number in title */}
+            {/* Phone link: sleek compact icon button on sm+ */}
             <a
               href="tel:+77785806866"
-              className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-700 hover:bg-black/5 hover:text-brand-700 transition-colors border border-[#e7decb] shrink-0"
+              className="hidden sm:flex h-9 w-9 items-center justify-center rounded-lg text-slate-700 hover:bg-black/5 hover:text-brand-700 transition-colors border border-[#e7decb] shrink-0"
               title="Позвонить в отдел продаж: +7 (778) 580-68-66"
               aria-label="Позвонить в отдел продаж"
             >
@@ -236,11 +252,11 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
               >RU</button>
             </div>
 
-            {/* Showroom Presentation Mode Toggle (Витрина / Без оптовых цен) */}
+            {/* Showroom Presentation Mode Toggle (Витрина / Без оптовых цен): visible on sm+ */}
             <button
               type="button"
               onClick={toggleShowroomMode}
-              className={`flex h-9 items-center gap-1.5 px-2.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
+              className={`hidden sm:flex h-9 items-center gap-1.5 px-2.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
                 isShowroomMode
                   ? 'bg-amber-500 border-amber-600 text-white shadow-2xs font-bold'
                   : 'bg-black/5 hover:bg-black/10 border-[#e7decb] text-slate-700'
@@ -252,7 +268,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
               }
             >
               {isShowroomMode ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-              <span className="hidden sm:inline">{isShowroomMode ? 'Витрина вкл' : 'Витрина'}</span>
+              <span className="hidden lg:inline">{isShowroomMode ? 'Витрина вкл' : 'Витрина'}</span>
             </button>
 
             {/* Currency Switcher ($ USD / ₸ KZT) - Скрыт для всех, кроме администратора */}
