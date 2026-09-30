@@ -125,7 +125,7 @@ export function getDiscountPercent(priceType?: string | null): number {
 export function parseDimensions(sizeStr: string): { width: number; length: number; area: number } {
   if (!sizeStr) return { width: 1.6, length: 2.3, area: 3.68 };
   const cleaned = sizeStr.replace(',', '.');
-  const parts = cleaned.split(/[*×xX]/).map(s => parseFloat(s.trim()));
+  const parts = cleaned.split(/[*×xXхХ]/).map(s => parseFloat(s.trim()));
   if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1]) && parts[0] > 0 && parts[1] > 0) {
     const width = Math.round(parts[0] * 100) / 100;
     const length = Math.round(parts[1] * 100) / 100;

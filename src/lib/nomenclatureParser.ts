@@ -5,7 +5,7 @@ export const STANDARD_SIZES = ['0.8 × 1.5', '1.6 × 2.3', '2 × 3', '2.5 × 3.5
 export function calculateArea(sizeStr: string): number {
   if (!sizeStr) return 3.68;
   const cleaned = sizeStr.replace(',', '.');
-  const parts = cleaned.split(/[*×xX]/).map(s => parseFloat(s.trim()));
+  const parts = cleaned.split(/[*×xXхХ]/).map(s => parseFloat(s.trim()));
   if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
     return Math.round(parts[0] * parts[1] * 100) / 100;
   }

@@ -34,7 +34,7 @@ export async function handleActiveReservations(
 
 function parseSizeArea(sizeStr?: string): number {
   if (!sizeStr) return 1;
-  const parts = String(sizeStr).replace(',', '.').split(/[*×xX]/).map(s => parseFloat(s.trim()));
+  const parts = String(sizeStr).replace(',', '.').split(/[*×xXхХ]/).map(s => parseFloat(s.trim()));
   if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1]) && parts[0] > 0 && parts[1] > 0) {
     return Math.round(parts[0] * parts[1] * 100) / 100;
   }

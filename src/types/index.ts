@@ -326,7 +326,8 @@ export function isRunnerDimension(w: number, l: number, category = ''): boolean 
 }
 
 export function parseSizeDimensions(size: string): { w: number; h: number } {
-  const normalized = size.replace(/[*xXхХ]/g, '×');
+  if (!size) return { w: 0, h: 0 };
+  const normalized = String(size).replace(',', '.').replace(/[*xXхХ]/g, '×');
   const parts = normalized.split('×').map(s => parseFloat(s.trim()));
   if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
     return { w: parts[0], h: parts[1] };

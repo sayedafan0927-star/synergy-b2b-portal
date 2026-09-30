@@ -77,11 +77,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // 2. POST: Сохранить/обновить правило для контрагента (Только для администраторов)
   if (req.method === 'POST') {
     const { authenticateRequest } = await import('./lib/authGuard');
-    const authCtx = await authenticateRequest(req, { requiredRoles: ['admin'], allowServerKey: true });
+    const authCtx = await authenticateRequest(req, { requiredRoles: ['admin', 'manager_rm'], allowServerKey: true });
     if (!authCtx.isAuthenticated || authCtx.error) {
       return res.status(403).json({
         success: false,
-        error: authCtx.error || 'Изменение правил видимости складов доступно только администраторам.',
+        error: authCtx.error || 'Изменение правил видимости складов доступно только администраторам и региональным менеджерам.',
       });
     }
 

@@ -21,7 +21,7 @@ export function buildSplitOrdersPayload(
     const whItems = items.filter(it => (it.warehouse || 'Основной Склад Астана') === wh);
     const whAmount = Math.round(whItems.reduce((acc, it) => acc + it.total_line, 0) * 100) / 100;
     const whItemsCount = whItems.reduce((acc, it) => acc + it.quantity, 0);
-    const whSqm = Math.round(whItems.reduce((acc, it) => acc + (it.price_per_sqm > 0 ? (it.price / it.price_per_sqm) * it.quantity : 0), 0) * 100) / 100;
+    const whSqm = Math.round(whItems.reduce((acc, it) => acc + (Number(it.area_sqm) > 0 ? Number(it.area_sqm) * it.quantity : (it.price_per_sqm > 0 ? (it.price / it.price_per_sqm) * it.quantity : 0)), 0) * 100) / 100;
     const subDoc = `${incomingIdempotencyKey || 'ORD'}-wh-${splitIdx}`;
 
     splitOrdersPayload.push({
@@ -69,7 +69,7 @@ export async function insertSequentialSplitOrders(
     const whItems = items.filter(it => (it.warehouse || 'Основной Склад Астана') === wh);
     const whAmount = Math.round(whItems.reduce((acc, it) => acc + it.total_line, 0) * 100) / 100;
     const whItemsCount = whItems.reduce((acc, it) => acc + it.quantity, 0);
-    const whSqm = Math.round(whItems.reduce((acc, it) => acc + (it.price_per_sqm > 0 ? (it.price / it.price_per_sqm) * it.quantity : 0), 0) * 100) / 100;
+    const whSqm = Math.round(whItems.reduce((acc, it) => acc + (Number(it.area_sqm) > 0 ? Number(it.area_sqm) * it.quantity : (it.price_per_sqm > 0 ? (it.price / it.price_per_sqm) * it.quantity : 0)), 0) * 100) / 100;
     const subDoc = `${parentOrderDoc}-${splitIdx}`;
 
     const { data: subOrderRow } = await supabase

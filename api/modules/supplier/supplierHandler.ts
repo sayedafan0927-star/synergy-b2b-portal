@@ -25,9 +25,18 @@ export function filterSupplierShipments(jsonData: any, rawSupplierId: string | s
 
   // 1. Нормализация складов хаба (Основной Склад Астана)
   jsonData.shipments.forEach((s: any) => {
-    if (s.warehouse_id === 81 || (s.warehouse_name && s.warehouse_name.includes('Астана')) || !s.city) {
+    if (s.warehouse_id === 81 || (s.warehouse_name && s.warehouse_name.includes('Астана'))) {
       s.city = 'Астана';
       s.warehouse_name = 'Основной Склад Астана';
+    } else if (s.warehouse_id === 82 || (s.warehouse_name && s.warehouse_name.includes('Алматы'))) {
+      s.city = 'Алматы';
+      s.warehouse_name = 'Филиал Алматы';
+    } else if (s.warehouse_id === 83 || (s.warehouse_name && s.warehouse_name.includes('Шымкент'))) {
+      s.city = 'Шымкент';
+      s.warehouse_name = 'Филиал Шымкент';
+    } else if (!s.city) {
+      s.city = 'Астана';
+      s.warehouse_name = s.warehouse_name || 'Основной Склад Астана';
     }
   });
 

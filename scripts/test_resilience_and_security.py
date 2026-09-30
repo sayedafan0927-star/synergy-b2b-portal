@@ -1196,7 +1196,52 @@ with open(os.path.join(ROOT_DIR, "api", "cron", "reconcile-stock.ts"), "r", enco
 test_assert("warehouse_id: d.warehouse_id" in rec_s9 and "warehouse_name: d.warehouse_name" in rec_s9, "reconcile-stock.ts preserves warehouse identity in drifted stock patches")
 
 # ------------------------------------------------------------------------------
-# 34. Summary Report
+# 34. Verifying Stage 10 Cyrillic Sizing Parser, Area Preservation & RM Permissions...
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{YELLOW}34. Verifying Stage 10 Cyrillic Sizing Parser, Area Preservation & RM Permissions...{RESET}")
+
+with open(os.path.join(ROOT_DIR, "src", "types", "index.ts"), "r", encoding="utf-8") as fp:
+    types_s10 = fp.read()
+test_assert(".replace(',', '.').replace(/[*xXхХ]/g, '×')" in types_s10, "src/types/index.ts handles comma decimal and Cyrillic x in parseSizeDimensions")
+
+with open(os.path.join(ROOT_DIR, "api", "lib", "pricingValidator.ts"), "r", encoding="utf-8") as fp:
+    pv_s10 = fp.read()
+test_assert("[*×xXхХ]" in pv_s10, "pricingValidator.ts supports Cyrillic x in parseDimensions")
+
+with open(os.path.join(ROOT_DIR, "src", "lib", "erp", "ordersApi.ts"), "r", encoding="utf-8") as fp:
+    oa_s10 = fp.read()
+test_assert("[*×xXхХ]" in oa_s10, "ordersApi.ts supports Cyrillic x in parseSizeDimensions")
+
+with open(os.path.join(ROOT_DIR, "src", "lib", "nomenclatureParser.ts"), "r", encoding="utf-8") as fp:
+    np_s10 = fp.read()
+test_assert("[*×xXхХ]" in np_s10, "nomenclatureParser.ts supports Cyrillic x in calculateArea")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "activeReservationsHandler.ts"), "r", encoding="utf-8") as fp:
+    arh_s10 = fp.read()
+test_assert("[*×xXхХ]" in arh_s10, "activeReservationsHandler.ts supports Cyrillic x in parseSizeArea")
+
+with open(os.path.join(ROOT_DIR, "api", "outbox", "outboxUtils.ts"), "r", encoding="utf-8") as fp:
+    ou_s10 = fp.read()
+test_assert("[*×xXхХ]" in ou_s10, "outboxUtils.ts supports Cyrillic x in buildOutboxErpPayload")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "createOrderHandler.ts"), "r", encoding="utf-8") as fp:
+    coh_s10 = fp.read()
+test_assert("it.area_sqm > 0 ? it.area_sqm * it.quantity" in coh_s10, "createOrderHandler.ts preserves physical rug area under contract discounts")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "orderSplitter.ts"), "r", encoding="utf-8") as fp:
+    os_s10 = fp.read()
+test_assert("Number(it.area_sqm) > 0 ? Number(it.area_sqm) * it.quantity" in os_s10, "orderSplitter.ts preserves suborder physical rug area under contract discounts")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "supplier", "supplierHandler.ts"), "r", encoding="utf-8") as fp:
+    sh_s10 = fp.read()
+test_assert("s.warehouse_id === 82" in sh_s10 and "s.warehouse_id === 83" in sh_s10, "supplierHandler.ts preserves Almaty and Shymkent regional warehouses in shipments")
+
+with open(os.path.join(ROOT_DIR, "api", "warehouse-rules.ts"), "r", encoding="utf-8") as fp:
+    wr_s10 = fp.read()
+test_assert("'manager_rm'" in wr_s10 and "requiredRoles: ['admin', 'manager_rm']" in wr_s10, "api/warehouse-rules.ts permits regional managers to configure warehouse rules")
+
+# ------------------------------------------------------------------------------
+# 35. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

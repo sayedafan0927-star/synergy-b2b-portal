@@ -67,7 +67,7 @@ export function buildOutboxErpPayload(order: any, dbItems: any[] | null) {
   const itemsList = (dbItems && dbItems.length > 0)
     ? dbItems.map(it => {
         const sizeStr = it.size || '1.6x2.3';
-        const parts = String(sizeStr).replace(',', '.').split(/[*×xX]/).map(s => parseFloat(s.trim()));
+        const parts = String(sizeStr).replace(',', '.').split(/[*×xXхХ]/).map(s => parseFloat(s.trim()));
         const width = (parts.length >= 2 && !isNaN(parts[0])) ? parts[0] : 1.6;
         const length = (parts.length >= 2 && !isNaN(parts[1])) ? parts[1] : 2.3;
         const area_sqm = Math.round(width * length * 100) / 100;

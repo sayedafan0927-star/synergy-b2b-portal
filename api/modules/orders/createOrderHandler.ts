@@ -93,6 +93,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
   // 3. Серверный комплаенс-контроль (Кредитный лимит и просрочка)
   const finalTotalAmount = pricingResult.totalAmount;
   const finalTotalItems = pricingResult.totalItems;
+  const finalTotalSqm = Math.round(pricingResult.items.reduce((s, it) => s + (it.area_sqm > 0 ? it.area_sqm * it.quantity : (it.price_per_sqm > 0 ? (it.price / it.price_per_sqm) * it.quantity : 0)), 0) * 100) / 100;
 
   const exposureCheck = await validateClientCreditExposure(callerAuth, finalTotalAmount, supabase);
   if (exposureCheck.blocked) {
@@ -183,7 +184,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
       notes: isMultiWarehouse ? `[Мультисклад (${distinctWarehouses.length} склада)] ${rawPayload.comment || ''}`.trim() : (rawPayload.comment || ''),
       total_amount: finalTotalAmount,
       total_items: finalTotalItems,
-      total_sqm: pricingResult.items.reduce((s, it) => s + (it.price_per_sqm > 0 ? (it.price / it.price_per_sqm) * it.quantity : 0), 0),
+      total_sqm: finalTotalSqm,
       idempotency_key: incomingIdempotencyKey || null,
       currency: rawPayload.currency || 'USD',
       applied_exchange_rate: authoritativeRate,
@@ -247,7 +248,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
           clientName: rawPayload.client_name || rawPayload.buyer?.name || 'Клиент B2B',
           clientPhone: rawPayload.client_phone || rawPayload.buyer?.phone,
           totalAmount: finalTotalAmount,
-          totalSqm: pricingResult.items.reduce((s, it) => s + (it.price_per_sqm > 0 ? (it.price / it.price_per_sqm) * it.quantity : 0), 0),
+          totalSqm: finalTotalSqm,
           itemsCount: finalTotalItems,
           reason: complianceReason || 'Превышение кредитного лимита (серверный контроль)',
         }).catch(e => logger.warn('[Order Approval Warning]', e as Error));
@@ -312,7 +313,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
           notes: isMultiWarehouse ? `[Мультисклад (${distinctWarehouses.length} склада)] ${rawPayload.comment || ''}`.trim() : (rawPayload.comment || ''),
           total_amount: finalTotalAmount,
           total_items: finalTotalItems,
-          total_sqm: pricingResult.items.reduce((s, it) => s + (it.price_per_sqm > 0 ? (it.price / it.price_per_sqm) * it.quantity : 0), 0),
+          total_sqm: finalTotalSqm,
           status: 'pending',
           idempotency_key: incomingIdempotencyKey || null,
           currency: rawPayload.currency || 'USD',
