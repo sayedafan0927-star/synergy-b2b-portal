@@ -24,6 +24,7 @@ import {
   useCatalogStatePersistence,
   DecklePaperWrapper,
   CatalogPetroglyphHero,
+  CatalogGridPetroglyphs,
   getTotalStock,
   sizeArea,
   type SortOption,
@@ -558,10 +559,13 @@ export default function CatalogPage({
         {filteredProducts.length > 0 ? (
           viewMode === 'grid' ? (
             <>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5 min-[1800px]:grid-cols-6 gap-4 lg:gap-6">
-                {visibleProducts.map(p => (
-                  <ProductCard key={p.id} product={p} onNavigate={handleProductNavigate} />
-                ))}
+              <div className="relative">
+                <CatalogGridPetroglyphs />
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 gap-4 lg:gap-6">
+                  {visibleProducts.map(p => (
+                    <ProductCard key={p.id} product={p} onNavigate={handleProductNavigate} />
+                  ))}
+                </div>
               </div>
               {hasMore && (
                 <div className="mt-8 flex flex-col items-center gap-3">

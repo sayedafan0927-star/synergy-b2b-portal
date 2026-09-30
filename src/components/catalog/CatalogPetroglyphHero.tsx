@@ -31,14 +31,17 @@ export default function CatalogPetroglyphHero({
         />
       </div>
 
-      {/* Top Header Row: Title on left, and on mobile the art floats naturally on linen canvas (no box, no overlap) */}
-      <div className="flex items-center justify-between sm:block relative mb-3 sm:mb-4">
-        <h1 className="text-xl sm:text-3xl lg:text-4xl font-serif font-bold text-slate-900 tracking-tight shrink-0">
+      {/* Top Header Row: Title on left with thematic subtitle */}
+      <div className="relative mb-3 sm:mb-4">
+        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-serif font-bold text-slate-900 tracking-tight">
           {title}
         </h1>
+        <p className="mt-1 text-xs sm:text-sm text-slate-500 font-sans max-w-xl">
+          Широкий ассортимент ковров и дорожек оптом от ведущих производителей
+        </p>
 
-        {/* Mobile-only organic art: Golden Horse & Petroglyph Banner floating freely on linen canvas (matching desktop aesthetics) */}
-        <div className="sm:hidden flex items-center gap-2 pointer-events-none opacity-85 shrink-0 pl-2">
+        {/* Mobile-only organic art: Golden Horse & Petroglyph Banner floating freely on linen canvas */}
+        <div className="sm:hidden flex items-center gap-2 pointer-events-none opacity-85 mt-2">
           <img
             src="/petroglyph-horse.png"
             alt="Golden Steppe Horse"
@@ -54,18 +57,18 @@ export default function CatalogPetroglyphHero({
         </div>
       </div>
 
-      {/* Category Pills & Sun Tamga in natural flex flow (100% zero overlap) */}
+      {/* Category Pills & Dark Sun Tamga in natural flex flow */}
       {children && (
-        <div className="relative z-10 flex flex-wrap items-center gap-3 sm:gap-4 mt-2 sm:mt-4">
-          <div className="flex-1 min-w-0">
+        <div className="relative z-10 flex flex-wrap items-center gap-3 sm:gap-4 mt-3 sm:mt-5">
+          <div className="flex items-center gap-2 flex-wrap">
             {children}
           </div>
-          {/* Sun Tamga placed safely alongside the categories, never touching text */}
-          <div className="flex items-center shrink-0 opacity-70 pointer-events-none">
+          {/* Dark Sun Tamga placed directly beside category pills */}
+          <div className="flex items-center shrink-0 opacity-80 pointer-events-none ml-1">
             <img
-              src="/petroglyph-sun.png"
-              alt="Solar Wheel Tamga"
-              className="h-8 sm:h-11 w-auto object-contain"
+              src="/petroglyph-sun-dark.png"
+              alt="Солярная тамга"
+              className="h-10 w-10 sm:h-12 sm:w-12 object-contain"
               loading="lazy"
             />
           </div>
