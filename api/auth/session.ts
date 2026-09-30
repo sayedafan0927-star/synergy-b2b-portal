@@ -33,15 +33,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const validRoles = ['admin', 'manager_rm', 'manager_lm', 'supplier', 'client'];
     const effectiveRole = validRoles.includes(role) ? role : (profile?.role && validRoles.includes(profile.role) ? profile.role : 'client');
 
-    // Anti-Bypass P0: Запрет произвольного назначения привилегированных ролей без подтвержденной серверной аутентификации
+    // Anti-Bypass P0: Запрет произвольного назначения ролей и выпуска токенов без подтвержденной серверной аутентификации
     const callerAuth = await authenticateRequest(req, { allowServerKey: true });
+
+    if (!callerAuth.isAuthenticated && !callerAuth.isServer) {
+      return res.status(401).json({
+        success: false,
+        error: 'Unauthorized: Выпуск или обновление сессионного токена требует действующей авторизации или мастер-ключа ERP (Anti-Spoofing Guard).',
+      });
+    }
+
     const isPrivileged = ['admin', 'manager_rm', 'manager_lm', 'supplier'].includes(effectiveRole);
 
     if (isPrivileged) {
-      if (!callerAuth.isAuthenticated || (!callerAuth.isServer && callerAuth.role !== 'admin' && callerAuth.role !== effectiveRole)) {
+      if (!callerAuth.isServer && callerAuth.role !== 'admin' && callerAuth.role !== effectiveRole) {
         return res.status(403).json({
           success: false,
           error: 'Forbidden: Повышение привилегий до роли сотрудника или администратора запрещено без валидной серверной авторизации.',
+        });
+      }
+    } else if (callerAuth.role === 'client' && !callerAuth.isServer) {
+      // IDOR Guard: Клиент может обновлять токен исключительно для своего собственного подтвержденного partner_id
+      const requestedPartnerId = profile?.partner_id ? String(profile.partner_id) : (callerAuth.partnerId || null);
+      if (callerAuth.partnerId && requestedPartnerId && String(callerAuth.partnerId) !== String(requestedPartnerId)) {
+        return res.status(403).json({
+          success: false,
+          error: 'Forbidden: Попытка выпуска сессионного токена для чужого контрагента заблокирована (Anti-IDOR Guard).',
         });
       }
     }
@@ -53,7 +70,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       callerAuth.fullName ||
       (effectiveRole === 'admin' ? 'Администратор портала' : 'Пользователь портала')
     );
-    const partnerId = profile?.partner_id ? String(profile.partner_id) : (callerAuth.partnerId || null);
+    // Для клиентов фиксируем partnerId исключительно из подтвержденной сессии
+    const partnerId = (!callerAuth.isServer && callerAuth.role === 'client')
+      ? (callerAuth.partnerId || (profile?.partner_id ? String(profile.partner_id) : null))
+      : (profile?.partner_id ? String(profile.partner_id) : (callerAuth.partnerId || null));
     const phone = String(profile?.phone || user?.phone || callerAuth.phone || '');
     const priceType = String(profile?.price_type || callerAuth.priceType || 'wholesale');
 
@@ -73,6 +93,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         price_type: priceType,
         showroom_warehouse_id: profile?.showroom_warehouse_id ?? null,
       },
+      two_factor_verified: Boolean(callerAuth.isTwoFactorVerified),
       timestamp: Date.now(),
     };
 

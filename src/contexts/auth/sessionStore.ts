@@ -92,9 +92,17 @@ export async function provisionSessionToken(u: unknown, p: Profile, r?: UserRole
     if (!hasToken) return;
   }
   try {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const stored = typeof window !== 'undefined' ? sessionStorage.getItem(AUTH_SESSION_KEY) || sessionStorage.getItem(DEMO_AUTH_KEY) : null;
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        if (parsed?.token) headers['Authorization'] = `Bearer ${parsed.token}`;
+      } catch {}
+    }
     const res = await fetch('/api/auth/session', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify({ role, user: u, profile: p }),
     });
     if (res.ok) {

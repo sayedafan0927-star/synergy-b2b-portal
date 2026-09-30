@@ -1,4 +1,4 @@
-import { Loader2, Send, AlertTriangle, AlertCircle, Boxes } from 'lucide-react';
+import { Loader2, Send, AlertTriangle, AlertCircle, Boxes, CheckCircle2 } from 'lucide-react';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { fmt2, CITIES } from './types';
 
@@ -20,8 +20,10 @@ interface CartCheckoutFormProps {
   submitError: string | null;
   stockConflictDetails: { available_qty?: number; requested_qty?: number; sku?: string } | null;
   hasDepletedItems?: boolean;
+  hasOverStockItems?: boolean;
   hasZeroPriceItems?: boolean;
   onRemoveUnavailableItems?: () => void;
+  onAutoAdjustQuantities?: () => void;
   isAuthenticated?: boolean;
   onLoginRedirect?: () => void;
   onSubmit: () => void;
@@ -53,8 +55,10 @@ export function CartCheckoutForm({
   submitError,
   stockConflictDetails,
   hasDepletedItems,
+  hasOverStockItems,
   hasZeroPriceItems,
   onRemoveUnavailableItems,
+  onAutoAdjustQuantities,
   isAuthenticated = true,
   onLoginRedirect,
   onSubmit,
@@ -69,7 +73,7 @@ export function CartCheckoutForm({
 }: CartCheckoutFormProps) {
   const { formatPrice: fmtPrice } = useCurrency();
 
-  const isCheckoutDisabled = submitting || hasDepletedItems || hasZeroPriceItems || !isAuthenticated;
+  const isCheckoutDisabled = submitting || hasDepletedItems || hasZeroPriceItems || !isAuthenticated || Boolean(hasOverStockItems);
 
   return (
     <div className="card p-4 sm:p-5 space-y-3.5 bg-white border border-slate-200 shadow-sm">
@@ -117,6 +121,8 @@ export function CartCheckoutForm({
             <span>Удалите закончившиеся товары</span>
           ) : hasZeroPriceItems ? (
             <span>Удалите позиции без цены</span>
+          ) : hasOverStockItems ? (
+            <span>Скорректируйте количество до остатка</span>
           ) : (
             <>
               <Send className="h-4 w-4" />
@@ -209,11 +215,33 @@ export function CartCheckoutForm({
         </div>
       )}
 
+      {hasOverStockItems && !submitError && onAutoAdjustQuantities && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 space-y-1.5">
+          <div className="flex items-start gap-1.5">
+            <AlertTriangle className="h-3.5 w-3.5 text-amber-700 shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-[11px]">Количество позиций превышает доступный остаток</p>
+              <p className="text-[10.5px] mt-0.5 text-amber-800 leading-tight">
+                Для беспрепятственного оформления выровняйте количество до фактического остатка на складах Synergy.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onAutoAdjustQuantities}
+            className="w-full py-1 px-2.5 rounded-md bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs"
+          >
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            <span>Скорректировать до остатка в 1 клик</span>
+          </button>
+        </div>
+      )}
+
       {submitError && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800 space-y-1.5">
           <div className="flex items-start gap-1.5">
             <AlertCircle className="h-3.5 w-3.5 text-red-600 shrink-0 mt-0.5" />
-            <div>
+            <div className="flex-1 min-w-0">
               <p className="font-semibold text-[11px]">{submitError}</p>
               {stockConflictDetails && (
                 <p className="text-[10.5px] mt-0.5 text-red-700">
@@ -223,6 +251,20 @@ export function CartCheckoutForm({
               )}
             </div>
           </div>
+          {onAutoAdjustQuantities && (stockConflictDetails || hasOverStockItems) && (
+            <button
+              type="button"
+              onClick={onAutoAdjustQuantities}
+              className="w-full py-1.5 px-3 rounded-md bg-red-600 hover:bg-red-700 text-white font-bold text-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs"
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              <span>
+                {stockConflictDetails && typeof stockConflictDetails.available_qty === 'number'
+                  ? `Скорректировать до остатка (${stockConflictDetails.available_qty} шт) в 1 клик`
+                  : 'Скорректировать заказ до доступного остатка в 1 клик'}
+              </span>
+            </button>
+          )}
         </div>
       )}
 

@@ -101,18 +101,59 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
   }, []);
 
   const hasDepletedItems = useMemo(() => items.some(it => it.maxStock === 0), [items]);
+  const hasOverStockItems = useMemo(
+    () => items.some(it => typeof it.maxStock === 'number' && it.maxStock > 0 && it.quantity > it.maxStock),
+    [items]
+  );
   const hasZeroPriceItems = useMemo(() => items.some(it => !it.price || it.price <= 0), [items]);
 
   const handleRemoveUnavailableItems = useCallback(() => {
-    const problematicKeys = items
-      .filter(it => (!it.price || it.price <= 0) || it.maxStock === 0)
-      .map(it => `${it.product.id}_${it.variant.size}`);
-
-    problematicKeys.forEach(key => removeItem(key));
-    if (problematicKeys.length > 0) {
-      toastInfo(`Удалено позиций: ${problematicKeys.length}. Корзина обновлена.`);
+    const problematicItems = items.filter(it => (!it.price || it.price <= 0) || it.maxStock === 0);
+    problematicItems.forEach(it => removeItem(it.productId, it.size, it.warehouse));
+    if (problematicItems.length > 0) {
+      toastInfo(`Удалено позиций: ${problematicItems.length}. Корзина обновлена.`);
     }
   }, [items, removeItem, toastInfo]);
+
+  const handleAutoAdjustQuantities = useCallback(() => {
+    let adjustedCount = 0;
+
+    // 1. Точечный конфликт от сервера при нехватке остатка (INSUFFICIENT_STOCK)
+    if (stockConflictDetails?.sku && typeof stockConflictDetails.available_qty === 'number') {
+      const targetSku = stockConflictDetails.sku.trim().toLowerCase();
+      const avail = Math.max(0, stockConflictDetails.available_qty);
+      for (const it of items) {
+        if ((it.sku && it.sku.trim().toLowerCase() === targetSku) || it.productId === stockConflictDetails.sku) {
+          if (avail === 0) {
+            removeItem(it.productId, it.size, it.warehouse);
+            adjustedCount++;
+          } else if (it.quantity > avail) {
+            updateQuantity(it.productId, it.size, it.warehouse, avail);
+            adjustedCount++;
+          }
+        }
+      }
+    }
+
+    // 2. Сквозная автокоррекция позиций, где запрошено больше фактического maxStock
+    for (const it of items) {
+      if (typeof it.maxStock === 'number') {
+        if (it.maxStock === 0) {
+          removeItem(it.productId, it.size, it.warehouse);
+          adjustedCount++;
+        } else if (it.quantity > it.maxStock) {
+          updateQuantity(it.productId, it.size, it.warehouse, it.maxStock);
+          adjustedCount++;
+        }
+      }
+    }
+
+    setSubmitError(null);
+    setStockConflictDetails(null);
+    if (adjustedCount > 0) {
+      toastInfo(`Скорректировано позиций: ${adjustedCount}. Количество выровнено по доступным остаткам складов.`, 'Остатки актуализированы');
+    }
+  }, [items, stockConflictDetails, removeItem, updateQuantity, toastInfo]);
 
   // Проверка финансовых блокировок и условий
   const isBlocked = debtReport?.client?.is_blocked_for_shipment === true;
@@ -448,8 +489,10 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
               submitError={submitError}
               stockConflictDetails={stockConflictDetails}
               hasDepletedItems={hasDepletedItems}
+              hasOverStockItems={hasOverStockItems}
               hasZeroPriceItems={hasZeroPriceItems}
               onRemoveUnavailableItems={handleRemoveUnavailableItems}
+              onAutoAdjustQuantities={handleAutoAdjustQuantities}
               isAuthenticated={Boolean(user)}
               onLoginRedirect={() => onNavigate('login')}
               onSubmit={handleSubmit}

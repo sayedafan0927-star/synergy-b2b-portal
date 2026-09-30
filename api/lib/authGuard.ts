@@ -111,6 +111,8 @@ export async function authenticateRequest(
     let fallbackPhone: string | undefined;
     let fallbackFullName: string | undefined;
     let fallbackPriceType: string | undefined;
+    let session2FA = false;
+    let supabase2FA = false;
 
     const SECRET_KEY = process.env.PORTAL_SECRET_KEY || process.env.ERP_PORTAL_SECRET || '';
     if (SECRET_KEY) {
@@ -136,6 +138,7 @@ export async function authenticateRequest(
               fallbackPhone = p.phone || u.phone;
               fallbackFullName = p.full_name || u.full_name || u.user_metadata?.full_name;
               fallbackPriceType = p.price_type || 'wholesale';
+              session2FA = Boolean(parsed.data.two_factor_verified || parsed.data.is_2fa_verified);
             }
           }
         }
@@ -155,6 +158,10 @@ export async function authenticateRequest(
         };
       }
       userId = authData.user.id;
+      supabase2FA = Boolean(
+        authData.user.app_metadata?.aal === 'aal2' ||
+        (Array.isArray((authData.user as any).amr) && (authData.user as any).amr.some((m: any) => m.method === 'totp' || m.method === 'mfa'))
+      );
     }
 
     // 3. Загружаем подтвержденный профиль из PostgreSQL (Master Data)
@@ -227,10 +234,8 @@ export async function authenticateRequest(
       }
     }
 
-    const isTwoFactorVerified = Boolean(
-      req.headers['x-2fa-verified'] === 'true' ||
-      req.headers['x-otp-verified'] === 'true'
-    );
+    // Защита от спуфинга 2FA: статус извлекается исключительно из криптографически подписанной сессии или проверенного JWT
+    const isTwoFactorVerified = Boolean(session2FA || supabase2FA);
 
     return {
       isAuthenticated: true,

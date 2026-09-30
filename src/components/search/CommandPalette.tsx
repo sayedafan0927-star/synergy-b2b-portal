@@ -14,6 +14,7 @@ import { useCurrency } from '@/contexts/CurrencyContext';
 import { useCart } from '@/contexts/CartContext';
 import { useToast } from '@/contexts/ToastContext';
 import { tokenizeSearchQuery, matchesSearchTokens } from '@/lib/searchNormalization';
+import { fetchSingleProductFromErp } from '@/lib/erpApi';
 import { CommandPaletteItem } from './CommandPaletteItem';
 import type { PageId, Product, ProductVariant } from '@/types';
 
@@ -170,7 +171,27 @@ export function CommandPalette({ isOpen, onClose, onNavigate }: CommandPalettePr
       }
     }
 
-    // 5. Otherwise: general search -> open catalog with search query
+    // 5. Точечный серверный поиск по точному артикулу/SKU/штрихкоду (без скачивания всей базы в память)
+    const looksLikeSkuOrBarcode = /^[\w\d\-_.\s]{2,30}$/i.test(clean);
+    if (looksLikeSkuOrBarcode) {
+      fetchSingleProductFromErp(clean)
+        .then(serverProd => {
+          if (serverProd && serverProd.id) {
+            onClose();
+            onNavigate('product', serverProd.id);
+          } else {
+            onClose();
+            onNavigate('catalog', `search:${clean}`);
+          }
+        })
+        .catch(() => {
+          onClose();
+          onNavigate('catalog', `search:${clean}`);
+        });
+      return;
+    }
+
+    // 6. Otherwise: general search -> open catalog with search query
     onClose();
     onNavigate('catalog', `search:${clean}`);
   }, [products, matchedProducts, onClose, onNavigate]);
