@@ -256,6 +256,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
           if (isDlq) {
             try {
+              await supabase
+                .from('orders')
+                .update({
+                  status: 'failed_dlq',
+                  last_error: isFatal
+                    ? `[Fatal Business Error] ERP ${erpRes.status}: ${errText.slice(0, 200)}`
+                    : `ERP ${erpRes.status}: ${errText.slice(0, 200)}`,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('parent_order_id', order.id);
+
               await supabase.rpc('release_order_reservations', { p_order_id: order.id });
             } catch (relErr) {
               console.warn('[Outbox Sync] DLQ reservation release error:', relErr);
@@ -316,6 +327,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         if (isDlq) {
           try {
+            await supabase
+              .from('orders')
+              .update({
+                status: 'failed_dlq',
+                last_error: `Сетевой сбой: ${reqErr?.message || 'Network error'}`,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('parent_order_id', order.id);
+
             await supabase.rpc('release_order_reservations', { p_order_id: order.id });
           } catch (relErr) {
             console.warn('[Outbox Sync] Network DLQ reservation release error:', relErr);

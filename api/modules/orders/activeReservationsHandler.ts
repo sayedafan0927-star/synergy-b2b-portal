@@ -32,14 +32,51 @@ export async function handleActiveReservations(
     }
   }
 
+function parseSizeArea(sizeStr?: string): number {
+  if (!sizeStr) return 1;
+  const parts = String(sizeStr).replace(',', '.').split(/[*×xX]/).map(s => parseFloat(s.trim()));
+  if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1]) && parts[0] > 0 && parts[1] > 0) {
+    return Math.round(parts[0] * parts[1] * 100) / 100;
+  }
+  return 1;
+}
+
   try {
     const skuFilter = req.query.sku ? String(req.query.sku).trim() : null;
     const searchFilter = req.query.q ? String(req.query.q).toLowerCase().trim() : null;
 
     const { data: orders, error } = await supabase
       .from('orders')
-      .select('id, order_number, user_id, placed_by_id, client_name, client_company, client_phone, status, warehouse, hold_expires_at, total_amount, total_sqm, total_items, items, created_at')
+      .select(`
+        id,
+        order_number,
+        user_id,
+        placed_by_id,
+        status,
+        warehouse,
+        hold_expires_at,
+        total_amount,
+        total_sqm,
+        total_items,
+        created_at,
+        profiles:user_id (
+          full_name,
+          company_name,
+          phone
+        ),
+        order_items (
+          id,
+          sku,
+          product_name,
+          collection,
+          size,
+          warehouse,
+          quantity,
+          price
+        )
+      `)
       .in('status', ['pending', 'reserved', 'confirmed', 'processing'])
+      .is('parent_order_id', null)
       .order('created_at', { ascending: false })
       .limit(200);
 
@@ -49,15 +86,20 @@ export async function handleActiveReservations(
     }
 
     let mapped = (orders || []).map((o: any) => {
-      const rawItems = Array.isArray(o.items) ? o.items : [];
+      const profile = o.profiles || {};
+      const clientName = profile.full_name || profile.company_name || 'Клиент B2B';
+      const clientCompany = profile.company_name || '';
+      const clientPhone = profile.phone || '';
+      const rawItems = Array.isArray(o.order_items) ? o.order_items : [];
+
       const items = rawItems.map((it: any) => {
         const qty = Number(it.quantity) || 1;
-        const areaSqm = Number(it.area_sqm) || 1;
+        const areaSqm = parseSizeArea(it.size);
         return {
           sku: it.sku || '',
-          product_name: it.product_name || it.name || 'Ковер',
+          product_name: it.product_name || 'Ковер',
           collection: it.collection || '',
-          size: it.size || '',
+          size: it.size || 'Стандарт',
           warehouse: it.warehouse || o.warehouse || 'Основной Склад Астана',
           quantity: qty,
           area_sqm: areaSqm,
@@ -71,9 +113,9 @@ export async function handleActiveReservations(
       return {
         id: String(o.id),
         order_number: o.order_number || `ORD-${o.id.slice(0, 8)}`,
-        client_name: o.client_name || o.client_company || 'Клиент',
-        client_company: o.client_company || '',
-        client_phone: o.client_phone || '',
+        client_name: clientName,
+        client_company: clientCompany,
+        client_phone: clientPhone,
         status: o.status,
         warehouse: o.warehouse || 'Основной Склад Астана',
         created_at: o.created_at,

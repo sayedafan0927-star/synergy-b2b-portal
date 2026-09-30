@@ -656,7 +656,7 @@ for p in [orders_tab_path, orders_hook_path, orders_card_path]:
 test_assert("from '@/components/admin'" in profile_code, "ProfilePage.tsx imports modular admin components")
 test_assert("<AdminDisplaySettingsTab />" in profile_code, "ProfilePage.tsx uses decoupled AdminDisplaySettingsTab")
 test_assert("AdminBootstrap" not in profile_code, "ProfilePage.tsx eliminated client-facing AdminBootstrap RPC")
-test_assert(("supabase.from('orders')" in profile_code and "localMapped" in profile_code) or ("supabase.from('orders')" in orders_code and "localMapped" in orders_code), "ProfilePage.tsx / OrdersTab implements offline & buffered orders merge resilience")
+test_assert((".from('orders')" in profile_code and "localMapped" in profile_code) or (".from('orders')" in orders_code and "localMapped" in orders_code), "ProfilePage.tsx / OrdersTab implements offline & buffered orders merge resilience")
 
 # ------------------------------------------------------------------------------
 # 20. Verifying Core 5 Blocks Quality Bar & Resilience Hardening...
@@ -1111,7 +1111,54 @@ with open(os.path.join(ROOT_DIR, "src", "pages", "CatalogPage.tsx"), "r", encodi
 test_assert("canViewStockSummary" in cat_s7 and "displaySettings.show_reserve" in cat_s7, "CatalogPage.tsx guards StockSummaryBar with permissions check")
 
 # ------------------------------------------------------------------------------
-# 32. Summary Report
+# 32. Verifying Stage 8 Order Hierarchy, Active Reservations & Lifecycle Standards...
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{YELLOW}32. Verifying Stage 8 Order Hierarchy, Active Reservations & Lifecycle Standards...{RESET}")
+
+with open(os.path.join(ROOT_DIR, "docs", "standards", "ORDER_LIFECYCLE_AND_STOCK_RESERVATIONS.md"), "r", encoding="utf-8") as fp:
+    order_std_content = fp.read()
+test_assert("flowchart TD" in order_std_content and "stateDiagram-v2" in order_std_content and "erDiagram" in order_std_content, "ORDER_LIFECYCLE_AND_STOCK_RESERVATIONS.md contains comprehensive Mermaid diagrams")
+test_assert("release_order_reservations" in order_std_content and "parent_order_id" in order_std_content, "ORDER_LIFECYCLE_AND_STOCK_RESERVATIONS.md defines idempotent cancellation and suborder rules")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "activeReservationsHandler.ts"), "r", encoding="utf-8") as fp:
+    arh_s8 = fp.read()
+test_assert(".is('parent_order_id', null)" in arh_s8, "activeReservationsHandler.ts excludes child suborders preventing reservation duplication")
+test_assert("profiles:user_id" in arh_s8 and "order_items" in arh_s8, "activeReservationsHandler.ts joins canonical profiles and order_items avoiding PostgREST 42703 error")
+test_assert("parseSizeArea" in arh_s8 and "total_sqm" in arh_s8, "activeReservationsHandler.ts calculates square meters accurately for carpet rolls")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "profile", "OrderDetail.tsx"), "r", encoding="utf-8") as fp:
+    ord_det_s8 = fp.read()
+test_assert("release_order_reservations" in ord_det_s8, "OrderDetail.tsx invokes release_order_reservations on client-side cancellation")
+test_assert("reservations_released" in ord_det_s8 and "parent_order_id.eq." in ord_det_s8, "OrderDetail.tsx cascades cancellation and reservation release to child suborders")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "profile", "useOrdersList.ts"), "r", encoding="utf-8") as fp:
+    uol_s8 = fp.read()
+test_assert(".is('parent_order_id', null)" in uol_s8, "useOrdersList.ts filters parent_order_id IS NULL to prevent duplicate order rows in UI")
+test_assert("order_items(*)" in uol_s8, "useOrdersList.ts joins order_items to compute item counts and totals")
+test_assert("parent_order_id.eq." in uol_s8, "useOrdersList.ts cascades order cancellation to child suborders")
+
+with open(os.path.join(ROOT_DIR, "src", "pages", "CartPage.tsx"), "r", encoding="utf-8") as fp:
+    cart_s8 = fp.read()
+test_assert("requestOrderApprovalViaWhatsApp" not in cart_s8, "CartPage.tsx avoids duplicate client-side WhatsApp approval call, delegating to server")
+
+with open(os.path.join(ROOT_DIR, "api", "outbox", "sync.ts"), "r", encoding="utf-8") as fp:
+    sync_s8 = fp.read()
+test_assert(".eq('parent_order_id', order.id)" in sync_s8 and "status: 'failed_dlq'" in sync_s8, "api/outbox/sync.ts cascades DLQ failure status to child suborders")
+
+with open(os.path.join(ROOT_DIR, "api", "cron", "expire-holds.ts"), "r", encoding="utf-8") as fp:
+    exp_s8 = fp.read()
+test_assert(".is('parent_order_id', null)" in exp_s8 and ".in('parent_order_id', orderIds)" in exp_s8, "api/cron/expire-holds.ts cascades hold expiration to child suborders")
+
+with open(os.path.join(ROOT_DIR, "docs", "standards", "README.md"), "r", encoding="utf-8") as fp:
+    readme_s8 = fp.read()
+test_assert("ORDER_LIFECYCLE_AND_STOCK_RESERVATIONS.md" in readme_s8, "docs/standards/README.md links ORDER_LIFECYCLE_AND_STOCK_RESERVATIONS.md")
+
+with open(os.path.join(ROOT_DIR, "AGENTS.md"), "r", encoding="utf-8") as fp:
+    agents_s8 = fp.read()
+test_assert("ORDER_LIFECYCLE_AND_STOCK_RESERVATIONS.md" in agents_s8, "AGENTS.md links ORDER_LIFECYCLE_AND_STOCK_RESERVATIONS.md")
+
+# ------------------------------------------------------------------------------
+# 33. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

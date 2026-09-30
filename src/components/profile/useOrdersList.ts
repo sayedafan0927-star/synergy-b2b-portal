@@ -83,7 +83,13 @@ export function useOrdersList({ isAdmin, isManager }: UseOrdersListOptions) {
 
       // Offline Resilience: Merge with Supabase orders table (buffered/offline orders)
       try {
-        let q = supabase.from('orders').select('*').order('created_at', { ascending: false }).limit(50);
+        let q = supabase
+          .from('orders')
+          .select('*, order_items(*)')
+          .is('parent_order_id', null)
+          .order('created_at', { ascending: false })
+          .limit(50);
+
         if (!isAdmin && !isManager && profile?.id) {
           q = q.eq('user_id', profile.id);
         }
@@ -93,7 +99,10 @@ export function useOrdersList({ isAdmin, isManager }: UseOrdersListOptions) {
           const knownIds = new Set(mappedErp.map(o => o.id));
 
           const localMapped: Order[] = dbOrders
-            .filter(row => !knownIds.has(String(row.id)) && (!row.doc_number || !knownDocNumbers.has(row.doc_number)))
+            .filter(row => {
+              const doc = row.order_number || row.doc_number;
+              return !knownIds.has(String(row.id)) && (!doc || !knownDocNumbers.has(doc));
+            })
             .map(row => {
               const st = row.status || 'pending';
               const meta = ORDER_STATUS_MAP[st] || { label: st, color: 'bg-amber-50 text-amber-700 border-amber-200' };
@@ -104,35 +113,37 @@ export function useOrdersList({ isAdmin, isManager }: UseOrdersListOptions) {
                 year: 'numeric',
               }) + ' ' + d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 
-              const rawItems = Array.isArray(row.items) ? row.items : [];
+              const rawItems = Array.isArray(row.order_items) && row.order_items.length > 0
+                ? row.order_items
+                : (Array.isArray(row.items) ? row.items : []);
               const items: OrderItem[] = rawItems.map((it: any, idx: number) => ({
                 id: String(it.id || idx),
                 productName: it.product_name || it.name || 'Ковер',
-                collection: it.collection || (it.name || '').split(' ')[0] || 'Коллекция',
+                collection: it.collection || (it.product_name || it.name || '').split(' ')[0] || 'Коллекция',
                 size: it.size || 'Стандарт',
                 sku: it.sku || '',
-                warehouse: it.warehouse || row.warehouse_name || 'Основной Склад Астана',
+                warehouse: it.warehouse || row.warehouse || row.warehouse_name || 'Основной Склад Астана',
                 price: Number(it.price) || 0,
                 quantity: Number(it.quantity) || 1,
               }));
 
               return {
                 id: String(row.id),
-                orderNumber: row.doc_number || `LOCAL-${row.id.slice(0, 8)}`,
+                orderNumber: row.order_number || row.doc_number || `ORD-${row.id.slice(0, 8)}`,
                 userId: String(row.user_id || ''),
                 date: dateStr,
                 rawDate: row.created_at || new Date().toISOString(),
                 status: meta.label,
                 statusRaw: st,
                 statusColor: meta.color,
-                warehouse: row.warehouse_name || 'Основной Склад Астана',
+                warehouse: row.warehouse || row.warehouse_name || 'Основной Склад Астана',
                 notes: row.notes || row.comment || '',
                 clientName: profile?.full_name || 'Клиент',
                 clientCompany: profile?.company_name || '',
                 clientPhone: profile?.phone || '',
                 totalAmount: Number(row.total_amount) || 0,
-                totalSqm: items.reduce((s, it) => s + calcSqm(it.size, it.quantity), 0),
-                totalItems: items.reduce((s, it) => s + it.quantity, 0),
+                totalSqm: Number(row.total_sqm) || items.reduce((s, it) => s + calcSqm(it.size, it.quantity), 0),
+                totalItems: Number(row.total_items) || items.reduce((s, it) => s + it.quantity, 0),
                 items,
               };
             });
@@ -233,8 +244,12 @@ export function useOrdersList({ isAdmin, isManager }: UseOrdersListOptions) {
     try {
       await supabase
         .from('orders')
-        .update({ status: 'cancelled', updated_at: new Date().toISOString() })
-        .eq('id', order.id);
+        .update({
+          status: 'cancelled',
+          reservations_released: true,
+          updated_at: new Date().toISOString(),
+        })
+        .or(`id.eq.${order.id},parent_order_id.eq.${order.id}`);
     } catch {
       // safe fallback
     }

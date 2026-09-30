@@ -3,7 +3,7 @@ import { ShoppingCart, ArrowLeft, PackageOpen } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import type { PageId } from '@/types';
-import { submitOrderToErp, fetchClientDebtFromErp, requestOrderApprovalViaWhatsApp, type SplitSubOrder } from '@/lib/erpApi';
+import { submitOrderToErp, fetchClientDebtFromErp, type SplitSubOrder } from '@/lib/erpApi';
 import { enqueueOfflineOrder } from '@/lib/offlineOrderQueue';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import {
@@ -201,28 +201,11 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
         setIsServerBuffered(buffered);
         setIsOfflineQueued(false);
 
-        if (requiresApproval) {
-          setIsWaitingApproval(true);
-          const reason = isBlocked
-            ? 'Ограничение отгрузок (стоп-лист по клиенту)'
-            : exceedsLimit
-            ? `Превышение кредитного лимита (Лимит: $${creditLimit}, Текущий долг: $${currentDebt}, Заказ: $${totalPrice.toFixed(0)})`
-            : `Имеется просроченная задолженность ($${debtReport?.financials?.overdue_usd || 0})`;
-
-          requestOrderApprovalViaWhatsApp({
-            orderId: data.order?.order_id || docNum,
-            orderDocNumber: docNum,
-            clientName: clientCompany.trim() || clientName.trim(),
-            clientPhone: clientPhone.trim(),
-            totalAmount: totalPrice,
-            totalSqm: totalSqm,
-            itemsCount: totalItems,
-            reason,
-            managerPhone: debtReport?.regional_manager?.phone,
-          }).catch(err => console.warn('Approval dispatch notice:', err));
-        } else {
-          setIsWaitingApproval(false);
-        }
+        const isApprovalRequired =
+          requiresApproval ||
+          Boolean((data.order as any)?.requires_approval) ||
+          Boolean((data as any)?.requires_approval);
+        setIsWaitingApproval(isApprovalRequired);
 
         clearCart();
         setOrderDocNumber(docNum);

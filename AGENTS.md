@@ -16,5 +16,6 @@
   - Стандарты Backend API и безопасности: [`docs/standards/BACKEND_API_STANDARDS.md`](docs/standards/BACKEND_API_STANDARDS.md)
   - Стандарты БД и миграций: [`docs/standards/DATABASE_STANDARDS.md`](docs/standards/DATABASE_STANDARDS.md)
   - Интеграция с ERP и CDC: [`docs/standards/INTEGRATION_STANDARDS.md`](docs/standards/INTEGRATION_STANDARDS.md) и [`docs/ERP_INTEGRATION_SPEC.md`](docs/ERP_INTEGRATION_SPEC.md)
+  - Жизненный цикл заказов и резервы: [`docs/standards/ORDER_LIFECYCLE_AND_STOCK_RESERVATIONS.md`](docs/standards/ORDER_LIFECYCLE_AND_STOCK_RESERVATIONS.md)
   - Definition of Done и чеклист ревью: [`docs/standards/CODE_REVIEW_AND_DOD.md`](docs/standards/CODE_REVIEW_AND_DOD.md)
 

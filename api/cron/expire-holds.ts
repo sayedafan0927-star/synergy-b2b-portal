@@ -55,6 +55,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .from('orders')
         .select('id, order_number, user_id, total_amount, created_at, hold_expires_at')
         .in('status', ['pending', 'failed_dlq'])
+        .is('parent_order_id', null)
         .or(`hold_expires_at.lte.${new Date().toISOString()},and(hold_expires_at.is.null,created_at.lte.${cutoffTime})`)
         .limit(50);
 
@@ -78,10 +79,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .from('orders')
           .update({
             status: 'cancelled',
+            reservations_released: true,
             notes: `[Auto-cancelled: WMS reservation hold TTL expired (${ttlHours}h)]`,
             updated_at: new Date().toISOString(),
           })
           .in('id', orderIds);
+
+        await supabase
+          .from('orders')
+          .update({
+            status: 'cancelled',
+            reservations_released: true,
+            notes: `[Auto-cancelled: Master reservation hold TTL expired (${ttlHours}h)]`,
+            updated_at: new Date().toISOString(),
+          })
+          .in('parent_order_id', orderIds);
 
         if (updateErr) {
           throw new Error(`Failed to update expired orders: ${updateErr.message}`);

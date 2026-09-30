@@ -99,12 +99,25 @@ export function OrderDetail({
       console.warn('[OrderDetailModal] ERP update_order_status warning:', erpErr);
     }
 
-    // 2. Обновляем статус в Supabase
+    // 2. При отмене освобождаем зарезервированные остатки обратно на склад (Zero Reservation Leak)
+    if (newStatus === 'cancelled') {
+      try {
+        await supabase.rpc('release_order_reservations', { p_order_id: order.id });
+      } catch (relErr) {
+        console.warn('[OrderDetail] release_order_reservations notice:', relErr);
+      }
+    }
+
+    // 3. Обновляем статус в Supabase с каскадом на дочерние подзаказы
     try {
       await supabase
         .from('orders')
-        .update({ status: newStatus, updated_at: new Date().toISOString() })
-        .eq('id', order.id);
+        .update({
+          status: newStatus,
+          reservations_released: newStatus === 'cancelled' ? true : undefined,
+          updated_at: new Date().toISOString(),
+        })
+        .or(`id.eq.${order.id},parent_order_id.eq.${order.id}`);
     } catch {
       // safe fallback
     }
