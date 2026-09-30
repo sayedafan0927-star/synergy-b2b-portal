@@ -21,6 +21,7 @@ import {
   sizeArea,
   orderTotals,
 } from './types';
+import { OrderHoldCountdown } from './OrderHoldCountdown';
 
 export interface OrderDetailProps {
   order: Order;
@@ -207,28 +208,8 @@ export function OrderDetail({
         </div>
       </div>
 
-      {/* WMS Hold TTL (24ч) Banner */}
-      {status === 'pending' && (() => {
-        const ttl = getReservationTtlRemaining(order.rawDate || order.date, 24);
-        if (!ttl) return null;
-        return (
-          <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-3.5 flex items-start gap-3">
-            <div className="p-1.5 rounded-lg bg-amber-100 text-amber-700 shrink-0 mt-0.5">
-              <Clock className="h-4 w-4" />
-            </div>
-            <div className="text-xs">
-              <p className="font-bold text-amber-900">
-                Складской резерв WMS активен (Hold TTL 24ч)
-              </p>
-              <p className="text-amber-700 mt-0.5">
-                {ttl.isExpired
-                  ? 'Срок действия брони истекает. Оплатите счет или свяжитесь с менеджером для продления.'
-                  : `До автоматической отмены брони и возврата товара на общую витрину осталось: ${ttl.label}.`}
-              </p>
-            </div>
-          </div>
-        );
-      })()}
+      {/* WMS Hold TTL (24ч) Countdown Timer */}
+      <OrderHoldCountdown rawDate={order.rawDate || order.date} status={status} />
 
       {status === 'cancelled' && (order.notes?.toLowerCase().includes('hold ttl') || order.notes?.toLowerCase().includes('брони')) && (
         <div className="rounded-xl border border-rose-200 bg-rose-50/80 p-3.5 flex items-start gap-3">

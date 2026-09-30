@@ -7,8 +7,10 @@ import {
   Printer,
   AlertCircle,
   CheckCircle2,
+  PlusCircle,
 } from 'lucide-react';
 import { fetchSupplierDefects } from '@/lib/erpApi';
+import { CreateDefectModal } from './CreateDefectModal';
 import type {
   SupplierDefectItem,
   SupplierDefectsResponse,
@@ -31,6 +33,18 @@ export function SupplierDefectsTab({
   const [loadingDefects, setLoadingDefects] = useState<boolean>(false);
   const [defectsError, setDefectsError] = useState<string | null>(null);
   const [defectFilter, setDefectFilter] = useState<'all' | 'factory_defect' | 'transit_damage' | 'client_return'>('all');
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+
+  const handleDefectCreated = (newDefect: SupplierDefectItem) => {
+    setDefectsData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        total_defects: (prev.total_defects || 0) + 1,
+        defects: [newDefect, ...(prev.defects || [])],
+      };
+    });
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -187,13 +201,24 @@ export function SupplierDefectsTab({
           </button>
         </div>
 
-        <button
-          onClick={handlePrint}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-xs cursor-pointer"
-        >
-          <Printer className="h-3.5 w-3.5" />
-          Печать актов брака
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setIsCreateModalOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 px-3 py-1.5 text-xs font-semibold text-white transition-colors shadow-xs cursor-pointer"
+          >
+            <PlusCircle className="h-3.5 w-3.5" />
+            Составить акт брака
+          </button>
+          <button
+            type="button"
+            onClick={handlePrint}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-xs cursor-pointer"
+          >
+            <Printer className="h-3.5 w-3.5" />
+            Печать актов брака
+          </button>
+        </div>
       </div>
 
       {/* Таблица рекламаций */}
@@ -292,6 +317,14 @@ export function SupplierDefectsTab({
           </div>
         </div>
       )}
+      {/* Модальное окно регистрации брака */}
+      <CreateDefectModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        supplierId={selectedSupplierId}
+        supplierName={supplierName}
+        onDefectCreated={handleDefectCreated}
+      />
     </div>
   );
 }

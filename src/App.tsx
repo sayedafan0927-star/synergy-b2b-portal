@@ -3,6 +3,8 @@ import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { CartProvider } from '@/contexts/CartContext';
 import { LanguageProvider } from '@/contexts/LanguageContext';
 import { CurrencyProvider } from '@/contexts/CurrencyContext';
+import { ToastProvider } from '@/contexts/ToastContext';
+import { RealtimeNotificationsWatcher } from '@/hooks/useRealtimeNotifications';
 import WhatsAppWidget from '@/components/WhatsAppWidget';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
@@ -98,43 +100,66 @@ function PageLoadingFallback({ page }: { page?: PageId }) {
 
 function Preloader({ onFinished }: { onFinished: () => void }) {
   const [phase, setPhase] = useState<'logo' | 'expand' | 'done'>('logo');
+  const [imageReady, setImageReady] = useState(false);
 
   useEffect(() => {
-    const t1 = setTimeout(() => setPhase('expand'), 1800);
+    // Гарантируем полную готовность логотипа перед стартом анимации
+    const img = new Image();
+    img.src = '/Вектор_Синэнергия.png';
+    if (img.complete && img.naturalWidth > 0) {
+      setImageReady(true);
+    } else {
+      img.onload = () => setImageReady(true);
+      img.onerror = () => setImageReady(true);
+    }
+    // Защитный лимит ожидания 250мс для слабых соединений
+    const safety = setTimeout(() => setImageReady(true), 250);
+    return () => clearTimeout(safety);
+  }, []);
+
+  useEffect(() => {
+    if (!imageReady) return;
+    const t1 = setTimeout(() => setPhase('expand'), 600);
     const t2 = setTimeout(() => {
       setPhase('done');
       onFinished();
-    }, 2600);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
-  }, [onFinished]);
+    }, 850);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [imageReady, onFinished]);
 
   return (
     <div
-      className={`fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900 transition-opacity duration-500 ${
+      className={`fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900 transition-opacity duration-300 ease-out ${
         phase === 'done' ? 'opacity-0 pointer-events-none' : 'opacity-100'
       }`}
     >
       {/* Radial glow behind logo */}
-      <div className="absolute inset-0 flex items-center justify-center">
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
         <div
-          className={`w-80 h-80 rounded-full bg-brand-600/20 blur-3xl transition-all duration-1000 ${
-            phase === 'logo' ? 'scale-100 opacity-100' : 'scale-150 opacity-0'
+          className={`w-72 h-72 rounded-full bg-brand-600/25 blur-3xl transition-all duration-500 ${
+            phase === 'logo' ? 'scale-100 opacity-100' : 'scale-125 opacity-0'
           }`}
         />
       </div>
 
       {/* Logo container */}
       <div
-        className={`relative flex flex-col items-center gap-6 transition-all duration-700 ease-out ${
-          phase === 'expand' ? 'scale-110 opacity-0 translate-y-[-20px]' : 'scale-100 opacity-100 translate-y-0'
+        className={`relative flex flex-col items-center gap-5 transition-all duration-300 ease-out ${
+          phase === 'expand' ? 'scale-105 opacity-0 -translate-y-2' : 'scale-100 opacity-100 translate-y-0'
         }`}
       >
         <img
           src="/Вектор_Синэнергия.png"
           alt="Synergiya Group"
-          className="h-32 sm:h-40 w-auto drop-shadow-2xl animate-preloader-logo brightness-0 invert"
+          onLoad={() => setImageReady(true)}
+          className={`h-28 sm:h-36 w-auto drop-shadow-2xl brightness-0 invert transition-opacity duration-200 ${
+            imageReady ? 'opacity-100 animate-preloader-logo' : 'opacity-0'
+          }`}
         />
-        <div className="flex items-center gap-2">
+        <div className={`flex items-center gap-2 transition-opacity duration-200 ${imageReady ? 'opacity-100' : 'opacity-0'}`}>
           <div className="h-0.5 w-8 bg-brand-400 rounded-full animate-preloader-line-left" />
           <div className="h-1 w-1 rounded-full bg-brand-400 animate-preloader-dot" />
           <div className="h-0.5 w-8 bg-brand-400 rounded-full animate-preloader-line-right" />
@@ -316,26 +341,29 @@ export default function App() {
       <AuthProvider>
         <CurrencyProvider>
           <CartProvider>
-            {isPending && (
-              <div className="fixed top-0 left-0 right-0 z-[99999] h-0.5 bg-gradient-to-r from-brand-600 via-amber-500 to-brand-700 animate-pulse pointer-events-none" />
-            )}
-            {!preloaderDone && <Preloader onFinished={handlePreloaderFinished} />}
-            {!isOnline && (
-              <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 z-[9990] flex items-center gap-2.5 rounded-xl border border-amber-300 bg-amber-500 text-white px-4 py-2.5 shadow-xl text-xs font-semibold backdrop-blur-md">
-                <span className="relative flex h-2.5 w-2.5 shrink-0">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
-                </span>
-                <span>Офлайн-режим: данные каталога загружены из локального кэша</span>
-              </div>
-            )}
-            <ErrorBoundary>
-              <MainLayout page={page} navigate={navigate} showFooter={showFooter}>
-                <Suspense fallback={<PageLoadingFallback page={page} />}>
-                  {renderPage()}
-                </Suspense>
-              </MainLayout>
-            </ErrorBoundary>
+            <ToastProvider>
+              <RealtimeNotificationsWatcher />
+              {isPending && (
+                <div className="fixed top-0 left-0 right-0 z-[99999] h-0.5 bg-gradient-to-r from-brand-600 via-amber-500 to-brand-700 animate-pulse pointer-events-none" />
+              )}
+              {!preloaderDone && <Preloader onFinished={handlePreloaderFinished} />}
+              {!isOnline && (
+                <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 z-[9990] flex items-center gap-2.5 rounded-xl border border-amber-300 bg-amber-500 text-white px-4 py-2.5 shadow-xl text-xs font-semibold backdrop-blur-md">
+                  <span className="relative flex h-2.5 w-2.5 shrink-0">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
+                  </span>
+                  <span>Офлайн-режим: данные каталога загружены из локального кэша</span>
+                </div>
+              )}
+              <ErrorBoundary>
+                <MainLayout page={page} navigate={navigate} showFooter={showFooter}>
+                  <Suspense fallback={<PageLoadingFallback page={page} />}>
+                    {renderPage()}
+                  </Suspense>
+                </MainLayout>
+              </ErrorBoundary>
+            </ToastProvider>
           </CartProvider>
         </CurrencyProvider>
       </AuthProvider>

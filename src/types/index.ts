@@ -214,10 +214,13 @@ export interface SupplierInboundShipmentsResponse {
 
 export interface SupplierDefectItem {
   defect_id: string;
-  carpet_id: number;
+  carpet_id?: number;
+  supplier_id?: number;
+  supplier_name?: string;
   article: string;
   collection: string;
   size: string;
+  warehouse_id?: number;
   warehouse_name: string;
   city: string;
   defect_type: 'factory_defect' | 'transit_damage' | 'client_return' | string;

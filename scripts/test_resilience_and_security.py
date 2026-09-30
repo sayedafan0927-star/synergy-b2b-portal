@@ -1164,9 +1164,11 @@ print(f"\n{BOLD}{YELLOW}33. Verifying Stage 9 Multi-Warehouse Repeat Order, DLQ 
 
 with open(os.path.join(ROOT_DIR, "src", "pages", "ProfilePage.tsx"), "r", encoding="utf-8") as fp:
     prof_s9 = fp.read()
-test_assert("itemWhId" in prof_s9 and "itemWhName" in prof_s9, "ProfilePage.tsx supports multi-warehouse matching for repeat orders")
-test_assert("Нет в наличии на складе в Астане" not in prof_s9, "ProfilePage.tsx eliminated hardcoded Astana-only restriction on repeat order")
-test_assert("currentPrice = Number(foundVariant.price || foundVariant.base_price" in prof_s9, "ProfilePage.tsx prioritizes current catalog price over stale order price")
+with open(os.path.join(ROOT_DIR, "src", "components", "profile", "useRepeatOrder.ts"), "r", encoding="utf-8") as fp:
+    uro_s9 = fp.read()
+test_assert(("itemWhId" in prof_s9 or "itemWhId" in uro_s9) and "useRepeatOrder" in prof_s9, "ProfilePage.tsx / useRepeatOrder.ts supports multi-warehouse matching for repeat orders")
+test_assert("Нет в наличии на складе в Астане" not in prof_s9 and "Нет в наличии на складе в Астане" not in uro_s9, "ProfilePage.tsx eliminated hardcoded Astana-only restriction on repeat order")
+test_assert("currentPrice = Number(foundVariant.price || foundVariant.base_price" in uro_s9, "useRepeatOrder.ts prioritizes current catalog price over stale order price")
 
 with open(os.path.join(ROOT_DIR, "src", "components", "profile", "RepeatOrderModal.tsx"), "r", encoding="utf-8") as fp:
     rep_mod_s9 = fp.read()
@@ -1340,7 +1342,50 @@ with open(os.path.join(ROOT_DIR, "src", "components", "Header.tsx"), "r", encodi
 test_assert("onMouseEnter" in header_tsx_txt and "onTouchStart" in header_tsx_txt, "Header.tsx implements hover & touch prefetching for catalog")
 
 # ------------------------------------------------------------------------------
-# 38. Summary Report
+# 38. Verifying Stage 14 Realtime Toasts, Hold Countdown, Defect Filing & Warehouse Substitution...
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{YELLOW}38. Verifying Stage 14 Realtime Toasts, Hold Countdown, Defect Filing & Warehouse Substitution...{RESET}")
+
+with open(os.path.join(ROOT_DIR, "src", "contexts", "ToastContext.tsx"), "r", encoding="utf-8") as fp:
+    toast_ctx = fp.read()
+test_assert("export function ToastProvider" in toast_ctx and "export function useToast" in toast_ctx, "ToastContext.tsx provides ToastProvider and useToast")
+test_assert("Portal" in toast_ctx and "role=\"alert\"" in toast_ctx, "ToastContext.tsx renders toasts via Portal with proper ARIA alert role")
+
+with open(os.path.join(ROOT_DIR, "src", "hooks", "useRealtimeNotifications.ts"), "r", encoding="utf-8") as fp:
+    rt_notif = fp.read()
+test_assert("portal_global_live_events" in rt_notif and "currency_rate_updated" in rt_notif, "useRealtimeNotifications.ts listens to realtime order events and currency rate broadcasts")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "profile", "OrderHoldCountdown.tsx"), "r", encoding="utf-8") as fp:
+    hold_cd = fp.read()
+test_assert("export function OrderHoldCountdown" in hold_cd and "percentRemaining" in hold_cd, "OrderHoldCountdown.tsx calculates dynamic countdown with visual progress bar")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "profile", "OrderDetail.tsx"), "r", encoding="utf-8") as fp:
+    od_txt = fp.read()
+test_assert("<OrderHoldCountdown" in od_txt, "OrderDetail.tsx mounts OrderHoldCountdown component")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "supplier", "CreateDefectModal.tsx"), "r", encoding="utf-8") as fp:
+    cdm_txt = fp.read()
+test_assert("export function CreateDefectModal" in cdm_txt and "defect_reports" in cdm_txt, "CreateDefectModal.tsx records carpet defects into defect_reports")
+test_assert("WAREHOUSE_OPTIONS" in cdm_txt and "84" in cdm_txt, "CreateDefectModal.tsx supports all 4 regional warehouses (81-84)")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "supplier", "SupplierDefectsTab.tsx"), "r", encoding="utf-8") as fp:
+    sdt_txt = fp.read()
+test_assert("<CreateDefectModal" in sdt_txt and "Составить акт брака" in sdt_txt, "SupplierDefectsTab.tsx triggers CreateDefectModal with proper action button")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "profile", "useRepeatOrder.ts"), "r", encoding="utf-8") as fp:
+    uro_txt = fp.read()
+test_assert("export function useRepeatOrder" in uro_txt and "isWarehouseSubstituted" in uro_txt, "useRepeatOrder.ts detects warehouse substitutions upon order replay")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "profile", "RepeatOrderModal.tsx"), "r", encoding="utf-8") as fp:
+    rom_txt = fp.read()
+test_assert("isWarehouseSubstituted" in rom_txt and "Склад изменен" in rom_txt, "RepeatOrderModal.tsx displays warehouse substitution badge")
+
+with open(os.path.join(ROOT_DIR, "src", "pages", "ProfilePage.tsx"), "r", encoding="utf-8") as fp:
+    pp_txt = fp.read()
+test_assert("useRepeatOrder" in pp_txt and len(pp_txt.splitlines()) < 480, "ProfilePage.tsx integrates useRepeatOrder and satisfies modularity line limits (<480 lines)")
+
+# ------------------------------------------------------------------------------
+# 39. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

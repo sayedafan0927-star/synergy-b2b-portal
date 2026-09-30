@@ -13,10 +13,27 @@ export interface OrderItem {
   quantity: number;
 }
 
+export interface RepeatItemAdded {
+  name: string;
+  size: string;
+  requestedQty: number;
+  addedQty: number;
+  originalWarehouse?: string;
+  warehouse?: string;
+  isWarehouseSubstituted?: boolean;
+}
+
+export interface RepeatItemMissing {
+  name: string;
+  size: string;
+  requestedQty: number;
+  reason: string;
+}
+
 export interface RepeatResult {
   orderNumber: string;
-  added: Array<{ name: string; size: string; requestedQty: number; addedQty: number }>;
-  missing: Array<{ name: string; size: string; requestedQty: number; reason: string }>;
+  added: RepeatItemAdded[];
+  missing: RepeatItemMissing[];
 }
 
 export interface Order {

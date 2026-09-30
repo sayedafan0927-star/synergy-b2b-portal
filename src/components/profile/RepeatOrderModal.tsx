@@ -46,14 +46,24 @@ export function RepeatOrderModal({
             </div>
             <div className="bg-emerald-50/60 border border-emerald-100 rounded-xl p-3 space-y-1.5 max-h-40 overflow-y-auto">
               {repeatResult.added.map((item, idx) => (
-                <div key={idx} className="flex items-center justify-between text-xs text-emerald-900">
-                  <span className="font-medium truncate mr-2">{item.name} ({item.size})</span>
-                  <span className="font-semibold whitespace-nowrap">
-                    {item.addedQty} шт.
-                    {item.addedQty < item.requestedQty && (
-                      <span className="text-[10px] text-amber-700 ml-1">(из {item.requestedQty} запрошенных)</span>
-                    )}
-                  </span>
+                <div key={idx} className="border-b border-emerald-100/60 pb-1.5 last:border-b-0 last:pb-0">
+                  <div className="flex items-center justify-between text-xs text-emerald-900">
+                    <span className="font-medium truncate mr-2">{item.name} ({item.size})</span>
+                    <span className="font-semibold whitespace-nowrap">
+                      {item.addedQty} шт.
+                      {item.addedQty < item.requestedQty && (
+                        <span className="text-[10px] text-amber-700 ml-1">(из {item.requestedQty} запрошенных)</span>
+                      )}
+                    </span>
+                  </div>
+                  {item.isWarehouseSubstituted && (
+                    <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded-md mt-1 font-medium">
+                      <span>⚠️ Склад изменен:</span>
+                      {item.originalWarehouse && <span className="line-through text-slate-400">{item.originalWarehouse}</span>}
+                      <span>→</span>
+                      <span className="font-bold text-amber-950">{item.warehouse}</span>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
