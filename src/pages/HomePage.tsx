@@ -8,6 +8,7 @@ import { useDisplaySettings } from '@/hooks/useDisplaySettings';
 import { isProductInStockForUser } from '@/lib/warehouseVisibility';
 import ProductCard from '@/components/ProductCard';
 import HeroBannerMedia from '@/components/home/HeroBannerMedia';
+import CarpetSectionDivider from '@/components/home/CarpetSectionDivider';
 
 const advantages = [
   {
@@ -57,6 +58,9 @@ export default function HomePage({
         <HeroBannerMedia onNavigate={onNavigate} isReady={isReady} />
       </section>
 
+      {/* ── Woven Carpet Kilim Fringe Divider (Dark Hero to Light Section) ── */}
+      <CarpetSectionDivider variant="dark-to-light" />
+
       {/* ── Advantages Section ── */}
       <section className="py-16 lg:py-24 bg-white">
         <div className="container-w">
@@ -69,9 +73,9 @@ export default function HomePage({
             {advantages.map((item) => (
               <div
                 key={item.title}
-                className="card p-6 text-center sm:text-left"
+                className="card p-6 text-center sm:text-left border border-slate-100 hover:border-amber-400/30 hover:shadow-md transition-all duration-300 relative group"
               >
-                <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-brand-50 text-brand-600 mb-4">
+                <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-brand-50 text-brand-700 border border-brand-100/60 mb-4 group-hover:scale-105 transition-transform">
                   <item.icon className="h-6 w-6" />
                 </div>
                 <h3 className="font-display text-base font-semibold text-slate-900">
@@ -85,6 +89,9 @@ export default function HomePage({
           </div>
         </div>
       </section>
+
+      {/* ── Subtle Kilim Border (White to Slate-50) ── */}
+      <CarpetSectionDivider variant="light-to-muted" />
 
       {/* ── Categories Section ── */}
       <section className="py-16 lg:py-24 bg-slate-50">
@@ -126,6 +133,9 @@ export default function HomePage({
         </div>
       </section>
 
+      {/* ── Subtle Kilim Border (Slate-50 to White) ── */}
+      <CarpetSectionDivider variant="muted-to-light" />
+
       {/* ── Featured Products Section ── */}
       <section className="py-16 lg:py-24 bg-white">
         <div className="container-w">
@@ -166,6 +176,9 @@ export default function HomePage({
           </div>
         </div>
       </section>
+
+      {/* ── Carpet Weave Line before CTA ── */}
+      <CarpetSectionDivider variant="light-to-accent" />
 
       {/* ── CTA Banner Section ── */}
       <section className="py-16 lg:py-24">

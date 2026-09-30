@@ -7,6 +7,7 @@ import { useCurrency } from '@/contexts/CurrencyContext';
 import { useShowroomMode } from '@/contexts/ShowroomModeContext';
 import { checkSystemHealth } from '@/lib/erpApi';
 import { getQueuedOfflineOrders, processOfflineOrderQueue, onOfflineQueueChange } from '@/lib/offlineOrderQueue';
+import CurtainNavigationDrawer from '@/components/layout/CurtainNavigationDrawer';
 import type { PageId } from '@/types';
 
 interface HeaderProps {
@@ -46,6 +47,11 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
     });
     return () => unbind();
   }, []);
+
+  const handleSyncOffline = async () => {
+    setIsSyncingOffline(true);
+    try { await processOfflineOrderQueue(); } finally { setIsSyncingOffline(false); }
+  };
 
   const navLinks: { label: string; page: PageId }[] = [
     { label: t('nav.home'), page: 'home' },
@@ -279,14 +285,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
             {offlineCount > 0 && (
               <button
                 type="button"
-                onClick={async () => {
-                  setIsSyncingOffline(true);
-                  try {
-                    await processOfflineOrderQueue();
-                  } finally {
-                    setIsSyncingOffline(false);
-                  }
-                }}
+                onClick={handleSyncOffline}
                 disabled={isSyncingOffline}
                 title="Есть сохраненные оффлайн-заказы. Нажмите для синхронизации с ERP"
                 className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 text-[11px] font-semibold hover:bg-amber-100 transition-colors shadow-2xs cursor-pointer disabled:opacity-50"
@@ -339,66 +338,37 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
 
             <button
               onClick={() => setMobileOpen(!mobileOpen)}
-              className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-600 transition-colors hover:bg-slate-50 lg:hidden"
+              className="flex h-9 items-center gap-1.5 px-2.5 rounded-lg text-slate-700 transition-all hover:bg-slate-100 hover:text-brand-700 border border-slate-200/80 cursor-pointer"
+              title="Навигационное меню Synergy"
+              aria-label="Открыть меню"
             >
-              {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+              <Menu className="h-4 w-4" />
+              <span className="text-xs font-semibold hidden md:inline">Меню</span>
             </button>
           </div>
         </div>
       </div>
 
-      <div
-        className={`lg:hidden overflow-hidden transition-all duration-300 ease-apple ${
-          mobileOpen ? 'max-h-96 border-b border-slate-100' : 'max-h-0'
-        }`}
-      >
-        <nav className="container-w flex flex-col gap-1 pb-4">
-          {navLinks.map(({ label, page }) => (
-            <button
-              key={page}
-              onClick={() => onNavigate(page)}
-              onTouchStart={() => {
-                if (page === 'catalog') import('@/pages/CatalogPage');
-              }}
-              className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                currentPage === page
-                  ? 'bg-brand-50 text-brand-700'
-                  : 'text-slate-600 hover:bg-slate-50'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-          <a
-            href="tel:+77785806866"
-            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-slate-700"
-          >
-            <Phone className="h-4 w-4 text-brand-600" />
-            <span>+7 (778) 580-68-66</span>
-          </a>
-          {user && profile ? (
-            <button
-              onClick={() => onNavigate('profile')}
-              className="sm:hidden w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium bg-slate-50 border border-slate-200/80 flex items-center justify-between text-slate-800"
-            >
-              <div className="flex items-center gap-2">
-                {isAdmin ? <Shield className="h-4 w-4 text-brand-700" /> : <User className="h-4 w-4 text-slate-500" />}
-                <span className="font-semibold">{profile.full_name || profile.company_name || user.email}</span>
-              </div>
-              <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-600">
-                ID {profile.partner_id || (profile as any).erp_id || profile.id.slice(0, 5)}
-              </span>
-            </button>
-          ) : (
-            <button
-              onClick={() => onNavigate('login')}
-              className="sm:hidden w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50"
-            >
-              {t('nav.login')}
-            </button>
-          )}
-        </nav>
-      </div>
+      {/* Fullscreen Curtain Slide-down Drawer (Thompson's Tea Style: Deep Sapphire #003365 + Gold) */}
+      <CurtainNavigationDrawer
+        isOpen={mobileOpen}
+        onClose={() => setMobileOpen(false)}
+        currentPage={currentPage}
+        onNavigate={onNavigate}
+        navLinks={navLinks}
+        user={user}
+        profile={profile}
+        isAdmin={Boolean(isAdmin)}
+        systemStatus={systemStatus}
+        offlineCount={offlineCount}
+        isSyncingOffline={isSyncingOffline}
+        onSyncOffline={handleSyncOffline}
+        isShowroomMode={isShowroomMode}
+        toggleShowroomMode={toggleShowroomMode}
+        language={language}
+        setLanguage={setLanguage}
+        t={t}
+      />
     </header>
   );
 }
