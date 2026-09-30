@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
 import { isProductInStockForUser } from '@/lib/warehouseVisibility';
 import ProductCard from '@/components/ProductCard';
+import HeroBannerMedia from '@/components/home/HeroBannerMedia';
 
 const advantages = [
   {
@@ -70,10 +71,10 @@ export default function HomePage({ onNavigate }: { onNavigate: (page: PageId, pr
           backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 60px, rgba(255,255,255,0.3) 60px, rgba(255,255,255,0.3) 61px), repeating-linear-gradient(90deg, transparent, transparent 60px, rgba(255,255,255,0.3) 60px, rgba(255,255,255,0.3) 61px)',
         }} />
 
-        <div className="relative container-w py-16 lg:py-24">
-          <div className="grid lg:grid-cols-[1fr,auto] gap-12 lg:gap-16 items-center">
+        <div className="relative container-w py-12 lg:py-20">
+          <div className="grid lg:grid-cols-12 gap-10 lg:gap-12 items-center">
             {/* Left text content */}
-            <div className="max-w-2xl">
+            <div className="lg:col-span-6 xl:col-span-6 max-w-2xl">
               {/* Logo badge */}
               <div className="inline-flex items-center gap-3 rounded-full bg-white/10 backdrop-blur-sm border border-white/10 pl-3 pr-5 py-2 mb-8">
                 <img
@@ -125,24 +126,9 @@ export default function HomePage({ onNavigate }: { onNavigate: (page: PageId, pr
               </div>
             </div>
 
-            {/* Right: elegant logo showcase (desktop) */}
-            <div className="hidden lg:flex flex-col items-center justify-center">
-              <div className="relative">
-                {/* Glow ring */}
-                <div className="absolute -inset-8 rounded-full bg-brand-500/10 blur-2xl" />
-                <div className="absolute -inset-4 rounded-full border border-white/5" />
-                <div className="relative flex items-center justify-center w-64 h-64 rounded-full bg-white/5 backdrop-blur-sm border border-white/10">
-                  <img
-                    src="/Вектор_Синэнергия.png"
-                    alt="Synergiya Group"
-                    className="h-44 w-auto brightness-0 invert drop-shadow-lg"
-                  />
-                </div>
-                {/* Orbit dots */}
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-2 w-2 h-2 rounded-full bg-brand-400/60" />
-                <div className="absolute bottom-4 right-0 translate-x-2 w-1.5 h-1.5 rounded-full bg-accent-400/60" />
-                <div className="absolute top-1/2 left-0 -translate-x-3 -translate-y-1/2 w-1 h-1 rounded-full bg-white/40" />
-              </div>
+            {/* Right: Hero Video Showcase */}
+            <div className="lg:col-span-6 xl:col-span-6 w-full mt-8 lg:mt-0">
+              <HeroBannerMedia onNavigate={onNavigate} />
             </div>
           </div>
         </div>
