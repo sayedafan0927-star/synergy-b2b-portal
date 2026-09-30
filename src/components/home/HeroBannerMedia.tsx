@@ -19,44 +19,48 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
     const video = videoRef.current;
     if (!video) return;
 
+    // Direct DOM property enforcement required by iOS Safari / Android for muted autoplay
     video.muted = true;
     video.defaultMuted = true;
+    video.playsInline = true;
 
-    // While preloader logo is displaying, hold video paused at beginning (frame 0)
-    if (!isReady) {
-      video.pause();
-      return;
-    }
+    video.setAttribute('muted', '');
+    video.setAttribute('playsinline', '');
+    video.setAttribute('webkit-playsinline', 'true');
 
-    // Preloader is done and user sees the screen: start immediately
-    setIsEnded(false);
-    
-    // Only seek to 0 if it was played previously and not at the beginning
-    if (video.currentTime > 0.1) {
-      try {
-        video.currentTime = 0;
-      } catch {}
-    }
-
-    const startPlayback = () => {
+    // Never call video.pause() on mount to preserve iOS Safari autoplay eligibility!
+    const attemptPlay = () => {
       const playPromise = video.play();
       if (playPromise !== undefined) {
         playPromise.catch(() => {
-          // If browser policy blocks autoplay, graceful fallback
+          // If browser policy or low-power mode blocks autoplay, fallback touch handler will activate it
         });
       }
     };
 
     if (video.readyState >= 2) {
-      startPlayback();
+      attemptPlay();
     } else {
       const onCanPlay = () => {
-        startPlayback();
+        attemptPlay();
         video.removeEventListener('canplay', onCanPlay);
       };
       video.addEventListener('canplay', onCanPlay);
-      return () => video.removeEventListener('canplay', onCanPlay);
     }
+
+    // Touch/click fallback for iOS devices in Low Power Mode
+    const handleFirstGesture = () => {
+      if (video && video.paused) {
+        video.play().catch(() => {});
+      }
+    };
+    window.addEventListener('touchstart', handleFirstGesture, { once: true, passive: true });
+    window.addEventListener('click', handleFirstGesture, { once: true, passive: true });
+
+    return () => {
+      window.removeEventListener('touchstart', handleFirstGesture);
+      window.removeEventListener('click', handleFirstGesture);
+    };
   }, [isReady]);
 
   const handleEnded = () => {
@@ -86,9 +90,11 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
       <div className="relative w-full aspect-[16/9] sm:aspect-auto sm:h-[72vh] lg:h-[82vh] sm:min-h-[480px] max-h-[860px] overflow-hidden bg-slate-950">
         <video
           ref={videoRef}
-          autoPlay={isReady}
+          autoPlay
           muted
           playsInline
+          // @ts-expect-error iOS Safari webkit prefix
+          webkit-playsinline="true"
           preload="auto"
           poster={POSTER}
           onEnded={handleEnded}
@@ -100,21 +106,16 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
         </video>
 
         {/* 
-          Central Carpet Brand Emblem (Smoothly illuminates in the carpet medallion at video end):
-          Gives the luxurious royal seal feel in the center of the oriental carpet pattern.
+          Corner Brand Hallmark (Option 2):
+          Luxury hallmark in top-left corner without solid background or box.
+          Preserves 100% of the carpet visual and animation completely unobstructed.
         */}
-        <div 
-          className={`absolute inset-0 flex items-center justify-center sm:justify-end sm:pr-[18%] pointer-events-none transition-all duration-700 ease-out z-10 ${
-            isEnded ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
-          }`}
-        >
-          <div className="flex flex-col items-center justify-center p-3 sm:p-4 rounded-2xl sm:rounded-3xl bg-black/35 backdrop-blur-md border border-white/15 shadow-2xl shadow-black/80">
-            <img 
-              src="/Вектор_Синэнергия.png" 
-              alt="Synergy Group" 
-              className="h-10 sm:h-16 w-auto brightness-0 invert drop-shadow-[0_2px_12px_rgba(234,179,8,0.35)]" 
-            />
-          </div>
+        <div className="absolute top-3 left-4 sm:top-5 sm:left-8 z-20 pointer-events-none select-none">
+          <img 
+            src="/Вектор_Синэнергия.png" 
+            alt="Synergy Group" 
+            className="h-7 sm:h-9 w-auto brightness-0 invert opacity-80 drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]" 
+          />
         </div>
 
         {/* 
@@ -135,17 +136,9 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
 
           <div className="relative container-w py-6 sm:py-10">
             <div className="max-w-lg p-6 sm:p-8 rounded-3xl bg-slate-950/25 backdrop-blur-md border border-white/10 shadow-2xl transition-all duration-500">
-              <div className="flex items-center gap-3 mb-4">
-                <img 
-                  src="/Вектор_Синэнергия.png" 
-                  alt="Synergy Group" 
-                  className="h-8 w-auto brightness-0 invert opacity-95 drop-shadow-[0_2px_6px_rgba(0,0,0,0.8)]" 
-                />
-                <div className="h-5 w-px bg-white/20" />
-                <div className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-medium text-brand-300 border border-white/15 backdrop-blur-sm">
-                  <Sparkles className="w-3.5 h-3.5 text-brand-400" />
-                  В наличии на складах
-                </div>
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-medium text-brand-300 border border-white/15 backdrop-blur-sm mb-4">
+                <Sparkles className="w-3.5 h-3.5 text-brand-400" />
+                Оптовый поставщик • В наличии на складах
               </div>
 
               <h1 className="font-display text-2xl sm:text-4xl font-bold text-white leading-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)]">
