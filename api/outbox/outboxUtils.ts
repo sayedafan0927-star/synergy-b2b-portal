@@ -18,7 +18,7 @@ export interface DlqAlertParams {
  * при переводе заказа в Dead Letter Queue (DLQ).
  */
 export async function dispatchDlqEmergencyAlert(params: DlqAlertParams): Promise<void> {
-  const alertPhone = process.env.ADMIN_WHATSAPP_PHONE || '';
+  const alertPhone = process.env.ADMIN_WHATSAPP_PHONE || process.env.MANAGER_WHATSAPP_PHONE || process.env.WHATSAPP_MANAGER_PHONE || '';
   const text = `🚨 *КРИТИЧЕСКИЙ СБОЙ OUTBOX / 1C:ERP*\n\n` +
     `Заказ *№${params.orderNumber}* переведен в *Dead Letter Queue (DLQ)* после ${params.retries} неудачных попыток синхронизации!\n\n` +
     `💰 Сумма заказа: $${params.amount}\n` +
@@ -280,6 +280,18 @@ export async function dispatchDlqAlert(
   });
 
   // 2. Внешний webhook (Telegram / Slack / Monitoring), если задан в переменных окружения
+  const alertPhone = process.env.ADMIN_WHATSAPP_PHONE || process.env.MANAGER_WHATSAPP_PHONE || process.env.WHATSAPP_MANAGER_PHONE || '';
+  if (alertPhone) {
+    const waText = `🚨 *КРИТИЧЕСКИЙ СБОЙ OUTBOX / 1C:ERP*\n\n` +
+      `Заказ *№${order.order_number}* переведен в *DLQ*!\n` +
+      `Категория: *${category.label}*\n` +
+      `Ошибка: ${errorMessage}\n` +
+      `Рекомендация: _${category.recommendedAction}_`;
+    sendWhatsAppMessage(alertPhone, waText).catch(waErr => {
+      logger.warn('[DLQ Alert WhatsApp notice]', { orderNumber: order.order_number }, waErr as Error);
+    });
+  }
+
   const alertWebhookUrl = process.env.DLQ_ALERT_WEBHOOK_URL;
   if (alertWebhookUrl) {
     try {

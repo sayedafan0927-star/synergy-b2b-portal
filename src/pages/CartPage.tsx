@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
-import { ShoppingCart, ArrowLeft, PackageOpen, AlertCircle } from 'lucide-react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { ShoppingCart, ArrowLeft, PackageOpen, AlertCircle, Trash2 } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import type { PageId } from '@/types';
@@ -100,6 +100,17 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
 
   const hasDepletedItems = useMemo(() => items.some(it => it.maxStock === 0), [items]);
   const hasZeroPriceItems = useMemo(() => items.some(it => !it.price || it.price <= 0), [items]);
+
+  const handleRemoveUnavailableItems = useCallback(() => {
+    const problematicKeys = items
+      .filter(it => (!it.price || it.price <= 0) || it.maxStock === 0)
+      .map(it => `${it.product.id}_${it.variant.size}`);
+
+    problematicKeys.forEach(key => removeItem(key));
+    if (problematicKeys.length > 0) {
+      toastInfo(`Удалено позиций: ${problematicKeys.length}. Корзина обновлена.`);
+    }
+  }, [items, removeItem, toastInfo]);
 
   // Проверка финансовых блокировок и условий
   const isBlocked = debtReport?.client?.is_blocked_for_shipment === true;
@@ -337,26 +348,46 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
         </div>
 
         {hasDepletedItems && (
-          <div className="mb-6 flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-800 animate-in fade-in">
-            <AlertCircle className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-bold text-rose-900">Внимание: некоторые товары закончились на складе</p>
-              <p className="mt-0.5 text-rose-700">
-                Один или несколько товаров в вашей корзине были выкуплены другими клиентами и сейчас отсутствуют на складе. Удалите закончившиеся позиции, чтобы продолжить оформление заказа.
-              </p>
+          <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-xs text-rose-800 animate-in fade-in">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-rose-900">Внимание: некоторые товары закончились на складе</p>
+                <p className="mt-0.5 text-rose-700">
+                  Один или несколько товаров в вашей корзине были выкуплены другими клиентами и сейчас отсутствуют на складе. Удалите закончившиеся позиции, чтобы продолжить оформление заказа.
+                </p>
+              </div>
             </div>
+            <button
+              type="button"
+              onClick={handleRemoveUnavailableItems}
+              className="shrink-0 inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition-colors cursor-pointer shadow-xs"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              <span>Удалить недоступные</span>
+            </button>
           </div>
         )}
 
         {hasZeroPriceItems && (
-          <div className="mb-6 flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-900 animate-in fade-in">
-            <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
-            <div>
-              <p className="font-bold text-amber-900">В корзине есть позиции с неустановленной ценой</p>
-              <p className="mt-0.5 text-amber-800">
-                Оформление оптового заказа невозможно для товаров с нулевой стоимостью. Удалите их из корзины или свяжитесь с отделом продаж Synergy для уточнения цены.
-              </p>
+          <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-900 animate-in fade-in">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-amber-900">В корзине есть позиции с неустановленной ценой</p>
+                <p className="mt-0.5 text-amber-800">
+                  Оформление оптового заказа невозможно для товаров с нулевой стоимостью. Удалите их из корзины или свяжитесь с отделом продаж Synergy для уточнения цены.
+                </p>
+              </div>
             </div>
+            <button
+              type="button"
+              onClick={handleRemoveUnavailableItems}
+              className="shrink-0 inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition-colors cursor-pointer shadow-xs"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              <span>Удалить позиции без цены</span>
+            </button>
           </div>
         )}
 
@@ -396,6 +427,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
               stockConflictDetails={stockConflictDetails}
               hasDepletedItems={hasDepletedItems}
               hasZeroPriceItems={hasZeroPriceItems}
+              onRemoveUnavailableItems={handleRemoveUnavailableItems}
               isAuthenticated={Boolean(user)}
               onLoginRedirect={() => onNavigate('login')}
               onSubmit={handleSubmit}

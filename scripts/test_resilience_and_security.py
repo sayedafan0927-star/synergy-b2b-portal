@@ -1574,7 +1574,43 @@ with open(os.path.join(ROOT_DIR, "src", "pages", "CartPage.tsx"), "r", encoding=
 test_assert("hasZeroPriceItems" in cartp_s19 and "В корзине есть позиции с неустановленной ценой" in cartp_s19 and "!user" in cartp_s19, "CartPage.tsx strictly blocks checkout submission if user is unauthenticated or cart contains zero-price items")
 
 # ------------------------------------------------------------------------------
-# 44. Summary Report
+# 44. Stage 20: 48h Hold Expiry, WhatsApp Alerts & 1-Click Cart Cleanup
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 44. STAGE 20: 48H HOLDS, WHATSAPP ALERTS & 1-CLICK CLEANUP ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "api", "cron", "expire-holds.ts"), "r", encoding="utf-8") as fp:
+    eh_code = fp.read()
+test_assert("WMS_HOLD_TTL_HOURS || '48'" in eh_code, "expire-holds.ts defaults to standard 48h WMS reservation hold window")
+test_assert("stock_reservations" in eh_code and "status: 'cancelled'" in eh_code, "expire-holds.ts guarantees dual-layer cancellation of stock_reservations")
+test_assert("sendWhatsAppMessage" in eh_code and "АВТО-ОТМЕНА ПРОСРОЧЕННЫХ БРОНЕЙ" in eh_code, "expire-holds.ts dispatches WhatsApp alert to managers upon auto-cancelling stale holds")
+
+with open(os.path.join(ROOT_DIR, "api", "outbox", "outboxUtils.ts"), "r", encoding="utf-8") as fp:
+    ou_code = fp.read()
+test_assert("MANAGER_WHATSAPP_PHONE" in ou_code and "WHATSAPP_MANAGER_PHONE" in ou_code, "outboxUtils.ts supports cascading WhatsApp phone number fallbacks")
+test_assert("sendWhatsAppMessage" in ou_code and "dispatchDlqAlert" in ou_code, "outboxUtils.ts triggers WhatsApp message when order moves to DLQ")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "auth", "dealerRegistrationNotification.ts"), "r", encoding="utf-8") as fp:
+    drn_code = fp.read()
+test_assert("handleNotifyDealerRegistration" in drn_code and "НОВАЯ РЕГИСТРАЦИЯ B2B-ДИЛЕРА" in drn_code, "dealerRegistrationNotification.ts defines B2B signup WhatsApp dispatcher")
+
+with open(os.path.join(ROOT_DIR, "api", "erp.ts"), "r", encoding="utf-8") as fp:
+    erp_code = fp.read()
+test_assert("notify_dealer_registration" in erp_code and "handleNotifyDealerRegistration" in erp_code, "api/erp.ts routes notify_dealer_registration action")
+
+with open(os.path.join(ROOT_DIR, "src", "pages", "LoginPage.tsx"), "r", encoding="utf-8") as fp:
+    lp_code = fp.read()
+test_assert("notify_dealer_registration" in lp_code, "LoginPage.tsx triggers notify_dealer_registration on successful signup")
+
+with open(os.path.join(ROOT_DIR, "src", "pages", "CartPage.tsx"), "r", encoding="utf-8") as fp:
+    cart_p20 = fp.read()
+test_assert("handleRemoveUnavailableItems" in cart_p20 and "Удалить недоступные" in cart_p20 and "Удалить позиции без цены" in cart_p20, "CartPage.tsx supports 1-click removal of zero-price and depleted items")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "cart", "CartCheckoutForm.tsx"), "r", encoding="utf-8") as fp:
+    ccf_p20 = fp.read()
+test_assert("onRemoveUnavailableItems" in ccf_p20 and "Удалить позиции без цены" in ccf_p20, "CartCheckoutForm.tsx includes 1-click cleanup button in zero-price warning banner")
+
+# ------------------------------------------------------------------------------
+# 45. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

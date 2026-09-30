@@ -21,6 +21,7 @@ interface CartCheckoutFormProps {
   stockConflictDetails: { available_qty?: number; requested_qty?: number; sku?: string } | null;
   hasDepletedItems?: boolean;
   hasZeroPriceItems?: boolean;
+  onRemoveUnavailableItems?: () => void;
   isAuthenticated?: boolean;
   onLoginRedirect?: () => void;
   onSubmit: () => void;
@@ -53,6 +54,7 @@ export function CartCheckoutForm({
   stockConflictDetails,
   hasDepletedItems,
   hasZeroPriceItems,
+  onRemoveUnavailableItems,
   isAuthenticated = true,
   onLoginRedirect,
   onSubmit,
@@ -207,7 +209,7 @@ export function CartCheckoutForm({
 
       {/* Предупреждение о товарах без цены */}
       {hasZeroPriceItems && (
-        <div className="rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-xs text-amber-900">
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-xs text-amber-900 space-y-2.5">
           <div className="flex items-start gap-2">
             <AlertTriangle className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
             <div>
@@ -217,6 +219,15 @@ export function CartCheckoutForm({
               </p>
             </div>
           </div>
+          {onRemoveUnavailableItems && (
+            <button
+              type="button"
+              onClick={onRemoveUnavailableItems}
+              className="w-full py-2 px-3 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition-colors cursor-pointer"
+            >
+              Удалить позиции без цены
+            </button>
+          )}
         </div>
       )}
 

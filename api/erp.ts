@@ -6,6 +6,7 @@ import { enforceRateLimit, getClientIp } from './lib/rateLimit';
 import { authenticateRequest, revokeToken } from './lib/authGuard';
 import { applyCorsHeaders } from './lib/cors';
 import { handleCreateLead } from './modules/leads';
+import { handleNotifyDealerRegistration } from './modules/auth/dealerRegistrationNotification';
 import { handleReconciliationReport } from './modules/reconciliation';
 import { handleCatalogRequests } from './modules/catalog/catalogHandler';
 import { handleCreateOrder } from './modules/orders/createOrderHandler';
@@ -45,6 +46,7 @@ const PUBLIC_ACTIONS = new Set([
   'login',
   'logout',
   'create_lead',
+  'notify_dealer_registration',
   'suppliers',
   'display_settings',
   'request_approval',
@@ -94,6 +96,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (action === 'retry_all_dlq_orders' && req.method === 'POST') {
       return await handleRetryAllDlqOrders(req, res, supabase, correlationId);
+    }
+
+    // 0.8.5. Оперативное оповещение менеджеров о новой регистрации дилера
+    if (action === 'notify_dealer_registration' && req.method === 'POST') {
+      return await handleNotifyDealerRegistration(req, res, supabase, correlationId);
     }
 
     // 0.9. Кэш настроек отображения и официального курса валюты (60s TTL)

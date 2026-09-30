@@ -59,6 +59,17 @@ export default function LoginPage({ onNavigate }: { onNavigate: (page: PageId) =
     if (err) {
       setError(err);
     } else {
+      // Фоновое WhatsApp-оповещение менеджерам Synergy о новой регистрации
+      fetch('/api/erp?action=notify_dealer_registration', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: form.email,
+          full_name: form.name,
+          company_name: form.company,
+        }),
+      }).catch(() => {});
+
       onNavigate('profile');
     }
   };

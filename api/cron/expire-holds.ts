@@ -4,6 +4,7 @@ import { recordAuditLog } from '../audit/logs';
 import { applyCorrelationId } from '../lib/trace';
 import { applyCorsHeaders } from '../lib/cors';
 import { logger } from '../lib/logger';
+import { sendWhatsAppMessage } from '../approvals/whatsapp';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
@@ -36,7 +37,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const startTime = Date.now();
-  const ttlHours = parseInt(process.env.WMS_HOLD_TTL_HOURS || '24', 10);
+  const ttlHours = parseInt(process.env.WMS_HOLD_TTL_HOURS || '48', 10);
   const cutoffTime = new Date(Date.now() - ttlHours * 60 * 60 * 1000).toISOString();
 
   try {
@@ -72,6 +73,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             await supabase.rpc('release_order_reservations', { p_order_id: ord.id });
           } catch (relErr) {
             logger.warn('[WMS Hold Expiry] Fallback release_order_reservations notice:', relErr as Error);
+          }
+          // Двухконтурная гарантия: прямая очистка таблицы stock_reservations
+          try {
+            await supabase
+              .from('stock_reservations')
+              .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+              .eq('order_id', ord.id)
+              .eq('status', 'active');
+          } catch (resErr) {
+            logger.warn('[WMS Hold Expiry] Direct stock_reservations fallback cleanup notice:', resErr as Error);
           }
         }
 
@@ -136,6 +147,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           ttlHours,
         },
       });
+
+      // Оперативное WhatsApp-уведомление дежурному менеджеру
+      const managerPhone = process.env.ADMIN_WHATSAPP_PHONE || process.env.MANAGER_WHATSAPP_PHONE || process.env.WHATSAPP_MANAGER_PHONE || '';
+      if (managerPhone && cancelledOrders.length > 0) {
+        const orderList = cancelledOrders.slice(0, 5).map((o: any) => `• №${o.cancelled_order_number || o.order_number || o.id}`).join('\n');
+        const waMsg = `⏳ *АВТО-ОТМЕНА ПРОСРОЧЕННЫХ БРОНЕЙ (${ttlHours}ч)*\n\n` +
+          `Отменено заказов с истекшим сроком оплаты: *${cancelledOrders.length}*\n` +
+          `${orderList}\n\n` +
+          `_Складские остатки автоматически возвращены в свободную продажу в каталоге._`;
+        sendWhatsAppMessage(managerPhone, waMsg).catch(waErr => {
+          logger.warn('[WMS Hold Expiry] WhatsApp alert warning:', waErr as Error);
+        });
+      }
     }
 
     return res.status(200).json({
