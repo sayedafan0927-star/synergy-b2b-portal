@@ -117,6 +117,12 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
               <button
                 key={page}
                 onClick={() => onNavigate(page)}
+                onMouseEnter={() => {
+                  if (page === 'catalog') import('@/pages/CatalogPage');
+                }}
+                onTouchStart={() => {
+                  if (page === 'catalog') import('@/pages/CatalogPage');
+                }}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 ${
                   currentPage === page
                     ? 'bg-brand-50 text-brand-700'
@@ -311,6 +317,9 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
             <button
               key={page}
               onClick={() => onNavigate(page)}
+              onTouchStart={() => {
+                if (page === 'catalog') import('@/pages/CatalogPage');
+              }}
               className={`w-full text-left px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                 currentPage === page
                   ? 'bg-brand-50 text-brand-700'
