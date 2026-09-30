@@ -128,13 +128,11 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
 
       {/* Thompson's Tea Signature Editorial Spline Arch (Flawless cubic-bezier continuous transition) */}
       <svg
-        className={`absolute left-1/2 -translate-x-1/2 top-full -mt-px pointer-events-none transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] origin-top ${
-          scrolled ? 'scale-y-0 opacity-0' : 'scale-y-100 opacity-100'
-        }`}
+        className="absolute left-1/2 -translate-x-1/2 top-full -mt-px pointer-events-none transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
         style={{
           zIndex: 1,
-          width: '460px',
-          height: '42px',
+          width: scrolled ? '360px' : '480px',
+          height: scrolled ? '18px' : '44px',
         }}
         viewBox="0 0 500 44"
         preserveAspectRatio="none"
@@ -179,12 +177,12 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
           {/* Left Column Spacer on Mobile to guarantee absolute center logo */}
           <div className="lg:hidden justify-self-start" />
 
-          {/* Center Column: Logo in Parabolic Arch (Full crest & text at top, collapses to text on scroll) */}
+          {/* Center Column: Logo in Parabolic Arch (Full crest & text at top, collapses to text dipping in curve on scroll) */}
           <button
             type="button"
             onClick={() => onNavigate('home')}
             className={`justify-self-center flex flex-col items-center justify-center cursor-pointer transition-all duration-300 py-1 px-3 sm:px-4 min-w-[130px] sm:min-w-[160px] ${
-              scrolled ? 'translate-y-0' : 'translate-y-1.5 sm:translate-y-2.5'
+              scrolled ? 'translate-y-1.5 sm:translate-y-2' : 'translate-y-2 sm:translate-y-3'
             }`}
             title="Synergiya Group — Главная"
             aria-label="Главная страница"
