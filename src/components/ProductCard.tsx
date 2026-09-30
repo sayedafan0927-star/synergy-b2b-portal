@@ -38,24 +38,12 @@ export function formatProductTitle(product: { name: string; article?: string; co
     (product.name && product.name.toLowerCase().includes('дорожк'))
   );
 
-  let art = (product.article || '').trim();
-  let col = (product.color || '').trim();
-
-  // Дедупликация повторов цвета вида "CREAM / CREAM" или "GREY / GREY"
-  if (col.includes('/')) {
-    const parts = col.split('/').map(p => p.trim());
-    if (parts.length > 1 && parts.every(p => p.toLowerCase() === parts[0].toLowerCase())) {
-      col = parts[0];
-    }
-  }
+  const art = (product.article || '').trim();
+  const col = (product.color || '').trim();
 
   let base = '';
   if (art && col) {
-    if (art.toLowerCase().includes(col.toLowerCase())) {
-      base = art;
-    } else {
-      base = `${art} — ${col}`;
-    }
+    base = `${art} — ${col}`;
   } else if (art) {
     base = art;
   } else {
@@ -64,9 +52,11 @@ export function formatProductTitle(product: { name: string; article?: string; co
       .replace(/^дорожка\s+/i, '')
       .replace(new RegExp(`^${product.collection}\\s+`, 'i'), '')
       .trim() || product.name;
+    // Если после удаления коллекции остался только голый цвет без артикула, возвращаем полное название
+    if (col && base.toLowerCase() === col.toLowerCase()) {
+      base = product.name;
+    }
   }
-  // Очистка повторов в названии вида "L.VİZON / L.VİZON" или "CREAM / CREAM"
-  base = base.replace(/([^\s/]+(?:\s+[^\s/]+)*)\s*\/\s*\1\b/gi, '$1').trim();
 
   const prefix = lang === 'kz' ? 'Жол кілем' : 'Дорожка';
   return isRunner ? `${prefix} ${base}` : base;

@@ -189,14 +189,12 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
 
       // Тревожный алерт дежурной смене
       dispatchDlqEmergencyAlert({
-        id: outboxOrderId || outboxOrderDoc,
-        order_number: outboxOrderDoc,
-        retry_count: 0,
-        last_error: `[Fatal Checkout Error ${erpResponse.status}] ${fatalErrorText}`,
-        created_at: new Date().toISOString(),
-        total_amount: outboundPayload.total_amount,
-        user_id: outboundPayload.user_id,
-      }, fatalErrorText).catch(() => {});
+        orderId: outboxOrderId || outboxOrderDoc,
+        orderNumber: outboxOrderDoc,
+        retries: 0,
+        amount: Number(outboundPayload.total_amount || 0),
+        error: `[Fatal Checkout Error ${erpResponse.status}] ${fatalErrorText}`,
+      }).catch(() => {});
 
       const httpStatus = erpResponse.status >= 400 && erpResponse.status < 500 ? erpResponse.status : 422;
       res.status(httpStatus).json({

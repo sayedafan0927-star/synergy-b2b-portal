@@ -117,11 +117,12 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
       for (const it of pricingResult.items) {
         const whId = resolveWarehouseId(it.warehouse_id, it.warehouse);
         if (forbiddenWhs.includes(whId)) {
-          return res.status(403).json({
+          res.status(403).json({
             success: false,
             error: `Заказ со склада "${it.warehouse || whId}" недоступен для вашей учетной записи.`,
             code: 'FORBIDDEN_WAREHOUSE',
           });
+          return;
         }
       }
     } catch (whErr) {
@@ -336,6 +337,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
           rawPayload.currency || 'USD',
           rawPayload.contract_id || null,
           rawPayload.comment,
+          authoritativeRate,
         );
       } else {
         createdSplitOrders = [{

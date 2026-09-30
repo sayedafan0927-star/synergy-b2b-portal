@@ -44,6 +44,31 @@ export async function dispatchWhatsAppNotification(params: {
   }
 }
 
+const STATUS_HIERARCHY: Record<string, number> = {
+  pending: 1,
+  confirmed: 2,
+  processing: 3,
+  shipped: 4,
+  delivered: 5,
+};
+
+export function canTransitionOrderStatus(currentStatus: string, nextStatus: string): boolean {
+  const normCurrent = (currentStatus || 'pending').toLowerCase();
+  const normNext = (nextStatus || '').toLowerCase();
+
+  if (normCurrent === normNext) return true;
+  if (normCurrent === 'delivered' || normCurrent === 'cancelled') return false;
+
+  if (normNext === 'cancelled') {
+    return normCurrent !== 'shipped' && normCurrent !== 'delivered';
+  }
+
+  const currentRank = STATUS_HIERARCHY[normCurrent] || 0;
+  const nextRank = STATUS_HIERARCHY[normNext] || 0;
+
+  return nextRank >= currentRank;
+}
+
 export async function handleOrderStatusChanged(
   payload: any,
   supabaseServer: SupabaseClient | null,
@@ -99,31 +124,6 @@ export async function handleOrderStatusChanged(
       console.warn('[Webhook ERP] Secondary channel broadcast notice:', bcErr);
     }
   }
-
-const STATUS_HIERARCHY: Record<string, number> = {
-  pending: 1,
-  confirmed: 2,
-  processing: 3,
-  shipped: 4,
-  delivered: 5,
-};
-
-export function canTransitionOrderStatus(currentStatus: string, nextStatus: string): boolean {
-  const normCurrent = (currentStatus || 'pending').toLowerCase();
-  const normNext = (nextStatus || '').toLowerCase();
-
-  if (normCurrent === normNext) return true;
-  if (normCurrent === 'delivered' || normCurrent === 'cancelled') return false;
-
-  if (normNext === 'cancelled') {
-    return normCurrent !== 'shipped' && normCurrent !== 'delivered';
-  }
-
-  const currentRank = STATUS_HIERARCHY[normCurrent] || 0;
-  const nextRank = STATUS_HIERARCHY[normNext] || 0;
-
-  return nextRank >= currentRank;
-}
 
   // Синхронизация статуса в Supabase
   try {

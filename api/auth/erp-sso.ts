@@ -171,13 +171,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     // Синхронизируем профиль в БД Supabase
-    let profileQuery = supabase.from('profiles').select('id, role');
+    let profileQuery = supabase.from('profiles').select('id, role, partner_id, is_blocked_for_shipment');
     if (p.phone && p.phone.trim().length > 0) {
       profileQuery = profileQuery.eq('phone', p.phone);
     } else {
       profileQuery = profileQuery.eq('partner_id', String(p.sub));
     }
     const { data: existingProfile } = await profileQuery.maybeSingle();
+
+    const effectivePartnerId = String(existingProfile?.partner_id || p.partner_id || p.sub || '').trim();
+
+    // Проверка блокировки / деактивации клиента в 1С:ERP
+    if (existingProfile?.is_blocked_for_shipment) {
+      await recordAuditLog({
+        eventType: 'sso_auth_blocked',
+        direction: 'inbound',
+        status: 'error',
+        source: 'SSO Gateway',
+        correlationId,
+        errorMessage: `Клиент ${effectivePartnerId} заблокирован для отгрузок (is_blocked_for_shipment)`,
+      });
+      return res.status(403).send('Доступ заблокирован: учетная запись контрагента деактивирована в 1С:ERP.');
+    }
+
+    if (redis && effectivePartnerId) {
+      try {
+        const isRevoked = await redis.get(`revoked_partner:${effectivePartnerId}`);
+        if (isRevoked) {
+          await recordAuditLog({
+            eventType: 'sso_auth_revoked',
+            direction: 'inbound',
+            status: 'error',
+            source: 'SSO Gateway',
+            correlationId,
+            errorMessage: `Клиент ${effectivePartnerId} отозван по вебхуку деактивации`,
+          });
+          return res.status(403).send('Доступ заблокирован: сессия партнера отозвана по требованию 1С:ERP.');
+        }
+      } catch (redisCheckErr) {
+        console.warn('[SSO Gateway] Redis partner revocation check warning:', redisCheckErr);
+      }
+    }
 
     let targetUserId = existingProfile?.id;
 

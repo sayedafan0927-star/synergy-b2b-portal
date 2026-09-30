@@ -991,7 +991,44 @@ with open(os.path.join(ROOT_DIR, "api", "webhooks", "handlers", "stockHandler.ts
 test_assert("payload.sku || payload.article" in sh_code_fresh, "stockHandler.ts supports single-item payloads in addition to items array")
 
 # ------------------------------------------------------------------------------
-# 29. Summary Report
+# 29. Verifying Product Card Naming & Integration Hardening Parity...
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}29. Verifying Product Card Naming & Integration Hardening Parity...{RESET}")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "ProductCard.tsx"), "r", encoding="utf-8") as fp:
+    card_code = fp.read()
+test_assert("formatProductTitle" in card_code and "base = product.name;" in card_code, "ProductCard.tsx falls back to product.name avoiding bare color reduction")
+
+with open(os.path.join(ROOT_DIR, "src", "lib", "nomenclatureParser.ts"), "r", encoding="utf-8") as fp:
+    parser_code = fp.read()
+test_assert("parts.length === 1" in parser_code and "parts[0].includes('/')" in parser_code, "nomenclatureParser.ts hardened against color-in-parentheses misclassification")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "catalog", "catalogHandler.ts"), "r", encoding="utf-8") as fp:
+    cat_handler_code = fp.read()
+test_assert("action: string,\n  supabase: SupabaseClient" in cat_handler_code, "catalogHandler.ts accepts supabase as 4th argument")
+
+with open(os.path.join(ROOT_DIR, "api", "erp.ts"), "r", encoding="utf-8") as fp:
+    erp_main_code = fp.read()
+test_assert("handleCatalogRequests(req, res, action, supabase," in erp_main_code, "api/erp.ts passes supabase client to handleCatalogRequests")
+
+with open(os.path.join(ROOT_DIR, "api", "outbox", "sync.ts"), "r", encoding="utf-8") as fp:
+    sync_code_fresh = fp.read()
+test_assert("release_order_reservations" in sync_code_fresh, "api/outbox/sync.ts releases stock reservations on DLQ transitions")
+
+with open(os.path.join(ROOT_DIR, "api", "approvals", "action.ts"), "r", encoding="utf-8") as fp:
+    approval_code_fresh = fp.read()
+test_assert("release_order_reservations" in approval_code_fresh and "parent_order_id" in approval_code_fresh, "api/approvals/action.ts releases reservations and cascades cancellation on rejection")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "orderSplitter.ts"), "r", encoding="utf-8") as fp:
+    splitter_code_fresh = fp.read()
+test_assert("authoritativeRate" in splitter_code_fresh and "applied_exchange_rate" in splitter_code_fresh, "orderSplitter.ts persists applied_exchange_rate on split suborders")
+
+with open(os.path.join(ROOT_DIR, "api", "auth", "erp-sso.ts"), "r", encoding="utf-8") as fp:
+    sso_code_fresh = fp.read()
+test_assert("is_blocked_for_shipment" in sso_code_fresh and "revoked_partner" in sso_code_fresh, "api/auth/erp-sso.ts verifies client blocking status before issuing SSO session")
+
+# ------------------------------------------------------------------------------
+# 30. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests
@@ -1003,4 +1040,5 @@ else:
 print(f"{BOLD}{BLUE}===================================================================={RESET}\n")
 
 sys.exit(0 if failed_tests == 0 else 1)
+
 

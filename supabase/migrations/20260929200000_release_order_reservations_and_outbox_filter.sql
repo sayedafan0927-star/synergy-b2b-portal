@@ -58,7 +58,7 @@ BEGIN
   FOR r IN
     SELECT id
     FROM orders
-    WHERE status = 'pending'
+    WHERE status IN ('pending', 'failed_dlq')
       AND (
         (hold_expires_at IS NOT NULL AND hold_expires_at <= now())
         OR (hold_expires_at IS NULL AND created_at <= now() - INTERVAL '24 hours')

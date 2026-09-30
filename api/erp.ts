@@ -18,7 +18,6 @@ import {
   handleDisplaySettingsPost,
 } from './modules/display/displaySettingsHandler';
 import { handleRequestApproval } from './modules/approvals/approvalHandler';
-import { handleEmployeeLoginFallback } from './modules/auth/loginHandler';
 import { handleGenericErpProxy } from './modules/erp/genericProxyHandler';
 import { getErpApiKey } from './lib/erpKey';
 
@@ -107,7 +106,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // 1.0. Каталог, карточка товара и серверная пагинация (модульный обработчик)
     if (action === 'catalog' || action === 'catalog_normalized' || action === 'product' || action === 'catalog_paginated') {
-      const handled = await handleCatalogRequests(req, res, action, TARGET_ERP_URL, ERP_FALLBACK_URL, SERVER_ERP_KEY, correlationId);
+      const handled = await handleCatalogRequests(req, res, action, supabase, TARGET_ERP_URL, ERP_FALLBACK_URL, SERVER_ERP_KEY, correlationId);
       if (handled) return;
     }
 
@@ -119,12 +118,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // 1.1.1. Сводный финансовый баланс-лист для администратора
     if (action === 'financial_balance' && req.method === 'GET') {
-      return await handleFinancialBalanceSheet(req, res, {
-        supabase,
-        targetErpUrl: TARGET_ERP_URL,
-        serverErpKey: SERVER_ERP_KEY,
-        correlationId,
-      });
+      return await handleFinancialBalanceSheet(req, res, supabase);
     }
 
     // 1.1.2. Принудительный онлайн-запрос баланса из 1С дилером или администратором
@@ -146,7 +140,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // 1.2. Быстрое создание лида из модалки каталога
     if (action === 'create_lead' && req.method === 'POST') {
-      return await handleCreateLead(req, res, correlationId);
+      return await handleCreateLead(req, res, supabase, correlationId);
     }
 
     // 1.3. Серверная генерация акта сверки взаиморасчетов (Anti-IDOR и клампинг периода)
@@ -190,7 +184,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       };
 
       const JWT_SECRET = process.env.PORTAL_JWT_SECRET || process.env.SUPABASE_JWT_SECRET || SERVER_ERP_KEY || 'fallback-secret-2026';
-      const b64Url = (str: string) => Buffer.from(str).toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+      const b64Url = (str: string | Buffer) => Buffer.from(str as any).toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
       const header = b64Url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
       const payload = b64Url(JSON.stringify(tokenPayload));
       const sig = b64Url(crypto.createHmac('sha256', JWT_SECRET).update(`${header}.${payload}`).digest());
@@ -199,15 +193,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ success: true, token, expires_in: 7 * 24 * 3600 });
     }
 
-    // 1.6. Защищенный вход для сотрудников/менеджеров
-    if (action === 'login' && req.method === 'POST' && req.body?.user_type === 'employee') {
-      const handled = await handleEmployeeLoginFallback(req, res, correlationId);
-      if (handled) return;
-    }
-
     // 1.7. Выход из системы
     if (action === 'logout' && req.method === 'POST') {
-      await revokeToken(req);
+      const authHeader = String(req.headers['authorization'] || '');
+      const rawTok = authHeader.replace(/^Bearer\s+/i, '').trim();
+      if (rawTok) await revokeToken(rawTok);
       return res.status(200).json({ success: true, message: 'Logged out successfully' });
     }
 
@@ -215,7 +205,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const isPublicAction = PUBLIC_ACTIONS.has(action);
     if (!isPublicAction) {
       const verifiedAuth = await authenticateRequest(req, {
-        requiredRole: ADMIN_ACTIONS.has(action) ? 'admin' : undefined,
+        requiredRoles: ADMIN_ACTIONS.has(action) ? ['admin'] : undefined,
         allowServerKey: true,
       });
 
@@ -226,7 +216,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
 
-      if (ADMIN_ACTIONS.has(action) && !verifiedAuth.isAdmin && !verifiedAuth.isServer) {
+      const isAdmin = verifiedAuth.role === 'admin';
+      if (ADMIN_ACTIONS.has(action) && !isAdmin && !verifiedAuth.isServer) {
         return res.status(403).json({
           success: false,
           error: 'Forbidden: Недостаточно прав для выполнения административного действия',
@@ -234,7 +225,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // Ограничение доступа для поставщиков к данным только своей фабрики
-      if (verifiedAuth.role === 'supplier' && !verifiedAuth.isAdmin && !verifiedAuth.isServer) {
+      if (verifiedAuth.role === 'supplier' && !isAdmin && !verifiedAuth.isServer) {
         const callerSuppId = String(verifiedAuth.partnerId || verifiedAuth.erpId || '');
         const requestedSuppId = String(req.query.supplier_id || req.body?.supplier_id || '');
         if (requestedSuppId && callerSuppId && requestedSuppId !== callerSuppId) {
@@ -269,6 +260,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // 4. ─── Универсальное проксирование в ERP через модульный обработчик ───
+    // Маршрутизирует запросы, включая логины сотрудников через handleEmployeeLoginFallback
     await handleGenericErpProxy(req, res, {
       action,
       correlationId,

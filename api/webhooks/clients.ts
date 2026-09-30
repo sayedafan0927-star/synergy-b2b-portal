@@ -151,7 +151,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
 
       // Проверка монотонности версий для предотвращения перезаписи свежих данных устаревшими пакетами
-      const incomingTimestamp = Number(p.version_timestamp || (p.updated_at ? new Date(p.updated_at).getTime() : 0));
+      const pAny = p as any;
+      const incomingTimestamp = Number(pAny.version_timestamp || (pAny.updated_at ? new Date(pAny.updated_at).getTime() : 0));
       if (incomingTimestamp > 0) {
         const { data: existingProf } = await supabase
           .from('profiles')

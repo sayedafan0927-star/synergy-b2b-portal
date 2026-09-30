@@ -254,6 +254,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             })
             .eq('id', order.id);
 
+          if (isDlq) {
+            try {
+              await supabase.rpc('release_order_reservations', { p_order_id: order.id });
+            } catch (relErr) {
+              console.warn('[Outbox Sync] DLQ reservation release error:', relErr);
+            }
+          }
+
           await recordAuditLog({
             eventType: isDlq ? 'outbox_dlq_moved' : 'outbox_sync_retry_scheduled',
             direction: 'outbound',
@@ -307,6 +315,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .eq('id', order.id);
 
         if (isDlq) {
+          try {
+            await supabase.rpc('release_order_reservations', { p_order_id: order.id });
+          } catch (relErr) {
+            console.warn('[Outbox Sync] Network DLQ reservation release error:', relErr);
+          }
           dispatchDlqEmergencyAlert({
             orderId: order.id,
             orderNumber: order.order_number,

@@ -81,21 +81,22 @@ export function handleErpLoginToken(jsonData: any, supabase: SupabaseClient | nu
 
       // Синхронизируем профиль клиента в базе данных
       if (pId && supabase) {
-        supabase
-          .from('profiles')
-          .upsert({
-            id: crypto.randomUUID(),
-            partner_id: pId,
-            erp_id: Number(pId) || null,
-            full_name: fName,
-            company_name: fName,
-            phone,
-            price_type: priceType,
-            role: 'client',
-            impersonation_enabled: true,
-            updated_at: new Date().toISOString(),
-          }, { onConflict: 'partner_id' })
-          .catch((e: any) => console.warn('[API Proxy ERP] Profile upsert notice:', e));
+        Promise.resolve(
+          supabase
+            .from('profiles')
+            .upsert({
+              id: crypto.randomUUID(),
+              partner_id: pId,
+              erp_id: Number(pId) || null,
+              full_name: fName,
+              company_name: fName,
+              phone,
+              price_type: priceType,
+              role: 'client',
+              impersonation_enabled: true,
+              updated_at: new Date().toISOString(),
+            }, { onConflict: 'partner_id' })
+        ).catch((e: any) => console.warn('[API Proxy ERP] Profile upsert notice:', e));
       }
     }
   } catch (tokenErr) {

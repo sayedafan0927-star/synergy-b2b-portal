@@ -54,7 +54,11 @@ export async function handleCatalogRequests(
   req: VercelRequest,
   res: VercelResponse,
   action: string,
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  targetErpUrl?: string,
+  fallbackErpUrl?: string,
+  serverErpKey?: string,
+  correlationId?: string
 ): Promise<boolean> {
   // 1. Быстрый ответ из L1/L2 кэша для полного каталога
   if ((action === 'catalog' || action === 'catalog_normalized') && req.method === 'GET') {

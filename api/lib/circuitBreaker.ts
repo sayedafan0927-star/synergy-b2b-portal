@@ -58,7 +58,7 @@ async function getServiceState(serviceName: string): Promise<ServiceState> {
   if (redis) {
     try {
       const key = `circuit:${serviceName}`;
-      const state = await redis.get<ServiceState>(key);
+      const state = (await redis.get(key)) as ServiceState | null;
       if (state) {
         l1StateCache.set(serviceName, { state, expiry: now + L1_TTL_MS });
         return state;

@@ -1,6 +1,7 @@
 import { sendWhatsAppMessage } from '../approvals/whatsapp';
 import { logger } from '../lib/logger';
 import { sendSystemAlert } from '../lib/alerting';
+import { recordAuditLog } from '../audit/logs';
 
 export const MAX_RETRIES = 5;
 
@@ -271,7 +272,7 @@ export async function dispatchDlqAlert(
   await recordAuditLog({
     eventType: 'dlq_poison_alert',
     direction: 'outbound',
-    status: 'failed',
+    status: 'error',
     statusCode: 500,
     source: 'DLQ Alert Dispatcher',
     correlationId,

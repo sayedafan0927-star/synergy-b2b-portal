@@ -57,6 +57,9 @@ export function parse1CNomenclature(rawName: string, fallbackCollection = ''): {
     }
     if (parts.length >= 4) {
       color = parts[3].replace(/[-/]/g, ' ').trim();
+    } else if (parts.length === 1 && (parts[0].includes('/') || /^[a-zа-я\s/]+$/i.test(parts[0]))) {
+      color = parts[0].trim();
+      sku = '';
     }
   }
 
@@ -76,7 +79,20 @@ export function parse1CNomenclature(rawName: string, fallbackCollection = ''): {
   // 3. Коллекция — текст до знака '<' или '('
   const collMatch = nameWithoutParams.split(/[<(]/)[0].trim();
   if (collMatch) {
-    collection = collMatch;
+    const cleanCollStr = collMatch.replace(/^(ковер|дорожка)\s+/i, '').trim();
+    if (fallbackCollection) {
+      collection = fallbackCollection;
+      const afterColl = cleanCollStr.replace(new RegExp(`^${fallbackCollection}\\s*`, 'i'), '').trim();
+      if (afterColl && !sku) {
+        sku = afterColl;
+      }
+    } else {
+      const tokens = cleanCollStr.split(/\s+/);
+      collection = tokens[0] || 'Ковры';
+      if (!sku && tokens.length > 1) {
+        sku = tokens.slice(1).join(' ');
+      }
+    }
   }
 
   const cleanName = sku ? `${collection} ${sku}${color ? ` (${color})` : ''}` : (collection || rawName);

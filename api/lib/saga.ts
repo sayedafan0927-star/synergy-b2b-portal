@@ -102,23 +102,23 @@ export async function releaseAllReservedStock(
   // Record audit log for Saga compensation event
   try {
     await recordAuditLog({
-      event_type: 'saga_stock_rollback',
-      direction: 'internal',
-      correlation_id: context.correlationId,
-      target_endpoint: 'supabase.rpc.release_stock',
-      status_code: failedSkus.length === 0 ? 200 : 500,
-      request_payload: {
+      eventType: 'saga_stock_rollback',
+      direction: 'outbound',
+      status: failedSkus.length === 0 ? 'success' : 'error',
+      statusCode: failedSkus.length === 0 ? 200 : 500,
+      source: 'Saga Compensator',
+      correlationId: context.correlationId,
+      payload: {
+        target_endpoint: 'supabase.rpc.release_stock',
         reason: context.reason,
         orderId: context.orderId,
         orderNumber: context.orderNumber,
         itemsToRollback: items,
-      },
-      response_payload: {
         releasedCount,
         failedSkus,
         allSuccess: failedSkus.length === 0,
       },
-      latency_ms: 0,
+      latencyMs: 0,
     });
   } catch (auditErr) {
     logger.warn('[Saga Compensator] Failed to record audit log:', auditErr as Error);
