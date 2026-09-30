@@ -48,8 +48,15 @@ export default function CurtainNavigationDrawer({
     }
   }, [isOpen, onClose]);
 
-  const handleLinkClick = (page: PageId) => {
+  const handleClose = () => {
+    if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
     onClose();
+  };
+
+  const handleLinkClick = (page: PageId) => {
+    handleClose();
     onNavigate(page);
   };
 
@@ -69,7 +76,9 @@ export default function CurtainNavigationDrawer({
   return (
     <div
       id="curtain-navigation-drawer"
-      aria-hidden={!isOpen}
+      aria-hidden={!isOpen ? true : undefined}
+      // @ts-expect-error React 18 inert attribute support
+      inert={!isOpen ? '' : undefined}
       className={`fixed inset-0 z-50 transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
         isOpen
           ? 'opacity-100 pointer-events-auto visible'
@@ -78,7 +87,7 @@ export default function CurtainNavigationDrawer({
     >
       {/* Dark backdrop overlay */}
       <div
-        onClick={onClose}
+        onClick={handleClose}
         className={`absolute inset-0 bg-slate-950/70 backdrop-blur-sm transition-opacity duration-500 ${
           isOpen ? 'opacity-100' : 'opacity-0'
         }`}
@@ -94,7 +103,7 @@ export default function CurtainNavigationDrawer({
         <div className="flex items-center justify-between w-full max-w-4xl mx-auto">
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             className="flex h-11 w-11 items-center justify-center rounded-full border border-white/20 text-white/80 hover:text-white hover:border-white hover:bg-white/5 transition-all duration-200 cursor-pointer"
             aria-label="Закрыть меню"
           >

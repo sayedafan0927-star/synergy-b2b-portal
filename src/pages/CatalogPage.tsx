@@ -355,7 +355,10 @@ export default function CatalogPage({
 
   return (
     <DecklePaperWrapper>
-      <CatalogPetroglyphHero title="Каталог продукции">
+      <CatalogPetroglyphHero
+        title="Каталог продукции"
+        subtitle="Широкий ассортимент ковров и дорожек оптом от ведущих производителей"
+      >
         {selectedCollections.size === 1 && (
           <div className="mb-3 inline-flex items-center gap-2 rounded-lg bg-[#003365]/10 border border-[#003365]/20 px-3 py-1.5">
             <span className="text-sm font-medium text-[#003365]">Коллекция: {[...selectedCollections][0]}</span>
