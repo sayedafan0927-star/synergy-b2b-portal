@@ -72,7 +72,21 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
   ];
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 10);
+    let ticking = false;
+    const onScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const sy = window.scrollY;
+          setScrolled(prev => {
+            if (!prev && sy > 35) return true;
+            if (prev && sy < 15) return false;
+            return prev;
+          });
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
@@ -83,7 +97,9 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
 
   return (
     <header
-      className="fixed top-0 left-0 right-0 z-50 transition-colors duration-300 bg-white"
+      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] bg-white ${
+        scrolled ? 'shadow-xs' : ''
+      }`}
       style={{ backgroundColor: '#ffffff' }}
     >
       {/* Impersonation Banner inside fixed header */}
@@ -135,22 +151,19 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
         </div>
       )}
 
-      {/* Mobile Flat Bottom Hairline (Zero protrusion, zero overlap on video or catalog on mobile) */}
-      <div className="sm:hidden absolute inset-x-0 top-full -mt-px h-px bg-slate-200" />
-
-      {/* Desktop Left/Right Bottom Border Lines & Spline Arch */}
+      {/* Desktop Left/Right Subtle Border Lines & Spline Arch */}
       <div
-        className={`hidden sm:block absolute left-0 top-full -mt-px h-px bg-slate-200 transition-all duration-300 ${
-          scrolled ? 'right-[calc(50%+140px)] lg:right-[calc(50%+180px)]' : 'right-[calc(50%+170px)] lg:right-[calc(50%+240px)]'
+        className={`hidden sm:block absolute left-0 top-full -mt-px h-px transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+          scrolled ? 'bg-slate-200/60 right-[calc(50%+140px)] lg:right-[calc(50%+180px)]' : 'bg-slate-200/30 right-[calc(50%+170px)] lg:right-[calc(50%+240px)]'
         }`}
       />
       <div
-        className={`hidden sm:block absolute right-0 top-full -mt-px h-px bg-slate-200 transition-all duration-300 ${
-          scrolled ? 'left-[calc(50%+140px)] lg:left-[calc(50%+180px)]' : 'left-[calc(50%+170px)] lg:left-[calc(50%+240px)]'
+        className={`hidden sm:block absolute right-0 top-full -mt-px h-px transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+          scrolled ? 'bg-slate-200/60 left-[calc(50%+140px)] lg:left-[calc(50%+180px)]' : 'bg-slate-200/30 left-[calc(50%+170px)] lg:left-[calc(50%+240px)]'
         }`}
       />
       <svg
-        className={`hidden sm:block absolute left-1/2 -translate-x-1/2 top-full -mt-px pointer-events-none transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] overflow-visible ${
+        className={`hidden sm:block absolute left-1/2 -translate-x-1/2 top-full -mt-px pointer-events-none transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] overflow-visible ${
           scrolled ? 'w-[280px] lg:w-[360px] h-[14px] lg:h-[18px]' : 'w-[340px] lg:w-[480px] h-[28px] lg:h-[42px]'
         }`}
         viewBox="0 0 500 44"
@@ -172,7 +185,9 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
       </svg>
 
       <div className="container-w relative" style={{ zIndex: 10 }}>
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center h-16 sm:h-18 w-full gap-2">
+        <div className={`grid grid-cols-[1fr_auto_1fr] items-center w-full gap-2 transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+          scrolled ? 'h-14 sm:h-16' : 'h-16 sm:h-18'
+        }`}>
           {/* Left Column (Desktop Navigation Links) */}
           <nav className="hidden lg:flex items-center gap-1.5 justify-self-start">
             {navLinks.map(({ label, page }) => (
@@ -208,26 +223,28 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
             </button>
           </div>
 
-          {/* Center Column: Logo in Parabolic Arch (Compact on mobile, perfectly dipped on scroll) */}
+          {/* Center Column: Logo in Parabolic Arch (Fluid Apple-grade transition) */}
           <button
             type="button"
             onClick={() => onNavigate('home')}
-            className={`justify-self-center flex flex-col items-center justify-center cursor-pointer transition-all duration-300 py-1 px-2 sm:px-4 min-w-[110px] sm:min-w-[160px] ${
-              scrolled ? 'translate-y-0 sm:translate-y-1.5' : 'translate-y-0 sm:translate-y-2'
+            className={`justify-self-center flex flex-col items-center justify-center cursor-pointer transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] py-1 px-2 sm:px-4 min-w-[110px] sm:min-w-[160px] ${
+              scrolled ? 'translate-y-0 sm:translate-y-1' : 'translate-y-0 sm:translate-y-2'
             }`}
             title="Synergiya Group — Главная"
             aria-label="Главная страница"
           >
-            {/* Upper Emblem: Smoothly disappears and collapses height when scrolled */}
+            {/* Upper Emblem: Smoothly fades, scales, and collapses height when scrolled */}
             <div
-              className={`transition-all duration-300 overflow-hidden flex items-center justify-center ${
-                scrolled ? 'h-0 opacity-0 mb-0 scale-75' : 'h-8 sm:h-10 lg:h-12 opacity-100 mb-0.5 sm:mb-1'
+              className={`transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] overflow-hidden flex items-center justify-center will-change-[max-height,opacity,transform] ${
+                scrolled 
+                  ? 'max-h-0 opacity-0 -translate-y-2 scale-75 mb-0 pointer-events-none' 
+                  : 'max-h-12 sm:max-h-14 opacity-100 translate-y-0 scale-100 mb-0.5 sm:mb-1'
               }`}
             >
               <img
                 src="/logo-emblem.png"
                 alt="Synergiya Crest"
-                className="h-full w-auto max-h-8 sm:max-h-11 object-contain"
+                className="h-8 sm:h-10 lg:h-12 w-auto object-contain transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
               />
             </div>
 
@@ -235,7 +252,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
             <img
               src="/logo-text.png"
               alt="Synergiya Group"
-              className="h-4 sm:h-5 lg:h-6 w-auto object-contain transition-all duration-300"
+              className="h-4 sm:h-5 lg:h-6 w-auto object-contain transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
             />
           </button>
 

@@ -143,20 +143,57 @@ export default function HomePage({
         </div>
       </section>
 
-      {/* ── Kilim Border (Warm Linen to Deep Midnight Sapphire) ── */}
-      <CarpetSectionDivider variant="linen-to-sapphire" />
+      {/* ── 2. Categories Section (Dark Slate Stone Texture with Seamless Organic Waves) ── */}
+      <section className="relative py-20 lg:py-28 text-white overflow-hidden bg-slate-950">
+        {/* Dark Slate Stone Texture Background */}
+        <div
+          className="absolute inset-0 bg-cover bg-center pointer-events-none"
+          style={{ backgroundImage: `url('/images/dark_slate_texture.webp')` }}
+        />
+        {/* Tactile Ambient Lighting Overlay */}
+        <div
+          className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/30 to-black/65 pointer-events-none"
+        />
 
-      {/* ── 2. Categories Section (Deep Midnight Sapphire #051325) ── */}
-      <section className="py-16 lg:py-24 bg-[#051325] text-white">
-        <div className="container-w">
+        {/* ── Top Organic Wave: Seamless transition from Advantages (#ffffff) with ZERO lines ── */}
+        <div className="absolute top-0 inset-x-0 pointer-events-none select-none z-10 -mt-[1px]">
+          <svg
+            className="w-full h-8 sm:h-12 lg:h-16 block"
+            viewBox="0 0 1440 64"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M 0,0 L 1440,0 L 1440,28 Q 1100,56 720,24 T 0,32 Z"
+              fill="#ffffff"
+            />
+          </svg>
+        </div>
+
+        {/* ── Bottom Organic Wave: Seamless transition to Featured Products (#f8fafc) with ZERO lines ── */}
+        <div className="absolute bottom-0 inset-x-0 pointer-events-none select-none z-10 -mb-[1px]">
+          <svg
+            className="w-full h-8 sm:h-12 lg:h-16 block"
+            viewBox="0 0 1440 64"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M 0,36 Q 360,12 720,44 T 1440,30 L 1440,64 L 0,64 Z"
+              fill="#f8fafc"
+            />
+          </svg>
+        </div>
+
+        <div className="container-w relative z-20">
           <div className="text-center">
-            <span className="font-mono text-xs text-amber-300/80 uppercase tracking-widest block mb-2">
+            <span className="font-mono text-xs text-amber-300/90 uppercase tracking-widest block mb-2 drop-shadow-sm">
               — Коллекции фабрик
             </span>
-            <h2 className="font-display text-2xl sm:text-3xl lg:text-4xl font-bold text-white tracking-tight">
+            <h2 className="font-display text-2xl sm:text-3xl lg:text-4xl font-bold text-white tracking-tight drop-shadow-md">
               Категории ковров
             </h2>
-            <p className="mt-3 text-sm sm:text-base text-slate-300 font-body max-w-xl mx-auto">
+            <p className="mt-3 text-sm sm:text-base text-slate-200 font-body max-w-xl mx-auto drop-shadow-sm">
               Подберите идеальное ковровое покрытие по типу и стилю для любого интерьера
             </p>
           </div>
@@ -170,14 +207,14 @@ export default function HomePage({
                   key={category.id}
                   type="button"
                   onClick={() => onNavigate('catalog', category.id)}
-                  className={`group flex flex-col items-center rounded-2xl cursor-pointer transition-all duration-300 text-center ${
+                  className={`group flex flex-col items-center rounded-2xl cursor-pointer transition-all duration-300 text-center backdrop-blur-md ${
                     isFirst
-                      ? 'col-span-2 md:col-span-1 bg-white/[0.03] border border-amber-500/30 hover:border-amber-400/60 p-3 md:p-4 shadow-xl'
-                      : 'col-span-1 bg-white/[0.02] border border-white/10 hover:border-amber-400/50 p-2.5 md:p-4 shadow-md'
+                      ? 'col-span-2 md:col-span-1 bg-black/40 border border-amber-500/35 hover:border-amber-400/80 p-3 md:p-4 shadow-2xl hover:shadow-amber-500/10'
+                      : 'col-span-1 bg-black/30 border border-white/15 hover:border-amber-400/60 p-2.5 md:p-4 shadow-xl hover:shadow-amber-500/10'
                   }`}
                 >
                   {/* Video Frame Box - 100% full square frame visible, zero text overlay */}
-                  <div className={`aspect-square rounded-xl overflow-hidden bg-black/40 border border-white/5 ${
+                  <div className={`aspect-square rounded-xl overflow-hidden bg-black/50 border border-white/10 ${
                     isFirst ? 'w-[180px] sm:w-[220px] md:w-full' : 'w-full'
                   }`}>
                     {category.video ? (
@@ -204,13 +241,13 @@ export default function HomePage({
 
                   {/* Centered Text strictly UNDER the animation */}
                   <div className="mt-2.5 md:mt-3 flex flex-col items-center">
-                    <span className="font-mono text-[9px] md:text-[10px] text-amber-300/80 uppercase tracking-widest block mb-0.5">
+                    <span className="font-mono text-[9px] md:text-[10px] text-amber-300/90 uppercase tracking-widest block mb-0.5">
                       {isFirst ? 'Прямые поставки • Хит продаж' : 'Прямые поставки'}
                     </span>
                     <h3 className="font-display text-base md:text-xl font-bold text-white group-hover:text-amber-300 transition-colors">
                       {isFirst ? 'Ковры Турции' : category.name}
                     </h3>
-                    <span className="inline-block mt-1 md:mt-2 font-mono text-[9px] md:text-[11px] font-semibold text-amber-300 bg-amber-500/15 border border-amber-500/30 px-2.5 py-0.5 md:py-1 rounded-full">
+                    <span className="inline-block mt-1 md:mt-2 font-mono text-[9px] md:text-[11px] font-semibold text-amber-300 bg-amber-500/20 border border-amber-500/40 px-2.5 py-0.5 md:py-1 rounded-full shadow-xs">
                       {actualCount > 0 ? (isFirst ? `${actualCount} товаров в наличии` : `${actualCount} товаров`) : 'В наличии'}
                     </span>
                   </div>
@@ -220,9 +257,6 @@ export default function HomePage({
           </div>
         </div>
       </section>
-
-      {/* ── Kilim Border (Deep Midnight Sapphire to Warm Linen Canvas) ── */}
-      <CarpetSectionDivider variant="sapphire-to-light" />
 
       {/* ── 3. Featured Products Section (Clean Slate-50) ── */}
       <section className="py-16 lg:py-24 bg-slate-50">
@@ -268,15 +302,10 @@ export default function HomePage({
         </div>
       </section>
 
-      {/* ── Carpet Weave Line before CTA ── */}
-      <CarpetSectionDivider variant="light-to-accent" />
-
       {/* ── 4. CTA Banner Section (Royal Sapphire #003365 + Gold) ── */}
       <section className="py-16 lg:py-24 bg-white">
         <div className="container-w">
           <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#003365] via-[#072142] to-[#041224] px-6 py-12 sm:px-12 sm:py-16 lg:px-16 lg:py-20 text-center border border-amber-400/30 shadow-2xl">
-            {/* Top golden hairline */}
-            <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-amber-400/60 to-transparent" />
 
             {/* Decorative shapes */}
             <div className="absolute top-0 right-0 -translate-y-1/3 translate-x-1/3 h-64 w-64 rounded-full bg-amber-400/5 blur-xl" />

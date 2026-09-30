@@ -20,13 +20,13 @@ export default function CarpetSectionDivider({
     const bottomColor = '#ffffff';
     return (
       <div
-        className={`relative w-full overflow-hidden select-none pointer-events-none -mt-px ${className}`}
+        className={`relative w-full overflow-hidden select-none pointer-events-none -mt-px -mb-[1px] ${className}`}
         aria-hidden="true"
       >
         <div className="relative w-full bg-slate-950">
-          {/* Smooth organic curve transition */}
+          {/* Smooth organic curve transition with zero horizontal line */}
           <svg
-            className="w-full h-4 sm:h-6 block"
+            className="w-full h-5 sm:h-7 block"
             style={{ color: bottomColor }}
             viewBox="0 0 1440 24"
             preserveAspectRatio="none"
