@@ -1286,7 +1286,26 @@ test_assert("next_retry_at.is.null" in sync_s11, "api/outbox/sync.ts supports ne
 test_assert("reservations_released: isDlq ? true : undefined" in sync_s11 and "reservations_released: true" in sync_s11, "api/outbox/sync.ts marks reservations_released upon DLQ transitions")
 
 # ------------------------------------------------------------------------------
-# 36. Summary Report
+# 36. Verifying End-to-End Process Flows & Architecture Diagrams Standard...
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{YELLOW}36. Verifying End-to-End Process Flows & Architecture Diagrams Standard...{RESET}")
+
+with open(os.path.join(ROOT_DIR, "docs", "standards", "END_TO_END_PROCESS_FLOWS.md"), "r", encoding="utf-8") as fp:
+    e2e_content = fp.read()
+test_assert("flowchart TD" in e2e_content and "sequenceDiagram" in e2e_content, "END_TO_END_PROCESS_FLOWS.md contains comprehensive block schemas")
+test_assert("Сценарий 1" in e2e_content and "Сценарий 9" in e2e_content, "END_TO_END_PROCESS_FLOWS.md covers all 9 end-to-end business scenarios")
+test_assert("Матрица UI/UX Состояний и Точек Отказа" in e2e_content, "END_TO_END_PROCESS_FLOWS.md includes comprehensive UI/UX failure matrix")
+
+with open(os.path.join(ROOT_DIR, "docs", "standards", "README.md"), "r", encoding="utf-8") as fp:
+    readme_s12 = fp.read()
+test_assert("END_TO_END_PROCESS_FLOWS.md" in readme_s12, "docs/standards/README.md links END_TO_END_PROCESS_FLOWS.md")
+
+with open(os.path.join(ROOT_DIR, "AGENTS.md"), "r", encoding="utf-8") as fp:
+    agents_s12 = fp.read()
+test_assert("END_TO_END_PROCESS_FLOWS.md" in agents_s12, "AGENTS.md links END_TO_END_PROCESS_FLOWS.md")
+
+# ------------------------------------------------------------------------------
+# 37. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests
