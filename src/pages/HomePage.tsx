@@ -52,64 +52,60 @@ export default function HomePage({ onNavigate }: { onNavigate: (page: PageId, pr
 
   return (
     <div className="pb-16 lg:pb-0">
-      {/* ── Hero Section ── */}
-      <section className="relative min-h-[600px] lg:min-h-[720px] flex items-center pt-16 overflow-hidden">
-        {/* Full-bleed animated hero video banner background */}
+      {/* ── Hero Video Banner (Pure, clean, unobscured) ── */}
+      <section className="relative w-full bg-slate-950 pt-16">
         <HeroBannerMedia />
+      </section>
 
-        {/* Decorative subtle grid pattern overlay */}
-        <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{
-          backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 60px, rgba(255,255,255,0.3) 60px, rgba(255,255,255,0.3) 61px), repeating-linear-gradient(90deg, transparent, transparent 60px, rgba(255,255,255,0.3) 60px, rgba(255,255,255,0.3) 61px)',
-        }} />
+      {/* ── Offer & Quick Actions Bar ── */}
+      <section className="relative bg-slate-900 border-b border-slate-800 text-white py-12 lg:py-16">
+        <div className="container-w">
+          <div className="grid lg:grid-cols-12 gap-8 items-center justify-between">
+            <div className="lg:col-span-7">
+              <div className="inline-flex items-center gap-3 rounded-full bg-white/10 backdrop-blur-sm border border-white/10 pl-3 pr-5 py-2 mb-6">
+                <img
+                  src="/Вектор_Синэнергия.png"
+                  alt=""
+                  className="h-6 w-auto brightness-0 invert"
+                />
+                <span className="text-xs font-medium text-white/80 tracking-wide uppercase">Оптовый поставщик</span>
+              </div>
 
-        <div className="relative container-w py-16 lg:py-24">
-          <div className="max-w-2xl">
-            {/* Logo badge */}
-            <div className="inline-flex items-center gap-3 rounded-full bg-white/10 backdrop-blur-sm border border-white/10 pl-3 pr-5 py-2 mb-8">
-              <img
-                src="/Вектор_Синэнергия.png"
-                alt=""
-                className="h-7 w-auto brightness-0 invert"
-              />
-              <span className="text-xs font-medium text-white/80 tracking-wide uppercase">Оптовый поставщик</span>
+              <h1 className="font-display text-2xl sm:text-3xl lg:text-4xl font-bold text-white leading-tight">
+                Оптовые поставки <span className="text-brand-400">ковровых покрытий</span>
+              </h1>
+              <p className="mt-3 text-sm sm:text-base text-slate-300 font-body leading-relaxed max-w-xl">
+                Широкий ассортимент ковров от ведущих производителей Турции, Бельгии и Ирана.
+                Всё в наличии на складах — отгрузка в течение 24 часов.
+              </p>
+
+              <div className="mt-6 flex flex-wrap gap-3">
+                <button
+                  onClick={() => onNavigate('catalog')}
+                  className="btn-primary inline-flex items-center justify-center gap-2"
+                >
+                  Перейти в каталог
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => onNavigate('contacts')}
+                  className="btn-secondary border-white/30 bg-white/10 text-white backdrop-blur-sm hover:bg-white/20 inline-flex items-center justify-center gap-2"
+                >
+                  Связаться с нами
+                </button>
+              </div>
             </div>
 
-            <h1 className="font-display text-3xl sm:text-4xl lg:text-5xl xl:text-6xl font-bold text-white leading-tight">
-              Оптовые поставки
-              <span className="block text-brand-400">ковровых покрытий</span>
-            </h1>
-            <p className="mt-4 sm:mt-6 text-base sm:text-lg text-slate-300 font-body leading-relaxed max-w-xl">
-              Широкий ассортимент ковров от ведущих производителей Турции, Бельгии и Ирана.
-              Всё в наличии на складах — отгрузка в течение 24 часов.
-            </p>
-
-            <div className="mt-8 flex flex-col sm:flex-row gap-3 sm:gap-4">
-              <button
-                onClick={() => onNavigate('catalog')}
-                className="btn-primary inline-flex items-center justify-center gap-2"
-              >
-                Перейти в каталог
-                <ArrowRight className="h-4 w-4" />
-              </button>
-              <button
-                onClick={() => onNavigate('contacts')}
-                className="btn-secondary border-white/30 bg-white/10 text-white backdrop-blur-sm hover:bg-white/20 inline-flex items-center justify-center gap-2"
-              >
-                Связаться с нами
-              </button>
-            </div>
-
-            {/* Stats row */}
-            <div className="mt-12 lg:mt-16 grid grid-cols-3 gap-4 sm:gap-8 max-w-lg">
+            <div className="lg:col-span-5 grid grid-cols-3 gap-4 lg:gap-6 bg-slate-950/40 p-6 rounded-2xl border border-white/10">
               {stats.map((stat) => (
                 <div key={stat.label} className="text-center sm:text-left">
                   <div className="flex items-center justify-center sm:justify-start gap-2 mb-1">
                     <stat.icon className="h-4 w-4 text-brand-400 hidden sm:block" />
-                    <span className="font-display text-2xl sm:text-3xl font-bold text-white">
+                    <span className="font-display text-xl sm:text-2xl font-bold text-white">
                       {stat.value}
                     </span>
                   </div>
-                  <p className="text-xs sm:text-sm text-slate-400 font-body">{stat.label}</p>
+                  <p className="text-xs text-slate-400 font-body">{stat.label}</p>
                 </div>
               ))}
             </div>
