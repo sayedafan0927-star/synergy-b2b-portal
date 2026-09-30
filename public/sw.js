@@ -1,4 +1,4 @@
-const CACHE_NAME = 'synergy-b2b-v17';
+const CACHE_NAME = 'synergy-b2b-v18';
 const STATIC_ASSETS = [
   '/favicon.svg',
   '/manifest.json',
@@ -56,6 +56,17 @@ self.addEventListener('fetch', (event) => {
 
   // Only intercept same-origin requests to prevent interference with cross-origin APIs or extensions
   if (url.origin !== self.location.origin) {
+    return;
+  }
+
+  // CRITICAL: Bypass video/audio media and Range requests from Service Worker interception!
+  // Browsers require native 206 Partial Content range streaming for hardware video decoding.
+  if (
+    request.headers.has('range') ||
+    request.destination === 'video' ||
+    request.destination === 'audio' ||
+    /\.(mp4|webm|mov|ogg)$/i.test(url.pathname)
+  ) {
     return;
   }
 

@@ -92,11 +92,30 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
           preload="auto"
           poster={POSTER}
           onEnded={handleEnded}
-          className="w-full h-full object-cover object-center sm:object-[center_right]"
+          style={{ willChange: 'transform' }}
+          className="w-full h-full object-cover object-center sm:object-[center_right] transform-gpu"
         >
           <source src={VIDEO_MP4} type="video/mp4" />
           <source src={VIDEO_WEBM} type="video/webm" />
         </video>
+
+        {/* 
+          Central Carpet Brand Emblem (Smoothly illuminates in the carpet medallion at video end):
+          Gives the luxurious royal seal feel in the center of the oriental carpet pattern.
+        */}
+        <div 
+          className={`absolute inset-0 flex items-center justify-center sm:justify-end sm:pr-[18%] pointer-events-none transition-all duration-700 ease-out z-10 ${
+            isEnded ? 'opacity-100 scale-100' : 'opacity-0 scale-95'
+          }`}
+        >
+          <div className="flex flex-col items-center justify-center p-3 sm:p-4 rounded-2xl sm:rounded-3xl bg-black/35 backdrop-blur-md border border-white/15 shadow-2xl shadow-black/80">
+            <img 
+              src="/Вектор_Синэнергия.png" 
+              alt="Synergy Group" 
+              className="h-10 sm:h-16 w-auto brightness-0 invert drop-shadow-[0_2px_12px_rgba(234,179,8,0.35)]" 
+            />
+          </div>
+        </div>
 
         {/* 
           Harmonious End-State Interactive Overlay (Desktop sm+):
@@ -104,7 +123,7 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
           Preserves 100% of the oriental carpet visual while providing crystal-clear readability.
         */}
         <div 
-          className={`hidden sm:flex absolute inset-0 items-center transition-all duration-700 ease-out ${
+          className={`hidden sm:flex absolute inset-0 items-center transition-all duration-700 ease-out z-20 ${
             isEnded ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
           }`}
         >
@@ -116,9 +135,17 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
 
           <div className="relative container-w py-6 sm:py-10">
             <div className="max-w-lg p-6 sm:p-8 rounded-3xl bg-slate-950/25 backdrop-blur-md border border-white/10 shadow-2xl transition-all duration-500">
-              <div className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 mb-4 text-xs font-medium text-brand-300 border border-white/15 backdrop-blur-sm">
-                <Sparkles className="w-3.5 h-3.5 text-brand-400" />
-                Оптовый поставщик • В наличии на складах
+              <div className="flex items-center gap-3 mb-4">
+                <img 
+                  src="/Вектор_Синэнергия.png" 
+                  alt="Synergy Group" 
+                  className="h-8 w-auto brightness-0 invert opacity-95 drop-shadow-[0_2px_6px_rgba(0,0,0,0.8)]" 
+                />
+                <div className="h-5 w-px bg-white/20" />
+                <div className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-medium text-brand-300 border border-white/15 backdrop-blur-sm">
+                  <Sparkles className="w-3.5 h-3.5 text-brand-400" />
+                  В наличии на складах
+                </div>
               </div>
 
               <h1 className="font-display text-2xl sm:text-4xl font-bold text-white leading-tight drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)]">
@@ -152,29 +179,8 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
         </div>
 
         {/* 
-          Mobile Floating Glass CTA (Variant A):
-          Ultra-clean, compact floating pill at the bottom edge of the video.
-          Zero clutter, 100% video/carpet visibility, seamless luxury feel.
-        */}
-        <div 
-          className={`sm:hidden absolute inset-x-0 bottom-3 px-4 flex items-center justify-center transition-all duration-500 ease-out z-20 ${
-            isEnded ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-2 pointer-events-none'
-          }`}
-        >
-          <button
-            type="button"
-            onClick={() => onNavigate?.('catalog')}
-            className="w-full max-w-xs inline-flex items-center justify-center gap-2 rounded-full bg-slate-950/75 hover:bg-slate-900/90 active:scale-95 text-white border border-white/20 backdrop-blur-md px-5 py-2.5 text-xs font-semibold shadow-xl shadow-black/60 transition-all duration-200"
-          >
-            <span>Перейти в каталог ковров</span>
-            <ArrowRight className="w-3.5 h-3.5 text-brand-400" />
-          </button>
-        </div>
-
-        {/* 
           Minimalist, non-intrusive replay button:
-          Positioned top-right on mobile so it never collides with bottom pill,
-          bottom-right on desktop.
+          Positioned top-right on mobile, bottom-right on desktop.
         */}
         <button
           type="button"
@@ -183,6 +189,18 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
           title="Повторить видео с начала"
         >
           <RotateCcw className="w-3.5 h-3.5 transition-transform duration-300 group-hover/btn:-rotate-90" />
+        </button>
+      </div>
+
+      {/* ── Mobile Permanent Action Bar (Clean, unclipped, directly below the 16:9 video) ── */}
+      <div className="block sm:hidden bg-slate-950 px-4 py-3 border-b border-slate-900/80">
+        <button
+          type="button"
+          onClick={() => onNavigate?.('catalog')}
+          className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 hover:bg-brand-500 active:scale-[0.98] text-white py-2.5 px-4 text-xs font-semibold shadow-md shadow-brand-500/20 transition-all duration-200"
+        >
+          <span>Перейти в каталог ковров</span>
+          <ArrowRight className="w-3.5 h-3.5" />
         </button>
       </div>
     </div>
