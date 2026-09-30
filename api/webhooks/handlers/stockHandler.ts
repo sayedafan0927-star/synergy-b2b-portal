@@ -22,7 +22,9 @@ export async function handleStockChanged(
   console.log(`[Webhook ERP: stock_changed] Reason: ${payload.reason || 'manual'}, Updated items count: ${items.length}`);
 
   // Материализация в БД (inventory_balances) и инкрементальное обновление кэша каталога с версионированием
-  const versionTimestamp = payload.version_timestamp || (payload.timestamp ? new Date(payload.timestamp).getTime() : Date.now());
+  const isForceSync = Boolean(payload.force_resync || payload.is_full_sync || payload.reason === 'inventory_audit');
+  let rawVersion = payload.version_timestamp || (payload.timestamp ? new Date(payload.timestamp).getTime() : Date.now());
+  const versionTimestamp = isForceSync ? Math.max(rawVersion, Date.now()) : rawVersion;
   let dbUpdated = 0;
   let cachePatched = false;
   try {

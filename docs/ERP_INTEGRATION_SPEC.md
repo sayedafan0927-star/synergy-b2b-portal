@@ -376,3 +376,76 @@ echo "<a href='{$ssoUrl}' target='_blank' class='btn'>Перейти в B2B-по
      VALUES (:idempotency_key, :order_id, :doc_number, NOW());
      ```
 
+---
+
+## 9. Мультискладские заказы и формат `split_orders`
+
+Если клиент включил в заказ позиции с разных складов (например, Центральный хаб Астана + Региональный шоурум Алматы):
+1. В теле запроса `action=create_order` портал передает:
+   ```json
+   {
+     "is_multi_warehouse": true,
+     "split_orders": [
+       { "warehouse_id": 81, "warehouse": "Основной Склад Астана", "amount": 1500.00, "items_count": 3 },
+       { "warehouse_id": 2, "warehouse": "Шоурум Алматы", "amount": 800.00, "items_count": 2 }
+     ]
+   }
+   ```
+2. ERP в ответе может вернуть как единый номер документа, так и детализацию по складам:
+   ```json
+   {
+     "success": true,
+     "order": { "doc_number": "1C-77889" },
+     "split_orders": [
+       { "warehouse_id": 81, "doc_number": "1C-77889-AST" },
+       { "warehouse_id": 2, "doc_number": "1C-77889-ALM" }
+     ]
+   }
+   ```
+   Портал автоматически присвоит номера дочерним подзаказам в базе данных.
+
+---
+
+## 10. Стандарты кодов ошибок ERP (Fatal vs Retryable)
+
+Для исключения перегрузки серверов (Poison Pill):
+* **Транзиентные ошибки (Retryable):** `500`, `502`, `503`, `504`, таймауты сети $\rightarrow$ портал повторяет отправку с экспоненциальным бэкоффом (до 5 попыток).
+* **Фатальные бизнес-ошибки (Non-Retryable / Fatal):** `400 Bad Request`, `404 Not Found`, `422 Unprocessable Entity`, коды `INVALID_PAYLOAD`, `PRODUCT_DELETED`, `CONTRACT_TERMINATED` $\rightarrow$ портал **немедленно прекращает повторы**, переводит заказ в Dead Letter Queue (`failed_dlq`) и отправляет алерт дежурному инженеру.
+
+---
+
+## 11. Протокол ручного отката статуса заказа (`allow_rollback`)
+
+Портал использует монотонную машину состояний заказа (`pending` $\rightarrow$ `confirmed` $\rightarrow$ `processing` $\rightarrow$ `shipped` $\rightarrow$ `delivered`).
+Если в 1С кладовщик по ошибке перевел заказ в статус «Отгружен», а затем расформировал отгрузку:
+* Для отката статуса назад в вебхуке `order_status_changed` **обязательно передавать флаг `allow_rollback: true` и причину:**
+  ```json
+  {
+    "event": "order_status_changed",
+    "order_doc_number": "1C-77889",
+    "new_status": "processing",
+    "allow_rollback": true,
+    "reason": "Расформирование отгрузки из-за повреждения упаковки"
+  }
+  ```
+* Без флага `allow_rollback: true` портал заблокирует откат как нарушение монотонности FSM.
+
+---
+
+## 12. Версионирование остатков и принудительная инвентаризация (`force_resync`)
+
+Чтобы избежать игнорирования свежих остатков из-за рассинхронизации системных часов NTP:
+* При регламентной полной выгрузке или инвентаризации передавайте флаг `force_resync: true` (или `is_full_sync: true`):
+  ```json
+  {
+    "event": "stock_changed",
+    "force_resync": true,
+    "reason": "inventory_audit",
+    "items": [
+      { "sku": "BER-160-230-01", "free_stock": 14, "reserved_stock": 2, "total_stock": 16 }
+    ]
+  }
+  ```
+  Это гарантирует, что портал обновит остатки независимо от разницы во времени между серверами.
+
+

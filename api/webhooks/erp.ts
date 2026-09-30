@@ -84,7 +84,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
-  // 2. Проверка HMAC SHA256 подписи (если передана ERP)
+  // 2. Проверка HMAC SHA256 подписи
+  const isProd = process.env.NODE_ENV === 'production' && process.env.ENFORCE_WEBHOOK_HMAC !== 'false';
   const receivedSig = (req.headers['x-webhook-signature'] || req.headers['X-Webhook-Signature']) as string | undefined;
   const rawBody = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
 
@@ -98,8 +99,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       (expectedSigKey && receivedSig.toLowerCase() === expectedSigKey.toLowerCase());
 
     if (!sigMatched) {
+      if (isProd) {
+        return res.status(401).json({
+          success: false,
+          error: 'Unauthorized: Invalid X-Webhook-Signature HMAC signature.',
+          code: 'INVALID_HMAC_SIGNATURE',
+        });
+      }
       console.warn(`[Webhook ERP] HMAC signature mismatch (raw/serialized payload format). Authenticated securely via verified X-Portal-Key.`);
     }
+  } else if (isProd && SECRET_KEY) {
+    return res.status(401).json({
+      success: false,
+      error: 'Unauthorized: Missing required X-Webhook-Signature header in production.',
+      code: 'MISSING_HMAC_SIGNATURE',
+    });
   }
 
   const eventId = (req.headers['x-webhook-event-id'] || req.headers['X-Webhook-Event-ID']) as string | undefined;

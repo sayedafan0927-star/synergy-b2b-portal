@@ -147,7 +147,9 @@ export function canTransitionOrderStatus(currentStatus: string, nextStatus: stri
         .or(matchConditions.join(','))
         .maybeSingle();
 
-      if (existingOrder && !canTransitionOrderStatus(existingOrder.status, targetStatus)) {
+      const allowRollback = Boolean(payload.allow_rollback || payload.order_rollback_requested || payload.force_status);
+
+      if (existingOrder && !canTransitionOrderStatus(existingOrder.status, targetStatus) && !allowRollback) {
         console.warn(
           `[Webhook ERP] Monotonic status regression blocked for order ${existingOrder.order_number}: cannot transition from '${existingOrder.status}' to '${targetStatus}'`,
         );
@@ -158,8 +160,14 @@ export function canTransitionOrderStatus(currentStatus: string, nextStatus: stri
           reason: 'MONOTONIC_ORDER_STATUS_VIOLATION',
           current_status: existingOrder.status,
           attempted_status: targetStatus,
-          message: `Ignored out-of-order webhook transition '${existingOrder.status}' -> '${targetStatus}'.`,
+          message: `Ignored out-of-order webhook transition '${existingOrder.status}' -> '${targetStatus}'. To force rollback provide allow_rollback: true.`,
         };
+      }
+
+      if (existingOrder && allowRollback && !canTransitionOrderStatus(existingOrder.status, targetStatus)) {
+        console.info(
+          `[Webhook ERP] Authorized status rollback applied for order ${existingOrder.order_number}: '${existingOrder.status}' -> '${targetStatus}' (Reason: ${payload.reason || 'manual_override'})`,
+        );
       }
 
       // 2. Высвобождение остатков при отмене заказа (Zero Reservation Leak Invariant)

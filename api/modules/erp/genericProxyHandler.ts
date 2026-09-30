@@ -88,15 +88,10 @@ export async function handleGenericErpProxy(
     if (!circuit.permitted) {
       console.warn(`[CircuitBreaker] Request to ERP suppressed for action '${action}'. Circuit state: ${circuit.state}`);
       if (action === 'create_order') {
-        res.status(200).json({
-          success: true,
-          order: {
-            order_id: 9999,
-            doc_number: `ORD-BUF-${Date.now()}`,
-            status: 'pending',
-            is_buffered: true,
-          },
-          message: 'Заказ успешно зафиксирован в автономном буфере (Circuit Breaker Active).',
+        res.status(400).json({
+          success: false,
+          code: 'INVALID_ROUTING',
+          error: 'Оформление заказа должно направляться исключительно в транзакционный обработчик заказов.',
         });
         return;
       }

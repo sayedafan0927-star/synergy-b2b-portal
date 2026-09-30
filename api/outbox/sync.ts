@@ -9,6 +9,7 @@ import {
   dispatchDlqEmergencyAlert,
   buildOutboxErpPayload,
   computeBackoffNextRetry,
+  isFatalBusinessError,
 } from './outboxUtils';
 
 // Re-export for backwards compatibility and test introspection
@@ -174,6 +175,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             })
             .eq('id', order.id);
 
+          // Каскадная нумерация и подтверждение дочерних подзаказов мультисклада (parent_order_id)
+          try {
+            const splitListFromErp = Array.isArray(erpData?.split_orders) ? erpData.split_orders : [];
+            const { data: childOrders } = await supabase
+              .from('orders')
+              .select('id, warehouse')
+              .eq('parent_order_id', order.id);
+
+            if (childOrders && childOrders.length > 0) {
+              for (const child of childOrders) {
+                const matchingSplit = splitListFromErp.find((s: any) =>
+                  s.warehouse === child.warehouse || String(s.warehouse_id) === String(child.warehouse)
+                );
+                const childDocNumber = matchingSplit?.doc_number || `${docNumber}-${child.id.slice(0, 6).toUpperCase()}`;
+                await supabase
+                  .from('orders')
+                  .update({
+                    status: 'confirmed',
+                    order_number: childDocNumber,
+                    last_error: null,
+                    notes: `${order.notes || ''} [Синхронизировано с ERP: ${new Date().toISOString()}]`.trim(),
+                    updated_at: new Date().toISOString(),
+                  })
+                  .eq('id', child.id);
+              }
+            }
+          } catch (splitSyncErr) {
+            console.warn('[Outbox Sync] Multi-warehouse suborder update notice:', splitSyncErr);
+          }
+
           await recordAuditLog({
             eventType: 'outbox_sync_success',
             direction: 'outbound',
@@ -203,15 +234,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return { order_id: order.id, order_number: order.order_number, success: true };
         } else {
           const errText = await erpRes.text().catch(() => '');
-          const nextRetries = currentRetries + 1;
-          const { nextRetryAt, isDlq } = computeBackoffNextRetry(nextRetries);
+          const isFatal = isFatalBusinessError(erpRes.status, errText);
+          const nextRetries = isFatal ? 5 : (currentRetries + 1);
+          const { nextRetryAt, isDlq } = isFatal
+            ? { nextRetryAt: new Date().toISOString(), isDlq: true }
+            : computeBackoffNextRetry(nextRetries);
 
           await supabase
             .from('orders')
             .update({
               status: isDlq ? 'failed_dlq' : 'pending',
               retry_count: nextRetries,
-              last_error: `ERP ${erpRes.status}: ${errText.slice(0, 200)}`,
+              last_error: isFatal
+                ? `[Fatal Business Error] ERP ${erpRes.status}: ${errText.slice(0, 200)}`
+                : `ERP ${erpRes.status}: ${errText.slice(0, 200)}`,
               next_retry_at: nextRetryAt,
               updated_at: new Date().toISOString(),
             })
@@ -230,6 +266,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               order_number: order.order_number,
               retry_count: nextRetries,
               is_dlq: isDlq,
+              is_fatal: isFatal,
               next_retry_at: nextRetryAt,
             },
             errorMessage: errText.slice(0, 250),

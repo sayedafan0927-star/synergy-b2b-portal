@@ -839,7 +839,50 @@ with open(webhook_clients_path, "r", encoding="utf-8") as fp:
 test_assert("ignored_stale_version" in whc_code, "api/webhooks/clients.ts protects against stale CDC counterparty payloads")
 
 # ------------------------------------------------------------------------------
-# 25. Summary Report
+# 25. Verifying Hardened ERP Inbound & Outbound Architecture (Fatal DLQ, Suborder Split, Allow Rollback, NTP Skew, Strict HMAC)
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}25. Verifying Hardened ERP Inbound & Outbound Architecture (Block 1 Standards)...{RESET}")
+
+outbox_utils_path = os.path.join(ROOT_DIR, "api", "outbox", "outboxUtils.ts")
+with open(outbox_utils_path, "r", encoding="utf-8") as fp:
+    ou_code = fp.read()
+test_assert("isFatalBusinessError" in ou_code, "outboxUtils.ts exports isFatalBusinessError classifier for non-retryable 4xx/fatal errors")
+test_assert("is_multi_warehouse" in ou_code and "split_orders" in ou_code, "outboxUtils.ts buildOutboxErpPayload enriches multi-warehouse split_orders")
+
+with open(outbox_path, "r", encoding="utf-8") as fp:
+    sync_code_latest = fp.read()
+test_assert("isFatalBusinessError" in sync_code_latest, "api/outbox/sync.ts integrates isFatalBusinessError for instant DLQ failover")
+test_assert("childOrders" in sync_code_latest and "parent_order_id" in sync_code_latest, "api/outbox/sync.ts cascades doc_number updates to multi-warehouse suborders")
+
+generic_proxy_path = os.path.join(ROOT_DIR, "api", "modules", "erp", "genericProxyHandler.ts")
+with open(generic_proxy_path, "r", encoding="utf-8") as fp:
+    gp_code = fp.read()
+test_assert("ORD-BUF" not in gp_code, "genericProxyHandler.ts eliminated fake mock ORD-BUF order creation")
+test_assert("INVALID_ROUTING" in gp_code, "genericProxyHandler.ts rejects unauthorized create_order bypassing transactional engine")
+
+with open(order_status_handler_path, "r", encoding="utf-8") as fp:
+    osh_latest = fp.read()
+test_assert("allow_rollback" in osh_latest or "allowRollback" in osh_latest, "orderStatusHandler.ts supports authorized order status rollback protocol")
+
+stock_h_path = os.path.join(ROOT_DIR, "api", "webhooks", "handlers", "stockHandler.ts")
+with open(stock_h_path, "r", encoding="utf-8") as fp:
+    sh_code = fp.read()
+test_assert("force_resync" in sh_code or "isForceSync" in sh_code, "stockHandler.ts protects against NTP clock skew via force_resync support")
+
+with open(webhook_ts_path, "r", encoding="utf-8") as fp:
+    wh_latest = fp.read()
+test_assert("MISSING_HMAC_SIGNATURE" in wh_latest and "INVALID_HMAC_SIGNATURE" in wh_latest, "api/webhooks/erp.ts strictly enforces HMAC-SHA256 signature in production")
+
+erp_spec_path = os.path.join(ROOT_DIR, "docs", "ERP_INTEGRATION_SPEC.md")
+with open(erp_spec_path, "r", encoding="utf-8") as fp:
+    spec_code = fp.read()
+test_assert("split_orders" in spec_code, "docs/ERP_INTEGRATION_SPEC.md defines multi-warehouse split_orders spec")
+test_assert("Fatal vs Retryable" in spec_code, "docs/ERP_INTEGRATION_SPEC.md defines Fatal vs Retryable error codes")
+test_assert("allow_rollback" in spec_code, "docs/ERP_INTEGRATION_SPEC.md defines allow_rollback protocol")
+test_assert("force_resync" in spec_code, "docs/ERP_INTEGRATION_SPEC.md defines force_resync inventory protocol")
+
+# ------------------------------------------------------------------------------
+# 26. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

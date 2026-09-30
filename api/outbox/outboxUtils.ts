@@ -95,11 +95,37 @@ export function buildOutboxErpPayload(order: any, dbItems: any[] | null) {
 
   const primaryWarehouseId = (itemsList[0] as any)?.warehouse_id || 1;
 
+  // Определение мультискладского состава позиций
+  const warehouseMap = new Map<number | string, { warehouse: string; amount: number; items_count: number }>();
+  for (const it of itemsList) {
+    const whKey = (it as any).warehouse_id || 1;
+    const existing = warehouseMap.get(whKey) || {
+      warehouse: String((it as any).warehouse || 'Склад'),
+      amount: 0,
+      items_count: 0,
+    };
+    existing.amount += Number(it.price || 0) * Number(it.quantity || 1);
+    existing.items_count += Number(it.quantity || 1);
+    warehouseMap.set(whKey, existing);
+  }
+
+  const isMultiWarehouse = warehouseMap.size > 1;
+  const splitOrdersSummary = isMultiWarehouse
+    ? Array.from(warehouseMap.entries()).map(([whId, info]) => ({
+        warehouse_id: typeof whId === 'number' ? whId : 1,
+        warehouse: info.warehouse,
+        amount: Math.round(info.amount * 100) / 100,
+        items_count: info.items_count,
+      }))
+    : [];
+
   return {
     idempotency_key: order.idempotency_key || `outbox-${order.id}`,
     partner_id: order.partner_id || 'guest',
     client_name: order.client_name || 'Оптовый клиент',
     warehouse_id: primaryWarehouseId,
+    is_multi_warehouse: isMultiWarehouse,
+    split_orders: splitOrdersSummary.length > 0 ? splitOrdersSummary : undefined,
     buyer: {
       name: order.client_name || 'Оптовый клиент',
       phone: order.client_phone || '',
@@ -112,6 +138,27 @@ export function buildOutboxErpPayload(order: any, dbItems: any[] | null) {
     total_amount: order.total_amount,
     items: itemsList,
   };
+}
+
+/**
+ * Проверка, является ли ошибка 1С фатальной бизнес-ошибкой (Poison Pill).
+ * Для фатальных ошибок (400, 404, 422, некорректный артикул, заблокированный клиент)
+ * повторные ретраи бессмысленны — заказ должен сразу перемещаться в DLQ.
+ */
+export function isFatalBusinessError(status: number, errText?: string): boolean {
+  if (status === 400 || status === 404 || status === 422) {
+    return true;
+  }
+  const txt = String(errText || '').toUpperCase();
+  const fatalKeywords = [
+    'INVALID_PAYLOAD',
+    'PRODUCT_DELETED',
+    'CONTRACT_TERMINATED',
+    'CLIENT_BLOCKED',
+    'UNKNOWN_COUNTERPARTY',
+    'NON_RETRYABLE',
+  ];
+  return fatalKeywords.some(keyword => txt.includes(keyword));
 }
 
 /**
