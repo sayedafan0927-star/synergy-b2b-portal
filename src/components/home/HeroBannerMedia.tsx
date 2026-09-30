@@ -87,8 +87,7 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
         Video Viewport:
         - Mobile (< sm): aspect-[16/9] renders 100% of the video frame with zero clipping (full leopard + carpet).
         - Desktop (sm+): full-height hero banner sm:h-[72vh] lg:h-[82vh] with object-cover.
-        - Pure Cinema (Option B / Thompson's Tea aesthetic): No watermarks or badges cluttering the video.
-          The header already provides clear brand identity.
+        - Pure Cinema: Video plays completely clean without obstructing watermarks.
       */}
       <div className="relative w-full aspect-[16/9] sm:aspect-auto sm:h-[72vh] lg:h-[82vh] sm:min-h-[480px] max-h-[860px] overflow-hidden bg-slate-950">
         <video
@@ -109,41 +108,49 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
         </video>
 
         {/* 
-          Harmonious End-State Interactive Overlay (Desktop sm+):
-          Heritage & Luxury Editorial Overlay (Thompson's Tea inspired):
-          - Ultra-transparent glass preserving the oriental carpet visual
-          - Refined typography with letter-spaced gold eyebrow and serif headings
+          Cinematic End-State Floating Glass Window (as in Reference Video):
+          Smoothly floats up and emerges from the bottom with rich cubic-bezier easing
+          when the video reaches the final frame, revealing the brand logo, offer, and CTA buttons.
         */}
         <div 
-          className={`hidden sm:flex absolute inset-0 items-center transition-all duration-700 ease-out z-20 ${
-            isEnded ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
-          }`}
+          className="hidden sm:flex absolute inset-0 items-center pointer-events-none z-20"
         >
-          {/* Subtle soft dark left vignette that gently darkens background for text readability without washing out carpet */}
+          {/* Subtle soft dark left vignette that gently blends into the video */}
           <div 
             aria-hidden="true"
-            className="absolute inset-0 bg-gradient-to-r from-black/50 via-black/20 to-transparent pointer-events-none" 
+            className={`absolute inset-0 bg-gradient-to-r from-black/60 via-black/20 to-transparent transition-opacity duration-1000 ease-out ${
+              isEnded ? 'opacity-100' : 'opacity-0'
+            }`} 
           />
 
           <div className="relative container-w py-6 sm:py-10">
-            <div className="max-w-lg p-6 sm:p-8 rounded-2xl bg-slate-950/20 backdrop-blur-md border border-white/10 shadow-2xl transition-all duration-500">
-              <div className="inline-flex items-center gap-2 mb-3.5">
-                <span className="text-[10px] tracking-[0.22em] uppercase font-semibold text-brand-300/90 border-b border-brand-400/30 pb-0.5">
-                  Оптовые поставки ковровых покрытий
-                </span>
-                <span className="text-white/30">•</span>
-                <span className="text-[11px] text-slate-300 font-medium flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-brand-400" />
-                  В наличии
-                </span>
+            <div 
+              className={`max-w-lg p-7 sm:p-8 rounded-3xl bg-slate-950/35 backdrop-blur-xl border border-white/20 shadow-[0_20px_60px_rgba(0,0,0,0.7)] transition-all duration-1000 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+                isEnded 
+                  ? 'opacity-100 translate-y-0 scale-100 pointer-events-auto' 
+                  : 'opacity-0 translate-y-12 scale-[0.96] pointer-events-none'
+              }`}
+            >
+              {/* Brand Header with Logo inside the window */}
+              <div className="flex items-center gap-3 mb-5">
+                <img 
+                  src="/Вектор_Синэнергия.png" 
+                  alt="Synergy Group" 
+                  className="h-8 sm:h-9 w-auto brightness-0 invert opacity-95 drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]" 
+                />
+                <div className="h-5 w-px bg-white/20" />
+                <div className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-0.5 text-xs font-medium text-brand-300 border border-white/15 backdrop-blur-sm">
+                  <Sparkles className="w-3.5 h-3.5 text-brand-400" />
+                  Оптовый портал
+                </div>
               </div>
 
               <h1 className="font-display text-2xl sm:text-4xl font-bold text-white leading-tight drop-shadow-[0_2px_10px_rgba(0,0,0,0.9)]">
-                Прямые поставки от ведущих фабрик
+                Оптовые поставки <span className="text-brand-300">ковровых покрытий</span>
               </h1>
 
               <p className="mt-3 text-xs sm:text-sm text-slate-200 font-body leading-relaxed drop-shadow-[0_1px_6px_rgba(0,0,0,0.9)] font-light">
-                Широкий ассортимент ковров от производителей Турции, Бельгии и Ирана. 
+                Широкий ассортимент ковров от ведущих производителей Турции, Бельгии и Ирана. 
                 Более 1500 наименований в наличии. Отгрузка за 24 часа со складов по Казахстану.
               </p>
 
@@ -151,7 +158,7 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
                 <button
                   type="button"
                   onClick={() => onNavigate?.('catalog')}
-                  className="btn-primary inline-flex items-center justify-center gap-2 text-xs uppercase tracking-wider font-semibold px-5 py-2.5 shadow-lg shadow-brand-500/20 transition-all duration-200 hover:-translate-y-0.5"
+                  className="btn-primary inline-flex items-center justify-center gap-2 text-xs uppercase tracking-wider font-semibold px-5 py-2.5 shadow-lg shadow-brand-500/25 transition-all duration-200 hover:-translate-y-0.5 active:scale-95"
                 >
                   Перейти в каталог
                   <ArrowRight className="w-3.5 h-3.5" />
@@ -159,7 +166,7 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
                 <button
                   type="button"
                   onClick={() => onNavigate?.('contacts')}
-                  className="btn-secondary border-white/20 bg-white/10 text-white backdrop-blur-md hover:bg-white/20 inline-flex items-center justify-center gap-2 text-xs uppercase tracking-wider font-semibold px-5 py-2.5 transition-all duration-200"
+                  className="btn-secondary border-white/20 bg-white/10 text-white backdrop-blur-md hover:bg-white/20 inline-flex items-center justify-center gap-2 text-xs uppercase tracking-wider font-semibold px-5 py-2.5 transition-all duration-200 hover:-translate-y-0.5"
                 >
                   Связаться с нами
                 </button>
