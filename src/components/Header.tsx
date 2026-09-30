@@ -126,15 +126,29 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
         </div>
       )}
 
-      {/* Thompson's Tea Signature Curved Parabolic Arch (Ellipse with rounded-[100%]) */}
-      <div
-        className={`absolute left-1/2 -translate-x-1/2 pointer-events-none transition-all duration-400 ease-[cubic-bezier(0.16,1,0.3,1)] bg-[#faf6ee] border-b border-[#e7decb] shadow-2xs ${
-          scrolled
-            ? 'w-[280px] sm:w-[340px] h-[100px] -bottom-[12px] rounded-[100%]'
-            : 'w-[400px] sm:w-[520px] h-[200px] sm:h-[230px] -bottom-[40px] sm:-bottom-[50px] rounded-[100%]'
-        }`}
-        style={{ zIndex: 1 }}
-      />
+      {/* Thompson's Tea Signature Editorial Spline Arch (Flawless cubic-bezier continuous transition) */}
+      <svg
+        className="absolute left-1/2 -translate-x-1/2 top-full -mt-px pointer-events-none transition-all duration-400 ease-[cubic-bezier(0.16,1,0.3,1)]"
+        style={{
+          zIndex: 1,
+          width: scrolled ? '320px' : '460px',
+          height: scrolled ? '12px' : '42px',
+        }}
+        viewBox="0 0 500 44"
+        preserveAspectRatio="none"
+        aria-hidden="true"
+      >
+        <path
+          d="M 0,0 C 110,0 160,44 250,44 C 340,44 390,0 500,0 L 500,-4 L 0,-4 Z"
+          fill="#faf6ee"
+        />
+        <path
+          d="M 0,0.5 C 110,0.5 160,44 250,44 C 340,44 390,0.5 500,0.5"
+          fill="none"
+          stroke="#e7decb"
+          strokeWidth="1.5"
+        />
+      </svg>
 
       <div className="container-w relative" style={{ zIndex: 10 }}>
         <div className="grid grid-cols-[1fr_auto_1fr] items-center h-16 sm:h-18 w-full gap-2">
@@ -167,7 +181,9 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
           <button
             type="button"
             onClick={() => onNavigate('home')}
-            className="justify-self-center flex flex-col items-center justify-center cursor-pointer transition-all duration-300 py-1 px-3 sm:px-4 min-w-[140px] sm:min-w-[180px]"
+            className={`justify-self-center flex flex-col items-center justify-center cursor-pointer transition-all duration-300 py-1 px-3 sm:px-4 min-w-[130px] sm:min-w-[160px] ${
+              scrolled ? 'translate-y-0' : 'translate-y-1 sm:translate-y-2'
+            }`}
             title="Synergiya Group — Главная"
             aria-label="Главная страница"
           >
@@ -194,14 +210,14 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
 
           {/* Right Column: Clean, Uncrowded Controls */}
           <div className="justify-self-end flex items-center justify-end gap-1.5 sm:gap-2">
-            {/* Phone link: visible on 2xl to avoid any collision on laptops */}
+            {/* Phone link: sleek compact button on desktop, full text on 2xl */}
             <a
               href="tel:+77785806866"
-              className="hidden 2xl:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-700 hover:bg-black/5 hover:text-brand-700 transition-colors"
-              title="Позвонить в отдел продаж"
+              className="flex h-9 items-center justify-center gap-1.5 px-2 sm:px-2.5 rounded-lg text-slate-700 hover:bg-black/5 hover:text-brand-700 transition-colors border border-[#e7decb]"
+              title="Позвонить в отдел продаж: +7 (778) 580-68-66"
             >
               <Phone className="h-3.5 w-3.5 text-brand-600" />
-              <span>+7 (778) 580-68-66</span>
+              <span className="hidden 2xl:inline text-xs font-semibold">+7 (778) 580-68-66</span>
             </a>
 
             {/* Language Switcher (KZ / RU): visible on sm+ */}
@@ -224,7 +240,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
             <button
               type="button"
               onClick={toggleShowroomMode}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
+              className={`flex h-9 items-center gap-1.5 px-2.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
                 isShowroomMode
                   ? 'bg-amber-500 border-amber-600 text-white shadow-2xs font-bold'
                   : 'bg-black/5 hover:bg-black/10 border-[#e7decb] text-slate-700'
