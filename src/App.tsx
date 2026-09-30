@@ -320,14 +320,14 @@ export default function App() {
 
   const renderPage = () => {
     switch (page) {
-      case 'home': return <HomePage onNavigate={navigate} />;
+      case 'home': return <HomePage onNavigate={navigate} isReady={preloaderDone} />;
       case 'catalog': return <CatalogPage key={catalogCollection ?? catalogCountry ?? 'all'} onNavigate={navigate} initialCollection={catalogCollection} initialCountry={catalogCountry} />;
       case 'product': return <ProductPage key={productId} productId={productId} onNavigate={navigate} />;
       case 'cart': return <CartPage onNavigate={navigate} />;
       case 'contacts': return <ContactsPage onNavigate={navigate} />;
       case 'login': return <LoginPage onNavigate={navigate} />;
       case 'profile': return <ProfilePage onNavigate={navigate} />;
-      default: return <HomePage onNavigate={navigate} />;
+      default: return <HomePage onNavigate={navigate} isReady={preloaderDone} />;
     }
   };
 

@@ -4,9 +4,10 @@ import type { PageId } from '@/types';
 
 interface HeroBannerMediaProps {
   onNavigate?: (page: PageId) => void;
+  isReady?: boolean;
 }
 
-export default function HeroBannerMedia({ onNavigate }: HeroBannerMediaProps) {
+export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBannerMediaProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isEnded, setIsEnded] = useState(false);
 
@@ -17,11 +18,26 @@ export default function HeroBannerMedia({ onNavigate }: HeroBannerMediaProps) {
     video.muted = true;
     video.defaultMuted = true;
 
+    // While preloader logo is displaying, hold video paused at beginning (frame 0)
+    if (!isReady) {
+      video.pause();
+      try {
+        video.currentTime = 0;
+      } catch {}
+      return;
+    }
+
+    // Preloader is done and user sees the screen: start cleanly from frame 0
+    setIsEnded(false);
+    try {
+      video.currentTime = 0;
+    } catch {}
+    
     video.play().catch(() => {
-      // If autoplay is blocked by browser, immediately show final state
+      // If browser blocks autoplay, show final CTA card
       setIsEnded(true);
     });
-  }, []);
+  }, [isReady]);
 
   const handleEnded = () => {
     if (videoRef.current) {
@@ -46,7 +62,7 @@ export default function HeroBannerMedia({ onNavigate }: HeroBannerMediaProps) {
       */}
       <video
         ref={videoRef}
-        autoPlay
+        autoPlay={isReady}
         muted
         playsInline
         preload="metadata"

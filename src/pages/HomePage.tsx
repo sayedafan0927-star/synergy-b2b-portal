@@ -38,7 +38,13 @@ const stats = [
   { icon: CalendarCheck, value: '8+', label: 'лет на рынке' },
 ];
 
-export default function HomePage({ onNavigate }: { onNavigate: (page: PageId, productId?: string) => void }) {
+export default function HomePage({ 
+  onNavigate, 
+  isReady = true 
+}: { 
+  onNavigate: (page: PageId, productId?: string) => void; 
+  isReady?: boolean; 
+}) {
   const { products } = useProducts();
   const { profile, isAdmin, isImpersonating } = useAuth();
   const isEffectiveAdmin = isAdmin && !isImpersonating;
@@ -54,7 +60,7 @@ export default function HomePage({ onNavigate }: { onNavigate: (page: PageId, pr
     <div className="pb-16 lg:pb-0">
       {/* ── Hero Video Banner (Pure animation + Harmonious End-State CTA) ── */}
       <section className="relative w-full bg-slate-950 pt-16">
-        <HeroBannerMedia onNavigate={onNavigate} />
+        <HeroBannerMedia onNavigate={onNavigate} isReady={isReady} />
       </section>
 
       {/* ── Quick Stats Strip ── */}
