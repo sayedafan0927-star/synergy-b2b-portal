@@ -9,7 +9,6 @@ export default function HeroBannerMedia() {
     const video = videoRef.current;
     if (!video) return;
 
-    // Strict muted + playsinline guarantees mobile Safari and Chrome autoplay
     video.muted = true;
     video.defaultMuted = true;
 
@@ -35,8 +34,12 @@ export default function HeroBannerMedia() {
   };
 
   return (
-    <div className="hero-banner-media absolute inset-0 w-full h-full overflow-hidden select-none">
-      {/* Full-bleed video background */}
+    <div className="hero-banner-media absolute inset-0 w-full h-full overflow-hidden select-none bg-slate-950">
+      {/* 
+        Video layer:
+        - opacity-45 to 55 prevents video from eclipsing foreground UI and text
+        - object-[center_right] focuses the visual action to the right
+      */}
       <video
         ref={videoRef}
         autoPlay
@@ -45,14 +48,28 @@ export default function HeroBannerMedia() {
         preload="metadata"
         poster="/assets/hero-poster.webp"
         onEnded={handleEnded}
-        className="hero-video w-full h-full object-cover object-[center_right] pointer-events-none"
+        className="hero-video w-full h-full object-cover object-[center_right] pointer-events-none opacity-45 lg:opacity-55 transition-opacity duration-700"
       >
         <source src="/assets/hero-video.webm" type="video/webm" />
         <source src="/assets/hero-video.mp4" type="video/mp4" />
       </video>
 
-      {/* Elegant dark gradient overlay for text readability on the left while keeping right action visible */}
-      <div className="absolute inset-0 bg-gradient-to-r from-slate-950/95 via-slate-900/80 to-slate-900/40 pointer-events-none" />
+      {/* 
+        Multi-stop horizontal mask:
+        - 0% to 45%: solid deep slate-950 completely blacks out and conceals AI gibberish text behind our real text
+        - 45% to 75%: smooth fade out so right-side visual animation shines through cleanly
+        - 75% to 100%: subtle tint so bright video elements don't distract
+      */}
+      <div 
+        aria-hidden="true"
+        className="absolute inset-0 bg-gradient-to-r from-slate-950 from-0% via-slate-950 via-42% to-slate-950/20 to-100% pointer-events-none" 
+      />
+
+      {/* Vertical vignette blending with header and lower sections */}
+      <div 
+        aria-hidden="true"
+        className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-slate-950/50 pointer-events-none" 
+      />
 
       {/* Replay action button when frozen at final frame */}
       {isEnded && (
