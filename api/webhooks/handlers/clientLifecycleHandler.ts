@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { recordAuditLog } from '../../audit/logs';
+import { getRedisClient } from '../../lib/redis';
 
 export async function handleClientDeactivated(
   payload: any,
@@ -9,14 +10,34 @@ export async function handleClientDeactivated(
 ) {
   const counterpartyId = payload.counterparty_id || payload.client_id;
   if (counterpartyId && supabaseServer) {
-    console.log(`[Webhook ERP: client_deactivated] Revoking access for client ${counterpartyId}`);
+    console.log(`[Webhook ERP: client_deactivated] Revoking access and blocking shipments for client ${counterpartyId}`);
     try {
+      // 1. Блокируем отгрузки и отключаем имперсонацию в profiles
       await supabaseServer
         .from('profiles')
-        .update({ impersonation_enabled: false, updated_at: new Date().toISOString() })
+        .update({
+          is_blocked_for_shipment: true,
+          impersonation_enabled: false,
+          updated_at: new Date().toISOString(),
+        })
         .eq('partner_id', String(counterpartyId));
 
-      await broadcastLiveUpdate('client_deactivated', { counterparty_id: counterpartyId });
+      // 2. Вносим partnerId в черный список отозванных сессий в Redis на 24 часа
+      const redis = getRedisClient();
+      if (redis) {
+        try {
+          await redis.set(`revoked_partner:${counterpartyId}`, '1', { ex: 86400 });
+        } catch (rErr) {
+          console.warn('[Webhook ERP] Redis partner revocation warning:', rErr);
+        }
+      }
+
+      // 3. Отправляем широковещательное событие для принудительного разлогинивания в браузере
+      await broadcastLiveUpdate('client_deactivated', {
+        counterparty_id: counterpartyId,
+        is_blocked_for_shipment: true,
+        force_logout: true,
+      });
     } catch (dbErr) {
       console.warn('[Webhook ERP] Client deactivation notice:', dbErr);
     }
@@ -30,6 +51,7 @@ export async function handleClientDeactivated(
     payload: {
       event_id: eventId || payload.event_id,
       counterparty_id: counterpartyId,
+      is_blocked_for_shipment: true,
     },
   });
 
@@ -37,7 +59,7 @@ export async function handleClientDeactivated(
     success: true,
     event: 'client_deactivated',
     counterparty_id: counterpartyId,
-    message: `Client ${counterpartyId} deactivated successfully.`,
+    message: `Client ${counterpartyId} deactivated successfully (shipments blocked, sessions revoked).`,
     processed_at: new Date().toISOString(),
   };
 }
@@ -53,10 +75,25 @@ export async function handleClientSynced(
     try {
       await supabaseServer
         .from('profiles')
-        .update({ impersonation_enabled: true, updated_at: new Date().toISOString() })
+        .update({
+          is_blocked_for_shipment: false,
+          impersonation_enabled: true,
+          updated_at: new Date().toISOString(),
+        })
         .eq('partner_id', String(counterpartyId));
 
-      await broadcastLiveUpdate('client_synced', { counterparty_id: counterpartyId });
+      // Удаляем из черного списка Redis при активации
+      const redis = getRedisClient();
+      if (redis) {
+        try {
+          await redis.del(`revoked_partner:${counterpartyId}`);
+        } catch {}
+      }
+
+      await broadcastLiveUpdate('client_synced', {
+        counterparty_id: counterpartyId,
+        is_blocked_for_shipment: false,
+      });
     } catch (dbErr) {
       console.warn('[Webhook ERP] Client sync notice:', dbErr);
     }

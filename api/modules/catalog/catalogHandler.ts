@@ -9,6 +9,47 @@ import { getCachedCatalog, saveCachedCatalog } from '../../lib/catalogCache';
 import { sanitizePostgrestFilter } from '../../lib/security';
 import { getErpApiKey } from '../../lib/erpKey';
 
+/**
+ * Очистка и компактизация снимка каталога для предотвращения превышения
+ * лимита тела ответа Vercel Serverless Function (4.5 MB Payload Limit).
+ */
+export function compactCatalogPayload(data: any): any {
+  if (!data || typeof data !== 'object') return data;
+  const rawList = Array.isArray(data.products) ? data.products : (Array.isArray(data.items) ? data.items : null);
+  if (!rawList) return data;
+
+  const compacted = rawList.map((p: any) => ({
+    id: p.id,
+    name: p.name,
+    category: p.category,
+    collection: p.collection,
+    manufacturer: p.manufacturer,
+    material: p.material,
+    country: p.country,
+    density: p.density,
+    pile_height: p.pile_height,
+    images: Array.isArray(p.images) ? p.images.slice(0, 3) : (p.image ? [p.image] : []),
+    variants: (p.variants || []).map((v: any) => ({
+      id: v.id,
+      size: v.size,
+      sku: v.sku,
+      base_price: Number(v.base_price || 0),
+      price_per_sqm: Number(v.price_per_sqm || 0),
+      area_sqm: Number(v.area_sqm || 0),
+      free_stock: Number(v.free_stock ?? v.stock ?? 0),
+      reserved_stock: Number(v.reserved_stock ?? 0),
+      total_stock: Number(v.total_stock ?? (v.free_stock ?? 0)),
+      warehouses: v.warehouses,
+    })),
+  }));
+
+  return {
+    ...data,
+    products: compacted,
+    is_compacted: true,
+  };
+}
+
 export async function handleCatalogRequests(
   req: VercelRequest,
   res: VercelResponse,
@@ -25,7 +66,10 @@ export async function handleCatalogRequests(
           res.setHeader('X-Cache', 'HIT');
           res.setHeader('X-Cache-Age-Ms', String(cached.ageMs));
           res.setHeader('X-Cache-Source', cached.source);
-          res.status(200).json(cached.data);
+
+          // Проверка на потенциальное превышение лимита 4.5 МБ Vercel
+          const payloadToSend = compactCatalogPayload(cached.data);
+          res.status(200).json(payloadToSend);
           return true;
         }
       } catch (cacheLookupErr) {

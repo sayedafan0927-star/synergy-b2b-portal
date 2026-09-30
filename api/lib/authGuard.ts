@@ -181,6 +181,32 @@ export async function authenticateRequest(
     const effectiveFullName = profile?.full_name || fallbackFullName || '';
     const effectivePhone = profile?.phone || fallbackPhone || '';
 
+    // Проверка мгновенной деактивации клиента из 1С:ERP (Redis Blacklist + DB Flag)
+    if (effectivePartnerId && effectiveRole === 'client') {
+      if (redis) {
+        try {
+          const isPartnerRevoked = await redis.exists(`revoked_partner:${effectivePartnerId}`);
+          if (isPartnerRevoked) {
+            return {
+              isAuthenticated: false,
+              isServer: false,
+              error: 'Учетная запись клиента деактивирована администратором 1С:ERP.',
+            };
+          }
+        } catch (pRevErr) {
+          console.warn('[AuthGuard] Partner revocation check notice:', pRevErr);
+        }
+      }
+
+      if (profile?.is_blocked_for_shipment === true || profile?.role === 'blocked') {
+        return {
+          isAuthenticated: false,
+          isServer: false,
+          error: 'Учетная запись клиента заблокирована для отгрузок и заказов.',
+        };
+      }
+    }
+
     // 4. Проверка RBAC ролей (если указаны)
     if (options.requiredRoles && options.requiredRoles.length > 0) {
       if (!options.requiredRoles.includes(effectiveRole)) {

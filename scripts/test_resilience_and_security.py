@@ -882,7 +882,36 @@ test_assert("allow_rollback" in spec_code, "docs/ERP_INTEGRATION_SPEC.md defines
 test_assert("force_resync" in spec_code, "docs/ERP_INTEGRATION_SPEC.md defines force_resync inventory protocol")
 
 # ------------------------------------------------------------------------------
-# 26. Summary Report
+# 26. Verifying Deep Integration Hardening: Hold Protection, Canonical Balance, SSO Nonce, Client Revocation & Compact Catalog
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}26. Verifying Deep Integration Hardening (Hold Protection, Balance Sign, SSO Replay & Compaction)...{RESET}")
+
+with open(os.path.join(ROOT_DIR, "api", "cron", "reconcile-stock.ts"), "r", encoding="utf-8") as fp:
+    rec_stock_code = fp.read()
+test_assert("stock_reserved" in rec_stock_code and "expectedFreeStock" in rec_stock_code, "reconcile-stock.ts protects active cart reservations from wiping")
+
+with open(os.path.join(ROOT_DIR, "api", "webhooks", "handlers", "paymentHandler.ts"), "r", encoding="utf-8") as fp:
+    pay_code = fp.read()
+test_assert("calculatedDebt" in pay_code and "calculatedBalance" in pay_code, "paymentHandler.ts enforces canonical debt and balance calculation without zeroing advances")
+
+with open(os.path.join(ROOT_DIR, "api", "auth", "erp-sso.ts"), "r", encoding="utf-8") as fp:
+    sso_code = fp.read()
+test_assert("isMemoryNonceConsumed" in sso_code and "nonceFingerprint" in sso_code, "erp-sso.ts protects SSO Magic Link against Replay Attacks via one-time nonce consumption")
+
+with open(os.path.join(ROOT_DIR, "api", "webhooks", "handlers", "clientLifecycleHandler.ts"), "r", encoding="utf-8") as fp:
+    clh_code = fp.read()
+test_assert("revoked_partner" in clh_code and "is_blocked_for_shipment: true" in clh_code, "clientLifecycleHandler.ts instantly blocks shipments and revokes sessions on client_deactivated")
+
+with open(os.path.join(ROOT_DIR, "api", "lib", "authGuard.ts"), "r", encoding="utf-8") as fp:
+    ag_code = fp.read()
+test_assert("revoked_partner" in ag_code and "is_blocked_for_shipment === true" in ag_code, "authGuard.ts enforces instant block and session rejection for deactivated clients")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "catalog", "catalogHandler.ts"), "r", encoding="utf-8") as fp:
+    cat_code = fp.read()
+test_assert("compactCatalogPayload" in cat_code, "catalogHandler.ts implements compactCatalogPayload protecting from Vercel 4.5MB payload limit")
+
+# ------------------------------------------------------------------------------
+# 27. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

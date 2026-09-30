@@ -11,8 +11,28 @@ export async function handlePaymentReceived(
   const { client_name, currency, payment_doc_number } = payload;
   const client_id = payload.partner_id || payload.client_id;
   const amount = Number(payload.amount_usd ?? payload.amount ?? 0);
-  const balance_usd = Number(payload.new_balance_usd ?? payload.balance_usd ?? 0);
-  const debt_usd = payload.debt_usd !== undefined ? Number(payload.debt_usd) : (balance_usd < 0 ? Math.abs(balance_usd) : 0);
+
+  // Канонический расчет финансового сальдо (Balance) и долга (Debt):
+  // - Положительный баланс (> 0) = Аванс / переплата клиента
+  // - Отрицательный баланс (< 0) = Задолженность клиента
+  // - Долг (debt_usd) = строго неотрицательная величина (>= 0)
+  let calculatedDebt = 0;
+  let calculatedBalance = 0;
+
+  if (payload.debt_usd !== undefined && payload.debt_usd !== null) {
+    calculatedDebt = Math.max(0, Number(payload.debt_usd));
+    calculatedBalance = (payload.balance_usd !== undefined || payload.new_balance_usd !== undefined)
+      ? Number(payload.new_balance_usd ?? payload.balance_usd)
+      : -calculatedDebt;
+  } else if (payload.new_balance_usd !== undefined || payload.balance_usd !== undefined) {
+    const rawBal = Number(payload.new_balance_usd ?? payload.balance_usd ?? 0);
+    calculatedBalance = rawBal;
+    calculatedDebt = rawBal < 0 ? Math.abs(rawBal) : 0;
+  }
+
+  const balance_usd = calculatedBalance;
+  const debt_usd = calculatedDebt;
+
   console.log(
     `[Webhook ERP: payment_received] Client: ${client_name} (ID ${client_id}) paid ${amount} ${currency || 'USD'} (Doc: ${payment_doc_number}). New balance: ${balance_usd}, Debt: ${debt_usd}`,
   );
@@ -35,20 +55,18 @@ export async function handlePaymentReceived(
         .from('partner_balances')
         .upsert({
           partner_id: String(client_id),
-          balance: Number(debt_usd !== undefined ? -debt_usd : (balance_usd || 0)),
+          balance: calculatedBalance,
           currency: currency || 'USD',
           last_synced_at: new Date().toISOString(),
         }, { onConflict: 'partner_id' });
 
-      if (debt_usd !== undefined) {
-        await supabaseServer
-          .from('profiles')
-          .update({
-            debt_usd: Number(debt_usd),
-            updated_at: new Date().toISOString(),
-          })
-          .eq('partner_id', String(client_id));
-      }
+      await supabaseServer
+        .from('profiles')
+        .update({
+          debt_usd: calculatedDebt,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('partner_id', String(client_id));
     } catch (dbErr) {
       console.warn('[Webhook ERP] partner_balances update notice:', dbErr);
     }

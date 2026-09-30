@@ -71,9 +71,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // 2. Получение текущего локального кэша каталога
+    // 2. Получение текущего локального кэша каталога и активных резервов
     const localCached = await getCachedCatalog('catalog_global');
     const localProducts = Array.isArray(localCached?.data?.products) ? localCached.data.products : [];
+
+    // Загружаем текущие активные резервы из inventory_balances для защиты от затирания броней
+    const localReservedMap = new Map<string, number>();
+    if (supabase) {
+      try {
+        const { data: dbBalances } = await supabase
+          .from('inventory_balances')
+          .select('sku, stock_reserved');
+        if (dbBalances) {
+          for (const b of dbBalances) {
+            if (b.sku && Number(b.stock_reserved) > 0) {
+              localReservedMap.set(String(b.sku).trim().toUpperCase(), Number(b.stock_reserved));
+            }
+          }
+        }
+      } catch (balErr) {
+        console.warn('[Stock Reconciliation] Notice fetching db stock_reserved:', balErr);
+      }
+    }
 
     // Построение карты локальных остатков: sku -> free_stock
     const localStockMap = new Map<string, number>();
@@ -86,22 +105,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     let discrepanciesFixed = 0;
-    const driftedSkus: Array<{ sku: string; local: number; erp: number; diff: number }> = [];
+    const driftedSkus: Array<{ sku: string; local: number; erp: number; reserved: number; diff: number }> = [];
 
-    // 3. Сверка остатков по каждому SKU
+    // 3. Сверка остатков по каждому SKU с учетом активных холдов (Zero Reservation Leak)
     for (const p of erpProducts) {
       for (const v of (p.variants || [])) {
         if (!v.sku) continue;
+        const normSku = String(v.sku).trim().toUpperCase();
         const erpStock = Number(v.free_stock ?? v.stock ?? 0);
+        const currentReserved = localReservedMap.get(normSku) || 0;
+        
+        // Ожидаемый свободный остаток: если на портале есть брони, они вычитаются из остатка 1С
+        const expectedFreeStock = Math.max(0, erpStock - currentReserved);
         const localStock = localStockMap.get(v.sku);
 
-        if (localStock !== undefined && Math.abs(localStock - erpStock) > 0) {
+        if (localStock !== undefined && Math.abs(localStock - expectedFreeStock) > 0) {
           discrepanciesFixed++;
           driftedSkus.push({
             sku: v.sku,
             local: localStock,
-            erp: erpStock,
-            diff: erpStock - localStock,
+            erp: expectedFreeStock,
+            reserved: currentReserved,
+            diff: expectedFreeStock - localStock,
           });
         }
       }
@@ -113,13 +138,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         await saveCachedCatalog(erpData, 'catalog_global');
       }
 
-      // Пакетная синхронизация расхождений непосредственно в таблицу inventory_balances
+      // Пакетная синхронизация расхождений непосредственно в таблицу inventory_balances с сохранением резервов
       if (driftedSkus.length > 0) {
         try {
           const patchItems = driftedSkus.map(d => ({
             sku: d.sku,
             free_stock: d.erp,
-            total_stock: d.erp,
+            reserved_stock: d.reserved,
+            total_stock: d.erp + d.reserved,
           }));
           await patchCachedCatalogStock(patchItems, 'catalog_global');
         } catch (patchErr) {

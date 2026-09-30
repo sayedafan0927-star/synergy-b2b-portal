@@ -4,6 +4,22 @@ import { createClient } from '@supabase/supabase-js';
 import { applyCorrelationId } from '../lib/trace';
 import { enforceRateLimit } from '../lib/rateLimit';
 import { recordAuditLog } from '../audit/logs';
+import { getRedisClient } from '../lib/redis';
+
+// Реестр использованных одноразовых ссылок в памяти (L1 Fallback при недоступности Redis)
+const memoryUsedNonces = new Map<string, number>();
+
+function isMemoryNonceConsumed(nonceKey: string): boolean {
+  const now = Date.now();
+  for (const [k, exp] of memoryUsedNonces.entries()) {
+    if (exp <= now) memoryUsedNonces.delete(k);
+  }
+  if (memoryUsedNonces.has(nonceKey)) {
+    return true;
+  }
+  memoryUsedNonces.set(nonceKey, now + 900 * 1000);
+  return false;
+}
 
 const SECRET_KEY = process.env.PORTAL_SECRET_KEY || process.env.ERP_PORTAL_SECRET || '';
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
@@ -117,8 +133,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).send(`Ошибка авторизации из 1С: ${result.error}`);
   }
 
-  const p = result.payload;
-  const targetEmail = p.email || `${p.phone.replace(/\D+/g, '') || p.sub}@synergy-portal.kz`;
+    const p = result.payload;
+    const targetEmail = p.email || `${p.phone.replace(/\D+/g, '') || p.sub}@synergy-portal.kz`;
+
+    // Защита от Replay-атак (One-Time Token Consumption)
+    const rawNonce = String(req.query.nonce || p.nonce || token).trim();
+    const nonceFingerprint = crypto.createHash('sha256').update(rawNonce).digest('hex');
+    const redis = getRedisClient();
+
+    let isConsumed = false;
+    if (redis) {
+      try {
+        const redisKey = `sso:consumed:${nonceFingerprint}`;
+        const setOk = await redis.set(redisKey, '1', { nx: true, ex: 900 });
+        if (!setOk) {
+          isConsumed = true;
+        }
+      } catch (redisErr) {
+        console.warn('[SSO Gateway] Redis nonce check warning, using memory:', redisErr);
+        isConsumed = isMemoryNonceConsumed(nonceFingerprint);
+      }
+    } else {
+      isConsumed = isMemoryNonceConsumed(nonceFingerprint);
+    }
+
+    if (isConsumed) {
+      await recordAuditLog({
+        eventType: 'sso_replay_blocked',
+        direction: 'inbound',
+        status: 'error',
+        source: 'SSO Gateway',
+        correlationId,
+        errorMessage: 'Одноразовая ссылка автовхода уже была использована (Replay Attack blocked)',
+      });
+      return res.status(403).send('Ошибка авторизации: одноразовая ссылка для входа уже была использована ранее.');
+    }
 
   try {
     // Синхронизируем профиль в БД Supabase
