@@ -54,81 +54,64 @@ export default function HomePage({ onNavigate }: { onNavigate: (page: PageId, pr
     <div className="pb-16 lg:pb-0">
       {/* ── Hero Section ── */}
       <section className="relative min-h-[600px] lg:min-h-[720px] flex items-center pt-16 overflow-hidden">
-        {/* Background image */}
-        <div className="absolute inset-0">
-          <img
-            src="https://images.pexels.com/photos/6580227/pexels-photo-6580227.jpeg?auto=compress&cs=tinysrgb&w=1600"
-            alt=""
-            loading="eager"
-            decoding="async"
-            className="h-full w-full object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-r from-slate-900/90 via-slate-900/75 to-slate-900/50" />
-        </div>
+        {/* Full-bleed animated hero video banner background */}
+        <HeroBannerMedia />
 
         {/* Decorative subtle grid pattern overlay */}
-        <div className="absolute inset-0 opacity-[0.03]" style={{
+        <div className="absolute inset-0 opacity-[0.03] pointer-events-none" style={{
           backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 60px, rgba(255,255,255,0.3) 60px, rgba(255,255,255,0.3) 61px), repeating-linear-gradient(90deg, transparent, transparent 60px, rgba(255,255,255,0.3) 60px, rgba(255,255,255,0.3) 61px)',
         }} />
 
-        <div className="relative container-w py-12 lg:py-20">
-          <div className="grid lg:grid-cols-12 gap-10 lg:gap-12 items-center">
-            {/* Left text content */}
-            <div className="lg:col-span-6 xl:col-span-6 max-w-2xl">
-              {/* Logo badge */}
-              <div className="inline-flex items-center gap-3 rounded-full bg-white/10 backdrop-blur-sm border border-white/10 pl-3 pr-5 py-2 mb-8">
-                <img
-                  src="/Вектор_Синэнергия.png"
-                  alt=""
-                  className="h-7 w-auto brightness-0 invert"
-                />
-                <span className="text-xs font-medium text-white/80 tracking-wide uppercase">Оптовый поставщик</span>
-              </div>
-
-              <h1 className="font-display text-3xl sm:text-4xl lg:text-5xl xl:text-6xl font-bold text-white leading-tight">
-                Оптовые поставки
-                <span className="block text-brand-400">ковровых покрытий</span>
-              </h1>
-              <p className="mt-4 sm:mt-6 text-base sm:text-lg text-slate-300 font-body leading-relaxed max-w-xl">
-                Широкий ассортимент ковров от ведущих производителей Турции, Бельгии и Ирана.
-                Всё в наличии на складах — отгрузка в течение 24 часов.
-              </p>
-
-              <div className="mt-8 flex flex-col sm:flex-row gap-3 sm:gap-4">
-                <button
-                  onClick={() => onNavigate('catalog')}
-                  className="btn-primary inline-flex items-center justify-center gap-2"
-                >
-                  Перейти в каталог
-                  <ArrowRight className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => onNavigate('contacts')}
-                  className="btn-secondary border-white/30 bg-white/10 text-white backdrop-blur-sm hover:bg-white/20 inline-flex items-center justify-center gap-2"
-                >
-                  Связаться с нами
-                </button>
-              </div>
-
-              {/* Stats row */}
-              <div className="mt-12 lg:mt-16 grid grid-cols-3 gap-4 sm:gap-8 max-w-lg">
-                {stats.map((stat) => (
-                  <div key={stat.label} className="text-center sm:text-left">
-                    <div className="flex items-center justify-center sm:justify-start gap-2 mb-1">
-                      <stat.icon className="h-4 w-4 text-brand-400 hidden sm:block" />
-                      <span className="font-display text-2xl sm:text-3xl font-bold text-white">
-                        {stat.value}
-                      </span>
-                    </div>
-                    <p className="text-xs sm:text-sm text-slate-400 font-body">{stat.label}</p>
-                  </div>
-                ))}
-              </div>
+        <div className="relative container-w py-16 lg:py-24">
+          <div className="max-w-2xl">
+            {/* Logo badge */}
+            <div className="inline-flex items-center gap-3 rounded-full bg-white/10 backdrop-blur-sm border border-white/10 pl-3 pr-5 py-2 mb-8">
+              <img
+                src="/Вектор_Синэнергия.png"
+                alt=""
+                className="h-7 w-auto brightness-0 invert"
+              />
+              <span className="text-xs font-medium text-white/80 tracking-wide uppercase">Оптовый поставщик</span>
             </div>
 
-            {/* Right: Hero Video Showcase */}
-            <div className="lg:col-span-6 xl:col-span-6 w-full mt-8 lg:mt-0">
-              <HeroBannerMedia onNavigate={onNavigate} />
+            <h1 className="font-display text-3xl sm:text-4xl lg:text-5xl xl:text-6xl font-bold text-white leading-tight">
+              Оптовые поставки
+              <span className="block text-brand-400">ковровых покрытий</span>
+            </h1>
+            <p className="mt-4 sm:mt-6 text-base sm:text-lg text-slate-300 font-body leading-relaxed max-w-xl">
+              Широкий ассортимент ковров от ведущих производителей Турции, Бельгии и Ирана.
+              Всё в наличии на складах — отгрузка в течение 24 часов.
+            </p>
+
+            <div className="mt-8 flex flex-col sm:flex-row gap-3 sm:gap-4">
+              <button
+                onClick={() => onNavigate('catalog')}
+                className="btn-primary inline-flex items-center justify-center gap-2"
+              >
+                Перейти в каталог
+                <ArrowRight className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => onNavigate('contacts')}
+                className="btn-secondary border-white/30 bg-white/10 text-white backdrop-blur-sm hover:bg-white/20 inline-flex items-center justify-center gap-2"
+              >
+                Связаться с нами
+              </button>
+            </div>
+
+            {/* Stats row */}
+            <div className="mt-12 lg:mt-16 grid grid-cols-3 gap-4 sm:gap-8 max-w-lg">
+              {stats.map((stat) => (
+                <div key={stat.label} className="text-center sm:text-left">
+                  <div className="flex items-center justify-center sm:justify-start gap-2 mb-1">
+                    <stat.icon className="h-4 w-4 text-brand-400 hidden sm:block" />
+                    <span className="font-display text-2xl sm:text-3xl font-bold text-white">
+                      {stat.value}
+                    </span>
+                  </div>
+                  <p className="text-xs sm:text-sm text-slate-400 font-body">{stat.label}</p>
+                </div>
+              ))}
             </div>
           </div>
         </div>
