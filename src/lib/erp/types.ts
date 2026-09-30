@@ -10,6 +10,7 @@ export type {
 } from '@/types';
 
 export interface CreateOrderPayload {
+  idempotency_key?: string;
   user_id?: string;
   client_id?: number | string;
   warehouse_id?: number;
@@ -51,10 +52,18 @@ export interface SplitSubOrder {
   warehouse: string;
   amount: number;
   items_count: number;
+  status?: string;
+  error?: string;
+  success?: boolean;
 }
 
 export interface ErpOrderResponse {
   success: boolean;
+  order_number?: string;
+  order_id?: string | number;
+  status?: string;
+  is_partially_confirmed?: boolean;
+  is_idempotent_replay?: boolean;
   order?: {
     order_id: number;
     doc_number: string;

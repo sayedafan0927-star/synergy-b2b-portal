@@ -249,19 +249,52 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
             .eq('parent_order_id', outboxOrderId);
 
           if (childOrders && childOrders.length > 0) {
+            let anySuborderFailed = false;
+            let anySuborderSuccess = false;
+
             for (const child of childOrders) {
               const matchingSplit = splitListFromErp.find((s: any) =>
                 s.warehouse === child.warehouse || String(s.warehouse_id) === String(child.warehouse)
               );
-              const childDocNumber = matchingSplit?.doc_number || `${docNumber}-${child.id.slice(0, 6).toUpperCase()}`;
+              const isFailed = matchingSplit?.status === 'failed' || matchingSplit?.status === 'cancelled' || matchingSplit?.success === false;
+
+              if (isFailed) {
+                anySuborderFailed = true;
+                await supabase
+                  .from('orders')
+                  .update({
+                    status: 'cancelled',
+                    reservations_released: true,
+                    notes: `[Отклонено складом: Недостаточно остатка] ${matchingSplit?.error || ''}`,
+                    updated_at: new Date().toISOString(),
+                  })
+                  .eq('id', child.id);
+              } else {
+                anySuborderSuccess = true;
+                const childDocNumber = matchingSplit?.doc_number || `${docNumber}-${child.id.slice(0, 6).toUpperCase()}`;
+                await supabase
+                  .from('orders')
+                  .update({
+                    status: 'processing',
+                    order_number: childDocNumber,
+                    updated_at: new Date().toISOString(),
+                  })
+                  .eq('id', child.id);
+              }
+            }
+
+            if (anySuborderFailed && anySuborderSuccess) {
               await supabase
                 .from('orders')
                 .update({
-                  status: 'processing',
-                  order_number: childDocNumber,
+                  status: 'partially_confirmed',
+                  notes: '[Частичное подтверждение] Часть складов подтвердила резерв, часть отклонила заказ из-за отсутствия остатка.',
                   updated_at: new Date().toISOString(),
                 })
-                .eq('id', child.id);
+                .eq('id', outboxOrderId);
+
+              jsonData.is_partially_confirmed = true;
+              jsonData.status = 'partially_confirmed';
             }
           }
         } catch (splitSyncErr) {
@@ -270,7 +303,15 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
       }
 
       if (jsonData && typeof jsonData === 'object' && createdSplitOrders.length > 0) {
-        jsonData.split_orders = createdSplitOrders;
+        const splitListFromErp = Array.isArray(jsonData?.split_orders) ? jsonData.split_orders : [];
+        jsonData.split_orders = createdSplitOrders.map(c => {
+          const matching = splitListFromErp.find((s: any) => s.warehouse === c.warehouse || String(s.warehouse_id) === String(c.warehouse));
+          return {
+            ...c,
+            status: matching?.status || (matching?.success === false ? 'failed' : 'processing'),
+            error: matching?.error,
+          };
+        });
       }
       res.status(200).json(jsonData);
       return;

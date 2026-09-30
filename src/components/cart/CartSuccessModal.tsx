@@ -8,6 +8,7 @@ interface CartSuccessModalProps {
   isOfflineQueued: boolean;
   isServerBuffered: boolean;
   isWaitingApproval: boolean;
+  isPartiallyConfirmed?: boolean;
   onContinueShopping: () => void;
 }
 
@@ -17,6 +18,7 @@ export function CartSuccessModal({
   isOfflineQueued,
   isServerBuffered,
   isWaitingApproval,
+  isPartiallyConfirmed,
   onContinueShopping,
 }: CartSuccessModalProps) {
   const { formatPrice: fmtPrice } = useCurrency();
@@ -28,6 +30,8 @@ export function CartSuccessModal({
           className={`mb-6 flex h-20 w-20 items-center justify-center rounded-full ${
             isOfflineQueued
               ? 'bg-sky-50 text-sky-600'
+              : isPartiallyConfirmed
+              ? 'bg-amber-50 text-amber-600'
               : isServerBuffered
               ? 'bg-amber-50 text-amber-600'
               : isWaitingApproval
@@ -37,6 +41,8 @@ export function CartSuccessModal({
         >
           {isOfflineQueued ? (
             <WifiOff className="h-10 w-10" />
+          ) : isPartiallyConfirmed ? (
+            <AlertTriangle className="h-10 w-10" />
           ) : isServerBuffered ? (
             <AlertTriangle className="h-10 w-10" />
           ) : isWaitingApproval ? (
@@ -48,6 +54,8 @@ export function CartSuccessModal({
         <h1 className="font-display text-2xl font-bold text-slate-900">
           {isOfflineQueued
             ? 'Заказ сохранен офлайн'
+            : isPartiallyConfirmed
+            ? 'Заказ частично подтвержден'
             : isServerBuffered
             ? 'Заказ зарезервирован и отправлен в буфер'
             : isWaitingApproval
@@ -62,6 +70,8 @@ export function CartSuccessModal({
             className={`text-2xl font-bold font-mono ${
               isOfflineQueued
                 ? 'text-sky-800'
+                : isPartiallyConfirmed
+                ? 'text-amber-800'
                 : isServerBuffered
                 ? 'text-amber-800'
                 : isWaitingApproval
@@ -81,21 +91,33 @@ export function CartSuccessModal({
               <span>Мультисклад: заказ разделен на {splitOrders.length} накладные</span>
             </div>
             <div className="space-y-2">
-              {splitOrders.map((split, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-center justify-between rounded-lg bg-white p-3 border border-slate-200/80 text-xs shadow-2xs"
-                >
-                  <div>
-                    <div className="font-mono font-bold text-slate-900">{split.doc_number}</div>
-                    <div className="text-slate-500 mt-0.5">{split.warehouse}</div>
+              {splitOrders.map((split, idx) => {
+                const isFailed = (split as any).status === 'failed' || (split as any).status === 'cancelled' || (split as any).success === false;
+                return (
+                  <div
+                    key={idx}
+                    className={`flex items-center justify-between rounded-lg bg-white p-3 border text-xs shadow-2xs ${
+                      isFailed ? 'border-rose-200 bg-rose-50/30' : 'border-slate-200/80'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-slate-900">{split.doc_number}</span>
+                        {isFailed ? (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-700">Отклонен</span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-700">Подтвержден</span>
+                        )}
+                      </div>
+                      <div className="text-slate-500 mt-0.5">{split.warehouse}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-bold text-slate-900">{fmtPrice(split.amount || 0)}</div>
+                      <div className="text-slate-400">{split.items_count} шт</div>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <div className="font-bold text-slate-900">{fmtPrice(split.amount || 0)}</div>
-                    <div className="text-slate-400">{split.items_count} шт</div>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
             <p className="mt-3 text-[11px] text-slate-500">
               Товары распределены по региональным складам для раздельной комплектации и оперативной логистики.
@@ -106,6 +128,8 @@ export function CartSuccessModal({
         <p className="mt-4 max-w-md text-slate-500">
           {isOfflineQueued
             ? 'Соединение с сетью отсутствует или нестабильно. Заказ надежно сохранен в локальной базе и будет автоматически передан в ERP при восстановлении интернета.'
+            : isPartiallyConfirmed
+            ? 'Часть товаров успешно зарезервирована на доступных складах. Позиции со складов с исчерпанным остатком отклонены и не включены в итоговый счет.'
             : isServerBuffered
             ? 'Шлюз ERP временно недоступен или на регламентном обслуживании. Товар надежно зарезервирован на складе портала и будет автоматически синхронизирован с ERP сервисом Outbox в течение нескольких минут.'
             : isWaitingApproval

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { ShoppingCart, ArrowLeft, PackageOpen } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -6,6 +6,9 @@ import type { PageId } from '@/types';
 import { submitOrderToErp, fetchClientDebtFromErp, type SplitSubOrder } from '@/lib/erpApi';
 import { enqueueOfflineOrder } from '@/lib/offlineOrderQueue';
 import { useCurrency } from '@/contexts/CurrencyContext';
+import { useProducts } from '@/hooks/useProductData';
+import { useUserPricing } from '@/hooks/usePricing';
+import { useToast } from '@/contexts/ToastContext';
 import {
   CartSuccessModal,
   CartItemsTable,
@@ -15,14 +18,19 @@ import {
 
 export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, productId?: string) => void }) {
   const { currency } = useCurrency();
-  const { items, removeItem, updateQuantity, clearCart, totalItems, totalPrice, totalSqm } = useCart();
+  const { items, removeItem, updateQuantity, syncItemPrices, clearCart, totalItems, totalPrice, totalSqm } = useCart();
   const { profile, isImpersonating, impersonatedProfile } = useAuth();
+  const { products } = useProducts();
+  const { getVariantPrice, getPricePerSqm } = useUserPricing();
+  const { info: toastInfo } = useToast();
+  const syncedRef = useRef(false);
 
   const [orderDocNumber, setOrderDocNumber] = useState<string | null>(null);
   const [splitOrders, setSplitOrders] = useState<SplitSubOrder[] | null>(null);
   const [isOfflineQueued, setIsOfflineQueued] = useState(false);
   const [isServerBuffered, setIsServerBuffered] = useState(false);
   const [isWaitingApproval, setIsWaitingApproval] = useState(false);
+  const [isPartiallyConfirmed, setIsPartiallyConfirmed] = useState(false);
   const [debtReport, setDebtReport] = useState<any | null>(null);
   const [activeCollection, setActiveCollection] = useState<string | null>(null);
   const [sizeAsc, setSizeAsc] = useState(true);
@@ -52,6 +60,34 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
       })
       .catch(err => console.warn('Debt check notice:', err));
   }, [profile, isImpersonating, impersonatedProfile]);
+
+  // Автоматическая тихая синхронизация цен и курса валют при входе в корзину
+  useEffect(() => {
+    if (!products || products.length === 0 || items.length === 0 || syncedRef.current) return;
+    syncedRef.current = true;
+
+    const count = syncItemPrices(item => {
+      const prod = products.find(p => p.id === item.productId || p.variants.some(v => v.sku === item.sku));
+      if (!prod) return null;
+      const variant = prod.variants.find(v => v.sku === item.sku || v.size === item.size);
+      if (!variant) return null;
+
+      const latestPrice = getVariantPrice(prod.collection, variant.size, variant.base_price, variant.price_per_sqm);
+      const latestSqmPrice = getPricePerSqm(prod.collection, variant.size, variant.base_price, variant.price_per_sqm);
+      const wh = variant.warehouses.find(w => (w.warehouse_name || w.city) === item.warehouse || w.warehouse_id === item.warehouse_id);
+      const latestStock = wh ? (typeof wh.free_stock === 'number' ? wh.free_stock : wh.stock ?? 0) : undefined;
+
+      return {
+        price: latestPrice,
+        price_per_sqm: latestSqmPrice,
+        maxStock: latestStock !== undefined ? Math.max(0, latestStock) : undefined,
+      };
+    });
+
+    if (count > 0) {
+      toastInfo(`Цены и доступные остатки для ${count} поз. в корзине актуализированы по прайсу 1С`, 'Синхронизация цен');
+    }
+  }, [products, items, syncItemPrices, getVariantPrice, getPricePerSqm, toastInfo]);
 
   // Проверка финансовых блокировок и условий
   const isBlocked = debtReport?.client?.is_blocked_for_shipment === true;
@@ -86,11 +122,14 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
         isOfflineQueued={isOfflineQueued}
         isServerBuffered={isServerBuffered}
         isWaitingApproval={isWaitingApproval}
+        isPartiallyConfirmed={isPartiallyConfirmed}
         onContinueShopping={() => {
           setOrderDocNumber(null);
           setSplitOrders(null);
           setIsOfflineQueued(false);
           setIsServerBuffered(false);
+          setIsWaitingApproval(false);
+          setIsPartiallyConfirmed(false);
           onNavigate('catalog');
         }}
       />
@@ -206,6 +245,13 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
           Boolean((data.order as any)?.requires_approval) ||
           Boolean((data as any)?.requires_approval);
         setIsWaitingApproval(isApprovalRequired);
+
+        const isPartial = Boolean(
+          data.is_partially_confirmed ||
+          data.status === 'partially_confirmed' ||
+          (receivedSplits && receivedSplits.some((s: any) => s.status === 'failed' || s.status === 'cancelled' || s.success === false))
+        );
+        setIsPartiallyConfirmed(isPartial);
 
         clearCart();
         setOrderDocNumber(docNum);

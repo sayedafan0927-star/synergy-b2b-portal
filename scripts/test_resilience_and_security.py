@@ -1422,7 +1422,44 @@ with open(os.path.join(ROOT_DIR, "src", "components", "supplier", "CreateDefectM
 test_assert("photo_urls" in cdm_s15 and "photoUrls" in cdm_s15, "CreateDefectModal.tsx supports photo attachments for supplier defects")
 
 # ------------------------------------------------------------------------------
-# 40. Summary Report
+# 40. Stage 16: Active Filter Chips, Silent Price/FX Sync, Multi-Warehouse Partial Fulfillment & Reconnect Idempotency
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 40. STAGE 16: ACTIVE FILTERS, SILENT SYNC, PARTIAL FULFILLMENT & IDEMPOTENCY ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "catalog", "ActiveFilterChips.tsx"), "r", encoding="utf-8") as fp:
+    afc_txt = fp.read()
+test_assert("export function ActiveFilterChips" in afc_txt and "onResetAll" in afc_txt, "ActiveFilterChips.tsx provides dismissable filter chips with 1-click reset")
+
+with open(os.path.join(ROOT_DIR, "src", "pages", "CatalogPage.tsx"), "r", encoding="utf-8") as fp:
+    cat_s16 = fp.read()
+test_assert("<ActiveFilterChips" in cat_s16 and "ActiveFilterChips" in cat_s16, "CatalogPage.tsx integrates ActiveFilterChips above the product listing")
+
+with open(os.path.join(ROOT_DIR, "src", "contexts", "CartContext.tsx"), "r", encoding="utf-8") as fp:
+    cc_s16 = fp.read()
+test_assert("syncItemPrices:" in cc_s16 and "const syncItemPrices = useCallback(" in cc_s16, "CartContext.tsx exposes syncItemPrices for automated cart price reconciliation")
+
+with open(os.path.join(ROOT_DIR, "src", "pages", "CartPage.tsx"), "r", encoding="utf-8") as fp:
+    cart_s16 = fp.read()
+test_assert("syncItemPrices(" in cart_s16 and "toastInfo(" in cart_s16 and "isPartiallyConfirmed" in cart_s16, "CartPage.tsx executes silent price/FX sync on entry and tracks partial confirmation")
+
+with open(os.path.join(ROOT_DIR, "api", "modules/orders/orderDispatcher.ts"), "r", encoding="utf-8") as fp:
+    disp_s16 = fp.read()
+test_assert("partially_confirmed" in disp_s16 and "is_partially_confirmed" in disp_s16, "orderDispatcher.ts supports multi-warehouse partial fulfillment when regional stocks conflict")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "cart", "CartSuccessModal.tsx"), "r", encoding="utf-8") as fp:
+    csm_s16 = fp.read()
+test_assert("isPartiallyConfirmed" in csm_s16 and "Заказ частично подтвержден" in csm_s16, "CartSuccessModal.tsx gracefully explains partially confirmed multi-warehouse orders")
+
+with open(os.path.join(ROOT_DIR, "src", "lib", "erp", "ordersApi.ts"), "r", encoding="utf-8") as fp:
+    oapi_s16 = fp.read()
+test_assert("payload.idempotency_key ||" in oapi_s16, "ordersApi.ts preserves caller idempotency_key for stable network retries")
+
+with open(os.path.join(ROOT_DIR, "src", "lib", "offlineOrderQueue.ts"), "r", encoding="utf-8") as fp:
+    ooq_s16 = fp.read()
+test_assert("payload.idempotency_key ||" in ooq_s16 and "res.order_number" in ooq_s16, "offlineOrderQueue.ts pins idempotency key and supports idempotent order replay")
+
+# ------------------------------------------------------------------------------
+# 41. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

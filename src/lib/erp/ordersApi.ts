@@ -46,9 +46,9 @@ export async function requestOrderApprovalViaWhatsApp(params: {
  * Отправка заказа в Synergy ERP с защитой от дублирования и повторами при сбоях сети (Exponential Backoff).
  */
 export async function submitOrderToErp(payload: CreateOrderPayload): Promise<ErpOrderResponse> {
-  const idempotencyKey = typeof crypto !== 'undefined' && crypto.randomUUID 
+  const idempotencyKey = payload.idempotency_key || (typeof crypto !== 'undefined' && crypto.randomUUID 
     ? crypto.randomUUID() 
-    : `order-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    : `order-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`);
 
   const rawClientId = payload.client_id;
   const numClientId = rawClientId ? (Number(String(rawClientId).replace(/\D+/g, '')) || Number(rawClientId)) : undefined;

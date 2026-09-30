@@ -8,6 +8,7 @@ interface CartContextValue {
   addItem: (item: Omit<CartItem, 'quantity'>, qty?: number) => void;
   removeItem: (productId: string, size: string, warehouse: string) => void;
   updateQuantity: (productId: string, size: string, warehouse: string, qty: number) => void;
+  syncItemPrices: (updater: (item: CartItem) => { price: number; price_per_sqm?: number; maxStock?: number } | null) => number;
   clearCart: () => void;
   totalItems: number;
   totalPrice: number;
@@ -87,6 +88,32 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
+  const syncItemPrices = useCallback((updater: (item: CartItem) => { price: number; price_per_sqm?: number; maxStock?: number } | null) => {
+    let updatedCount = 0;
+    setItems(prev => {
+      const next = prev.map(item => {
+        const patch = updater(item);
+        if (!patch) return item;
+        const priceChanged = Math.abs(item.price - patch.price) >= 0.01;
+        const sqmChanged = patch.price_per_sqm !== undefined && Math.abs((item.price_per_sqm ?? 0) - patch.price_per_sqm) >= 0.01;
+        const stockChanged = patch.maxStock !== undefined && item.maxStock !== patch.maxStock;
+        if (priceChanged || sqmChanged || stockChanged) {
+          updatedCount++;
+          return {
+            ...item,
+            price: patch.price,
+            price_per_sqm: patch.price_per_sqm ?? item.price_per_sqm,
+            maxStock: patch.maxStock ?? item.maxStock,
+            quantity: patch.maxStock !== undefined ? Math.min(item.quantity, Math.max(1, patch.maxStock)) : item.quantity,
+          };
+        }
+        return item;
+      });
+      return updatedCount > 0 ? next : prev;
+    });
+    return updatedCount;
+  }, []);
+
   const clearCart = useCallback(() => setItems([]), []);
 
   const totalItems = items.reduce((sum, i) => sum + i.quantity, 0);
@@ -94,7 +121,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const totalSqm = items.reduce((sum, i) => sum + calcSqm(i.size, i.quantity), 0);
 
   return (
-    <CartContext.Provider value={{ items, addItem, removeItem, updateQuantity, clearCart, totalItems, totalPrice, totalSqm }}>
+    <CartContext.Provider value={{ items, addItem, removeItem, updateQuantity, syncItemPrices, clearCart, totalItems, totalPrice, totalSqm }}>
       {children}
     </CartContext.Provider>
   );

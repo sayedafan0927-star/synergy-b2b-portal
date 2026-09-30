@@ -47,10 +47,15 @@ export function enqueueOfflineOrder(payload: CreateOrderPayload): QueuedOfflineO
   const queue = getQueuedOfflineOrders();
   const id = `OFFLINE-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
 
+  const payloadWithIdemp: CreateOrderPayload = {
+    ...payload,
+    idempotency_key: payload.idempotency_key || `idemp-${id}`,
+  };
+
   const entry: QueuedOfflineOrder = {
     id,
     createdAt: new Date().toISOString(),
-    payload,
+    payload: payloadWithIdemp,
     status: 'pending',
     retries: 0,
   };
@@ -132,9 +137,10 @@ export async function processOfflineOrderQueue(): Promise<{ synced: number; fail
     try {
       const res = await submitOrderToErp(order.payload);
 
-      if (res.success && (res.order?.doc_number || res.split_orders?.length)) {
+      const resolvedDocNumber = res.order?.doc_number || res.order_number || res.split_orders?.[0]?.doc_number;
+      if (res.success && resolvedDocNumber) {
         order.status = 'synced';
-        order.docNumber = res.order?.doc_number || res.split_orders?.[0]?.doc_number;
+        order.docNumber = resolvedDocNumber;
         order.splitOrders = res.split_orders || res.order?.split_orders;
         delete order.lastError;
         synced++;

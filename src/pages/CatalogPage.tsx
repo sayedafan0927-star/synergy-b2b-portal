@@ -20,6 +20,7 @@ import {
   FilterDrawer,
   CatalogStockTable,
   StockReservationsModal,
+  ActiveFilterChips,
   getTotalStock,
   sizeArea,
   type SortOption,
@@ -384,41 +385,27 @@ export default function CatalogPage({
           )}
         </div>
 
-        {/* Category switcher: Ковры vs Дорожки */}
         <div className="mb-5 flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setSelectedCategory('all')}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-              selectedCategory === 'all'
-                ? 'bg-brand-700 text-white shadow-sm ring-2 ring-brand-700/20'
-                : 'bg-white border border-slate-200 text-slate-700 hover:border-brand-500 hover:bg-slate-50'
-            }`}
-          >
-            Все категории ({baseProducts.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setSelectedCategory('Ковры')}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-              selectedCategory === 'Ковры'
-                ? 'bg-brand-700 text-white shadow-sm ring-2 ring-brand-700/20'
-                : 'bg-white border border-slate-200 text-slate-700 hover:border-brand-500 hover:bg-slate-50'
-            }`}
-          >
-            Ковры ({baseProducts.filter(p => p.category === 'Ковры' || !p.name.toLowerCase().includes('дорожк')).length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setSelectedCategory('Дорожки')}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-              selectedCategory === 'Дорожки'
-                ? 'bg-brand-700 text-white shadow-sm ring-2 ring-brand-700/20'
-                : 'bg-white border border-slate-200 text-slate-700 hover:border-brand-500 hover:bg-slate-50'
-            }`}
-          >
-            Дорожки ({baseProducts.filter(p => p.category === 'Дорожки' || p.name.toLowerCase().includes('дорожк')).length})
-          </button>
+          {(['all', 'Ковры', 'Дорожки'] as const).map((cat) => {
+            const count = cat === 'all'
+              ? baseProducts.length
+              : baseProducts.filter(p => cat === 'Ковры' ? (p.category === 'Ковры' || !p.name.toLowerCase().includes('дорожк')) : (p.category === 'Дорожки' || p.name.toLowerCase().includes('дорожк'))).length;
+            const label = cat === 'all' ? 'Все категории' : cat;
+            return (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                  selectedCategory === cat
+                    ? 'bg-brand-700 text-white shadow-sm ring-2 ring-brand-700/20'
+                    : 'bg-white border border-slate-200 text-slate-700 hover:border-brand-500 hover:bg-slate-50'
+                }`}
+              >
+                {label} ({count})
+              </button>
+            );
+          })}
         </div>
 
         {/* RugsUSA Size Clustering Bar (Pattern 3) activeClusterQuickFilter disabled per user request to prevent mobile layout overflow */}
@@ -491,17 +478,6 @@ export default function CatalogPage({
               </button>
             </div>
 
-            {activeFilterCount > 0 && (
-              <button
-                type="button"
-                onClick={resetFilters}
-                className="hidden sm:flex items-center gap-1 text-xs text-slate-400 hover:text-red-500 transition-colors cursor-pointer"
-              >
-                <X className="h-3 w-3" />
-                Сбросить ({activeFilterCount})
-              </button>
-            )}
-
             {viewMode === 'grid' && (
               <div className="relative">
                 <select
@@ -536,6 +512,27 @@ export default function CatalogPage({
             )}
           </div>
         </div>
+
+        {/* Active Filter Chips */}
+        <ActiveFilterChips
+          searchQuery={searchQuery}
+          selectedCategory={selectedCategory}
+          selectedCollections={selectedCollections}
+          selectedCountries={selectedCountries}
+          selectedManufacturers={selectedManufacturers}
+          selectedWarehouses={selectedWarehouses}
+          selectedSizes={selectedSizes}
+          selectedClusters={selectedClusters}
+          onClearSearch={() => setSearchQuery('')}
+          onClearCategory={() => setSelectedCategory('all')}
+          onRemoveCollection={val => setSelectedCollections(s => toggle(s, val))}
+          onRemoveCountry={val => setSelectedCountries(s => toggle(s, val))}
+          onRemoveManufacturer={val => setSelectedManufacturers(s => toggle(s, val))}
+          onRemoveWarehouse={val => setSelectedWarehouses(s => toggle(s, val))}
+          onRemoveSize={val => setSelectedSizes(s => toggle(s, val))}
+          onRemoveCluster={val => setSelectedClusters(s => toggle(s, val))}
+          onResetAll={resetFilters}
+        />
 
         {/* Country filter pills */}
         {allCountries.length > 1 && (
