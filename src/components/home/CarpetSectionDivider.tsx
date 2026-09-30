@@ -49,7 +49,6 @@ export default function CarpetSectionDivider({
   }
 
   // 2. Clean Canvas (#ffffff) -> Deep Midnight Sapphire (#0e1726)
-  // Authentic Oriental Kilim Diamond Fretwork
   if (variant === 'linen-to-sapphire') {
     return (
       <div
@@ -57,17 +56,6 @@ export default function CarpetSectionDivider({
         aria-hidden="true"
       >
         <div className="relative w-full bg-white">
-          {/* Ethnic Kilim Border Motif */}
-          <div className="container-w flex items-center justify-center gap-3 py-1.5 opacity-60">
-            <div className="h-px flex-1 bg-gradient-to-r from-transparent via-[#c59b48]/40 to-slate-400/30" />
-            <div className="flex items-center gap-2 text-[#c59b48] text-[9px] tracking-widest font-serif">
-              <span>❖</span>
-              <span>✦</span>
-              <span>❖</span>
-            </div>
-            <div className="h-px flex-1 bg-gradient-to-l from-transparent via-[#c59b48]/40 to-slate-400/30" />
-          </div>
-
           <svg
             className="w-full h-4 sm:h-6 text-[#0e1726] fill-current block"
             viewBox="0 0 1440 24"
@@ -99,7 +87,6 @@ export default function CarpetSectionDivider({
         aria-hidden="true"
       >
         <div className="relative w-full bg-[#0e1726]">
-          <div className="h-[1px] w-full bg-gradient-to-r from-transparent via-[#c59b48]/60 to-transparent" />
           <svg
             className="w-full h-4 sm:h-6 text-slate-50 fill-current block"
             viewBox="0 0 1440 24"

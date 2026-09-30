@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Menu, X, ShoppingCart, User, Shield, Phone, CloudOff, RefreshCw, Eye, EyeOff, Search } from 'lucide-react';
+import { Menu, ShoppingCart, User, Shield, CloudOff, RefreshCw, EyeOff, Search } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { useCurrency } from '@/contexts/CurrencyContext';
 import { useShowroomMode } from '@/contexts/ShowroomModeContext';
 import { checkSystemHealth } from '@/lib/erpApi';
 import { getQueuedOfflineOrders, processOfflineOrderQueue, onOfflineQueueChange } from '@/lib/offlineOrderQueue';
@@ -26,7 +25,6 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
   const { user, profile, isAdmin, realIsAdmin, isImpersonating, stopImpersonation } = useAuth();
   const isEffectiveAdmin = Boolean(isAdmin && !isImpersonating);
   const { language, setLanguage, t } = useLanguage();
-  const { currency, setCurrency } = useCurrency();
   const { isShowroomMode, toggleShowroomMode } = useShowroomMode();
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 
@@ -124,7 +122,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
           <div className="flex items-center gap-2 min-w-0">
             <EyeOff className="h-3.5 w-3.5 shrink-0" />
             <span className="truncate">
-              <strong>Режим витрины:</strong> оптовые цены и баланс скрыты для клиента в салоне
+              <strong>Режим витрины активен:</strong> оптовые цены и баланс скрыты для клиента в салоне (Витрина)
             </span>
           </div>
           <button
@@ -241,71 +239,8 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
             />
           </button>
 
-          {/* Right Column: Clean, Uncrowded Controls (Mobile shows Cart + Menu for zero clutter) */}
+          {/* Right Column: Minimalist Controls (Variant 3: Search + Profile + Cart + Menu) */}
           <div className="justify-self-end flex items-center justify-end gap-1.5 sm:gap-2">
-            {/* Phone link: sleek compact icon button on sm+ */}
-            <a
-              href="tel:+77785806866"
-              className="hidden sm:flex h-9 w-9 items-center justify-center rounded-lg text-slate-700 hover:bg-slate-100 hover:text-brand-700 transition-colors border border-slate-200 shrink-0"
-              title="Позвонить в отдел продаж: +7 (778) 580-68-66"
-              aria-label="Позвонить в отдел продаж"
-            >
-              <Phone className="h-3.5 w-3.5 text-brand-600" />
-            </a>
-
-            {/* Language Switcher (KZ / RU): visible on sm+ */}
-            <div className="hidden sm:flex items-center rounded-lg bg-slate-100 p-0.5 border border-slate-200 text-xs font-bold">
-              <button
-                type="button"
-                onClick={() => setLanguage('kz')}
-                className={`rounded-md px-2 py-1 transition-all ${language === 'kz' ? 'bg-white text-[#003365] shadow-2xs font-bold' : 'text-slate-600 hover:text-slate-900'}`}
-                title="Қазақ тілі"
-              >KZ</button>
-              <button
-                type="button"
-                onClick={() => setLanguage('ru')}
-                className={`rounded-md px-2 py-1 transition-all ${language === 'ru' ? 'bg-white text-[#003365] shadow-2xs font-bold' : 'text-slate-600 hover:text-slate-900'}`}
-                title="Русский язык"
-              >RU</button>
-            </div>
-
-            {/* Showroom Presentation Mode Toggle (Витрина / Без оптовых цен): visible on sm+ */}
-            <button
-              type="button"
-              onClick={toggleShowroomMode}
-              className={`hidden sm:flex h-9 items-center gap-1.5 px-2.5 rounded-lg border text-xs font-semibold transition-all cursor-pointer ${
-                isShowroomMode
-                  ? 'bg-amber-500 border-amber-600 text-white shadow-2xs font-bold'
-                  : 'bg-slate-100 hover:bg-slate-200/80 border-slate-200 text-slate-700'
-              }`}
-              title={
-                isShowroomMode
-                  ? 'Режим витрины активен: оптовые цены и баланс скрыты. Нажмите для выхода'
-                  : 'Включить режим витрины: скрыть оптовые цены для показа каталога клиенту'
-              }
-            >
-              {isShowroomMode ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-              <span className="hidden lg:inline">{isShowroomMode ? 'Витрина вкл' : 'Витрина'}</span>
-            </button>
-
-            {/* Currency Switcher ($ USD / ₸ KZT) - Скрыт для всех, кроме администратора */}
-            {isEffectiveAdmin && (
-              <div className="hidden xl:flex items-center rounded-lg bg-slate-100 p-0.5 border border-slate-200 text-xs font-bold">
-                <button
-                  type="button"
-                  onClick={() => setCurrency('USD')}
-                  className={`rounded-md px-2 py-1 transition-all ${currency === 'USD' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-800'}`}
-                  title="Цены в долларах ($)"
-                >$</button>
-                <button
-                  type="button"
-                  onClick={() => setCurrency('KZT')}
-                  className={`rounded-md px-2 py-1 transition-all ${currency === 'KZT' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-500 hover:text-slate-800'}`}
-                  title="Цены в тенге (₸)"
-                >₸</button>
-              </div>
-            )}
-
             {/* Offline Orders Queue Badge */}
             {offlineCount > 0 && (
               <button
@@ -313,7 +248,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
                 onClick={handleSyncOffline}
                 disabled={isSyncingOffline}
                 title="Есть сохраненные оффлайн-заказы. Нажмите для синхронизации с ERP"
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 text-[11px] font-semibold hover:bg-amber-100 transition-colors shadow-2xs cursor-pointer disabled:opacity-50"
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 text-[11px] font-semibold hover:bg-amber-100 transition-colors shadow-2xs cursor-pointer disabled:opacity-50 shrink-0"
               >
                 {isSyncingOffline ? (
                   <RefreshCw className="h-3 w-3 animate-spin text-amber-700" />
@@ -324,28 +259,30 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
               </button>
             )}
 
-            {/* Global Quick Search Button (Command Palette ⌘K) - Desktop */}
+            {/* Quick Search Button (⌘K Spotlight) - Sleek icon with ⌘K badge, zero text clutter */}
             <button
               type="button"
               onClick={() => setCommandPaletteOpen(true)}
-              className="hidden sm:flex h-9 items-center gap-2 rounded-lg px-2.5 transition-colors border border-slate-200 bg-slate-100 hover:bg-slate-200/80 text-slate-600 hover:text-slate-900 cursor-pointer shadow-2xs"
-              title="Быстрый поиск по артикулу и каталогу (⌘K / Ctrl+K)"
+              className="hidden sm:flex h-9 items-center gap-1.5 rounded-lg px-2.5 transition-colors border border-slate-200 bg-slate-100 hover:bg-slate-200/80 text-slate-700 hover:text-slate-900 cursor-pointer shadow-2xs shrink-0"
+              title="Быстрый поиск по каталогу (⌘K / Ctrl+K)"
               aria-label="Быстрый поиск"
             >
-              <Search className="h-3.5 w-3.5 text-slate-500" />
-              <span className="hidden xl:inline text-xs font-medium text-slate-500">Поиск SKU...</span>
-              <kbd className="hidden md:inline-flex items-center font-mono text-[10px] font-semibold bg-white border border-slate-250 rounded px-1.5 py-0.5 text-slate-500 shadow-2xs">
+              <Search className="h-4 w-4 text-slate-600 shrink-0" />
+              <kbd className="hidden md:inline-flex items-center font-mono text-[10px] font-semibold bg-white border border-slate-200 rounded px-1.5 py-0.5 text-slate-500 shadow-2xs">
                 ⌘K
               </kbd>
             </button>
 
+            {/* Account / Login Button */}
             <button
+              type="button"
               onClick={() => onNavigate(user ? 'profile' : 'login')}
-              className={`hidden sm:flex h-9 items-center gap-2 rounded-lg px-2.5 transition-colors border ${
+              className={`hidden sm:flex h-9 items-center gap-2 rounded-lg px-2.5 transition-colors border shrink-0 cursor-pointer ${
                 user
                   ? 'border-slate-200 bg-slate-100 hover:bg-slate-200/80 text-slate-900 shadow-2xs'
-                  : 'border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-800'
+                  : 'border-slate-200 text-slate-700 hover:bg-slate-100 hover:text-slate-900'
               }`}
+              title={user ? 'Личный кабинет' : 'Войти в личный кабинет'}
             >
               {isAdmin ? (
                 <Shield className="h-4 w-4 text-brand-700 shrink-0" />
@@ -368,18 +305,20 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
 
             {/* Cart Button: Visible on sm+, hidden on mobile (since Cart is in bottom MobileNav) */}
             <button
+              type="button"
               onClick={() => onNavigate('cart')}
-              className="hidden sm:flex relative h-9 items-center gap-1.5 rounded-lg bg-slate-100 px-3 text-[#003365] transition-colors hover:bg-slate-200/80 border border-slate-200"
+              className="hidden sm:flex relative h-9 items-center gap-1.5 rounded-lg bg-slate-100 px-3 text-[#003365] transition-colors hover:bg-slate-200/80 border border-slate-200 shrink-0 cursor-pointer"
               title="Корзина"
             >
               <ShoppingCart className="h-[18px] w-[18px]" />
               {totalItems > 0 && <span className="text-xs font-bold">{totalItems}</span>}
             </button>
 
-            {/* Menu Button: 36x36px on mobile, full width on desktop */}
+            {/* Menu Button: 36x36px on mobile, full button on desktop */}
             <button
+              type="button"
               onClick={() => setMobileOpen(!mobileOpen)}
-              className="flex h-9 w-9 sm:w-auto items-center justify-center gap-1.5 px-0 sm:px-2.5 rounded-lg text-slate-700 transition-all hover:bg-slate-100 hover:text-brand-700 border border-slate-200 cursor-pointer"
+              className="flex h-9 w-9 sm:w-auto items-center justify-center gap-1.5 px-0 sm:px-2.5 rounded-lg text-slate-700 transition-all hover:bg-slate-100 hover:text-brand-700 border border-slate-200 cursor-pointer shrink-0"
               title="Навигационное меню Synergy"
               aria-label="Открыть меню"
             >
