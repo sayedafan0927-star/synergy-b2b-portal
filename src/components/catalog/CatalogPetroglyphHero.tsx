@@ -8,11 +8,10 @@ interface CatalogPetroglyphHeroProps {
 
 export default function CatalogPetroglyphHero({
   title = 'Каталог продукции',
-  subtitle = 'Широкий ассортимент ковров и дорожек оптом от ведущих производителей',
   children,
 }: CatalogPetroglyphHeroProps) {
   return (
-    <div className="relative mb-6 pt-1 pb-2 overflow-hidden select-none">
+    <div className="relative mb-5 pt-1 pb-1 overflow-hidden select-none">
       {/* Right Background Petroglyphs (Ibex, Deer, Hunter, Solar Tamgas) safely inset so nothing is clipped */}
       <div className="absolute right-2 sm:right-6 lg:right-10 -top-1 w-64 sm:w-80 lg:w-[400px] pointer-events-none opacity-85 z-0">
         <img
@@ -33,14 +32,12 @@ export default function CatalogPetroglyphHero({
         />
       </div>
 
-      {/* Left Typography Block (strictly isolated from any decorative elements) */}
-      <div className="relative z-10 max-w-lg mb-4">
-        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-serif font-bold text-slate-900 tracking-tight mb-2">
+      {/* Left Typography Block: Delicate, laconic, high-end editorial styling (no subtitle) */}
+      <div className="relative z-10 mb-3 flex items-center gap-2">
+        <span className="w-1.5 h-1.5 rounded-full bg-amber-500/70 shrink-0" />
+        <h1 className="text-xs sm:text-sm font-semibold tracking-[0.25em] uppercase text-slate-700">
           {title}
         </h1>
-        <p className="text-xs sm:text-sm text-slate-600 font-medium leading-relaxed">
-          {subtitle}
-        </p>
       </div>
 
       {/* Category Pills & Sun Tamga in natural flex flow (100% zero overlap) */}

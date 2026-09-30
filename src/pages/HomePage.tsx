@@ -54,7 +54,7 @@ export default function HomePage({
   return (
     <div className="pb-16 lg:pb-0">
       {/* ── Hero Video Banner (Pure animation + Harmonious End-State CTA) ── */}
-      <section className="relative w-full bg-slate-950 pt-20 sm:pt-20 lg:pt-24">
+      <section className="relative w-full bg-slate-950 pt-16 sm:pt-20 lg:pt-24">
         <HeroBannerMedia onNavigate={onNavigate} isReady={isReady} />
       </section>
 

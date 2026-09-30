@@ -89,6 +89,35 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
     videoRef.current.play().catch(() => {});
   };
 
+  // Guard against scroll gestures being misinterpreted as clicks on touch screens
+  const touchStartY = useRef<number | null>(null);
+  const touchStartX = useRef<number | null>(null);
+  const hasMoved = useRef(false);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+    hasMoved.current = false;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartX.current === null || touchStartY.current === null) return;
+    const dx = Math.abs(e.touches[0].clientX - touchStartX.current);
+    const dy = Math.abs(e.touches[0].clientY - touchStartY.current);
+    if (dx > 8 || dy > 8) {
+      hasMoved.current = true;
+    }
+  };
+
+  const handleCatalogNavigate = (e: React.MouseEvent) => {
+    if (hasMoved.current) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    onNavigate?.('catalog');
+  };
+
   return (
     <div className="hero-banner-media relative w-full bg-slate-950 select-none">
       {/* 
@@ -169,7 +198,7 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
               <div className="mt-7 flex flex-wrap gap-3">
                 <button
                   type="button"
-                  onClick={() => onNavigate?.('catalog')}
+                  onClick={handleCatalogNavigate}
                   className="inline-flex items-center justify-center gap-2 text-xs uppercase tracking-widest font-bold px-6 py-3.5 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-slate-950 shadow-lg shadow-amber-400/30 hover:shadow-amber-400/50 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer"
                 >
                   <span>Перейти в каталог</span>
@@ -201,15 +230,23 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
         </button>
       </div>
 
-      {/* ── Mobile Action Bar (Thompson's Tea style: refined, compact, single ergonomic row) ── */}
-      <div className="block sm:hidden bg-slate-950 px-4 py-2.5 border-b border-slate-900/80">
+      {/* ── Mobile Action Bar: Smoothly unfolds only when video finishes, with touch scroll drag protection ── */}
+      <div 
+        className={`block sm:hidden bg-slate-950 transition-all duration-700 ease-out overflow-hidden ${
+          isEnded 
+            ? 'max-h-24 opacity-100 py-2.5 px-4 border-b border-slate-900/80 pointer-events-auto' 
+            : 'max-h-0 opacity-0 py-0 px-4 pointer-events-none'
+        }`}
+      >
         <button
           type="button"
-          onClick={() => onNavigate?.('catalog')}
-          className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-brand-600/90 hover:bg-brand-600 active:scale-[0.99] text-white py-2.5 px-4 text-xs font-semibold tracking-wider shadow-md shadow-brand-950/40 border border-brand-400/20 transition-all duration-200"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onClick={handleCatalogNavigate}
+          className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-slate-950 py-3 px-4 text-xs font-bold uppercase tracking-wider shadow-lg shadow-amber-400/20 active:scale-[0.98] transition-all cursor-pointer"
         >
           <span>ПЕРЕЙТИ В КАТАЛОГ КОВРОВ</span>
-          <ArrowRight className="w-3.5 h-3.5 text-brand-300" />
+          <ArrowRight className="w-4 h-4 text-slate-950" />
         </button>
       </div>
     </div>

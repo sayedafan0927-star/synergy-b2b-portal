@@ -71,13 +71,12 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
 
   return (
     <header
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 bg-[#faf6ee] ${
-        scrolled ? 'shadow-xs' : ''
-      }`}
+      className="fixed top-0 left-0 right-0 z-50 transition-colors duration-300 bg-[#faf6ee]"
+      style={{ backgroundColor: '#faf6ee' }}
     >
       {/* Impersonation Banner inside fixed header */}
       {isImpersonating && profile && (
-        <div className="bg-amber-500 text-white px-3 sm:px-4 py-1.5 sm:py-2 text-xs flex items-center justify-between gap-2 shadow-xs border-b border-amber-600/30">
+        <div className="bg-amber-500 text-white px-3 sm:px-4 py-1.5 sm:py-2 text-xs flex items-center justify-between gap-2 border-b border-amber-600/30">
           <div className="flex items-center gap-2 min-w-0">
             <span className="flex h-2 w-2 rounded-full bg-white animate-ping shrink-0" />
             <span className="truncate">
@@ -107,7 +106,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
 
       {/* Showroom Mode Banner */}
       {isShowroomMode && (
-        <div className="bg-amber-600 text-white px-3 sm:px-4 py-1.5 text-xs flex items-center justify-between gap-2 shadow-xs border-b border-amber-700/40">
+        <div className="bg-amber-600 text-white px-3 sm:px-4 py-1.5 text-xs flex items-center justify-between gap-2 border-b border-amber-700/40">
           <div className="flex items-center gap-2 min-w-0">
             <EyeOff className="h-3.5 w-3.5 shrink-0" />
             <span className="truncate">
@@ -124,30 +123,23 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
         </div>
       )}
 
-      {/* Left Bottom Border Line (Stops precisely where arch begins, eliminating horizontal line behind logo) */}
+      {/* Mobile Flat Bottom Hairline (Zero protrusion, zero overlap on video or catalog on mobile) */}
+      <div className="sm:hidden absolute inset-x-0 top-full -mt-px h-px bg-[#e7decb]" />
+
+      {/* Desktop Left/Right Bottom Border Lines & Spline Arch */}
       <div
-        className={`absolute left-0 top-full -mt-px h-px bg-[#e7decb] transition-all duration-300 ${
-          scrolled
-            ? 'right-[calc(50%+90px)] sm:right-[calc(50%+140px)] lg:right-[calc(50%+180px)]'
-            : 'right-[calc(50%+110px)] sm:right-[calc(50%+170px)] lg:right-[calc(50%+240px)]'
+        className={`hidden sm:block absolute left-0 top-full -mt-px h-px bg-[#e7decb] transition-all duration-300 ${
+          scrolled ? 'right-[calc(50%+140px)] lg:right-[calc(50%+180px)]' : 'right-[calc(50%+170px)] lg:right-[calc(50%+240px)]'
         }`}
       />
-
-      {/* Right Bottom Border Line (Starts precisely where arch ends) */}
       <div
-        className={`absolute right-0 top-full -mt-px h-px bg-[#e7decb] transition-all duration-300 ${
-          scrolled
-            ? 'left-[calc(50%+90px)] sm:left-[calc(50%+140px)] lg:left-[calc(50%+180px)]'
-            : 'left-[calc(50%+110px)] sm:left-[calc(50%+170px)] lg:left-[calc(50%+240px)]'
+        className={`hidden sm:block absolute right-0 top-full -mt-px h-px bg-[#e7decb] transition-all duration-300 ${
+          scrolled ? 'left-[calc(50%+140px)] lg:left-[calc(50%+180px)]' : 'left-[calc(50%+170px)] lg:left-[calc(50%+240px)]'
         }`}
       />
-
-      {/* Center Arch SVG (Continuous organic spline with identical #faf6ee fill, compact on mobile) */}
       <svg
-        className={`absolute left-1/2 -translate-x-1/2 top-full -mt-px pointer-events-none transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-          scrolled
-            ? 'w-[180px] sm:w-[280px] lg:w-[360px] h-[10px] sm:h-[14px] lg:h-[18px]'
-            : 'w-[220px] sm:w-[340px] lg:w-[480px] h-[14px] sm:h-[28px] lg:h-[42px]'
+        className={`hidden sm:block absolute left-1/2 -translate-x-1/2 top-full -mt-px pointer-events-none transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] overflow-visible ${
+          scrolled ? 'w-[280px] lg:w-[360px] h-[14px] lg:h-[18px]' : 'w-[340px] lg:w-[480px] h-[28px] lg:h-[42px]'
         }`}
         viewBox="0 0 500 44"
         preserveAspectRatio="none"
@@ -155,8 +147,9 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
         style={{ zIndex: 1 }}
       >
         <path
-          d="M 0,0 C 110,0 160,44 250,44 C 340,44 390,0 500,0 L 500,-4 L 0,-4 Z"
+          d="M 0,-2 L 500,-2 L 500,0 C 390,0 340,44 250,44 C 160,44 110,0 0,0 Z"
           fill="#faf6ee"
+          style={{ fill: '#faf6ee' }}
         />
         <path
           d="M 0,0.5 C 110,0.5 160,44 250,44 C 340,44 390,0.5 500,0.5"
@@ -198,7 +191,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
             type="button"
             onClick={() => onNavigate('home')}
             className={`justify-self-center flex flex-col items-center justify-center cursor-pointer transition-all duration-300 py-1 px-2 sm:px-4 min-w-[110px] sm:min-w-[160px] ${
-              scrolled ? 'translate-y-0.5 sm:translate-y-1.5' : 'translate-y-1 sm:translate-y-2'
+              scrolled ? 'translate-y-0 sm:translate-y-1.5' : 'translate-y-0 sm:translate-y-2'
             }`}
             title="Synergiya Group — Главная"
             aria-label="Главная страница"
