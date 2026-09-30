@@ -229,20 +229,6 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
           <RotateCcw className="w-3.5 h-3.5 transition-transform duration-300 group-hover/btn:-rotate-90" />
         </button>
       </div>
-
-      {/* ── Mobile Action Bar: Static, elegant, golden button under the video (exact reference from user Image 2) ── */}
-      <div className="block sm:hidden bg-slate-950 px-4 py-3 select-none">
-        <button
-          type="button"
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onClick={handleCatalogNavigate}
-          className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-slate-950 py-3 px-4 text-xs font-bold uppercase tracking-wider shadow-lg shadow-amber-500/25 active:scale-[0.98] transition-all cursor-pointer"
-        >
-          <span>ПЕРЕЙТИ В КАТАЛОГ КОВРОВ</span>
-          <ArrowRight className="w-4 h-4 text-slate-950" />
-        </button>
-      </div>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { Truck, Shield, Clock, Warehouse, ArrowRight } from 'lucide-react';
 import type { PageId } from '@/types';
 import { categories } from '@/data/categories';
@@ -51,6 +51,35 @@ export default function HomePage({
     return available.slice(0, 4);
   }, [products, profile, isEffectiveAdmin, hideOutOfStock]);
 
+  // Touch scroll guard to prevent accidental navigation while swiping
+  const touchStartY = useRef<number | null>(null);
+  const touchStartX = useRef<number | null>(null);
+  const hasMoved = useRef(false);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+    hasMoved.current = false;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartX.current === null || touchStartY.current === null) return;
+    const dx = Math.abs(e.touches[0].clientX - touchStartX.current);
+    const dy = Math.abs(e.touches[0].clientY - touchStartY.current);
+    if (dx > 8 || dy > 8) {
+      hasMoved.current = true;
+    }
+  };
+
+  const handleCatalogNavigate = (e: React.MouseEvent) => {
+    if (hasMoved.current) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    onNavigate('catalog');
+  };
+
   return (
     <div className="pb-16 lg:pb-0">
       {/* ── Hero Video Banner (Pure animation + Harmonious End-State CTA) ── */}
@@ -60,6 +89,20 @@ export default function HomePage({
 
       {/* ── Woven Carpet Kilim Fringe Divider (Dark Hero to Warm Linen) ── */}
       <CarpetSectionDivider variant="dark-to-linen" />
+
+      {/* ── Mobile Action Bar: Synergy Navy plaque on Warm Linen canvas with organic asymmetrical shape ── */}
+      <div className="block sm:hidden bg-[#faf7f2] px-4 pt-3 pb-2 select-none">
+        <button
+          type="button"
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onClick={handleCatalogNavigate}
+          className="w-full inline-flex items-center justify-center gap-2.5 rounded-[24px_6px_24px_6px] bg-gradient-to-r from-[#002244] via-[#003365] to-[#002244] text-white py-3.5 px-5 text-xs font-bold uppercase tracking-wider shadow-md shadow-[#003365]/20 border border-amber-400/40 active:scale-[0.98] transition-all cursor-pointer"
+        >
+          <span>ПЕРЕЙТИ В КАТАЛОГ КОВРОВ</span>
+          <ArrowRight className="w-4 h-4 text-amber-300 shrink-0" />
+        </button>
+      </div>
 
       {/* ── 1. Advantages Section (Warm Linen Parchment #faf7f2) ── */}
       <section className="py-16 lg:py-24 bg-[#faf7f2]">
