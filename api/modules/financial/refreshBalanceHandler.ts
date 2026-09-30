@@ -68,12 +68,18 @@ export async function handleRefreshClientBalance(ctx: RefreshBalanceContext): Pr
     }
 
     const fin = jsonData.financials || {};
+    const rawDebt = fin.total_debt_usd ?? jsonData.debt_usd ?? jsonData.total_debt_usd;
+    const totalDebtUsd = rawDebt !== undefined
+      ? Math.max(0, Number(rawDebt))
+      : (typeof fin.balance_usd === 'number' && fin.balance_usd < 0 ? Math.abs(fin.balance_usd) : 0);
+
     const balanceUsd = typeof fin.balance_usd === 'number'
-      ? fin.balance_usd
-      : (typeof jsonData.balance_usd === 'number' ? jsonData.balance_usd : -Number(fin.total_debt_usd || jsonData.debt_usd || 0));
+      ? Math.max(0, fin.balance_usd)
+      : (typeof jsonData.balance_usd === 'number'
+          ? Math.max(0, jsonData.balance_usd)
+          : (totalDebtUsd === 0 && Number(jsonData.balance || 0) > 0 ? Number(jsonData.balance) : 0));
     const isOverdue = Boolean(fin.is_overdue || jsonData.is_overdue);
     const overdueDays = Number(fin.max_overdue_days || fin.overdue_days || 0);
-    const totalDebtUsd = Math.max(0, -balanceUsd);
     const refreshedAt = new Date().toISOString();
 
     // 1. Атомарно сохраняем в partner_balances

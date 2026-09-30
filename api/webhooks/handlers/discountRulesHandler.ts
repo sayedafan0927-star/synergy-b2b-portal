@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { recordAuditLog } from '../../audit/logs';
+import { invalidateCatalogCache } from '../../lib/catalogCache';
 
 export async function handleDiscountRulesUpdated(
   payload: any,
@@ -14,7 +15,9 @@ export async function handleDiscountRulesUpdated(
     try {
       for (const r of rawRules) {
         const priceTypeId = String(r.price_type_id || r.price_type || '').toLowerCase().trim();
-        const discountPercent = Number(r.discount_percent ?? r.discount ?? 0);
+        const rawPercent = Number(r.discount_percent ?? r.discount ?? 0);
+        // Безопасные границы скидок: от 0% до 90%
+        const discountPercent = Math.max(0, Math.min(90, isNaN(rawPercent) ? 0 : Math.round(rawPercent * 100) / 100));
         if (priceTypeId) {
           await supabaseServer.from('discount_rules').upsert({
             price_type_id: priceTypeId,
@@ -27,6 +30,8 @@ export async function handleDiscountRulesUpdated(
           savedCount++;
         }
       }
+      // Сбрасываем кэш каталога, чтобы новые скидки применились мгновенно
+      await invalidateCatalogCache();
     } catch (ruleErr) {
       console.warn('[Webhook ERP] discount_rules upsert notice:', ruleErr);
     }

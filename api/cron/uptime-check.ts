@@ -6,6 +6,7 @@ import { applyCorsHeaders } from '../lib/cors';
 import { logger } from '../lib/logger';
 import { sendWhatsAppMessage } from '../approvals/whatsapp';
 import { getErpApiKey } from '../lib/erpKey';
+import { recordSuccess, recordFailure } from '../lib/circuitBreaker';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
@@ -89,12 +90,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       report.erp.status = 'unhealthy';
       report.erp.error = `HTTP ${erpRes.status}`;
       report.status = report.database.status === 'unhealthy' ? 'unhealthy' : 'degraded';
+      await recordFailure('erp').catch(() => {});
+    } else {
+      // Проактивное самоисцеление: переводим Circuit Breaker из OPEN/HALF_OPEN в CLOSED
+      await recordSuccess('erp').catch(() => {});
     }
   } catch (err: any) {
     report.erp.latencyMs = Date.now() - erpStart;
     report.erp.status = 'unhealthy';
     report.erp.error = err?.name === 'AbortError' ? 'Timeout (5s)' : (err?.message || 'ERP gateway unreachable');
     report.status = report.database.status === 'unhealthy' ? 'unhealthy' : 'degraded';
+    await recordFailure('erp').catch(() => {});
   }
 
   // 3. Если обнаружен инцидент — отправляем тревожный алерт дежурному инженеру

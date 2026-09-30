@@ -911,7 +911,56 @@ with open(os.path.join(ROOT_DIR, "api", "modules", "catalog", "catalogHandler.ts
 test_assert("compactCatalogPayload" in cat_code, "catalogHandler.ts implements compactCatalogPayload protecting from Vercel 4.5MB payload limit")
 
 # ------------------------------------------------------------------------------
-# 27. Summary Report
+# 27. Verifying Stage 3 ERP Gateway Hardening (Outbox nowIso, Currency Rate CDC, Reconcile Clamping, Self-Healing Breaker, Client Parity)
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}27. Verifying Stage 3 ERP Gateway Hardening & Reliability...{RESET}")
+
+with open(outbox_path, "r", encoding="utf-8") as fp:
+    outbox_src = fp.read()
+test_assert("const nowIso = new Date().toISOString()" in outbox_src, "api/outbox/sync.ts declares nowIso preventing ReferenceError crash")
+
+cur_handler_path = os.path.join(ROOT_DIR, "api", "webhooks", "handlers", "currencyRateHandler.ts")
+test_assert(os.path.exists(cur_handler_path), "api/webhooks/handlers/currencyRateHandler.ts exists")
+with open(cur_handler_path, "r", encoding="utf-8") as fp:
+    cur_code = fp.read()
+test_assert("handleCurrencyRateUpdated" in cur_code and "INVALID_EXCHANGE_RATE_BOUNDS" in cur_code, "currencyRateHandler.ts validates exchange rate bounds and updates display_settings")
+
+with open(webhook_ts_path, "r", encoding="utf-8") as fp:
+    erp_hook_src = fp.read()
+test_assert("currency_rate_updated" in erp_hook_src and "handleCurrencyRateUpdated" in erp_hook_src, "api/webhooks/erp.ts routes currency_rate_updated CDC events")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "reconciliation.ts"), "r", encoding="utf-8") as fp:
+    rec_rep_code = fp.read()
+test_assert("ISO_DATE_REGEX" in rec_rep_code and "365" in rec_rep_code, "api/modules/reconciliation.ts validates ISO date format and clamps span to 365 days")
+
+with open(os.path.join(ROOT_DIR, "api", "cron", "uptime-check.ts"), "r", encoding="utf-8") as fp:
+    up_code = fp.read()
+test_assert("recordSuccess('erp')" in up_code and "recordFailure('erp')" in up_code, "uptime-check.ts provides proactive self-healing for ERP circuit breaker")
+
+with open(os.path.join(ROOT_DIR, "api", "cron", "reconcile-balances.ts"), "r", encoding="utf-8") as fp:
+    rec_bal_code = fp.read()
+test_assert("Math.max(0, Number(erpItem.total_debt_usd" in rec_bal_code, "reconcile-balances.ts maintains canonical non-negative debt and non-negative advance balance")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "financial", "refreshBalanceHandler.ts"), "r", encoding="utf-8") as fp:
+    ref_bal_code = fp.read()
+test_assert("rawDebt !== undefined" in ref_bal_code and "totalDebtUsd" in ref_bal_code, "refreshBalanceHandler.ts prioritizes canonical total debt before balance fallback")
+
+with open(os.path.join(ROOT_DIR, "api", "webhooks", "clients.ts"), "r", encoding="utf-8") as fp:
+    cli_wh_code = fp.read()
+test_assert("handleClientDeactivated" in cli_wh_code and "INVALID_HMAC_SIGNATURE" in cli_wh_code, "api/webhooks/clients.ts delegates to handleClientDeactivated and enforces strict HMAC")
+
+with open(os.path.join(ROOT_DIR, "api", "lib", "catalogCache.ts"), "r", encoding="utf-8") as fp:
+    cat_cache_code = fp.read()
+test_assert("invalidateCatalogCache" in cat_cache_code, "catalogCache.ts exports invalidateCatalogCache for live memory invalidation")
+
+with open(os.path.join(ROOT_DIR, "api", "webhooks", "handlers", "discountRulesHandler.ts"), "r", encoding="utf-8") as fp:
+    disc_code = fp.read()
+test_assert("Math.min(90" in disc_code and "invalidateCatalogCache" in disc_code, "discountRulesHandler.ts bounds discount percentages and invalidates catalog cache")
+
+test_assert("currency_rate_updated" in spec_code, "docs/ERP_INTEGRATION_SPEC.md documents currency_rate_updated webhook specification")
+
+# ------------------------------------------------------------------------------
+# 28. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

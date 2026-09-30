@@ -310,3 +310,14 @@ export async function patchCachedCatalogStock(
 
   return { updatedInDb, cachePatched };
 }
+
+/**
+ * Инвалидация кэша каталога (L1 RAM + принудительный сброс)
+ */
+export async function invalidateCatalogCache(cacheKey?: string): Promise<void> {
+  if (cacheKey) {
+    memoryCache.delete(cacheKey);
+  } else {
+    memoryCache.clear();
+  }
+}

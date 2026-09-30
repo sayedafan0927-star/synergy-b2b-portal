@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import { recordAuditLog } from '../audit/logs';
 import { applyCorsHeaders } from '../lib/cors';
 import { logger } from '../lib/logger';
+import { handleClientDeactivated } from './handlers/clientLifecycleHandler';
 
 const ALLOWED_KEYS = new Set(
   [
@@ -96,19 +97,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
-  // 2. Проверка HMAC SHA256 подписи (если передана ERP)
+  // 2. Проверка HMAC SHA256 подписи
+  const isProd = process.env.NODE_ENV === 'production' && process.env.ENFORCE_WEBHOOK_HMAC !== 'false';
   const receivedSig = (req.headers['x-webhook-signature'] || req.headers['X-Webhook-Signature']) as string | undefined;
   const rawBody = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
 
   if (receivedSig) {
     const expectedSig = crypto.createHmac('sha256', SECRET_KEY).update(rawBody).digest('hex');
-    if (receivedSig !== expectedSig) {
+    if (receivedSig.toLowerCase() !== expectedSig.toLowerCase()) {
+      if (isProd) {
+        return res.status(401).json({
+          success: false,
+          error: 'Unauthorized: Invalid X-Webhook-Signature HMAC signature.',
+          code: 'INVALID_HMAC_SIGNATURE',
+        });
+      }
       logger.warn(`[Webhook clients] Invalid HMAC signature. Expected: ${expectedSig}, Received: ${receivedSig}`);
-      return res.status(401).json({
-        success: false,
-        error: 'Invalid HMAC signature in X-Webhook-Signature header.',
-      });
     }
+  } else if (isProd && SECRET_KEY) {
+    return res.status(401).json({
+      success: false,
+      error: 'Unauthorized: Missing required X-Webhook-Signature header in production.',
+      code: 'MISSING_HMAC_SIGNATURE',
+    });
   }
 
   const eventId = (req.headers['x-webhook-event-id'] || req.headers['X-Webhook-Event-ID']) as string | undefined;
@@ -230,46 +241,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       (payload as any).portal_access_enabled === false;
 
     if (isDeactivation) {
-      logger.info(`[Webhook clients] DEACTIVATED client: ID=${counterparty_id}. Revoking all sessions.`, { counterparty_id });
+      const broadcastLiveUpdate = async (evt: string, bPayload: any) => {
+        if (!supabase) return;
+        try {
+          const channel = supabase.channel('portal_live_updates');
+          await channel.send({ type: 'broadcast', event: evt, payload: bPayload });
+        } catch (bErr) {
+          logger.warn('[Webhook clients] Realtime broadcast notice:', {}, bErr as Error);
+        }
+      };
 
-      // Мгновенная деактивация: фиксируем в БД и транслируем в Realtime
-      try {
-        await supabase
-          .from('profiles')
-          .update({
-            impersonation_enabled: false,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('partner_id', String(counterparty_id));
-
-        const channel = supabase.channel('portal_live_updates');
-        await channel.send({
-          type: 'broadcast',
-          event: 'client_deactivated',
-          payload: { counterparty_id },
-        });
-
-        await recordAuditLog({
-          eventType: 'client_deactivated_webhook',
-          direction: 'inbound',
-          status: 'success',
-          source: 'ERP Client Webhook',
-          payload: { counterparty_id },
-        });
-      } catch (dbErr) {
-        logger.warn('[Webhook clients] Profile deactivation notice:', {}, dbErr as Error);
-      }
-
-      return res.status(200).json({
-        success: true,
-        message: 'Client deactivated and all active sessions revoked successfully.',
-        event: 'client_deactivated',
-        counterparty_id,
-        is_active: false,
-        status: 'inactive',
-        access: 'disabled',
-        timestamp: payload.timestamp || new Date().toISOString(),
-      });
+      const result = await handleClientDeactivated(
+        { ...payload, counterparty_id },
+        supabase,
+        eventId,
+        broadcastLiveUpdate
+      );
+      return res.status(200).json(result);
     }
 
     return res.status(400).json({

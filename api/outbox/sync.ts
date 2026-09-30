@@ -53,6 +53,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const startTime = Date.now();
+  const nowIso = new Date().toISOString();
   try {
     // 0. Автоматическое освобождение зависших заказов (Stale Claim Recovery)
     // Если предыдущий воркер аварийно завершился и заказ остался в 'processing_sync' > 5 минут

@@ -316,6 +316,18 @@ echo "<a href='{$ssoUrl}' target='_blank' class='btn'>Перейти в B2B-по
 }
 ```
 
+### 5.4. Событие: `currency_rate_updated` (Синхронизация официального курса USD/KZT)
+*Мгновенно обновляет базовый курс портала, предотвращая курсовые расхождения при расчетах:*
+```json
+{
+  "event": "currency_rate_updated",
+  "event_id": "rate-2026-09-30",
+  "exchange_rate_usd_kzt": 524.5000,
+  "timestamp": "2026-09-30T09:00:00Z"
+}
+```
+*Допустимый диапазон:* от 100.0000 до 2000.0000 KZT/USD. Обновляет `display_settings.exchange_rate_usd_kzt` и фиксируется в заказах (`applied_exchange_rate`).
+
 ---
 
 ## 6. Политика учета складских остатков и защита от оверселлинга (free_stock vs total_stock)

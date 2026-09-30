@@ -13,6 +13,7 @@ import {
   handlePartnerStockReleased,
 } from './handlers/clientLifecycleHandler';
 import { handleDiscountRulesUpdated } from './handlers/discountRulesHandler';
+import { handleCurrencyRateUpdated } from './handlers/currencyRateHandler';
 
 function getAllowedKeys(): Set<string> {
   return new Set([
@@ -226,6 +227,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (event === 'discount_rules_updated') {
       const result = await handleDiscountRulesUpdated(payload, supabaseServer, eventId, timestamp, broadcastLiveUpdate);
       return res.status(200).json(result);
+    }
+
+    // 8. Обновление официального курса валюты (USD/KZT) от 1C CDC
+    if (event === 'currency_rate_updated' || event === 'exchange_rate_updated') {
+      const result = await handleCurrencyRateUpdated(payload, supabaseServer, eventId, timestamp, broadcastLiveUpdate);
+      return res.status(result.success ? 200 : 422).json(result);
     }
 
     // Неизвестное событие
