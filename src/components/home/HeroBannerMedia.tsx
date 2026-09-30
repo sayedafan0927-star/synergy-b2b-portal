@@ -2,12 +2,12 @@ import { useRef, useState, useEffect } from 'react';
 import { RotateCcw, ArrowRight, Sparkles } from 'lucide-react';
 import type { PageId } from '@/types';
 
-const MOBILE_VIDEO_WEBM = '/assets/hero-video-mobile-v1.webm';
-const MOBILE_VIDEO_MP4 = '/assets/hero-video-mobile-v1.mp4';
+const MOBILE_VIDEO_MP4 = '/assets/hero-video-mobile-v2.mp4';
+const MOBILE_VIDEO_WEBM = '/assets/hero-video-mobile-v2.webm';
 const MOBILE_POSTER = '/assets/hero-poster-mobile-v1.webp';
 
-const DESKTOP_VIDEO_WEBM = '/assets/hero-video-desktop-v2.webm';
-const DESKTOP_VIDEO_MP4 = '/assets/hero-video-desktop-v2.mp4';
+const DESKTOP_VIDEO_MP4 = '/assets/hero-video-desktop-v3.mp4';
+const DESKTOP_VIDEO_WEBM = '/assets/hero-video-desktop-v3.webm';
 const DESKTOP_POSTER = '/assets/hero-poster-desktop-v2.webp';
 
 interface HeroBannerMediaProps {
@@ -43,22 +43,38 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
     // While preloader logo is displaying, hold video paused at beginning (frame 0)
     if (!isReady) {
       video.pause();
-      try {
-        video.currentTime = 0;
-      } catch {}
       return;
     }
 
-    // Preloader is done and user sees the screen: start cleanly from frame 0
+    // Preloader is done and user sees the screen: start immediately without seeking
     setIsEnded(false);
-    try {
-      video.currentTime = 0;
-    } catch {}
     
-    video.play().catch(() => {
-      // If browser blocks autoplay, show final CTA card
-      setIsEnded(true);
-    });
+    // Only seek to 0 if it was played previously and not at the beginning
+    if (video.currentTime > 0.1) {
+      try {
+        video.currentTime = 0;
+      } catch {}
+    }
+
+    const startPlayback = () => {
+      const playPromise = video.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(() => {
+          // If browser policy blocks autoplay, graceful fallback
+        });
+      }
+    };
+
+    if (video.readyState >= 2) {
+      startPlayback();
+    } else {
+      const onCanPlay = () => {
+        startPlayback();
+        video.removeEventListener('canplay', onCanPlay);
+      };
+      video.addEventListener('canplay', onCanPlay);
+      return () => video.removeEventListener('canplay', onCanPlay);
+    }
   }, [isReady, isMobile]);
 
   const handleEnded = () => {
@@ -72,7 +88,9 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
     e.stopPropagation();
     if (!videoRef.current) return;
     setIsEnded(false);
-    videoRef.current.currentTime = 0;
+    try {
+      videoRef.current.currentTime = 0;
+    } catch {}
     videoRef.current.play().catch(() => {});
   };
 
@@ -82,29 +100,29 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
     <div className="hero-banner-media relative w-full h-[66vh] sm:h-[72vh] lg:h-[82vh] min-h-[480px] max-h-[860px] bg-slate-950 overflow-hidden select-none">
       {/* 
         Full clean video background:
-        Dynamic responsive source selection with key-recreation to guarantee Safari/Android
-        pick the right stream without loading redundant data.
+        - preload="auto" primes the buffer while preloader displays
+        - MP4 with +faststart and frequent keyframes placed first for instant hardware decode
       */}
       <video
-        key={isMobile ? 'mobile-v1' : 'desktop-v2'}
+        key={isMobile ? 'mobile-v2' : 'desktop-v3'}
         ref={videoRef}
         autoPlay={isReady}
         muted
         playsInline
-        preload="metadata"
+        preload="auto"
         poster={poster}
         onEnded={handleEnded}
         className="w-full h-full object-cover object-center"
       >
         {isMobile ? (
           <>
-            <source src={MOBILE_VIDEO_WEBM} type="video/webm" />
             <source src={MOBILE_VIDEO_MP4} type="video/mp4" />
+            <source src={MOBILE_VIDEO_WEBM} type="video/webm" />
           </>
         ) : (
           <>
-            <source src={DESKTOP_VIDEO_WEBM} type="video/webm" />
             <source src={DESKTOP_VIDEO_MP4} type="video/mp4" />
+            <source src={DESKTOP_VIDEO_WEBM} type="video/webm" />
           </>
         )}
       </video>
