@@ -128,11 +128,13 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
 
       {/* Thompson's Tea Signature Editorial Spline Arch (Flawless cubic-bezier continuous transition) */}
       <svg
-        className="absolute left-1/2 -translate-x-1/2 top-full -mt-px pointer-events-none transition-all duration-400 ease-[cubic-bezier(0.16,1,0.3,1)]"
+        className={`absolute left-1/2 -translate-x-1/2 top-full -mt-px pointer-events-none transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] origin-top ${
+          scrolled ? 'scale-y-0 opacity-0' : 'scale-y-100 opacity-100'
+        }`}
         style={{
           zIndex: 1,
-          width: scrolled ? '320px' : '460px',
-          height: scrolled ? '12px' : '42px',
+          width: '460px',
+          height: '42px',
         }}
         viewBox="0 0 500 44"
         preserveAspectRatio="none"
@@ -182,7 +184,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
             type="button"
             onClick={() => onNavigate('home')}
             className={`justify-self-center flex flex-col items-center justify-center cursor-pointer transition-all duration-300 py-1 px-3 sm:px-4 min-w-[130px] sm:min-w-[160px] ${
-              scrolled ? 'translate-y-0' : 'translate-y-1 sm:translate-y-2'
+              scrolled ? 'translate-y-0' : 'translate-y-1.5 sm:translate-y-2.5'
             }`}
             title="Synergiya Group — Главная"
             aria-label="Главная страница"
@@ -210,14 +212,14 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
 
           {/* Right Column: Clean, Uncrowded Controls */}
           <div className="justify-self-end flex items-center justify-end gap-1.5 sm:gap-2">
-            {/* Phone link: sleek compact button on desktop, full text on 2xl */}
+            {/* Phone link: sleek compact icon button with phone number in title */}
             <a
               href="tel:+77785806866"
-              className="flex h-9 items-center justify-center gap-1.5 px-2 sm:px-2.5 rounded-lg text-slate-700 hover:bg-black/5 hover:text-brand-700 transition-colors border border-[#e7decb]"
+              className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-700 hover:bg-black/5 hover:text-brand-700 transition-colors border border-[#e7decb] shrink-0"
               title="Позвонить в отдел продаж: +7 (778) 580-68-66"
+              aria-label="Позвонить в отдел продаж"
             >
               <Phone className="h-3.5 w-3.5 text-brand-600" />
-              <span className="hidden 2xl:inline text-xs font-semibold">+7 (778) 580-68-66</span>
             </a>
 
             {/* Language Switcher (KZ / RU): visible on sm+ */}
