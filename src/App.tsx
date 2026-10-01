@@ -226,6 +226,9 @@ export default function App() {
   const [isPending, startTransition] = useTransition();
 
   const navigate = useCallback((target: PageId, id?: string, pushToHistory = true) => {
+    if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
     startTransition(() => {
       setPage(target);
       if (target === 'catalog' && id?.startsWith('country:')) {
@@ -385,7 +388,12 @@ export default function App() {
                 <ErrorBoundary>
                   <MainLayout page={page} navigate={navigate} showFooter={showFooter}>
                     <Suspense fallback={<PageLoadingFallback page={page} />}>
-                      <div className={page === 'home' ? 'contents' : 'hidden'} aria-hidden={page !== 'home'}>
+                      <div
+                        className={page === 'home' ? 'contents' : 'hidden'}
+                        // @ts-expect-error React 18 inert attribute support
+                        inert={page !== 'home' ? '' : undefined}
+                        aria-hidden={page !== 'home' ? true : undefined}
+                      >
                         <HomePage onNavigate={navigate} isReady={preloaderDone} />
                       </div>
                       {page !== 'home' && renderPage()}

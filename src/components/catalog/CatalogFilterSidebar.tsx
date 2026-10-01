@@ -13,7 +13,9 @@ export function CatalogFilterSidebar(props: FilterDrawerProps) {
           : 'w-0 opacity-0 -translate-x-6 border-0 pointer-events-none mr-0'
       }`}
       aria-label="Фильтры каталога"
-      aria-hidden={!open}
+      aria-hidden={!open ? true : undefined}
+      // @ts-expect-error React 18 inert attribute support
+      inert={!open ? '' : undefined}
     >
       <div className="w-72 xl:w-80 flex flex-col h-full shrink-0">
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 shrink-0 bg-white">

@@ -95,6 +95,9 @@ export default function HomePage({
       e.stopPropagation();
       return;
     }
+    if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
     onNavigate('catalog');
   };
 
