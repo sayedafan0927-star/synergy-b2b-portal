@@ -26,23 +26,8 @@ export default function B2BPartnerCtaSection({ onNavigate }: B2BPartnerCtaSectio
             }}
           />
 
-          {/* Ultra-subtle bottom edge shadow for depth */}
-          <div 
-            aria-hidden="true" 
-            className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-slate-950/35 to-transparent pointer-events-none" 
-          />
-
           {/* ── Delicate Transparent Card Container ── */}
           <div className="relative z-10 w-full px-5 py-7 sm:px-10 sm:py-10 lg:py-12 max-w-lg lg:max-w-xl mx-auto flex flex-col items-center text-center">
-            
-            {/* Synergiya Group Brand Logo */}
-            <div className="mb-3 sm:mb-4 flex items-center justify-center">
-              <img 
-                src="/Вектор_Синэнергия.png" 
-                alt="Synergiya Group" 
-                className="h-8 sm:h-9 w-auto brightness-0 invert opacity-95 drop-shadow-[0_2px_8px_rgba(0,0,0,0.85)] transition-opacity duration-300"
-              />
-            </div>
 
             {/* Main Luxury Heading */}
             <h2 className="font-display text-2xl sm:text-4xl lg:text-[42px] font-bold text-white tracking-tight leading-[1.15] drop-shadow-[0_2px_14px_rgba(0,0,0,0.85)]">
