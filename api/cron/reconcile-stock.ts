@@ -118,10 +118,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               const nextAuto = currentAutoRetries + 1;
               const newNotes = `${tOrder.notes || ''} [DLQ_AUTO_RETRY_${nextAuto} на ${new Date().toISOString()}]`.trim();
               
+              // Проверяем возможность повторного резервирования остатка перед возвратом в pending
+              const { data: oItems } = await supabase
+                .from('order_items')
+                .select('sku, quantity, warehouse_id')
+                .eq('order_id', tOrder.id);
+
+              let canReserveAll = true;
+              if (oItems && oItems.length > 0) {
+                for (const it of oItems) {
+                  const { data: isRes } = await supabase.rpc('reserve_stock', {
+                    p_sku: it.sku,
+                    p_qty: it.quantity,
+                    p_warehouse_id: it.warehouse_id || 81,
+                  });
+                  if (isRes === false) {
+                    canReserveAll = false;
+                    break;
+                  }
+                }
+              }
+
+              if (!canReserveAll) {
+                console.warn(`[Stock Reconciliation] Cannot auto-recover DLQ order ${tOrder.order_number}: insufficient stock.`);
+                continue;
+              }
+
               await supabase
                 .from('orders')
                 .update({
                   status: 'pending',
+                  reservations_released: false,
                   retry_count: 0,
                   next_retry_at: new Date().toISOString(),
                   notes: newNotes,
@@ -299,6 +326,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 4. Обновление локального L2 кэша каталога и inventory_balances при наличии расхождений
     if (discrepanciesFixed > 0 || !localCached?.data) {
       if (erpProducts.length <= 50000) {
+        // Защита активных резервов: вычитаем подтвержденные брони из каталога 1С перед сохранением в кэш
+        for (const p of erpProducts) {
+          for (const v of (p.variants || [])) {
+            if (!v.sku) continue;
+            const normSku = String(v.sku).trim().toUpperCase();
+            const mainWh = (v.warehouses && v.warehouses.length > 0) ? v.warehouses[0] : null;
+            const whId = Number(mainWh?.warehouse_id || v.warehouse_id || 81);
+            const currentReserved = localReservedMap.get(`${normSku}::${whId}`) ?? localReservedMap.get(normSku) ?? 0;
+            if (currentReserved > 0) {
+              const origFree = Number(v.free_stock ?? v.stock ?? 0);
+              const newFree = Math.max(0, origFree - currentReserved);
+              v.free_stock = newFree;
+              v.stock = newFree;
+              v.reserved_stock = Math.max(Number(v.reserved_stock || 0), currentReserved);
+            }
+          }
+        }
         await saveCachedCatalog(erpData, 'catalog_global');
       }
 

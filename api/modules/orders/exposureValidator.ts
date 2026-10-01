@@ -67,14 +67,22 @@ export async function validateClientCreditExposure(
 
     // 4. Подсчет суммы незавершенных заказов («в пути»), не проведенных в 1C
     let inFlightOrdersSum = 0;
-    if (callerAuth.userId) {
+    const partnerKey = callerAuth.partnerId ? String(callerAuth.partnerId).trim() : null;
+    if (partnerKey || callerAuth.userId) {
       try {
-        const { data: inFlightOrders } = await supabase
+        let q = supabase
           .from('orders')
           .select('total_amount')
-          .eq('user_id', callerAuth.userId)
           .in('status', ['pending', 'processing_sync', 'confirmed', 'processing'])
           .is('parent_order_id', null);
+
+        if (partnerKey) {
+          q = q.eq('partner_id', partnerKey);
+        } else {
+          q = q.eq('user_id', callerAuth.userId);
+        }
+
+        const { data: inFlightOrders } = await q;
 
         if (inFlightOrders && inFlightOrders.length > 0) {
           inFlightOrdersSum = inFlightOrders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0);

@@ -1956,7 +1956,35 @@ test_assert("xlsx" in ebm_code and "Бинарный формат .xlsx" in ebm_
 test_assert("candidateWhs.find(w => Number(w.free_stock ?? w.stock ?? 0) > 0)" in ebm_code, "ExcelBulkOrderModal.tsx picks warehouse with positive stock rather than arbitrary 0-stock index")
 
 # ------------------------------------------------------------------------------
-# 59. Summary Report
+# 59. Stage 35: P0 Runtime UUID, Corporate Credit Limit & Webhook Replay Defense
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 59. STAGE 35: P0 RUNTIME UUID, CORPORATE CREDIT LIMIT & ANTI-REPLAY WEBHOOKS ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "supabase", "migrations", "20261001153000_fix_p0_user_uuid_and_credit_limit.sql"), "r", encoding="utf-8") as fp:
+    p0_fix_sql = fp.read()
+test_assert("v_user_id := (p_order->>'user_id')::uuid;" in p0_fix_sql and "SELECT id INTO v_user_id FROM public.profiles WHERE partner_id = v_partner_id" in p0_fix_sql, "create_order_atomic safely handles non-UUID strings via v_user_id partner resolution")
+test_assert("CLIENT_BLOCKED" in p0_fix_sql and "OVERDUE_DEBT" in p0_fix_sql and "CLIENT_DEACTIVATED" in p0_fix_sql, "create_order_atomic enforces atomic credit limit and overdue debt blocks in PostgreSQL transaction")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "exposureValidator.ts"), "r", encoding="utf-8") as fp:
+    ev_fresh = fp.read()
+test_assert("partnerKey" in ev_fresh and "q.eq('partner_id', partnerKey)" in ev_fresh, "exposureValidator.ts aggregates in-flight orders across corporate counterparty by partner_id")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "auth", "loginHandler.ts"), "r", encoding="utf-8") as fp:
+    lh_fresh = fp.read()
+test_assert("resolvedProfileId" in lh_fresh and "id: resolvedProfileId" in lh_fresh, "loginHandler.ts issues verified UUID for client user session")
+test_assert("resolvedEmpId" in lh_fresh and "id: resolvedEmpId" in lh_fresh, "loginHandler.ts issues verified UUID for employee session")
+
+with open(os.path.join(ROOT_DIR, "api", "cron", "reconcile-stock.ts"), "r", encoding="utf-8") as fp:
+    rs_fresh = fp.read()
+test_assert("newFree = Math.max(0, origFree - currentReserved)" in rs_fresh, "reconcile-stock.ts protects active reservations before saving raw erpData to catalog_cache")
+test_assert("reserve_stock" in rs_fresh and "canReserveAll" in rs_fresh, "reconcile-stock.ts re-reserves stock before auto-recovering DLQ orders to pending")
+
+with open(os.path.join(ROOT_DIR, "api", "webhooks", "erp.ts"), "r", encoding="utf-8") as fp:
+    wh_fresh = fp.read()
+test_assert("WEBHOOK_TIMESTAMP_EXPIRED" in wh_fresh and "x-webhook-timestamp" in wh_fresh, "api/webhooks/erp.ts enforces 5-minute replay window against replay attacks")
+
+# ------------------------------------------------------------------------------
+# 60. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

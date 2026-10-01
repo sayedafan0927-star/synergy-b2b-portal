@@ -49,18 +49,20 @@ export function handleErpLoginToken(jsonData: any, supabase: SupabaseClient | nu
       const c = jsonData.client || {};
       const pId = String(c.id || jsonData.client_id || '');
       const uId = `erp-client-${pId}`;
+      const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       const fName = String(jsonData.name || c.name || 'Оптовый клиент');
       const phone = String(jsonData.phone || c.phone || '');
       const priceType = String(c.price_type || 'wholesale');
+      const resolvedUserId = (typeof c.uuid === 'string' && UUID_REGEX.test(c.uuid)) ? c.uuid : crypto.randomUUID();
 
       const sessionData = {
         user: {
-          id: uId,
+          id: resolvedUserId,
           email: `${phone.replace(/\D+/g, '') || pId}@kilem-khan.kz`,
-          user_metadata: { full_name: fName },
+          user_metadata: { full_name: fName, erp_client_id: uId },
         },
         profile: {
-          id: uId,
+          id: resolvedUserId,
           role: 'client',
           partner_id: pId,
           full_name: fName,
@@ -85,7 +87,7 @@ export function handleErpLoginToken(jsonData: any, supabase: SupabaseClient | nu
           supabase
             .from('profiles')
             .upsert({
-              id: crypto.randomUUID(),
+              id: resolvedUserId,
               partner_id: pId,
               erp_id: Number(pId) || null,
               full_name: fName,

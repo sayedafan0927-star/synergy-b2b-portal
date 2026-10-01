@@ -138,6 +138,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
+  // 2.1. Защита от Replay-атак по временному окну (5 минут)
+  const rawWebhookTs = req.headers['x-webhook-timestamp'] || req.headers['X-Webhook-Timestamp'];
+  if (rawWebhookTs) {
+    const parsedTs = Number(rawWebhookTs) > 1e11 ? Number(rawWebhookTs) : Number(rawWebhookTs) * 1000;
+    if (!isNaN(parsedTs) && Math.abs(Date.now() - parsedTs) > 5 * 60 * 1000) {
+      if (isProd) {
+        return res.status(401).json({
+          success: false,
+          error: 'Unauthorized: Webhook timestamp expired or outside permitted replay window (+/- 5m).',
+          code: 'WEBHOOK_TIMESTAMP_EXPIRED',
+        });
+      }
+      console.warn('[Webhook ERP] Timestamp replay window exceeded (+/- 5m). Permitted in non-prod mode.');
+    }
+  }
+
   const eventId = (req.headers['x-webhook-event-id'] || req.headers['X-Webhook-Event-ID']) as string | undefined;
 
   try {

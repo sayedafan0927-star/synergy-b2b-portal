@@ -166,21 +166,20 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
 
   const distinctWarehouses = Array.from(new Set(pricingResult.items.map(it => it.warehouse || 'Основной Склад Астана')));
   const isMultiWarehouse = distinctWarehouses.length > 1;
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const isManagerOrAdmin = callerAuth.role === 'admin' || callerAuth.role === 'manager_rm' || callerAuth.role === 'manager_lm';
-  const resolvedUserId = isManagerOrAdmin && rawPayload.user_id
-    ? rawPayload.user_id
-    : (callerAuth.userId || rawPayload.user_id || '00000000-0000-0000-0000-000000000000');
+  const rawTargetId = isManagerOrAdmin && rawPayload.user_id ? rawPayload.user_id : (callerAuth.userId || rawPayload.user_id);
+  const resolvedUserId = (typeof rawTargetId === 'string' && UUID_REGEX.test(rawTargetId.trim()))
+    ? rawTargetId.trim()
+    : ((callerAuth.userId && UUID_REGEX.test(callerAuth.userId)) ? callerAuth.userId : '00000000-0000-0000-0000-000000000000');
 
   for (const it of pricingResult.items) {
     const itemSku = String(it.sku || '');
     const itemQty = Number(it.quantity || 1);
     const whId = resolveWarehouseId(it.warehouse_id, it.warehouse);
-    if (itemSku) {
-      reservedSkuItems.push({ sku: itemSku, qty: itemQty, whId });
-    }
+    if (itemSku) reservedSkuItems.push({ sku: itemSku, qty: itemQty, whId });
   }
 
-  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const safeContractId = typeof rawPayload.contract_id === 'string' && UUID_REGEX.test(rawPayload.contract_id.trim())
     ? rawPayload.contract_id.trim()
     : null;
@@ -193,7 +192,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
   try {
     const orderMasterPayload = {
       user_id: resolvedUserId,
-      placed_by_id: callerAuth.userId || resolvedUserId,
+      placed_by_id: (callerAuth.userId && UUID_REGEX.test(callerAuth.userId)) ? callerAuth.userId : resolvedUserId,
       partner_id: effectivePartnerId,
       warehouse: pricingResult.items[0]?.warehouse || 'Основной Склад Астана',
       notes: isMultiWarehouse ? `[Мультисклад (${distinctWarehouses.length} склада)] ${rawPayload.comment || ''}`.trim() : (rawPayload.comment || ''),
@@ -225,6 +224,10 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
 
     if (atomicErr) {
       const errMsg = atomicErr.message || '';
+      if (errMsg.includes('CLIENT_BLOCKED') || errMsg.includes('OVERDUE_DEBT') || errMsg.includes('CLIENT_DEACTIVATED')) {
+        res.status(403).json({ success: false, code: errMsg.split(':')[0].trim(), error: errMsg.replace(/^[A-Z_]+:\s*/, '').trim() });
+        return;
+      }
       if (errMsg.includes('INSUFFICIENT_STOCK')) {
         logger.warn('[Order] Atomic checkout rejected due to insufficient stock:', { error: errMsg, correlationId });
         res.status(409).json({

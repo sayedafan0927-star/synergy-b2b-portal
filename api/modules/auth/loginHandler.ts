@@ -156,6 +156,10 @@ export async function handleLoginFallback(
   // 4. Успешная авторизация — формирование сессии
   const pId = String(matchedClient.id || '');
   const uId = `erp-client-${pId}`;
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const resolvedProfileId = (dbProfile?.id && UUID_REGEX.test(dbProfile.id))
+    ? dbProfile.id
+    : crypto.randomUUID();
   const fName = String(matchedClient.name || 'Оптовый клиент');
   const priceType = String(matchedClient.price_type || 'wholesale');
   const debtUsd = typeof matchedClient.financials?.debt_usd === 'number' ? matchedClient.financials.debt_usd : (matchedClient.debt_usd || 0);
@@ -163,12 +167,12 @@ export async function handleLoginFallback(
 
   const sessionData = {
     user: {
-      id: uId,
+      id: resolvedProfileId,
       email: `${(matchedClient.phone || pId).replace(/\D+/g, '')}@kilem-khan.kz`,
-      user_metadata: { full_name: fName },
+      user_metadata: { full_name: fName, erp_client_id: uId },
     },
     profile: {
-      id: uId,
+      id: resolvedProfileId,
       role: 'client',
       partner_id: pId,
       full_name: fName,
@@ -185,7 +189,7 @@ export async function handleLoginFallback(
   // Синхронизация профиля в базе
   try {
     await supabase.from('profiles').upsert({
-      id: dbProfile?.id || crypto.randomUUID(),
+      id: resolvedProfileId,
       partner_id: pId,
       erp_id: Number(pId) || null,
       full_name: fName,
@@ -349,14 +353,19 @@ export async function handleEmployeeLoginFallback(
   }
 
   // 4. Формирование сессии при успешной аутентификации
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const resolvedEmpId = (dbProfile?.id && UUID_REGEX.test(dbProfile.id))
+    ? dbProfile.id
+    : crypto.randomUUID();
+
   const sessionData = {
     user: {
-      id: uId,
+      id: resolvedEmpId,
       email: `${empPhone.replace(/\D+/g, '') || empId}@synergy-portal.kz`,
-      user_metadata: { full_name: empName },
+      user_metadata: { full_name: empName, erp_emp_id: uId },
     },
     profile: {
-      id: uId,
+      id: resolvedEmpId,
       role: empRole,
       partner_id: null,
       full_name: empName,
@@ -385,7 +394,7 @@ export async function handleEmployeeLoginFallback(
       await supabase.from('profiles').update(empProfilePayload).eq('id', dbProfile.id);
     } else {
       await supabase.from('profiles').insert({
-        id: crypto.randomUUID(),
+        id: resolvedEmpId,
         ...empProfilePayload,
       });
     }

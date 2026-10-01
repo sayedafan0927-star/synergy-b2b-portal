@@ -64,7 +64,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    const userId = String(client.id || user?.id || `erp-client-${partnerId}`);
+    const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    let validUserId = (typeof user?.id === 'string' && UUID_REGEX.test(user.id)) ? user.id : null;
+    if (!validUserId && typeof client.id === 'string' && UUID_REGEX.test(client.id)) {
+      validUserId = client.id;
+    }
+    if (!validUserId && supabaseAdmin) {
+      try {
+        const { data: pRow } = await supabaseAdmin.from('profiles').select('id').eq('partner_id', partnerId).maybeSingle();
+        if (pRow?.id && UUID_REGEX.test(pRow.id)) validUserId = pRow.id;
+      } catch {}
+    }
+    if (!validUserId) validUserId = crypto.randomUUID();
+    const userId = validUserId;
     const fullName = String(client.full_name || client.name || 'Оптовый клиент');
     const phone = String(client.phone || '');
     const priceType = String(client.price_type || 'wholesale');
@@ -72,7 +84,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Обеспечиваем наличие профиля в PostgreSQL (profiles)
     try {
       await supabaseAdmin.from('profiles').upsert({
-        id: userId.includes('-') && userId.length >= 32 ? userId : crypto.randomUUID(),
+        id: userId,
         partner_id: partnerId,
         erp_id: Number(partnerId) || null,
         full_name: fullName,
