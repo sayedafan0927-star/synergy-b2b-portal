@@ -57,13 +57,13 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
               video.play().catch(() => {});
             }
           } else {
-            if (video) {
+            if (video && !video.paused) {
               video.pause();
             }
           }
         });
       },
-      { threshold: 0.05 }
+      { threshold: 0.05, rootMargin: '120px 0px 120px 0px' }
     );
     observer.observe(video);
 
@@ -212,6 +212,8 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
           muted
           playsInline
           {...({ 'webkit-playsinline': 'true' } as any)}
+          disablePictureInPicture
+          disableRemotePlayback
           preload="auto"
           poster={POSTER}
           onEnded={handleEnded}

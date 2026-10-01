@@ -218,6 +218,8 @@ export default function HomePage({
                         muted
                         playsInline
                         {...({ 'webkit-playsinline': 'true' } as any)}
+                        disablePictureInPicture
+                        disableRemotePlayback
                         preload="auto"
                         poster={category.poster || category.image}
                         style={{
@@ -259,7 +261,7 @@ export default function HomePage({
       </section>
 
       {/* ── 3. Featured Products Section (Clean Slate-50) ── */}
-      <section className="relative py-16 lg:py-24 bg-slate-50">
+      <section className="relative py-16 lg:py-24 bg-slate-50 [content-visibility:auto] [contain-intrinsic-size:1px_800px]">
         {/* ── Top Organic Wave: Seamlessly drapes UP over the bottom of Categories Section ── */}
         <div className="absolute -top-[30px] sm:-top-[46px] lg:-top-[62px] inset-x-0 pointer-events-none select-none z-20">
           <svg
