@@ -161,7 +161,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               signal: controller.signal,
             }).finally(() => clearTimeout(timeout));
           } catch (erpErr: any) {
-            logger.warn('[WMS Hold Expiry] Notice syncing cancel with 1C ERP:', { orderDoc, error: erpErr?.message });
+            logger.warn('[WMS Hold Expiry] Notice syncing cancel with 1C ERP:', { ordDoc, error: erpErr?.message });
           }
         }
       }

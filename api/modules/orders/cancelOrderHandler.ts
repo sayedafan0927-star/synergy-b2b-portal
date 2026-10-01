@@ -29,7 +29,7 @@ export async function handleCancelOrder(options: CancelOrderOptions): Promise<vo
   const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const isUuid = UUID_REGEX.test(rawOrderId);
 
-  let query = supabase.from('orders').select('id, order_number, user_id, placed_by_id, status, total_amount, reservations_released');
+  let query = supabase.from('orders').select('id, order_number, user_id, placed_by_id, status, total_amount, reservations_released, parent_order_id');
   if (isUuid) {
     query = query.eq('id', rawOrderId);
   } else {

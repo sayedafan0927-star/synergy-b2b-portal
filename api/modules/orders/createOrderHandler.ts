@@ -8,6 +8,7 @@
  * - Transactional Outbox resilience (2.5s timeout fallback)
  */
 
+import { randomUUID } from 'crypto';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { validateOrderPricing, resolveWarehouseId } from '../../lib/pricingValidator';
@@ -301,7 +302,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
   if (!atomicExecuted) {
     const genDoc = 'ORD-' + Math.floor(Date.now() / 1000) + '-' + Math.floor(Math.random() * 1000).toString().padStart(3, '0');
     outboxOrderDoc = genDoc;
-    outboxOrderId = crypto.randomUUID();
+    outboxOrderId = randomUUID();
     createdSplitOrders = [{
       doc_number: outboxOrderDoc,
       warehouse: distinctWarehouses[0] || 'Основной Склад Астана',
@@ -335,16 +336,13 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
         outboxOrderId = createdRow.id;
         outboxOrderDoc = createdRow.order_number || outboxOrderDoc;
       }
-    } catch (insertErr) {
-      logger.warn('[Order] Local orders insert notice, continuing with generated doc:', insertErr as Error);
-    }
 
       if (isMultiWarehouse) {
         createdSplitOrders = await insertSequentialSplitOrders(
           supabase,
           pricingResult.items,
           distinctWarehouses,
-          createdRow.id,
+          outboxOrderId,
           outboxOrderDoc,
           resolvedUserId,
           callerAuth.userId,
@@ -359,7 +357,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
         createdSplitOrders = [{ doc_number: outboxOrderDoc, warehouse: distinctWarehouses[0] || 'Основной Склад Астана', amount: finalTotalAmount, items_count: finalTotalItems }];
       }
 
-      const targetOrderId = createdRow?.id || outboxOrderId;
+      const targetOrderId = outboxOrderId;
       const orderItemRows = pricingResult.items.map(it => ({
         order_id: targetOrderId,
         product_id: String(it.productId || it.item_id || it.sku || ''),
@@ -373,7 +371,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
       }));
 
       if (orderItemRows.length > 0) {
-        await supabase.from('order_items').insert(orderItemRows).catch(() => {});
+        await supabase.from('order_items').insert(orderItemRows);
       }
 
       if (serverRequiresApproval) {

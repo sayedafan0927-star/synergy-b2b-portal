@@ -44,7 +44,11 @@ export async function syncPendingCancellation(options: CancellationSyncOptions):
 
     if (erpRes.ok) {
       // 1C подтвердила отмену: теперь безопасно высвобождаем резервы
-      await supabase.rpc('release_order_reservations', { p_order_id: order.id }).catch(() => {});
+      try {
+        await supabase.rpc('release_order_reservations', { p_order_id: order.id });
+      } catch {
+        // RPC notice: continue
+      }
 
       await supabase
         .from('orders')

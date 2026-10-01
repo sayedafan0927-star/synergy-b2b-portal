@@ -10,8 +10,6 @@ import ProductCard from '@/components/ProductCard';
 import HeroBannerMedia from '@/components/home/HeroBannerMedia';
 import TechnoLuxuryButton from '@/components/home/TechnoLuxuryButton';
 import B2BPartnerCtaSection from '@/components/home/B2BPartnerCtaSection';
-import TiltCard from '@/components/home/TiltCard';
-import PopularProductsSmokeBackdrop from '@/components/home/PopularProductsSmokeBackdrop';
 import { useSynchronizedCategoryVideos } from '@/hooks/useSynchronizedCategoryVideos';
 
 const advantages = [
@@ -274,11 +272,8 @@ export default function HomePage({
         </div>
       </section>
 
-      {/* ── 3. Featured Products Section (Clean Slate-50 + Volumetric Blue-Slate Smoke Backdrop) ── */}
-      <section className="relative py-16 lg:py-24 bg-slate-50 overflow-hidden [content-visibility:auto] [contain-intrinsic-size:1px_800px]">
-        {/* ── Volumetric Smoke / Mist: Billowing thin plumes of blue-grey fog between cards & background ── */}
-        <PopularProductsSmokeBackdrop />
-
+      {/* ── 3. Featured Products Section (Clean Slate-50) ── */}
+      <section className="relative py-16 lg:py-24 bg-slate-50 [content-visibility:auto] [contain-intrinsic-size:1px_800px]">
         {/* ── Top Organic Wave: Seamlessly drapes UP over the bottom of Categories Section ── */}
         <div className="absolute -top-[30px] sm:-top-[46px] lg:-top-[62px] inset-x-0 pointer-events-none select-none z-20">
           <svg
@@ -295,7 +290,7 @@ export default function HomePage({
         </div>
 
         <div className="container-w relative z-10">
-          <div className="flex items-end justify-between mb-8 sm:mb-10 lg:mb-14">
+          <div className="flex items-end justify-between mb-10 lg:mb-14">
             <div>
               <span className="font-mono text-xs text-brand-700/80 uppercase tracking-widest block mb-1">
                 — Выбор оптовых клиентов
@@ -314,21 +309,13 @@ export default function HomePage({
             </button>
           </div>
 
-          {/* Mobile: 2 Cards Fit Comfortably Side-by-Side + Autonomous 3D Tilt | Desktop: 4-Column Grid with 3D Mouse Tilt */}
-          <div className="flex sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 lg:gap-6 overflow-x-auto sm:overflow-visible snap-x snap-mandatory no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0 pb-4 sm:pb-0">
-            {featuredProducts.map((product, idx) => (
-              <div
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+            {featuredProducts.map((product) => (
+              <ProductCard
                 key={product.id}
-                className="w-[45vw] min-w-[150px] max-w-[185px] shrink-0 snap-start sm:w-auto sm:max-w-none"
-              >
-                <TiltCard cardIndex={idx} maxTilt={14} autoTiltMobile={true} glare={true}>
-                  <ProductCard
-                    product={product}
-                    onNavigate={onNavigate}
-                    disableZoom={true}
-                  />
-                </TiltCard>
-              </div>
+                product={product}
+                onNavigate={onNavigate}
+              />
             ))}
           </div>
 

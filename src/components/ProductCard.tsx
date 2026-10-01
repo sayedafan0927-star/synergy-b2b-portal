@@ -22,7 +22,6 @@ const prefetchProductPage = () => {
 interface ProductCardProps {
   product: Product;
   onNavigate: (page: PageId, productId?: string) => void;
-  disableZoom?: boolean;
 }
 
 function getMainWarehouseStock(variant: ProductVariant) {
@@ -69,7 +68,7 @@ export function formatProductTitle(product: { name: string; article?: string; co
   return isRunner ? `${prefix} ${base}` : base;
 }
 
-export default function ProductCard({ product, onNavigate, disableZoom = false }: ProductCardProps) {
+export default function ProductCard({ product, onNavigate }: ProductCardProps) {
   const { user, profile, isAdmin, isImpersonating } = useAuth();
   const isEffectiveAdmin = isAdmin && !isImpersonating;
   const clientContext = isEffectiveAdmin ? true : profile;
@@ -221,7 +220,7 @@ export default function ProductCard({ product, onNavigate, disableZoom = false }
           width={600}
           fit="contain"
           className="h-full w-full bg-transparent flex items-center justify-center pointer-events-none"
-          imageClassName={`transition-transform duration-500 ease-apple ${disableZoom ? '' : 'group-hover:scale-105'}`}
+          imageClassName="transition-transform duration-500 ease-apple group-hover:scale-105"
         />
 
         {/* Бейдж наличия */}
