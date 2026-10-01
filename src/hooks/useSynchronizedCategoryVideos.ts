@@ -203,7 +203,7 @@ export function useSynchronizedCategoryVideos({}: UseSynchronizedCategoryVideosO
           }
         });
       },
-      { threshold: 0.05 }
+      { threshold: 0.01, rootMargin: '250px 0px 250px 0px' }
     );
 
     const sectionEl = sectionRef.current;
