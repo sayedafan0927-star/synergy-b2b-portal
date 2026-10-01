@@ -6,7 +6,7 @@ import { authenticateRequest } from '../lib/authGuard';
 import { handleReconciliationReport } from '../modules/reconciliation';
 import { getErpApiKey } from '../lib/erpKey';
 
-const TARGET_ERP_URL = process.env.ERP_API_URL || 'https://kilem-khan.kz/api/sin/public/api_portal.php';
+const TARGET_ERP_URL = process.env.ERP_API_URL || 'https://erp.synergy-tech.kz/api_portal.php';
 const SERVER_ERP_KEY = getErpApiKey();
 
 /**

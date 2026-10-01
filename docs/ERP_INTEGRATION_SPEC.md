@@ -1,6 +1,6 @@
 # Интеграционный протокол и спецификация REST API: Synergy B2B Portal ⟷ Собственная ERP
 
-Данный документ предназначен для команды разработчиков собственной ERP-системы (бэкенд `kilem-khan.kz`). Он содержит исчерпывающее описание протокола двустороннего обмена данными, схем JSON, алгоритмов формирования SSO-ссылок и вебхуков.
+Данный документ предназначен для команды разработчиков собственной ERP-системы (бэкенд `erp.synergy-tech.kz`). Он содержит исчерпывающее описание протокола двустороннего обмена данными, схем JSON, алгоритмов формирования SSO-ссылок и вебхуков.
 
 ---
 
@@ -9,7 +9,7 @@
 ```
 ┌──────────────────────────┐                 ┌──────────────────────────┐
 │   Собственная ERP        │                 │    Synergy B2B Portal    │
-│   (бэкенд kilem-khan.kz) │                 │      (Next/Vercel)       │
+│ (бэкенд erp.synergy-tech.kz)│               │      (Next/Vercel)       │
 └────────────┬─────────────┘                 └────────────┬─────────────┘
              │                                            │
              │ 1. Вызовы портала (Заказы, Каталог, Долги) │
@@ -92,8 +92,7 @@ echo "<a href='{$ssoUrl}' target='_blank' class='btn'>Перейти в B2B-по
 ## 4. Эндпоинты, которые Портал вызывает у вашей ERP
  
  Шлюз портала (`/api/erp`) выполняет вызовы к Action Router вашей ERP по адресу:
- * **Основная точка входа:** `https://crm.kilem-khan.kz/api_portal.php?action={ACTION}&portal_key={KEY}`
- * **Прямой резервный путь:** `https://kilem-khan.kz/api/sin/public/api_portal.php?action={ACTION}&portal_key={KEY}`
+ * **Основная точка входа:** `https://erp.synergy-tech.kz/api_portal.php?action={ACTION}&portal_key={KEY}`
  
  Поддерживаемые действия (`action`): `ping`, `catalog`, `create_order`, `orders`, `client_auth`, `counterparties`, `client_debt`, `sync_bundle`, `supplier_network_stock`.
  
@@ -355,7 +354,7 @@ echo "<a href='{$ssoUrl}' target='_blank' class='btn'>Перейти в B2B-по
 
 | Переменная | Описание | Пример боевого значения |
 |---|---|---|
-| `ERP_API_URL` | Единая точка входа Action Router ERP | `https://crm.kilem-khan.kz/api_portal.php` |
+| `ERP_API_URL` | Единая точка входа Action Router ERP | `https://erp.synergy-tech.kz/api_portal.php` |
 | `ERP_API_KEY` | Мастер-ключ авторизации к ERP | `<SECRET_ERP_API_KEY>` |
 | `ERP_PORTAL_SECRET` | Общий секрет для HMAC-подписи SSO | `<SECRET_PORTAL_KEY>` |
 | `GREEN_API_URL` | URL шлюза WhatsApp (Green-API / Chat-API) | `https://api.green-api.com/waInstance.../sendMessage/...` |
@@ -465,7 +464,7 @@ echo "<a href='{$ssoUrl}' target='_blank' class='btn'>Перейти в B2B-по
 ## 13. Единый шлюз WhatsApp-уведомлений (`action=send_whatsapp`)
 
 Для централизованной отправки сообщений без дублирования коннекторов портал обращается к роутеру ERP:
-* **URL:** `POST https://kilem-khan.kz/api/sin/api_portal.php?action=send_whatsapp` (алиас: `action=notify_whatsapp`)
+* **URL:** `POST https://erp.synergy-tech.kz/api_portal.php?action=send_whatsapp` (алиас: `action=notify_whatsapp`)
 * **Авторизация:** Заголовок `X-Portal-Key: <секретный_ключ_портала>`
 * **Тело запроса (JSON):**
   ```json

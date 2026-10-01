@@ -26,7 +26,7 @@ def load_env():
     return env
 
 ENV = load_env()
-TARGET_ERP_URL = os.environ.get('ERP_FALLBACK_URL', ENV.get('ERP_FALLBACK_URL', 'https://kilem-khan.kz/api/sin/public/api_portal.php'))
+TARGET_ERP_URL = os.environ.get('ERP_FALLBACK_URL', ENV.get('ERP_FALLBACK_URL', 'https://erp.synergy-tech.kz/api_portal.php'))
 ERP_KEY = os.environ.get('ERP_API_KEY', ENV.get('ERP_API_KEY', ''))
 
 def execute_request(url, headers=None, method='GET', payload=None, timeout=10):

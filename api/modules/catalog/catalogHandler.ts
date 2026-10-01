@@ -10,6 +10,14 @@ import { sanitizePostgrestFilter } from '../../lib/security';
 import { getErpApiKey } from '../../lib/erpKey';
 import { fetchUpstreamCatalogSingleflight } from './catalogSingleflight';
 
+function normalizeImageUrl(url: any): string {
+  if (typeof url !== 'string' || !url) return '';
+  return url
+    .replace(/^https?:\/\/kilem-khan\.kz\/api\/sin\/public\/image\.php/i, 'https://erp.synergy-tech.kz/image.php')
+    .replace(/^https?:\/\/crm\.kilem-khan\.kz\/api\/sin\/public\/image\.php/i, 'https://erp.synergy-tech.kz/image.php')
+    .replace(/^https?:\/\/erp\.synergy-tech\.kz\/api\/sin\/public\/image\.php/i, 'https://erp.synergy-tech.kz/image.php');
+}
+
 /**
  * Очистка и компактизация снимка каталога для предотвращения превышения
  * лимита тела ответа Vercel Serverless Function (4.5 MB Payload Limit).
@@ -29,7 +37,8 @@ export function compactCatalogPayload(data: any): any {
     country: p.country,
     density: p.density,
     pile_height: p.pile_height,
-    images: Array.isArray(p.images) ? p.images.slice(0, 3) : (p.image ? [p.image] : []),
+    images: (Array.isArray(p.images) ? p.images.slice(0, 3) : (p.image ? [p.image] : [])).map(normalizeImageUrl).filter(Boolean),
+    image_thumb: p.image_thumb ? normalizeImageUrl(p.image_thumb) : undefined,
     variants: (p.variants || []).map((v: any) => ({
       id: v.id,
       size: v.size,
@@ -327,7 +336,7 @@ export async function handleCatalogRequests(
           country: p.country,
           density: p.density,
           pile_height: p.pile_height,
-          images: p.images || [],
+          images: (p.images || []).map(normalizeImageUrl).filter(Boolean),
           variants,
           total_stock: variants.reduce((acc: number, v: any) => acc + v.stock, 0),
         };

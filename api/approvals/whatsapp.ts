@@ -2,8 +2,8 @@ import crypto from 'crypto';
 import { getErpApiKey } from '../lib/erpKey';
 
 const SECRET_KEY = process.env.PORTAL_SECRET_KEY || process.env.ERP_PORTAL_SECRET || '';
-const TARGET_ERP_URL = process.env.ERP_API_URL || 'https://kilem-khan.kz/api/sin/public/api_portal.php';
-const ERP_FALLBACK_URL = 'https://kilem-khan.kz/api/sin/api_portal.php';
+const TARGET_ERP_URL = process.env.ERP_API_URL || 'https://erp.synergy-tech.kz/api_portal.php';
+const ERP_FALLBACK_URL = process.env.ERP_FALLBACK_URL || 'https://erp.synergy-tech.kz/api_portal.php';
 const WHATSAPP_GATEWAY_URL = process.env.WHATSAPP_API_URL || process.env.GREEN_API_URL;
 const WHATSAPP_TOKEN = process.env.WHATSAPP_API_TOKEN;
 const PORTAL_BASE_URL = process.env.PORTAL_BASE_URL || 'https://synergy-b2b-portal.vercel.app';
@@ -86,7 +86,7 @@ export function verifySignedDecisionToken(tokenStr: string): { valid: boolean; o
 }
 
 /**
- * Отправка сообщения через единый шлюз ERP (kilem-khan.kz api_portal.php?action=send_whatsapp)
+ * Отправка сообщения через единый шлюз ERP (erp.synergy-tech.kz api_portal.php?action=send_whatsapp)
  * с автоматическим фоллбэком на дежурный корпоративный номер и прямой шлюз.
  */
 export async function sendWhatsAppMessage(

@@ -403,7 +403,7 @@ print(f"\n{BOLD}12. Verifying Sprint 3 ERP Gateway & Integration Specification..
 
 fresh_erp_code = erp_code
 
-test_assert("https://crm.kilem-khan.kz/api_portal.php" in fresh_erp_code, "api/erp.ts points to production ERP Gateway https://crm.kilem-khan.kz/api_portal.php")
+test_assert("https://erp.synergy-tech.kz/api_portal.php" in fresh_erp_code, "api/erp.ts points to production ERP Gateway https://erp.synergy-tech.kz/api_portal.php")
 test_assert("catalog_normalized" in fresh_erp_code and "reconcile_all_balances" in fresh_erp_code, "api/erp.ts includes catalog_normalized and reconcile_all_balances in PUBLIC_ACTIONS")
 test_assert("jsonData.designs" in fresh_erp_code and "normalizedProducts" in fresh_erp_code, "api/erp.ts maps RugsUSA normalized designs tree into products schema")
 test_assert("INSUFFICIENT_STOCK" in fresh_erp_code and "409" in fresh_erp_code, "api/erp.ts handles 409 Conflict / INSUFFICIENT_STOCK with order status cancellation")

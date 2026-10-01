@@ -1,5 +1,5 @@
 # ТЕХНИЧЕСКОЕ ЗАДАНИЕ И СПЕЦИФИКАЦИЯ ИНТЕГРАЦИИ
-## B2B-Портал Synergy ⟷ Собственная ERP (kilem-khan.kz)
+## B2B-Портал Synergy ⟷ Собственная ERP (erp.synergy-tech.kz)
 **Версия документа:** 2.4 (Enterprise Production Edition)  
 **Статус:** Утверждено к реализации при миграции на новый хостинг  
 **Целевая аудитория:** Разработчики и DevOps-инженеры учетной системы ERP  
@@ -25,7 +25,7 @@ B2B-портал для оптовых клиентов спроектирова
                ▼                               │
 ┌──────────────────────────────────────────────┴──────────────┐
 │                  СОБСТВЕННАЯ ERP-СИСТЕМА                    │
-│   (https://crm.kilem-khan.kz / https://kilem-khan.kz)       │
+│                 (https://erp.synergy-tech.kz)               │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -34,9 +34,7 @@ B2B-портал для оптовых клиентов спроектирова
 ## 2. Сетевые параметры и безопасность
 
 1. **Точки входа Action Router ERP:**
-   * Основной роутер: `https://crm.kilem-khan.kz/api_portal.php`
-   * Резервный шлюз: `https://kilem-khan.kz/api/sin/public/api_portal.php`
-   *(Если при переезде на новый хостинг изменится домен или путь, сообщите — мы моментально переключим переменную `ERP_API_URL`)*.
+   * Основной роутер: `https://erp.synergy-tech.kz/api_portal.php`
 2. **Авторизация запросов:**
    * Все запросы от портала к ERP содержат заголовок:
      ```http
@@ -105,7 +103,7 @@ ERP должна корректно обрабатывать следующие 
       "material": "Полипропилен / Heat-Set",
       "density": "600 000 точек/м²",
       "pile_height": "10 мм",
-      "images": ["https://kilem-khan.kz/uploads/saloon_25449a.jpg"],
+      "images": ["https://erp.synergy-tech.kz/image.php?f=saloon_25449a.webp"],
       "variants": [
         {
           "id": "140",
@@ -419,25 +417,25 @@ function generatePortalSsoUrl(
 
 - [ ] **1. Проверка Ping:**
   ```bash
-  curl -i "https://crm.kilem-khan.kz/api_portal.php?action=ping&portal_key=138d1bdaf9402600c8f5d5763e2e1573c1e45d32401e62e4981cd7e898bf0544"
+  curl -i "https://erp.synergy-tech.kz/api_portal.php?action=ping&portal_key=138d1bdaf9402600c8f5d5763e2e1573c1e45d32401e62e4981cd7e898bf0544"
   ```
   *Ожидается: HTTP 200, success: true.*
 
 - [ ] **2. Проверка авторизации (Zero-Key Check):**
   ```bash
-  curl -i "https://crm.kilem-khan.kz/api_portal.php?action=ping"
+  curl -i "https://erp.synergy-tech.kz/api_portal.php?action=ping"
   ```
   *Ожидается: HTTP 401 Unauthorized.*
 
 - [ ] **3. Проверка выгрузки каталога:**
   ```bash
-  curl -i -H "X-Portal-Key: 138d1bdaf9402600c8f5d5763e2e1573c1e45d32401e62e4981cd7e898bf0544" "https://crm.kilem-khan.kz/api_portal.php?action=catalog&dealer_id=PRT-DEMO-001"
+  curl -i -H "X-Portal-Key: 138d1bdaf9402600c8f5d5763e2e1573c1e45d32401e62e4981cd7e898bf0544" "https://erp.synergy-tech.kz/api_portal.php?action=catalog&dealer_id=PRT-DEMO-001"
   ```
   *Ожидается: HTTP 200, массив products с остатками складов.*
 
 - [ ] **4. Проверка финансового сальдо:**
   ```bash
-  curl -i -H "X-Portal-Key: 138d1bdaf9402600c8f5d5763e2e1573c1e45d32401e62e4981cd7e898bf0544" "https://crm.kilem-khan.kz/api_portal.php?action=client_debt&counterparty_id=42"
+  curl -i -H "X-Portal-Key: 138d1bdaf9402600c8f5d5763e2e1573c1e45d32401e62e4981cd7e898bf0544" "https://erp.synergy-tech.kz/api_portal.php?action=client_debt&counterparty_id=42"
   ```
   *Ожидается: HTTP 200, financials.*
 

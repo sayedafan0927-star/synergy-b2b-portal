@@ -26,8 +26,8 @@ const upstreamCatalogInFlight = new Map<string, Promise<any>>();
 export async function fetchUpstreamCatalogSingleflight(
   options: FetchCatalogSingleflightOptions = {}
 ): Promise<any> {
-  const targetErpUrl = options.targetErpUrl || process.env.ERP_API_URL || 'https://kilem-khan.kz/api/sin/public/api_portal.php';
-  const fallbackErpUrl = options.fallbackErpUrl || process.env.ERP_FALLBACK_URL || 'https://crm.kilem-khan.kz/api_portal.php';
+  const targetErpUrl = options.targetErpUrl || process.env.ERP_API_URL || 'https://erp.synergy-tech.kz/api_portal.php';
+  const fallbackErpUrl = options.fallbackErpUrl || process.env.ERP_FALLBACK_URL || 'https://erp.synergy-tech.kz/api_portal.php';
   const serverErpKey = options.serverErpKey || getErpApiKey();
   const correlationId = options.correlationId || `singleflight-${Date.now()}`;
 

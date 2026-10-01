@@ -40,7 +40,7 @@ API портала работает в среде Serverless Functions (`api/`).
                                                       ▼
                                             ┌──────────────────┐
                                             │ Synergy ERP 1C   │
-                                            │ (kilem-khan.kz)  │
+                                            │ (erp.synergy-tech.kz) │
                                             └──────────────────┘
 ```
 

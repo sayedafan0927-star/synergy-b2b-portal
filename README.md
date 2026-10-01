@@ -49,7 +49,7 @@
 
 ### Смежные технические спецификации:
 - [UI_UX_STANDARDS.md](UI_UX_STANDARDS.md) — детальные правила адаптивности и оформления ковров.
-- [docs/ERP_INTEGRATION_SPEC.md](docs/ERP_INTEGRATION_SPEC.md) — спецификация REST API для команды ERP (`kilem-khan.kz`).
+- [docs/ERP_INTEGRATION_SPEC.md](docs/ERP_INTEGRATION_SPEC.md) — спецификация REST API для команды ERP (`erp.synergy-tech.kz`).
 - [docs/MONITORING_AND_OBSERVABILITY.md](docs/MONITORING_AND_OBSERVABILITY.md) — руководство по мониторингу Grafana и алертам в Telegram.
 
 ---
