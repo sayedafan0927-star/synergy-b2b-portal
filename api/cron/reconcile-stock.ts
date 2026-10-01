@@ -71,14 +71,104 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
+    // 1.5. Self-Healing: Автоматическое освобождение зависших резервов отмененных/отклоненных заказов
+    let selfHealedOrders = 0;
+    if (supabase) {
+      try {
+        const { data: leakedOrders } = await supabase
+          .from('orders')
+          .select('id, order_number, status')
+          .in('status', ['cancelled', 'rejected'])
+          .or('reservations_released.is.null,reservations_released.eq.false')
+          .limit(50);
+
+        if (leakedOrders && leakedOrders.length > 0) {
+          for (const lo of leakedOrders) {
+            await supabase.rpc('release_order_reservations', { p_order_id: lo.id });
+            await supabase
+              .from('orders')
+              .update({ reservations_released: true, updated_at: new Date().toISOString() })
+              .eq('id', lo.id);
+            selfHealedOrders++;
+          }
+          console.log(`[Stock Reconciliation] Self-healed ${selfHealedOrders} unreleased cancelled/rejected orders.`);
+        }
+      } catch (leakErr) {
+        console.warn('[Stock Reconciliation] Notice self-healing leaked cancelled orders:', leakErr);
+      }
+    }
+
+    // 1.6. Self-Healing: Автоматический перезапуск заказов из DLQ при подтвержденной доступности 1С
+    let autoRetriedDlqCount = 0;
+    if (supabase && erpProducts.length > 0) {
+      try {
+        const { data: transientDlqOrders } = await supabase
+          .from('orders')
+          .select('id, order_number, last_error, notes')
+          .eq('status', 'failed_dlq')
+          .not('last_error', 'ilike', '%[Fatal Business Error]%')
+          .limit(10);
+
+        if (transientDlqOrders && transientDlqOrders.length > 0) {
+          for (const tOrder of transientDlqOrders) {
+            const autoRetryMarker = (tOrder.notes || '').match(/\[DLQ_AUTO_RETRY_(\d+)\]/);
+            const currentAutoRetries = autoRetryMarker ? parseInt(autoRetryMarker[1], 10) : 0;
+
+            if (currentAutoRetries < 3) {
+              const nextAuto = currentAutoRetries + 1;
+              const newNotes = `${tOrder.notes || ''} [DLQ_AUTO_RETRY_${nextAuto} на ${new Date().toISOString()}]`.trim();
+              
+              await supabase
+                .from('orders')
+                .update({
+                  status: 'pending',
+                  retry_count: 0,
+                  next_retry_at: new Date().toISOString(),
+                  notes: newNotes,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', tOrder.id);
+
+              autoRetriedDlqCount++;
+              console.log(`[Stock Reconciliation] Auto-recovered transient DLQ order ${tOrder.order_number} (attempt ${nextAuto}/3)`);
+            }
+          }
+        }
+      } catch (dlqRecoverErr) {
+        console.warn('[Stock Reconciliation] Notice in DLQ auto-recovery:', dlqRecoverErr);
+      }
+    }
+
     // 2. Получение текущего локального кэша каталога и активных резервов
     const localCached = await getCachedCatalog('catalog_global');
     const localProducts = Array.isArray(localCached?.data?.products) ? localCached.data.products : [];
 
     // Загружаем текущие активные резервы из inventory_balances для защиты от затирания броней
     const localReservedMap = new Map<string, number>();
+    let phantomReservationsFixed = 0;
     if (supabase) {
       try {
+        // Подсчитываем реальные активные брони по заказам клиентов (Zero Ghost Reservation)
+        const actualActiveOrderReservations = new Map<string, number>();
+        const { data: activeOrderItems } = await supabase
+          .from('order_items')
+          .select('sku, quantity, warehouse_id, orders!inner(status, reservations_released)')
+          .not('orders.status', 'in', '("cancelled","rejected","completed","delivered")')
+          .or('reservations_released.is.null,reservations_released.eq.false', { foreignTable: 'orders' });
+
+        if (activeOrderItems) {
+          for (const item of activeOrderItems) {
+            const sku = String(item.sku || '').trim().toUpperCase();
+            const wh = Number(item.warehouse_id || 81);
+            const qty = Number(item.quantity || 0);
+            if (sku && qty > 0) {
+              const key = `${sku}::${wh}`;
+              actualActiveOrderReservations.set(key, (actualActiveOrderReservations.get(key) || 0) + qty);
+              actualActiveOrderReservations.set(sku, (actualActiveOrderReservations.get(sku) || 0) + qty);
+            }
+          }
+        }
+
         // Queries canonical .select('sku, reserved_stock') with warehouse granularity
         const { data: dbBalances, error: qErr } = await supabase
           .from('inventory_balances')
@@ -102,9 +192,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             if (b.sku && resStock > 0) {
               const skuUpper = String(b.sku).trim().toUpperCase();
               const bWh = Number(b.warehouse_id || 81);
+              const key = `${skuUpper}::${bWh}`;
+
+              // Self-Healing: устраняем фантомные резервы, не подтвержденные активными заказами
+              const realReserved = actualActiveOrderReservations.get(key) || 0;
+              const effectiveReserved = Math.min(resStock, realReserved);
+
+              if (resStock > realReserved) {
+                phantomReservationsFixed++;
+                supabase
+                  .from('inventory_balances')
+                  .update({ reserved_stock: realReserved, updated_at: new Date().toISOString() })
+                  .eq('sku', b.sku)
+                  .eq('warehouse_id', bWh)
+                  .then(() => {})
+                  .catch(() => {});
+              }
+
               // Точная привязка броней к конкретному складу (Zero Cross-Warehouse Contamination)
-              localReservedMap.set(`${skuUpper}::${bWh}`, (localReservedMap.get(`${skuUpper}::${bWh}`) || 0) + resStock);
-              localReservedMap.set(skuUpper, (localReservedMap.get(skuUpper) || 0) + resStock);
+              localReservedMap.set(`${skuUpper}::${bWh}`, (localReservedMap.get(`${skuUpper}::${bWh}`) || 0) + effectiveReserved);
+              localReservedMap.set(skuUpper, (localReservedMap.get(skuUpper) || 0) + effectiveReserved);
             }
           }
         }
@@ -195,6 +302,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       payload: {
         total_products: erpProducts.length,
         discrepancies_count: discrepanciesFixed,
+        self_healed_orders: selfHealedOrders,
+        phantom_reservations_fixed: phantomReservationsFixed,
+        auto_retried_dlq_count: autoRetriedDlqCount,
         sample_drifted_skus: driftedSkus.slice(0, 20),
       },
     });
@@ -203,6 +313,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       success: true,
       checked_products: erpProducts.length,
       discrepancies_fixed: discrepanciesFixed,
+      self_healed_orders: selfHealedOrders,
+      phantom_reservations_fixed: phantomReservationsFixed,
+      auto_retried_dlq_orders: autoRetriedDlqCount,
       sample_drifted: driftedSkus.slice(0, 10),
       duration_ms: Date.now() - startTime,
       correlation_id: correlationId,

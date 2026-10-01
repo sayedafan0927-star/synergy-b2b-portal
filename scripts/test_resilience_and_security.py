@@ -1824,7 +1824,19 @@ with open(os.path.join(ROOT_DIR, "api", "modules", "catalog", "resolveBatchHandl
 test_assert("items.slice(0, 500)" in rb_code, "resolveBatchHandler.ts caps batch resolution to 500 items preventing memory overload")
 
 # ------------------------------------------------------------------------------
-# 53. Summary Report
+# 53. STAGE 29: SELF-HEALING STOCK RECONCILIATION & DLQ AUTO-RECOVERY
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 53. STAGE 29: SELF-HEALING STOCK RECONCILIATION & DLQ AUTO-RECOVERY ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "api", "cron", "reconcile-stock.ts"), "r", encoding="utf-8") as fp:
+    rec_stock_code = fp.read()
+test_assert("selfHealedOrders" in rec_stock_code and "release_order_reservations" in rec_stock_code, "reconcile-stock.ts auto-heals leaked reservations from cancelled/rejected orders")
+test_assert("actualActiveOrderReservations" in rec_stock_code and "phantomReservationsFixed" in rec_stock_code, "reconcile-stock.ts eliminates ghost/phantom reservations not backed by active orders")
+test_assert("autoRetriedDlqCount" in rec_stock_code and "DLQ_AUTO_RETRY" in rec_stock_code, "reconcile-stock.ts implements automatic self-recovery of transient DLQ orders")
+test_assert("Fatal Business Error" in rec_stock_code, "reconcile-stock.ts protects fatal business errors from unwanted DLQ retry loops")
+
+# ------------------------------------------------------------------------------
+# 54. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests
