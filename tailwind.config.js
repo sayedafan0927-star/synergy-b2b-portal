@@ -55,10 +55,12 @@ export default {
         spring: 'cubic-bezier(0.34, 1.56, 0.64, 1)',
       },
       animation: {
-        'fade-in': 'fadeIn 0.6s ease forwards',
-        'fade-up': 'fadeUp 0.6s ease forwards',
-        'slide-up': 'slideUp 0.8s ease forwards',
-        'scale-in': 'scaleIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards',
+        'fade-in': 'fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+        'fade-up': 'fadeUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+        'slide-up': 'slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+        'scale-in': 'scaleIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+        'modal-backdrop': 'modalBackdrop 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+        'modal-card': 'modalCard 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards',
         'preloader-logo': 'preloaderLogo 0.75s cubic-bezier(0.16, 1, 0.3, 1) forwards',
         'preloader-line-left': 'preloaderLineLeft 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards',
         'preloader-line-right': 'preloaderLineRight 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards',
@@ -70,16 +72,24 @@ export default {
           '100%': { opacity: '1' },
         },
         fadeUp: {
-          '0%': { opacity: '0', transform: 'translateY(20px)' },
-          '100%': { opacity: '1', transform: 'translateY(0)' },
+          '0%': { opacity: '0', transform: 'translate3d(0, 16px, 0)' },
+          '100%': { opacity: '1', transform: 'translate3d(0, 0, 0)' },
         },
         slideUp: {
-          '0%': { opacity: '0', transform: 'translateY(40px)' },
-          '100%': { opacity: '1', transform: 'translateY(0)' },
+          '0%': { opacity: '0', transform: 'translate3d(0, 24px, 0)' },
+          '100%': { opacity: '1', transform: 'translate3d(0, 0, 0)' },
         },
         scaleIn: {
-          '0%': { opacity: '0', transform: 'scale(0.9)' },
-          '100%': { opacity: '1', transform: 'scale(1)' },
+          '0%': { opacity: '0', transform: 'translate3d(0, 8px, 0) scale3d(0.96, 0.96, 1)' },
+          '100%': { opacity: '1', transform: 'translate3d(0, 0, 0) scale3d(1, 1, 1)' },
+        },
+        modalBackdrop: {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
+        },
+        modalCard: {
+          '0%': { opacity: '0', transform: 'translate3d(0, 10px, 0) scale3d(0.97, 0.97, 1)' },
+          '100%': { opacity: '1', transform: 'translate3d(0, 0, 0) scale3d(1, 1, 1)' },
         },
         preloaderLogo: {
           '0%': { opacity: '0', transform: 'scale(0.8)' },

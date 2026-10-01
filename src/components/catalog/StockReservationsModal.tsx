@@ -138,12 +138,10 @@ export function StockReservationsModal({ isOpen, onClose, filterSku }: StockRese
 
   return (
     <Portal>
-      <div
-        className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200"
-        onClick={onClose}
-      >
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4" onClick={onClose}>
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs animate-modal-backdrop modal-gpu-backdrop pointer-events-none" aria-hidden="true" />
         <div
-          className="relative flex flex-col w-full max-w-4xl max-h-[92vh] sm:max-h-[88vh] rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden"
+          className="relative flex flex-col w-full max-w-4xl max-h-[92vh] sm:max-h-[88vh] rounded-2xl bg-white shadow-2xl border border-slate-100 overflow-hidden animate-modal-card modal-gpu-card z-10"
           onClick={e => e.stopPropagation()}
         >
           {/* Header */}

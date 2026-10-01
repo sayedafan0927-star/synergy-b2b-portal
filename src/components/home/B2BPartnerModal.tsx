@@ -155,9 +155,9 @@ export default function B2BPartnerModal({ isOpen, onClose }: B2BPartnerModalProp
       >
         {/* ── Apple Frosted Backdrop ── */}
         <div
-          className="fixed inset-0 bg-slate-950/50 backdrop-blur-md"
+          className="fixed inset-0 bg-slate-950/50 backdrop-blur-md modal-gpu-backdrop"
           style={{
-            transition: 'opacity 420ms cubic-bezier(0.16, 1, 0.3, 1)',
+            transition: 'opacity 240ms cubic-bezier(0.16, 1, 0.3, 1)',
             opacity: active ? 1 : 0,
           }}
           onClick={onClose}
@@ -166,10 +166,10 @@ export default function B2BPartnerModal({ isOpen, onClose }: B2BPartnerModalProp
 
         {/* ── Floating Card (Apple Easing) ── */}
         <div
-          className="relative w-full sm:max-w-xl bg-white rounded-t-[28px] sm:rounded-[32px] border border-slate-200/80 shadow-[0_25px_70px_rgba(0,0,0,0.32),0_0_0_1px_rgba(0,0,0,0.04)] overflow-hidden max-h-[92vh] flex flex-col z-10"
+          className="relative w-full sm:max-w-xl bg-white rounded-t-[28px] sm:rounded-[32px] border border-slate-200/80 shadow-[0_25px_70px_rgba(0,0,0,0.32),0_0_0_1px_rgba(0,0,0,0.04)] overflow-hidden max-h-[92vh] flex flex-col z-10 modal-gpu-card"
           style={{
-            transition: 'transform 420ms cubic-bezier(0.16, 1, 0.3, 1), opacity 380ms cubic-bezier(0.16, 1, 0.3, 1)',
-            transform: active ? 'translate3d(0, 0, 0) scale(1)' : 'translate3d(0, 36px, 0) scale(0.96)',
+            transition: 'transform 260ms cubic-bezier(0.16, 1, 0.3, 1), opacity 240ms cubic-bezier(0.16, 1, 0.3, 1)',
+            transform: active ? 'translate3d(0, 0, 0) scale(1)' : 'translate3d(0, 24px, 0) scale(0.97)',
             opacity: active ? 1 : 0,
             willChange: 'transform, opacity',
           }}

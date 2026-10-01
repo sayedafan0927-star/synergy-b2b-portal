@@ -277,7 +277,7 @@ export function CommandPalette({ isOpen, onClose, onNavigate }: CommandPalettePr
   return (
     <Portal>
       <div
-        className="fixed inset-0 z-50 flex items-start justify-center p-3 sm:p-6 md:pt-20 bg-slate-900/60 backdrop-blur-sm animate-fade-in overscroll-contain overflow-y-auto"
+        className="fixed inset-0 z-50 flex items-start justify-center p-3 sm:p-6 md:pt-20 overscroll-contain overflow-y-auto"
         onPointerDown={e => {
           if (e.target === e.currentTarget) {
             isInternalInteractionRef.current = true;
@@ -285,8 +285,9 @@ export function CommandPalette({ isOpen, onClose, onNavigate }: CommandPalettePr
         }}
         onClick={onClose}
       >
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm animate-modal-backdrop modal-gpu-backdrop pointer-events-none" aria-hidden="true" />
         <div
-          className="bg-white rounded-2xl max-w-2xl w-full mx-auto shadow-2xl border border-slate-200/80 overflow-hidden flex flex-col max-h-[85vh] max-h-[85dvh] animate-scale-in"
+          className="relative bg-white rounded-2xl max-w-2xl w-full mx-auto shadow-2xl border border-slate-200/80 overflow-hidden flex flex-col max-h-[85vh] max-h-[85dvh] animate-modal-card modal-gpu-card z-10"
           onClick={e => e.stopPropagation()}
         >
           {/* Top Search Input Bar */}
