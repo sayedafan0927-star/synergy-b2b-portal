@@ -44,12 +44,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     // 0. Автоматическое освобождение зависших заказов (Stale Claim Recovery > 5 мин)
     const staleThreshold = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const isForce = req.query.force === '1' || req.query.force === 'true';
+
     try {
-      await supabase
-        .from('orders')
-        .update({ status: 'pending', last_error: 'Сброс зависшего захвата синхронизации', updated_at: nowIso })
-        .eq('status', 'processing_sync')
-        .lte('updated_at', staleThreshold);
+      if (isForce) {
+        await supabase
+          .from('orders')
+          .update({ status: 'pending', next_retry_at: null, last_error: 'Принудительный сброс очереди синхронизации', updated_at: nowIso })
+          .in('status', ['pending', 'processing_sync']);
+      } else {
+        await supabase
+          .from('orders')
+          .update({ status: 'pending', last_error: 'Сброс зависшего захвата синхронизации', updated_at: nowIso })
+          .eq('status', 'processing_sync')
+          .lte('updated_at', staleThreshold);
+      }
     } catch {}
 
     // 1. Атомарный захват заказов: сначала приоритетные отмены, затем обычные чекауты
@@ -57,26 +66,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let pendingOrders: any[] | null = null;
     let claimedViaRpc = false;
 
-    const { data: cancelOrders } = await supabase
-      .from('orders')
-      .select('*')
-      .eq('status', 'cancellation_pending')
-      .is('parent_order_id', null)
-      .limit(2);
+    if (!isForce) {
+      const { data: cancelOrders } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('status', 'cancellation_pending')
+        .is('parent_order_id', null)
+        .limit(2);
 
-    const { data: claimedOrders, error: rpcErr } = await supabase.rpc('claim_outbox_orders', { p_limit: 4 });
-    if (!rpcErr && Array.isArray(claimedOrders)) {
-      pendingOrders = [...(cancelOrders || []), ...claimedOrders].slice(0, 4);
-      claimedViaRpc = true;
-    } else {
-      const { data: fetchedOrders, error: fetchErr } = await supabase
+      const { data: claimedOrders, error: rpcErr } = await supabase.rpc('claim_outbox_orders', { p_limit: 4 });
+      if (!rpcErr && Array.isArray(claimedOrders)) {
+        pendingOrders = [...(cancelOrders || []), ...claimedOrders].slice(0, 4);
+        claimedViaRpc = true;
+      }
+    }
+
+    if (!pendingOrders) {
+      const baseQuery = supabase
         .from('orders')
         .select('*')
         .in('status', ['pending', 'cancellation_pending'])
-        .is('parent_order_id', null)
-        .or(`next_retry_at.is.null,next_retry_at.lte.${nowIso}`)
-        .order('created_at', { ascending: true })
-        .limit(4);
+        .is('parent_order_id', null);
+
+      const { data: fetchedOrders, error: fetchErr } = isForce
+        ? await baseQuery.order('created_at', { ascending: true }).limit(10)
+        : await baseQuery.or(`next_retry_at.is.null,next_retry_at.lte.${nowIso}`).order('created_at', { ascending: true }).limit(4);
 
       if (fetchErr) {
         return res.status(500).json({ success: false, error: 'Ошибка очереди заказов в БД', details: fetchErr.message });
