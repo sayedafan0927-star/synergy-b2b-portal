@@ -9,6 +9,7 @@ import { isProductInStockForUser } from '@/lib/warehouseVisibility';
 import ProductCard from '@/components/ProductCard';
 import HeroBannerMedia from '@/components/home/HeroBannerMedia';
 import TechnoLuxuryButton from '@/components/home/TechnoLuxuryButton';
+import B2BPartnerCtaSection from '@/components/home/B2BPartnerCtaSection';
 import { useSynchronizedCategoryVideos } from '@/hooks/useSynchronizedCategoryVideos';
 
 const advantages = [
@@ -312,37 +313,8 @@ export default function HomePage({
         </div>
       </section>
 
-      {/* ── 4. CTA Banner Section (Royal Sapphire #003365 + Gold) ── */}
-      <section className="py-16 lg:py-24 bg-white">
-        <div className="container-w">
-          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#003365] via-[#072142] to-[#041224] px-6 py-12 sm:px-12 sm:py-16 lg:px-16 lg:py-20 text-center border border-amber-400/30 shadow-2xl">
-
-            {/* Decorative shapes */}
-            <div className="absolute top-0 right-0 -translate-y-1/3 translate-x-1/3 h-64 w-64 rounded-full bg-amber-400/5 blur-xl" />
-            <div className="absolute bottom-0 left-0 translate-y-1/3 -translate-x-1/3 h-48 w-48 rounded-full bg-brand-500/10 blur-xl" />
-
-            <div className="relative max-w-2xl mx-auto">
-              <span className="font-mono text-xs text-amber-300 uppercase tracking-widest block mb-3">
-                ✦ B2B Сотрудничество ✦
-              </span>
-              <h2 className="font-display text-2xl sm:text-3xl lg:text-4xl font-bold text-white leading-tight">
-                Станьте нашим партнёром
-              </h2>
-              <p className="mt-4 text-base sm:text-lg text-slate-200 font-body leading-relaxed font-light">
-                Специальные условия для оптовых покупателей: прямые цены фабрик, персональный менеджер,
-                приоритетная отгрузка за 24 часа и резервирование складских остатков.
-              </p>
-              <button
-                onClick={() => onNavigate('contacts')}
-                className="mt-8 inline-flex items-center gap-2 text-xs uppercase tracking-widest font-bold px-7 py-4 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-slate-950 shadow-lg shadow-amber-400/30 hover:shadow-amber-400/50 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
-              >
-                Оставить заявку на сотрудничество
-                <ArrowRight className="h-4 w-4 text-slate-950" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
+      {/* ── 4. CTA Banner Section (Concept 2: Pure Macro Glassmorphism + Techno-Luxury Button) ── */}
+      <B2BPartnerCtaSection onNavigate={onNavigate} />
     </div>
   );
 }
