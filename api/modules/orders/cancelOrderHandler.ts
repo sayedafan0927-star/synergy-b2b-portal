@@ -105,27 +105,42 @@ export async function handleCancelOrder(options: CancelOrderOptions): Promise<vo
     logger.warn('[CancelOrder] Notice notifying 1C ERP:', netErr as Error);
   }
 
-  // 5. Высвобождение резервов в PostgreSQL (Service-Role execution)
-  try {
-    await supabase.rpc('release_order_reservations', { p_order_id: order.id });
-  } catch (rpcErr) {
-    logger.warn('[CancelOrder] release_order_reservations RPC error:', rpcErr as Error);
-  }
-
-  // 6. Обновление статуса мастер-заказа и дочерних субордеров
+  const isSafeLocalCancel = order.status === 'pending' || erpNotified;
   const nowIso = new Date().toISOString();
-  await supabase
-    .from('orders')
-    .update({
-      status: 'cancelled',
-      reservations_released: true,
-      last_error: erpNotified ? null : 'pending_erp_cancel',
-      notes: `${comment} [Отменен через B2B-портал: ${nowIso}${erpNotified ? ' (ERP подтвержден)' : ' (Ожидает синхронизации отмены с ERP: pending_erp_cancel)'}]`,
-      updated_at: nowIso,
-    })
-    .or(`id.eq.${order.id},parent_order_id.eq.${order.id}`);
 
-  if (!erpNotified) {
+  if (isSafeLocalCancel) {
+    // 5. Высвобождение резервов в PostgreSQL (безопасно, т.к. ERP подтвердила или заказ еще не был в ERP)
+    try {
+      await supabase.rpc('release_order_reservations', { p_order_id: order.id });
+    } catch (rpcErr) {
+      logger.warn('[CancelOrder] release_order_reservations RPC error:', rpcErr as Error);
+    }
+
+    // 6. Обновление статуса мастер-заказа и дочерних субордеров
+    await supabase
+      .from('orders')
+      .update({
+        status: 'cancelled',
+        reservations_released: true,
+        last_error: null,
+        notes: `${comment} [Отменен через B2B-портал: ${nowIso}${erpNotified ? ' (ERP подтвержден)' : ' (Локальный буфер)'}]`,
+        updated_at: nowIso,
+      })
+      .or(`id.eq.${order.id},parent_order_id.eq.${order.id}`);
+  } else {
+    // 5. Защита от Ghost Shipment: заказ уже в 1C, но 1C временно недоступна.
+    // Резерв НЕ высвобождается вслепую, статус ставится в cancellation_pending для Outbox
+    await supabase
+      .from('orders')
+      .update({
+        status: 'cancellation_pending',
+        reservations_released: false,
+        last_error: 'pending_erp_cancel',
+        notes: `${comment} [Ожидает подтверждения отмены от 1C:ERP: ${nowIso}]`,
+        updated_at: nowIso,
+      })
+      .or(`id.eq.${order.id},parent_order_id.eq.${order.id}`);
+
     triggerImmediateOutboxSync(req, correlationId);
   }
 
@@ -138,7 +153,7 @@ export async function handleCancelOrder(options: CancelOrderOptions): Promise<vo
       payload: {
         order_id: order.id,
         order_doc_number: order.order_number,
-        new_status: 'cancelled',
+        new_status: isSafeLocalCancel ? 'cancelled' : 'cancellation_pending',
         comment,
         timestamp: nowIso,
       },
@@ -147,9 +162,9 @@ export async function handleCancelOrder(options: CancelOrderOptions): Promise<vo
 
   // 8. Аудит лог
   await recordAuditLog({
-    eventType: 'order_cancelled',
+    eventType: isSafeLocalCancel ? 'order_cancelled' : 'order_cancellation_queued',
     direction: 'outbound',
-    status: 'success',
+    status: isSafeLocalCancel ? 'success' : 'warning',
     source: 'B2B Portal Cancel Handler',
     correlationId,
     payload: {
@@ -164,8 +179,11 @@ export async function handleCancelOrder(options: CancelOrderOptions): Promise<vo
     success: true,
     order_id: order.id,
     order_number: order.order_number,
-    status: 'cancelled',
+    status: isSafeLocalCancel ? 'cancelled' : 'cancellation_pending',
+    cancellation_pending: !isSafeLocalCancel,
     erp_notified: erpNotified,
-    message: 'Заказ успешно отменен. Зарезервированные остатки возвращены в свободную продажу.',
+    message: isSafeLocalCancel
+      ? 'Заказ успешно отменен. Зарезервированные остатки возвращены в свободную продажу.'
+      : 'Запрос на отмену зарегистрирован и передан в 1C:ERP. Складской резерв удерживается до подтверждения отмены учетной системой.',
   });
 }

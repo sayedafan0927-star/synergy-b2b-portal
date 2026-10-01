@@ -8,8 +8,8 @@ import { getErpApiKey } from '../lib/erpKey';
 import { checkCircuit } from '../lib/circuitBreaker';
 import { dequeueOutboxOrders } from '../lib/queueBroker';
 import { dispatchDlqEmergencyAlert, buildOutboxErpPayload, computeBackoffNextRetry, isFatalBusinessError } from './outboxUtils';
+import { syncPendingCancellation } from './cancellationSync';
 
-// Re-export for backwards compatibility and test introspection
 export { dispatchDlqEmergencyAlert };
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
@@ -22,13 +22,9 @@ const supabase = (SUPABASE_URL && SUPABASE_KEY)
   : null as any;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (!applyCorsHeaders(req, res)) {
-    return;
-  }
-
+  if (!applyCorsHeaders(req, res)) return;
   const correlationId = applyCorrelationId(req, res);
 
-  // Проверка авторизации воркера (CRON_SECRET или PORTAL_SECRET_KEY)
   const CRON_SECRET = process.env.CRON_SECRET || process.env.PORTAL_SECRET_KEY || '';
   const authHeader = req.headers['authorization'] || '';
   const cronKeyHeader = req.headers['x-cron-key'] || req.headers['x-portal-key'];
@@ -38,107 +34,89 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     (CRON_SECRET && (cronKeyHeader === CRON_SECRET || authHeader === `Bearer ${CRON_SECRET}`));
 
   if (!isAuthorized) {
-    return res.status(401).json({
-      success: false,
-      error: 'Unauthorized: Invalid or missing authorization token for outbox worker.',
-    });
+    return res.status(401).json({ success: false, error: 'Unauthorized: Invalid authorization token for outbox worker.' });
   }
 
-  // Rate Limiting (макс 30 запусков в минуту на IP)
-  if (!(await enforceRateLimit(req, res, { limit: 30, windowSeconds: 60, actionPrefix: 'outbox_sync' }))) {
-    return;
-  }
+  if (!(await enforceRateLimit(req, res, { limit: 30, windowSeconds: 60, actionPrefix: 'outbox_sync' }))) return;
 
   const startTime = Date.now();
   const nowIso = new Date().toISOString();
   try {
-    // 0. Автоматическое освобождение зависших заказов (Stale Claim Recovery)
-    // Если предыдущий воркер аварийно завершился и заказ остался в 'processing_sync' > 5 минут
+    // 0. Автоматическое освобождение зависших заказов (Stale Claim Recovery > 5 мин)
     const staleThreshold = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     try {
       await supabase
         .from('orders')
-        .update({
-          status: 'pending',
-          last_error: 'Сброс зависшего захвата синхронизации (Stale Claim Recovery)',
-          updated_at: nowIso,
-        })
+        .update({ status: 'pending', last_error: 'Сброс зависшего захвата синхронизации', updated_at: nowIso })
         .eq('status', 'processing_sync')
         .lte('updated_at', staleThreshold);
-    } catch (staleErr) {
-      console.warn('[Outbox Sync] Stale claim recovery warning:', staleErr);
-    }
+    } catch {}
 
-    // 1. Атомарный конкурентно-безопасный захват заказов (Queue Broker + FOR UPDATE SKIP LOCKED)
+    // 1. Атомарный захват заказов: сначала приоритетные отмены, затем обычные чекауты
     await dequeueOutboxOrders(4).catch(() => {});
     let pendingOrders: any[] | null = null;
     let claimedViaRpc = false;
 
+    const { data: cancelOrders } = await supabase
+      .from('orders')
+      .select('*')
+      .eq('status', 'cancellation_pending')
+      .is('parent_order_id', null)
+      .limit(2);
+
     const { data: claimedOrders, error: rpcErr } = await supabase.rpc('claim_outbox_orders', { p_limit: 4 });
     if (!rpcErr && Array.isArray(claimedOrders)) {
-      pendingOrders = claimedOrders;
+      pendingOrders = [...(cancelOrders || []), ...claimedOrders].slice(0, 4);
       claimedViaRpc = true;
     } else {
-      // Fallback на селективный claim, если RPC еще не применена в миграциях
       const { data: fetchedOrders, error: fetchErr } = await supabase
         .from('orders')
         .select('*')
-        .eq('status', 'pending')
+        .in('status', ['pending', 'cancellation_pending'])
         .is('parent_order_id', null)
         .or(`next_retry_at.is.null,next_retry_at.lte.${nowIso}`)
         .order('created_at', { ascending: true })
         .limit(4);
 
       if (fetchErr) {
-        console.error('[Outbox Sync] Failed to fetch pending orders:', fetchErr);
-        return res.status(500).json({
-          success: false,
-          error: 'Ошибка обращения к очереди заказов в БД',
-          details: fetchErr.message,
-        });
+        return res.status(500).json({ success: false, error: 'Ошибка очереди заказов в БД', details: fetchErr.message });
       }
       pendingOrders = fetchedOrders;
     }
 
     if (!pendingOrders || pendingOrders.length === 0) {
-      return res.status(200).json({
-        success: true,
-        message: 'Очередь Outbox пуста или все заказы ожидают своего тайм-аута ретрая.',
-        count: 0,
-        processed: [],
-      });
+      return res.status(200).json({ success: true, message: 'Очередь Outbox пуста.', count: 0, processed: [] });
     }
 
-    // Circuit Breaker Guard: не бомбардируем аварийный шлюз ERP при открытом контуре
+    // Circuit Breaker Guard
     const circuit = await checkCircuit('erp_gateway');
     if (!circuit.permitted) {
-      return res.status(200).json({
-        success: true,
-        circuit_open: true,
-        message: 'Circuit breaker for erp_gateway is OPEN. Postponing outbox drain until recovery.',
-        count: pendingOrders.length,
-      });
+      return res.status(200).json({ success: true, circuit_open: true, message: 'Circuit breaker OPEN. Postponing drain.', count: pendingOrders.length });
     }
 
     const results: Array<{ order_id: string; order_number: string; success: boolean; dlq?: boolean; error?: string }> = [];
 
     async function syncSingleOrder(order: any): Promise<{ order_id: string; order_number: string; success: boolean; dlq?: boolean; error?: string } | null> {
-      // Если заказ не был предварительно залочен через SKIP LOCKED RPC — захватываем атомарно
+      if (order.status === 'cancellation_pending') {
+        return await syncPendingCancellation({
+          order,
+          supabase,
+          targetErpUrl: TARGET_ERP_URL,
+          serverErpKey: SERVER_ERP_KEY,
+          correlationId,
+        });
+      }
+
       if (!claimedViaRpc) {
         const { data: claimedRow } = await supabase
           .from('orders')
-          .update({
-            status: 'processing_sync',
-            updated_at: new Date().toISOString(),
-          })
+          .update({ status: 'processing_sync', updated_at: new Date().toISOString() })
           .eq('id', order.id)
           .eq('status', 'pending')
           .select('id')
           .maybeSingle();
 
-        if (!claimedRow) {
-          return null; // Заказ уже перехвачен параллельным воркером
-        }
+        if (!claimedRow) return null;
       }
 
       const currentRetries = Number(order.retry_count || 0);

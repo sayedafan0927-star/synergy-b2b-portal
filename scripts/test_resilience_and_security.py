@@ -2015,9 +2015,41 @@ with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "orderDispatcher.ts
 test_assert("checkCircuit('erp_gateway')" in od_txt and "is_buffered_offline" in od_txt, "orderDispatcher.ts fast-fails to Outbox buffer when Circuit Breaker is OPEN")
 test_assert("triggerImmediateOutboxSync" in od_txt, "orderDispatcher.ts triggers immediate background outbox drain on 1C timeout")
 
+# ------------------------------------------------------------------------------
+# 61. STAGE 37: MULTI-WAREHOUSE DEDUP, POST-CHECKOUT SYNC & GHOST SHIPMENT DEFENSE
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 61. STAGE 37: MULTI-WAREHOUSE DEDUP, POST-CHECKOUT SYNC & GHOST SHIPMENT DEFENSE ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "api", "cron", "reconcile-stock.ts"), "r", encoding="utf-8") as fp:
+    rc_txt = fp.read()
+test_assert(".is('orders.parent_order_id', null)" in rc_txt, "reconcile-stock.ts excludes child suborders to eliminate double reservation counting")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "stockCacheUpdater.ts"), "r", encoding="utf-8") as fp:
+    scu_txt = fp.read()
+test_assert("decrementCachedCatalogStock" in scu_txt and "saveCachedCatalog" in scu_txt, "stockCacheUpdater.ts provides atomic stock decrement for catalog cache")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "orderDispatcher.ts"), "r", encoding="utf-8") as fp:
+    od_fresh = fp.read()
+test_assert("decrementCachedCatalogStock(reservedSkuItems" in od_fresh, "orderDispatcher.ts invokes decrementCachedCatalogStock to eliminate post-checkout stale gap")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "catalog", "catalogHandler.ts"), "r", encoding="utf-8") as fp:
+    ch_fresh = fp.read()
+test_assert("canonicalSkuMap" in ch_fresh and "canonical ? canonical.free_stock" in ch_fresh, "catalogHandler.ts enriches catalog_paginated with canonical cache data eliminating split-brain")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "cancelOrderHandler.ts"), "r", encoding="utf-8") as fp:
+    coh_txt = fp.read()
+test_assert("cancellation_pending" in coh_txt and "pending_erp_cancel" in coh_txt, "cancelOrderHandler.ts queues unconfirmed cancellations preventing ghost shipments")
+
+with open(os.path.join(ROOT_DIR, "api", "outbox", "cancellationSync.ts"), "r", encoding="utf-8") as fp:
+    csy_txt = fp.read()
+test_assert("syncPendingCancellation" in csy_txt and "release_order_reservations" in csy_txt, "cancellationSync.ts releases reservations only after 1C cancellation confirmation")
+
+with open(os.path.join(ROOT_DIR, "api", "outbox", "sync.ts"), "r", encoding="utf-8") as fp:
+    sy_fresh = fp.read()
+test_assert("syncPendingCancellation" in sy_fresh and "cancellation_pending" in sy_fresh, "sync.ts drains pending order cancellations through Outbox")
 
 # ------------------------------------------------------------------------------
-# 60. Summary Report
+# 62. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests
