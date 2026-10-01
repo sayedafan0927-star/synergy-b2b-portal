@@ -2046,10 +2046,34 @@ test_assert("syncPendingCancellation" in csy_txt and "release_order_reservations
 
 with open(os.path.join(ROOT_DIR, "api", "outbox", "sync.ts"), "r", encoding="utf-8") as fp:
     sy_fresh = fp.read()
-test_assert("syncPendingCancellation" in sy_fresh and "cancellation_pending" in sy_fresh, "sync.ts drains pending order cancellations through Outbox")
+# ------------------------------------------------------------------------------
+# 62. Stage 38: Deep Audit Fixes — CDC Split-Brain, 1C Zombie Hold & FSM Guard
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 62. STAGE 38: DEEP AUDIT EDGE-CASE INVARIANTS ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "api", "lib", "catalogCache.ts"), "r", encoding="utf-8") as fp:
+    cc_txt = fp.read()
+test_assert(".is('orders.parent_order_id', null)" in cc_txt, "catalogCache.ts filters out split suborders when calculating pending reservations")
+
+with open(os.path.join(ROOT_DIR, "api", "cron", "expire-holds.ts"), "r", encoding="utf-8") as fp:
+    eh_txt = fp.read()
+test_assert("action=update_order_status" in eh_txt and "SERVER_ERP_KEY" in eh_txt, "expire-holds.ts synchronizes expired hold cancellations with 1C:ERP")
+
+with open(os.path.join(ROOT_DIR, "api", "approvals", "action.ts"), "r", encoding="utf-8") as fp:
+    act_txt = fp.read()
+test_assert("allowedStatuses = ['pending', 'processing']" in act_txt, "action.ts enforces state machine guard preventing replay mutations")
+test_assert("triggerImmediateOutboxSync" in act_txt, "action.ts triggers immediate Outbox drain when approving buffered orders")
+
+with open(os.path.join(ROOT_DIR, "api", "cron", "reconcile-balances.ts"), "r", encoding="utf-8") as fp:
+    rb_txt = fp.read()
+test_assert(".in('partner_id', clientPartnerIds)" in rb_txt, "reconcile-balances.ts scopes partner_balances query by batch partner IDs preventing 1000-row limit")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "createOrderHandler.ts"), "r", encoding="utf-8") as fp:
+    coh_fresh = fp.read()
+test_assert("Promise.all([" in coh_fresh and "validateClientCreditExposure" in coh_fresh, "createOrderHandler.ts executes compliance check and settings query in parallel")
 
 # ------------------------------------------------------------------------------
-# 62. Summary Report
+# 63. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

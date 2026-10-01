@@ -67,10 +67,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    // 2. Получаем текущие балансы из таблицы partner_balances
+    // 2. Получаем текущие балансы из таблицы partner_balances строго для контрагентов текущего батча (Anti-1000-Row Truncation)
+    const clientPartnerIds = clients.map((c: any) => c.partner_id).filter(Boolean);
     const { data: localBalances } = await supabase
       .from('partner_balances')
-      .select('partner_id, balance, currency, last_synced_at');
+      .select('partner_id, balance, currency, last_synced_at')
+      .in('partner_id', clientPartnerIds);
 
     const localBalanceMap = new Map<string, number>();
     if (localBalances) {

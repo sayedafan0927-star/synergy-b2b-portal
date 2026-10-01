@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { verifySignedDecisionToken } from './whatsapp';
 import { getErpApiKey } from '../lib/erpKey';
+import { triggerImmediateOutboxSync } from '../modules/orders/orderDispatcher';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
@@ -57,66 +58,86 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // 2. МУТАЦИЯ: Только по методу POST при осознанном клике пользователя
+  // 2. МУТАЦИЯ: Только по методу POST при осознанном клике пользователя
   if (req.method === 'POST') {
     try {
-      // 2.0. ПРОВЕРКА АКТУАЛЬНОСТИ БРОНИ WMS (Hold TTL 24ч)
-      if (supabase && isApprove) {
-        const { data: existingOrder } = await supabase
+      // 2.0. Валидация заказа и защита от Replay-атак / случайных повторных кликов
+      let existingOrder: any = null;
+      if (supabase) {
+        const { data } = await supabase
           .from('orders')
-          .select('id, order_number, status, reservations_released, created_at')
+          .select('id, order_number, status, reservations_released, created_at, notes')
           .or(`id.eq.${orderId},order_number.eq.${orderId}`)
           .maybeSingle();
-
-        if (existingOrder) {
-          const isAlreadyCancelled = existingOrder.status === 'cancelled' || existingOrder.reservations_released === true;
-          const createdMs = new Date(existingOrder.created_at).getTime();
-          const isHoldExpired = !isNaN(createdMs) && (Date.now() - createdMs > 24 * 3600 * 1000);
-
-          if (isAlreadyCancelled || isHoldExpired) {
-            return res.status(409).send(renderHtmlResult(
-              false,
-              `Срок действия складской брони (24ч) для заказа №${existingOrder.order_number || existingOrder.id} истёк. Резерв товаров расформирован в WMS. Одобрение невозможно — клиенту необходимо сформировать новый заказ.`
-            ));
-          }
-        }
+        existingOrder = data;
       }
 
+      if (!existingOrder) {
+        return res.status(404).send(renderHtmlResult(false, 'Заказ не найден в базе данных портала.'));
+      }
+
+      // Разрешенные статусы для согласования: только pending или processing
+      const allowedStatuses = ['pending', 'processing'];
+      if (!allowedStatuses.includes(existingOrder.status)) {
+        const currentStatus = existingOrder.status;
+        const msg = currentStatus === 'confirmed'
+          ? `Заказ №${existingOrder.order_number || existingOrder.id} уже был ранее одобрен и передан на комплектацию.`
+          : currentStatus === 'cancelled'
+          ? `Заказ №${existingOrder.order_number || existingOrder.id} уже отменен, повторное действие невозможно.`
+          : `Заказ №${existingOrder.order_number || existingOrder.id} находится в статусе «${currentStatus}». Повторное изменение через ссылку согласования отклонено.`;
+        return res.status(409).send(renderHtmlResult(false, msg));
+      }
+
+      // Проверка срока действия складской брони (24ч)
+      const createdMs = new Date(existingOrder.created_at).getTime();
+      const isHoldExpired = !isNaN(createdMs) && (Date.now() - createdMs > 24 * 3600 * 1000);
+      if (isApprove && isHoldExpired) {
+        return res.status(409).send(renderHtmlResult(
+          false,
+          `Срок действия складской брони (24ч) для заказа №${existingOrder.order_number || existingOrder.id} истёк. Резерв товаров расформирован в WMS. Одобрение невозможно — клиенту необходимо сформировать новый заказ.`
+        ));
+      }
+
+      const targetOrderId = existingOrder.id;
+      const targetOrderNumber = existingOrder.order_number || orderId;
+
       // 2.1. При отклонении заказа: СНАЧАЛА возвращаем зарезервированные остатки на склад
-      // Функция release_order_reservations требует reservations_released = false, поэтому вызывается до флага!
       if (!isApprove && supabase) {
         try {
-          const { data: ordRow } = await supabase
-            .from('orders')
-            .select('id')
-            .or(`id.eq.${orderId},order_number.eq.${orderId}`)
-            .maybeSingle();
-
-          const releaseTargetId = ordRow?.id || orderId;
-          await supabase.rpc('release_order_reservations', { p_order_id: releaseTargetId });
+          await supabase.rpc('release_order_reservations', { p_order_id: targetOrderId });
         } catch (relErr: any) {
           console.warn('[Approval Action] Error releasing reservations on reject:', relErr?.message);
         }
       }
 
+      // Определение нового статуса:
+      // Если заказ еще в буфере Outbox (pending) и одобрен, статус 'pending' сохраняется,
+      // добавляется отметка одобрения в notes и немедленно активируется воркер Outbox.
+      const isBufferedOutbox = existingOrder.status === 'pending';
+      const newStatus = !isApprove
+        ? 'cancelled'
+        : (isBufferedOutbox ? 'pending' : 'confirmed');
+
+      const approvalNote = `[Согласование WhatsApp: ${statusLabel} (${new Date().toLocaleString('ru-RU')})]`;
+      const combinedNotes = `${existingOrder.notes || ''} ${approvalNote}`.trim();
+
       // 2.2. Обновляем статус заказа в Supabase
-      const { data: dbOrders, error: dbError } = await supabase
+      const { error: dbError } = await supabase
         .from('orders')
         .update({
           status: newStatus,
           reservations_released: !isApprove ? true : undefined,
+          notes: combinedNotes,
           updated_at: new Date().toISOString(),
         })
-        .or(`id.eq.${orderId},order_number.eq.${orderId}`)
-        .select('id, order_number');
+        .eq('id', targetOrderId);
 
       if (dbError) {
         console.warn('[Approval Action] Supabase update warning:', dbError.message);
       }
 
-      const targetOrderId = dbOrders?.[0]?.id || orderId;
-
-      // При одобрении заказа каскадно подтверждаем мультискладские подзаказы
-      if (isApprove) {
+      // При одобрении каскадно подтверждаем мультискладские подзаказы (если мастер уже был в 1С)
+      if (isApprove && !isBufferedOutbox) {
         try {
           await supabase
             .from('orders')
@@ -133,30 +154,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // При отклонении заказа каскадно отменяем мультискладские подзаказы
       if (!isApprove) {
         try {
-          const { data: subOrders } = await supabase
+          await supabase
             .from('orders')
-            .select('id')
+            .update({
+              status: 'cancelled',
+              reservations_released: true,
+              updated_at: new Date().toISOString(),
+            })
             .eq('parent_order_id', targetOrderId);
-
-          if (subOrders && subOrders.length > 0) {
-            await supabase
-              .from('orders')
-              .update({
-                status: 'cancelled',
-                reservations_released: true,
-                updated_at: new Date().toISOString(),
-              })
-              .eq('parent_order_id', targetOrderId);
-          }
         } catch (relErr: any) {
           console.warn('[Approval Action] Error cascading cancel to suborders:', relErr?.message);
         }
       }
 
-      // 2.2. Синхронизируем статус с 1С:ERP
-      if (SERVER_ERP_KEY) {
+      // 2.3. Синхронизация с 1С:ERP или запуск Outbox дренажа
+      if (isApprove && isBufferedOutbox) {
+        // Заказ одобрен, но ожидает создания в 1С через Outbox: немедленный дренаж
+        try {
+          triggerImmediateOutboxSync(req, 'wa-approved-drain', {
+            orderId: targetOrderId,
+            orderDoc: targetOrderNumber,
+          });
+          console.log(`[Approval Action] Triggered immediate Outbox sync for approved order ${targetOrderNumber}`);
+        } catch (syncErr: any) {
+          console.warn('[Approval Action] Outbox trigger notice:', syncErr?.message);
+        }
+      } else if (SERVER_ERP_KEY) {
+        // Заказ уже был создан в 1С: обновляем статус через API
         const erpUrl = `${TARGET_ERP_URL}?action=update_order_status`;
         try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 3500);
           await fetch(erpUrl, {
             method: 'POST',
             headers: {
@@ -164,18 +192,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               'X-Portal-Key': SERVER_ERP_KEY,
             },
             body: JSON.stringify({
-              order_id: orderId,
+              order_id: targetOrderNumber,
               status: newStatus,
               comment: `Решение подтверждено менеджером в WhatsApp (${statusLabel}) в ${new Date().toLocaleString('ru-RU')}`,
             }),
-          });
-          console.log(`[Approval Action] Synced order status ${newStatus} to ERP for order ${orderId}`);
+            signal: controller.signal,
+          }).finally(() => clearTimeout(timeout));
+          console.log(`[Approval Action] Synced order status ${newStatus} to ERP for order ${targetOrderNumber}`);
         } catch (erpErr: any) {
           console.warn('[Approval Action] Notice syncing with ERP:', erpErr?.message);
         }
       }
 
-      // 2.3. Трансляция в Realtime-шину
+      // 2.4. Трансляция в Realtime-шину
       try {
         const channel = supabase.channel('portal_live_updates');
         await channel.send({

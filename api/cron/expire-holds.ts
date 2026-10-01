@@ -5,10 +5,13 @@ import { applyCorrelationId } from '../lib/trace';
 import { applyCorsHeaders } from '../lib/cors';
 import { logger } from '../lib/logger';
 import { sendWhatsAppMessage } from '../approvals/whatsapp';
+import { getErpApiKey } from '../lib/erpKey';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
 const CRON_SECRET = process.env.CRON_SECRET || process.env.PORTAL_SECRET_KEY || '';
+const TARGET_ERP_URL = process.env.ERP_API_URL || 'https://kilem-khan.kz/api/sin/public/api_portal.php';
+const SERVER_ERP_KEY = getErpApiKey();
 
 const supabase = (SUPABASE_URL && SUPABASE_KEY)
   ? createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })
@@ -134,6 +137,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       } catch (broadcastErr) {
         logger.warn('[WMS Hold Expiry] Realtime broadcast warning', {}, broadcastErr as Error);
+      }
+
+      // Двустороннее уведомление 1C:ERP о снятии броней для исключения зомби-резервов
+      if (SERVER_ERP_KEY && TARGET_ERP_URL) {
+        for (const ord of cancelledOrders) {
+          const ordDoc = ord.cancelled_order_number || ord.order_number || ord.id;
+          try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 3000);
+            await fetch(`${TARGET_ERP_URL}?action=update_order_status`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Portal-Key': SERVER_ERP_KEY,
+                'X-Correlation-ID': correlationId,
+              },
+              body: JSON.stringify({
+                order_id: ordDoc,
+                status: 'cancelled',
+                comment: `Авто-отмена брони WMS по истечению TTL (${ttlHours}ч)`,
+              }),
+              signal: controller.signal,
+            }).finally(() => clearTimeout(timeout));
+          } catch (erpErr: any) {
+            logger.warn('[WMS Hold Expiry] Notice syncing cancel with 1C ERP:', { orderDoc, error: erpErr?.message });
+          }
+        }
       }
 
       await recordAuditLog({

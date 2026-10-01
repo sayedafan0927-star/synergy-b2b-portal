@@ -102,7 +102,14 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
   const finalTotalItems = pricingResult.totalItems;
   const finalTotalSqm = Math.round(pricingResult.items.reduce((s, it) => s + (it.area_sqm > 0 ? it.area_sqm * it.quantity : (it.price_per_sqm > 0 ? (it.price / it.price_per_sqm) * it.quantity : 0)), 0) * 100) / 100;
 
-  const exposureCheck = await validateClientCreditExposure(callerAuth, finalTotalAmount, supabase);
+  const [exposureCheck, clientRulesResult, dispSettingsResult] = await Promise.all([
+    validateClientCreditExposure(callerAuth, finalTotalAmount, supabase),
+    callerAuth.role === 'client'
+      ? supabase.from('display_settings').select('hidden_warehouses').eq('target_role', 'client').maybeSingle()
+      : Promise.resolve({ data: null, error: null } as any),
+    supabase.from('display_settings').select('exchange_rate_usd_kzt').order('updated_at', { ascending: false }).limit(1).maybeSingle(),
+  ]);
+
   if (exposureCheck.blocked) {
     res.status(exposureCheck.statusCode || 403).json({
       success: false,
@@ -113,46 +120,23 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
   }
 
   // 3.1. Валидация прав доступа дилера к указанным складам (Anti-Bypass)
-  if (callerAuth.role === 'client') {
-    try {
-      const { data: clientRules } = await supabase
-        .from('display_settings')
-        .select('hidden_warehouses')
-        .eq('target_role', 'client')
-        .maybeSingle();
-
-      const forbiddenWhs = Array.isArray(clientRules?.hidden_warehouses) ? clientRules.hidden_warehouses : [];
-      for (const it of pricingResult.items) {
-        const whId = resolveWarehouseId(it.warehouse_id, it.warehouse);
-        if (forbiddenWhs.includes(whId)) {
-          res.status(403).json({
-            success: false,
-            error: `Заказ со склада "${it.warehouse || whId}" недоступен для вашей учетной записи.`,
-            code: 'FORBIDDEN_WAREHOUSE',
-          });
-          return;
-        }
+  if (callerAuth.role === 'client' && clientRulesResult?.data?.hidden_warehouses) {
+    const forbiddenWhs = Array.isArray(clientRulesResult.data.hidden_warehouses) ? clientRulesResult.data.hidden_warehouses : [];
+    for (const it of pricingResult.items) {
+      const whId = resolveWarehouseId(it.warehouse_id, it.warehouse);
+      if (forbiddenWhs.includes(whId)) {
+        res.status(403).json({
+          success: false,
+          error: `Заказ со склада "${it.warehouse || whId}" недоступен для вашей учетной записи.`,
+          code: 'FORBIDDEN_WAREHOUSE',
+        });
+        return;
       }
-    } catch (whErr) {
-      logger.warn('[Order] Warehouse check notice:', whErr as Error);
     }
   }
 
   // 3.2. Авторитетный курс валют из базы данных (display_settings)
-  let authoritativeRate = 520.00;
-  try {
-    const { data: dispSettings } = await supabase
-      .from('display_settings')
-      .select('exchange_rate_usd_kzt')
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (dispSettings?.exchange_rate_usd_kzt) {
-      authoritativeRate = Number(dispSettings.exchange_rate_usd_kzt);
-    }
-  } catch {
-    // fallback
-  }
+  const authoritativeRate = Number(dispSettingsResult?.data?.exchange_rate_usd_kzt) || 520.00;
 
   const serverRequiresApproval = Boolean(exposureCheck.requiresApproval);
   const complianceReason = exposureCheck.complianceReason || '';
