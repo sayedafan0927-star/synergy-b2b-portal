@@ -175,16 +175,16 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
                 className="w-full h-auto block select-none pointer-events-none drop-shadow-[0_10px_30px_rgba(0,0,0,0.8)]"
               />
 
-              {/* Interactive Button Overlay precisely mapped to the Techno-Luxury brushed steel button */}
+              {/* Interactive Button Overlay precisely mapped to the brushed steel CTA button */}
               <button
                 type="button"
                 onClick={handleCatalogNavigate}
-                className="absolute z-10 rounded-[20px] cursor-pointer group focus:outline-none transition-transform duration-200 active:scale-[0.985] hover:scale-[1.01]"
+                className="absolute z-10 rounded-[14px] cursor-pointer group focus:outline-none transition-transform duration-200 active:scale-[0.985] hover:scale-[1.01]"
                 style={{
-                  left: '16.80%',
-                  top: '74.23%',
-                  width: '66.39%',
-                  height: '19.61%',
+                  left: '9.34%',
+                  top: '76.33%',
+                  width: '81.33%',
+                  height: '14.71%',
                 }}
                 title="Перейти в каталог"
                 aria-label="Перейти в каталог"
@@ -192,7 +192,7 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
                 {/* Dynamic light sheen that glides across the metal button on hover */}
                 <span 
                   aria-hidden="true"
-                  className="absolute inset-0 rounded-[20px] opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none shadow-[0_0_25px_rgba(0,251,255,0.7)]"
+                  className="absolute inset-0 rounded-[14px] opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none shadow-[0_0_20px_rgba(0,251,255,0.6)]"
                   style={{
                     background: 'linear-gradient(180deg, rgba(255,255,255,0.18) 0%, rgba(0,251,255,0.2) 100%)',
                   }}
