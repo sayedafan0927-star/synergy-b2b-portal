@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
-import { RotateCcw, ArrowRight, Sparkles } from 'lucide-react';
+import { RotateCcw } from 'lucide-react';
 import type { PageId } from '@/types';
 
 // Lightweight, hardware-optimized 2.7MB stream for buttery-smooth 60fps playback
@@ -162,56 +162,43 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
           />
 
           <div className="relative container-w py-6 sm:py-10">
+            {/* ── Techno-Luxury End-State Call To Action Card ── */}
             <div 
-              className={`max-w-lg p-7 sm:p-9 rounded-3xl bg-gradient-to-br from-[#003365]/90 via-[#061930]/95 to-[#020914]/95 backdrop-blur-2xl border border-amber-400/40 shadow-[0_25px_60px_rgba(0,18,45,0.7),0_0_40px_rgba(212,175,55,0.18)] transition-all duration-1000 ease-[cubic-bezier(0.16,1,0.3,1)] relative overflow-hidden ${
+              className={`max-w-[480px] lg:max-w-[540px] rounded-[32px] shadow-[0_25px_60px_rgba(0,0,0,0.9),0_0_50px_rgba(0,251,255,0.22)] transition-all duration-1000 ease-[cubic-bezier(0.16,1,0.3,1)] relative select-none ${
                 isEnded 
                   ? 'opacity-100 translate-y-0 scale-100 pointer-events-auto' 
                   : 'opacity-0 translate-y-16 scale-[0.92] pointer-events-none'
               }`}
             >
-              {/* Top Golden Light Filament */}
-              <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-amber-400 to-transparent" />
+              <img 
+                src="/images/techno_hero_card.webp" 
+                alt="Прямые оптовые поставки ковровых коллекций" 
+                className="w-full h-auto block select-none pointer-events-none drop-shadow-[0_10px_30px_rgba(0,0,0,0.8)]"
+              />
 
-              {/* Brand Header with Logo inside the window */}
-              <div className="flex items-center gap-3 mb-5">
-                <img 
-                  src="/Вектор_Синэнергия.png" 
-                  alt="Synergy Group" 
-                  className="h-9 sm:h-10 w-auto brightness-0 invert opacity-95 drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)]" 
+              {/* Interactive Button Overlay precisely mapped to the brushed steel CTA button */}
+              <button
+                type="button"
+                onClick={handleCatalogNavigate}
+                className="absolute z-10 rounded-[14px] cursor-pointer group focus:outline-none transition-transform duration-200 active:scale-[0.985] hover:scale-[1.01]"
+                style={{
+                  left: '9.34%',
+                  top: '76.33%',
+                  width: '81.33%',
+                  height: '14.71%',
+                }}
+                title="Перейти в каталог"
+                aria-label="Перейти в каталог"
+              >
+                {/* Dynamic light sheen that glides across the metal button on hover */}
+                <span 
+                  aria-hidden="true"
+                  className="absolute inset-0 rounded-[14px] opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none shadow-[0_0_20px_rgba(0,251,255,0.6)]"
+                  style={{
+                    background: 'linear-gradient(180deg, rgba(255,255,255,0.18) 0%, rgba(0,251,255,0.2) 100%)',
+                  }}
                 />
-                <div className="h-5 w-px bg-amber-400/30" />
-                <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-400/10 px-3 py-1 text-[11px] font-medium text-amber-200 border border-amber-400/30 backdrop-blur-sm">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                  <span>Оптовый склад ковров</span>
-                </div>
-              </div>
-
-              <h1 className="font-display text-2xl sm:text-3xl lg:text-4xl font-bold text-white leading-tight drop-shadow-[0_2px_10px_rgba(0,0,0,0.9)]">
-                Прямые оптовые поставки <span className="text-amber-300">ковровых коллекций</span>
-              </h1>
-
-              <p className="mt-3 text-xs sm:text-sm text-slate-200 font-body leading-relaxed drop-shadow-[0_1px_6px_rgba(0,0,0,0.9)] font-light">
-                Широкий ассортимент от ведущих фабрик Турции, Бельгии и Ирана. 
-                Более 1500 коллекций в наличии. Экспресс-отгрузка за 24 часа с 3 складов в Казахстане.
-              </p>
-
-              <div className="mt-7 flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={handleCatalogNavigate}
-                  className="inline-flex items-center justify-center gap-2 text-xs uppercase tracking-widest font-bold px-6 py-3.5 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-slate-950 shadow-lg shadow-amber-400/30 hover:shadow-amber-400/50 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer"
-                >
-                  <span>Перейти в каталог</span>
-                  <ArrowRight className="w-4 h-4 text-slate-950" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onNavigate?.('contacts')}
-                  className="inline-flex items-center justify-center gap-2 text-xs uppercase tracking-wider font-semibold px-5 py-3.5 rounded-xl border border-amber-400/30 bg-white/5 hover:bg-white/10 text-amber-200 hover:text-white backdrop-blur-md transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
-                >
-                  <span>Связаться с нами</span>
-                </button>
-              </div>
+              </button>
             </div>
           </div>
         </div>
