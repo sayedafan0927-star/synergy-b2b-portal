@@ -198,6 +198,7 @@ export default function HomePage({
           <div className="mt-8 lg:mt-12 grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-6">
             {categories.map((category, idx) => {
               const isFirst = idx === 0;
+              const isChina = category.name === 'Китай' || category.id.includes('Китай');
               const actualCount = countryCounts[category.name] || category.count || 0;
               return (
                 <button
@@ -207,11 +208,17 @@ export default function HomePage({
                   className={`group flex flex-col items-center rounded-2xl cursor-pointer transition-all duration-300 text-center backdrop-blur-md ${
                     isFirst
                       ? 'col-span-2 md:col-span-1 bg-black/40 border border-amber-500/35 hover:border-amber-400/80 p-3 md:p-4 shadow-2xl hover:shadow-amber-500/10'
-                      : 'col-span-1 bg-black/30 border border-white/15 hover:border-amber-400/60 p-2.5 md:p-4 shadow-xl hover:shadow-amber-500/10'
+                      : isChina
+                        ? 'col-span-1 bg-black/25 border border-slate-300/30 hover:border-slate-200/60 p-2.5 md:p-4 shadow-xl hover:shadow-slate-300/10'
+                        : 'col-span-1 bg-black/30 border border-white/15 hover:border-amber-400/60 p-2.5 md:p-4 shadow-xl hover:shadow-amber-500/10'
                   }`}
                 >
-                  {/* Video Frame Box - 100% full square frame visible, zero text overlay */}
-                  <div className={`aspect-square rounded-xl overflow-hidden bg-black/50 border border-white/10 ${
+                  {/* Video Frame Box - China is frameless & seamless; Turkey and Iran maintain classic frames */}
+                  <div className={`aspect-square rounded-xl overflow-hidden ${
+                    isChina
+                      ? 'border-0 bg-transparent'
+                      : 'bg-black/50 border border-white/10'
+                  } ${
                     isFirst ? 'w-[180px] sm:w-[220px] md:w-full' : 'w-full'
                   }`}>
                     {category.video ? (
