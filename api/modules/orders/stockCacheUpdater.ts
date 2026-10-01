@@ -51,12 +51,17 @@ export async function decrementCachedCatalogStock(
           v.reserved_stock = (v.reserved_stock ?? 0) + decTotal;
           v.stock = v.free_stock;
           if (Array.isArray(v.warehouses)) {
+            // Защита от ложного списания: если указан конкретный склад, другие склады НЕ списываются
+            const hasWarehouseSpecificTarget = Array.from(decMap.keys()).some(k => k.startsWith(`${vSku}::`));
             for (const w of v.warehouses) {
               const wId = Number(w.warehouse_id || 81);
-              const wDec = decMap.get(`${vSku}::${wId}`) ?? decTotal;
-              w.free_stock = Math.max(0, (w.free_stock ?? w.stock ?? 0) - wDec);
-              w.reserved_stock = (w.reserved_stock ?? 0) + wDec;
-              w.stock = w.free_stock;
+              const specificDec = decMap.get(`${vSku}::${wId}`);
+              const wDec = specificDec !== undefined ? specificDec : (hasWarehouseSpecificTarget ? 0 : decTotal);
+              if (wDec > 0) {
+                w.free_stock = Math.max(0, (w.free_stock ?? w.stock ?? 0) - wDec);
+                w.reserved_stock = (w.reserved_stock ?? 0) + wDec;
+                w.stock = w.free_stock;
+              }
             }
           }
         }

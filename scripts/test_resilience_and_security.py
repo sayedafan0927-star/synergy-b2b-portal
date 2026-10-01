@@ -2095,7 +2095,30 @@ with open(os.path.join(ROOT_DIR, "api", "erp.ts"), "r", encoding="utf-8") as fp:
 test_assert("req.query.manager_id = String(verifiedAuth.userId)" in erp_fresh, "api/erp.ts scopes regional/line manager queries with manager_id preventing republic-wide data leaks")
 
 # ------------------------------------------------------------------------------
-# 64. Summary Report
+# 64. Stage 40: Suborder-Safe Inventory, Regional Balance Anti-BOLA & Master Sync
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 64. STAGE 40: SUBORDER-SAFE INVENTORY, REGIONAL BOLA & MASTER RECONCILIATION ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "stockCacheUpdater.ts"), "r", encoding="utf-8") as fp:
+    scu_code = fp.read()
+test_assert("hasWarehouseSpecificTarget" in scu_code and "specificDec !== undefined" in scu_code, "stockCacheUpdater.ts scopes stock decrements only to target warehouses, preventing false depletion across branches")
+
+with open(os.path.join(ROOT_DIR, "supabase", "migrations", "20261001170000_composite_suborder_safe_reservations.sql"), "r", encoding="utf-8") as fp:
+    comp_sql = fp.read()
+test_assert("v_has_children" in comp_sql and "sub.parent_order_id = p_order_id" in comp_sql, "Migration 20261001170000 inspects child suborders preventing phantom duplicate inventory releases")
+test_assert("COALESCE(sub.reservations_released, false) = false" in comp_sql, "release_order_reservations only releases stock for unreleased suborders")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "financial", "refreshBalanceHandler.ts"), "r", encoding="utf-8") as fp:
+    rfb_code = fp.read()
+test_assert("FORBIDDEN_COUNTERPARTY_SCOPE" in rfb_code and "manager_id" in rfb_code, "refreshBalanceHandler.ts enforces manager territory scoping preventing IDOR/BOLA financial balance leaks")
+test_assert("FORBIDDEN_FINANCIAL_ACCESS" in rfb_code, "refreshBalanceHandler.ts blocks buyer role from viewing company balance")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "cancelOrderHandler.ts"), "r", encoding="utf-8") as fp:
+    can_master = fp.read()
+test_assert("allCancelled" in can_master and "partially_confirmed" in can_master and "newTotal" in can_master, "cancelOrderHandler.ts synchronizes master order status and recalculates total_amount upon suborder cancellations")
+
+# ------------------------------------------------------------------------------
+# 65. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

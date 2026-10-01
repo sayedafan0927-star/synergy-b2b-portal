@@ -173,6 +173,46 @@ export async function handleCancelOrder(options: CancelOrderOptions): Promise<vo
     triggerImmediateOutboxSync(req, correlationId);
   }
 
+  // 6.1. Синхронизация состояния мастер-заказа, если отменялся дочерний подзаказ
+  if (order.parent_order_id) {
+    try {
+      const { data: siblings } = await supabase
+        .from('orders')
+        .select('id, status, total_amount')
+        .eq('parent_order_id', order.parent_order_id);
+
+      if (Array.isArray(siblings) && siblings.length > 0) {
+        const allCancelled = siblings.every((s: any) => s.status === 'cancelled');
+        const activeSiblings = siblings.filter((s: any) => s.status !== 'cancelled');
+        const newTotal = activeSiblings.reduce((sum: number, s: any) => sum + (Number(s.total_amount) || 0), 0);
+
+        if (allCancelled) {
+          await supabase
+            .from('orders')
+            .update({
+              status: isSafeLocalCancel ? 'cancelled' : 'cancellation_pending',
+              reservations_released: isSafeLocalCancel,
+              total_amount: 0,
+              updated_at: nowIso,
+              notes: `Все дочерние складские партии отменены. [${nowIso}]`,
+            })
+            .eq('id', order.parent_order_id);
+        } else {
+          await supabase
+            .from('orders')
+            .update({
+              status: 'partially_confirmed',
+              total_amount: newTotal,
+              updated_at: nowIso,
+            })
+            .eq('id', order.parent_order_id);
+        }
+      }
+    } catch (parentSyncErr) {
+      logger.warn('[CancelOrder] Failed to sync master order state from suborders:', parentSyncErr as Error);
+    }
+  }
+
   // 7. Оповещение Realtime-канала
   try {
     const channel = supabase.channel('portal_live_updates');

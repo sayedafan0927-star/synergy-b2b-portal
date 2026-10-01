@@ -29,7 +29,18 @@ export async function handleRefreshClientBalance(ctx: RefreshBalanceContext): Pr
     ''
   ).trim();
 
-  // Клиент может обновлять только свой баланс, админ/менеджер — любой
+  // Anti-IDOR & B2B RBAC: Клиент может обновлять только свой баланс, закупщикам доступ запрещен
+  if (callerAuth && callerAuth.role === 'client' && !callerAuth.isServer) {
+    if (callerAuth.b2bRole === 'buyer') {
+      res.status(403).json({
+        success: false,
+        code: 'FORBIDDEN_FINANCIAL_ACCESS',
+        error: 'Доступ к финансовым взаиморасчетам и задолженности компании ограничен для роли закупщика.',
+      });
+      return;
+    }
+  }
+
   const effectivePartnerId = (callerAuth.role === 'client' && callerAuth.partnerId)
     ? String(callerAuth.partnerId)
     : requestedPartnerId;
@@ -40,6 +51,27 @@ export async function handleRefreshClientBalance(ctx: RefreshBalanceContext): Pr
       error: 'partner_id is required for balance refresh',
     });
     return;
+  }
+
+  // Multi-Tenancy Scoping: Менеджеры могут обновлять баланс только прикрепленных контрагентов своего региона
+  if (callerAuth && (callerAuth.role === 'manager_rm' || callerAuth.role === 'manager_lm') && !callerAuth.isServer) {
+    if (effectivePartnerId && callerAuth.userId) {
+      const { data: clientManaged } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('partner_id', effectivePartnerId)
+        .eq('manager_id', callerAuth.userId)
+        .maybeSingle();
+
+      if (!clientManaged) {
+        res.status(403).json({
+          success: false,
+          error: 'Доступ запрещен: данный контрагент не относится к вашей региональной зоне ответственности.',
+          code: 'FORBIDDEN_COUNTERPARTY_SCOPE',
+        });
+        return;
+      }
+    }
   }
 
   const startTime = Date.now();
