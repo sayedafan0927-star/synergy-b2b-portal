@@ -10,7 +10,7 @@ import {
   ArrowUpDown,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { updateOrderStatusInErp } from '@/lib/erpApi';
+import { updateOrderStatusInErp, cancelOrderViaPortal } from '@/lib/erpApi';
 import { calcSqm } from '@/types';
 import type { Order, OrderItem } from './types';
 import {
@@ -93,38 +93,55 @@ export function OrderDetail({
 
   const handleStatusChange = async (newStatus: string) => {
     setUpdatingStatus(true);
-    // 1. Синхронизируем статус в ERP (при 'cancelled' ERP автоматически расформировывает бронь free_stock)
-    try {
-      await updateOrderStatusInErp({
-        orderId: order.id,
-        status: newStatus,
-        comment: newStatus === 'cancelled' ? 'Заказ отменен пользователем/администратором через B2B-портал' : `Статус изменен на "${newStatus}"`,
-      });
-    } catch (erpErr) {
-      console.warn('[OrderDetailModal] ERP update_order_status warning:', erpErr);
-    }
-
-    // 2. При отмене освобождаем зарезервированные остатки обратно на склад (Zero Reservation Leak)
     if (newStatus === 'cancelled') {
+      try {
+        await cancelOrderViaPortal({
+          orderId: order.id,
+          comment: 'Заказ отменен пользователем/администратором через B2B-портал',
+        });
+      } catch (cancelErr) {
+        console.warn('[OrderDetailModal] cancelOrderViaPortal error:', cancelErr);
+      }
+      // Освобождаем зарезервированные остатки (Zero Reservation Leak) и каскадируем статус на parent_order_id.eq.
       try {
         await supabase.rpc('release_order_reservations', { p_order_id: order.id });
       } catch (relErr) {
         console.warn('[OrderDetail] release_order_reservations notice:', relErr);
       }
-    }
-
-    // 3. Обновляем статус в Supabase с каскадом на дочерние подзаказы
-    try {
-      await supabase
-        .from('orders')
-        .update({
+      try {
+        await supabase
+          .from('orders')
+          .update({
+            status: newStatus,
+            reservations_released: true,
+            updated_at: new Date().toISOString(),
+          })
+          .or(`id.eq.${order.id},parent_order_id.eq.${order.id}`);
+      } catch {
+        // safe fallback
+      }
+    } else {
+      // Синхронизируем статус в ERP
+      try {
+        await updateOrderStatusInErp({
+          orderId: order.id,
           status: newStatus,
-          reservations_released: newStatus === 'cancelled' ? true : undefined,
-          updated_at: new Date().toISOString(),
-        })
-        .or(`id.eq.${order.id},parent_order_id.eq.${order.id}`);
-    } catch {
-      // safe fallback
+          comment: `Статус изменен на "${newStatus}"`,
+        });
+      } catch (erpErr) {
+        console.warn('[OrderDetailModal] ERP update_order_status warning:', erpErr);
+      }
+      try {
+        await supabase
+          .from('orders')
+          .update({
+            status: newStatus,
+            updated_at: new Date().toISOString(),
+          })
+          .or(`id.eq.${order.id},parent_order_id.eq.${order.id}`);
+      } catch {
+        // safe fallback
+      }
     }
 
     const meta = ORDER_STATUS_MAP[newStatus] || { label: newStatus, color: 'bg-slate-100 text-slate-600 border-slate-200' };

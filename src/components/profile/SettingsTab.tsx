@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Settings, Shield } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
+import { getAuthHeaders } from '@/lib/erpApi';
 
 export function SettingsTab() {
   const { profile, refreshProfile } = useAuth();
@@ -54,28 +55,25 @@ export function SettingsTab() {
     }
     setPassSaving(true);
     try {
-      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(profile.id);
-      if (isUuid) {
-        const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(newPassword));
-        const hex = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
-        const { error } = await supabase.from('profiles').update({
-          password_hash: hex,
-        }).eq('id', profile.id);
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders,
+        },
+        body: JSON.stringify({ new_password: newPassword }),
+      });
 
-        if (error) {
-          setPassError('Не удалось обновить пароль: ' + error.message);
-        } else {
-          setPassSaved(true);
-          setNewPassword('');
-          setConfirmPassword('');
-          setTimeout(() => setPassSaved(false), 3000);
-        }
-      } else {
-        setPassSaved(true);
-        setNewPassword('');
-        setConfirmPassword('');
-        setTimeout(() => setPassSaved(false), 3000);
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || `Ошибка смены пароля (${res.status})`);
       }
+
+      setPassSaved(true);
+      setNewPassword('');
+      setConfirmPassword('');
+      setTimeout(() => setPassSaved(false), 3000);
     } catch (e: any) {
       setPassError(e?.message || 'Ошибка обновления пароля');
     } finally {

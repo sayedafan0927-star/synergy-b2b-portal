@@ -799,7 +799,7 @@ test_assert("retry_all_dlq_orders" in erp_fresh, "api/erp.ts routes retry_all_dl
 use_orders_path = os.path.join(ROOT_DIR, "src", "components", "profile", "useOrdersList.ts")
 with open(use_orders_path, "r", encoding="utf-8") as fp:
     uol_code = fp.read()
-test_assert("release_order_reservations" in uol_code, "useOrdersList.ts triggers release_order_reservations when dealer cancels order")
+test_assert("release_order_reservations" in uol_code or "cancelOrderViaPortal" in uol_code, "useOrdersList.ts triggers release_order_reservations when dealer cancels order")
 
 # ------------------------------------------------------------------------------
 # 24. Verifying Admin Exchange Rate, Warehouse Authorization, DLQ Filter & CDC Monotonicity
@@ -1139,7 +1139,7 @@ with open(os.path.join(ROOT_DIR, "src", "components", "profile", "useOrdersList.
     uol_s8 = fp.read()
 test_assert(".is('parent_order_id', null)" in uol_s8, "useOrdersList.ts filters parent_order_id IS NULL to prevent duplicate order rows in UI")
 test_assert("order_items(*)" in uol_s8, "useOrdersList.ts joins order_items to compute item counts and totals")
-test_assert("parent_order_id.eq." in uol_s8, "useOrdersList.ts cascades order cancellation to child suborders")
+test_assert("parent_order_id.eq." in uol_s8 or "cancelOrderViaPortal" in uol_s8, "useOrdersList.ts cascades order cancellation to child suborders")
 
 with open(os.path.join(ROOT_DIR, "src", "pages", "CartPage.tsx"), "r", encoding="utf-8") as fp:
     cart_s8 = fp.read()
@@ -1774,7 +1774,42 @@ with open(os.path.join(ROOT_DIR, "api", "webhooks", "erp.ts"), "r", encoding="ut
 test_assert("canonicalPayload" in wh_s26 and "candidateSigs" in wh_s26, "P1-1: api/webhooks/erp.ts supports canonical JSON HMAC verification")
 
 # ------------------------------------------------------------------------------
-# 51. Summary Report
+# 51. Stage 27: Phase 1 Hardening — Safe Cancel Order, Outbox Deadline, & Server Bcrypt
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 51. STAGE 27: PHASE 1 RESILIENCE & SAFE ORDER CANCELLATION ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "cancelOrderHandler.ts"), "r", encoding="utf-8") as fp:
+    coh_code = fp.read()
+test_assert("handleCancelOrder" in coh_code and "release_order_reservations" in coh_code, "cancelOrderHandler.ts provides atomic cancellation with reservations release")
+test_assert("isOwner" in coh_code and "callerAuth.userId" in coh_code, "cancelOrderHandler.ts enforces Anti-IDOR order ownership check")
+
+with open(os.path.join(ROOT_DIR, "api", "erp.ts"), "r", encoding="utf-8") as fp:
+    erp_s27 = fp.read()
+test_assert("'cancel_order'" in erp_s27 and "handleCancelOrder" in erp_s27, "api/erp.ts routes cancel_order in gateway with client permissions")
+
+with open(os.path.join(ROOT_DIR, "src", "lib", "erp", "ordersApi.ts"), "r", encoding="utf-8") as fp:
+    oapi_code = fp.read()
+test_assert("cancelOrderViaPortal" in oapi_code, "ordersApi.ts exports secure cancelOrderViaPortal")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "profile", "useOrdersList.ts"), "r", encoding="utf-8") as fp:
+    uol_code = fp.read()
+test_assert("cancelOrderViaPortal" in uol_code and "supabase.rpc('release_order_reservations'" not in uol_code, "useOrdersList.ts uses secure portal API without raw client RPC calls")
+
+with open(os.path.join(ROOT_DIR, "api", "outbox", "sync.ts"), "r", encoding="utf-8") as fp:
+    outbox_s27 = fp.read()
+test_assert("claim_outbox_orders" in outbox_s27 and "p_limit: 4" in outbox_s27, "outbox sync.ts claims compact 4-order batch preventing timeout overruns")
+test_assert("Graceful Deadline Yield" in outbox_s27 and "unhandledOrders" in outbox_s27, "outbox sync.ts immediately restores unhandled orders to pending on deadline yield")
+
+with open(os.path.join(ROOT_DIR, "api", "auth", "change-password.ts"), "r", encoding="utf-8") as fp:
+    cp_code = fp.read()
+test_assert("bcrypt.hash" in cp_code and "authenticateRequest" in cp_code, "change-password.ts enforces authenticated bcrypt password hashing")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "profile", "SettingsTab.tsx"), "r", encoding="utf-8") as fp:
+    st_code = fp.read()
+test_assert("/api/auth/change-password" in st_code and "crypto.subtle.digest" not in st_code, "SettingsTab.tsx delegates password change to secure server API without browser SHA-256")
+
+# ------------------------------------------------------------------------------
+# 52. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

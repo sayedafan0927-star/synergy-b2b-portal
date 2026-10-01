@@ -208,6 +208,29 @@ export async function updateOrderStatusInErp(params: UpdateOrderStatusParams): P
 }
 
 /**
+ * Безопасная клиентская и административная отмена заказа через B2B-шлюз.
+ * Проводит отмену в 1С:ERP, высвобождает резервы и обновляет локальную базу.
+ */
+export async function cancelOrderViaPortal(params: {
+  orderId: string;
+  comment?: string;
+}): Promise<{ success: boolean; message?: string }> {
+  const response = await erpFetch('cancel_order', {
+    method: 'POST',
+    body: {
+      order_id: params.orderId,
+      comment: params.comment || 'Заказ отменен пользователем через B2B-портал',
+    },
+  });
+
+  const data = await response.json().catch(() => null);
+  if (!response.ok || !data?.success) {
+    throw new Error(data?.error || `Ошибка отмены заказа (${response.status})`);
+  }
+  return data;
+}
+
+/**
  * Отправка лида из формы обратной связи в Synergy ERP (в новый канбан с пометкой источника).
  */
 export async function submitLeadToErp(payload: LeadPayload): Promise<LeadResponse> {

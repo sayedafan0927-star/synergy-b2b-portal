@@ -21,6 +21,7 @@ import {
   handleDisplaySettingsPost,
 } from './modules/display/displaySettingsHandler';
 import { handleRequestApproval } from './modules/approvals/approvalHandler';
+import { handleCancelOrder } from './modules/orders/cancelOrderHandler';
 import { handleGenericErpProxy } from './modules/erp/genericProxyHandler';
 import { getErpApiKey } from './lib/erpKey';
 
@@ -283,6 +284,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           'reconciliation_report',
           'get_reconciliation_report',
           'request_approval',
+          'cancel_order',
           'logout',
           'display_settings',
           'orders',
@@ -330,6 +332,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           req.query.supplier_id = callerSuppId;
         }
       }
+    }
+
+    // 2.9. Безопасная клиентская и административная отмена заказа (T-24 / P1-1)
+    if (action === 'cancel_order' && (req.method === 'POST' || req.method === 'DELETE')) {
+      const callerAuth = await authenticateRequest(req, { allowServerKey: true });
+      if (!callerAuth.isAuthenticated || callerAuth.error) {
+        return res.status(401).json({ success: false, error: callerAuth.error || 'Требуется авторизация' });
+      }
+      await handleCancelOrder({
+        req,
+        res,
+        callerAuth,
+        correlationId,
+        supabase,
+        targetErpUrl: TARGET_ERP_URL,
+        serverErpKey: SERVER_ERP_KEY,
+      });
+      return;
     }
 
     // 3. ─── Создание заказов с Compensating Saga и Anti-Tamper Guard ───

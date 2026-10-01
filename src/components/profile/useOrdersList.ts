@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { fetchClientOrdersFromErp, updateOrderStatusInErp } from '@/lib/erpApi';
+import { fetchClientOrdersFromErp, updateOrderStatusInErp, cancelOrderViaPortal } from '@/lib/erpApi';
 import { useAuth } from '@/contexts/AuthContext';
 import { calcSqm } from '@/types';
 import type { Order, OrderItem } from './types';
@@ -227,38 +227,19 @@ export function useOrdersList({ isAdmin, isManager }: UseOrdersListOptions) {
     }
     setUpdatingId(order.id);
     try {
-      await updateOrderStatusInErp({
+      await cancelOrderViaPortal({
         orderId: order.id,
-        status: 'cancelled',
-        comment: 'Заказ отменен пользователем/администратором через B2B-портал',
+        comment: 'Заказ отменен пользователем через B2B-портал',
       });
-    } catch (erpErr) {
-      console.warn('[handleCancelOrder] ERP update_order_status warning:', erpErr);
-    }
 
-    try {
-      // 1. Освобождаем зарезервированные остатки обратно на склад (Zero Reservation Leak)
-      await supabase.rpc('release_order_reservations', { p_order_id: order.id });
-    } catch (rpcErr) {
-      console.warn('[handleCancelOrder] release_order_reservations notice:', rpcErr);
+      const meta = ORDER_STATUS_MAP['cancelled'] || { label: 'Отменён', color: 'bg-rose-50 text-rose-700 border-rose-200' };
+      setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: meta.label, statusRaw: 'cancelled', statusColor: meta.color } : o));
+    } catch (cancelErr: any) {
+      console.warn('[handleCancelOrder] Cancel failed:', cancelErr);
+      alert(cancelErr?.message || 'Не удалось отменить заказ. Пожалуйста, обратитесь к персональному менеджеру.');
+    } finally {
+      setUpdatingId(null);
     }
-
-    try {
-      await supabase
-        .from('orders')
-        .update({
-          status: 'cancelled',
-          reservations_released: true,
-          updated_at: new Date().toISOString(),
-        })
-        .or(`id.eq.${order.id},parent_order_id.eq.${order.id}`);
-    } catch {
-      // safe fallback
-    }
-
-    const meta = ORDER_STATUS_MAP['cancelled'] || { label: 'Отменён', color: 'bg-rose-50 text-rose-700 border-rose-200' };
-    setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: meta.label, statusRaw: 'cancelled', statusColor: meta.color } : o));
-    setUpdatingId(null);
   };
 
   return {

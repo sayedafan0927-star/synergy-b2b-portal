@@ -77,7 +77,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let pendingOrders: any[] | null = null;
     let claimedViaRpc = false;
 
-    const { data: claimedOrders, error: rpcErr } = await supabase.rpc('claim_outbox_orders', { p_limit: 10 });
+    const { data: claimedOrders, error: rpcErr } = await supabase.rpc('claim_outbox_orders', { p_limit: 4 });
     if (!rpcErr && Array.isArray(claimedOrders)) {
       pendingOrders = claimedOrders;
       claimedViaRpc = true;
@@ -90,7 +90,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .is('parent_order_id', null)
         .or(`next_retry_at.is.null,next_retry_at.lte.${nowIso}`)
         .order('created_at', { ascending: true })
-        .limit(10);
+        .limit(4);
 
       if (fetchErr) {
         console.error('[Outbox Sync] Failed to fetch pending orders:', fetchErr);
@@ -375,8 +375,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // Обработка батчами по 3 заказа с защитой от Serverless 504 Timeout (дедлайн 7.5с)
-    const BATCH_SIZE = 3;
+    // Обработка батчами по 2 заказа с защитой от Serverless 504 Timeout (дедлайн 7.5с)
+    const BATCH_SIZE = 2;
     const MAX_EXECUTION_MS = 7500;
     let deadlineReached = false;
 
@@ -389,6 +389,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const batchResults = await Promise.all(batch.map(order => syncSingleOrder(order)));
       for (const res of batchResults) {
         if (res) results.push(res);
+      }
+    }
+
+    // Zero 5-Minute Stale Delay: Если воркер уперся в дедлайн, немедленно освобождаем захваченные, но необработанные заказы
+    if (claimedViaRpc && deadlineReached) {
+      const processedIds = new Set(results.map(r => r.order_id));
+      const unhandledOrders = pendingOrders.filter(o => !processedIds.has(o.id));
+      if (unhandledOrders.length > 0) {
+        const unhandledIds = unhandledOrders.map(o => o.id);
+        try {
+          await supabase
+            .from('orders')
+            .update({
+              status: 'pending',
+              last_error: 'Освобождение по таймауту воркера (Graceful Deadline Yield)',
+              updated_at: new Date().toISOString(),
+            })
+            .in('id', unhandledIds)
+            .eq('status', 'processing_sync');
+        } catch (releaseErr) {
+          console.warn('[Outbox Sync] Unhandled orders release warning:', releaseErr);
+        }
       }
     }
 

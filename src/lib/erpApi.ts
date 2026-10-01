@@ -34,6 +34,7 @@ export {
   submitOrderToErp,
   fetchClientOrdersFromErp,
   updateOrderStatusInErp,
+  cancelOrderViaPortal,
   submitLeadToErp,
   fetchActiveReservations,
   type ActiveReservation,
