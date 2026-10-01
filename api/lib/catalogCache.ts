@@ -25,60 +25,79 @@ export interface CachedCatalogResult {
   source: 'memory' | 'database';
 }
 
+const inFlightRequests = new Map<string, Promise<CachedCatalogResult | null>>();
+
 /**
  * Получить закэшированный снимок каталога (L1 RAM -> Redis -> L2 Supabase DB)
+ * Защищен Singleflight паттерном от Cache Stampede при конкурентных запросах.
  */
 export async function getCachedCatalog(cacheKey = 'catalog_global'): Promise<CachedCatalogResult | null> {
   const now = Date.now();
 
-  // 1. L1 Memory Cache
+  // 1. L1 Memory Cache (мгновенное чтение)
   const mem = memoryCache.get(cacheKey);
   if (mem) {
     const ageMs = now - mem.cachedAt;
     return { data: mem.data, ageMs, isFresh: ageMs < CACHE_FRESH_TTL_MS, version: mem.version, source: 'memory' };
   }
 
-  // 1.5. L2 Distributed Redis Cache
-  const redisData = await getRedisCatalogCache(cacheKey);
-  if (redisData) {
-    memoryCache.set(cacheKey, { data: redisData, cachedAt: now, version: 1 });
-    return { data: redisData, ageMs: 0, isFresh: true, version: 1, source: 'memory' };
+  // 2. Singleflight Deduplication — объединяем параллельные запросы к холодному кэшу
+  const existingInFlight = inFlightRequests.get(cacheKey);
+  if (existingInFlight) {
+    return existingInFlight;
   }
 
-  // 2. Проверяем L2 Database Staging Cache
-  if (!supabase) return null;
-  try {
-    const { data: row, error } = await supabase
-      .from('catalog_cache')
-      .select('data, version, updated_at')
-      .eq('cache_key', cacheKey)
-      .maybeSingle();
-
-    if (!error && row && row.data) {
-      const updatedAtMs = new Date(row.updated_at).getTime();
-      const ageMs = Math.max(0, now - updatedAtMs);
-      const version = Number(row.version || 1);
-
-      // Сохраняем в L1 Memory
-      memoryCache.set(cacheKey, {
-        data: row.data,
-        cachedAt: updatedAtMs,
-        version,
-      });
-
-      return {
-        data: row.data,
-        ageMs,
-        isFresh: ageMs < CACHE_FRESH_TTL_MS,
-        version,
-        source: 'database',
-      };
+  const lookupPromise = (async (): Promise<CachedCatalogResult | null> => {
+    // 2.1. L2 Distributed Redis Cache
+    const redisData = await getRedisCatalogCache(cacheKey);
+    if (redisData) {
+      memoryCache.set(cacheKey, { data: redisData, cachedAt: Date.now(), version: 1 });
+      return { data: redisData, ageMs: 0, isFresh: true, version: 1, source: 'memory' };
     }
-  } catch (err) {
-    console.warn('[CatalogCache] Error fetching from database cache:', err);
-  }
 
-  return null;
+    // 2.2. L2 Database Staging Cache
+    if (!supabase) return null;
+    try {
+      const { data: row, error } = await supabase
+        .from('catalog_cache')
+        .select('data, version, updated_at')
+        .eq('cache_key', cacheKey)
+        .maybeSingle();
+
+      if (!error && row && row.data) {
+        const updatedAtMs = new Date(row.updated_at).getTime();
+        const ageMs = Math.max(0, Date.now() - updatedAtMs);
+        const version = Number(row.version || 1);
+
+        // Сохраняем в L1 Memory и асинхронно прогреваем L2 Redis
+        memoryCache.set(cacheKey, {
+          data: row.data,
+          cachedAt: updatedAtMs,
+          version,
+        });
+        setRedisCatalogCache(cacheKey, row.data).catch(() => {});
+
+        return {
+          data: row.data,
+          ageMs,
+          isFresh: ageMs < CACHE_FRESH_TTL_MS,
+          version,
+          source: 'database',
+        };
+      }
+    } catch (err) {
+      console.warn('[CatalogCache] Error fetching from database cache:', err);
+    }
+
+    return null;
+  })();
+
+  inFlightRequests.set(cacheKey, lookupPromise);
+  try {
+    return await lookupPromise;
+  } finally {
+    inFlightRequests.delete(cacheKey);
+  }
 }
 
 /**
@@ -365,8 +384,10 @@ export async function patchCachedCatalogStock(
 export async function invalidateCatalogCache(cacheKey?: string): Promise<void> {
   if (cacheKey) {
     memoryCache.delete(cacheKey);
+    inFlightRequests.delete(cacheKey);
   } else {
     memoryCache.clear();
+    inFlightRequests.clear();
   }
   await invalidateRedisCatalogCache(cacheKey);
 }

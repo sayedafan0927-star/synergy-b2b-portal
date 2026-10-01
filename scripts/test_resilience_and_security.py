@@ -1809,7 +1809,22 @@ with open(os.path.join(ROOT_DIR, "src", "components", "profile", "SettingsTab.ts
 test_assert("/api/auth/change-password" in st_code and "crypto.subtle.digest" not in st_code, "SettingsTab.tsx delegates password change to secure server API without browser SHA-256")
 
 # ------------------------------------------------------------------------------
-# 52. Summary Report
+# 52. STAGE 28: PHASE 2 CACHE STAMPEDE PROTECTION & RESOLVER
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 52. STAGE 28: PHASE 2 CACHE STAMPEDE PROTECTION & RESOLVER ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "api", "lib", "catalogCache.ts"), "r", encoding="utf-8") as fp:
+    cat_cache_code = fp.read()
+test_assert("inFlightRequests" in cat_cache_code and "lookupPromise" in cat_cache_code, "catalogCache.ts implements Singleflight deduplication preventing cache stampede")
+test_assert("setRedisCatalogCache" in cat_cache_code, "catalogCache.ts actively seeds L2 Redis cache on DB cache hit")
+test_assert("inFlightRequests.clear()" in cat_cache_code, "catalogCache.ts purges in-flight promises upon cache invalidation")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "catalog", "resolveBatchHandler.ts"), "r", encoding="utf-8") as fp:
+    rb_code = fp.read()
+test_assert("items.slice(0, 500)" in rb_code, "resolveBatchHandler.ts caps batch resolution to 500 items preventing memory overload")
+
+# ------------------------------------------------------------------------------
+# 53. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests
