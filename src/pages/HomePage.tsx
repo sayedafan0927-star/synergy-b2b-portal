@@ -93,7 +93,8 @@ export default function HomePage({
   return (
     <div className="pb-16 lg:pb-0">
       {/* ── Hero Video Banner (Pure animation + Harmonious End-State CTA) ── */}
-      <section className="relative w-full bg-slate-950 pt-16 sm:pt-20 lg:pt-24 overflow-hidden">
+      {/* ── Hero Video Banner (Pure animation + Harmonious End-State CTA) ── */}
+      <section className="relative w-full bg-slate-950 pt-16 sm:pt-20 lg:pt-24">
         <HeroBannerMedia onNavigate={onNavigate} isReady={isReady} />
         {/* Mobile Action Bar: Golden button on dark canvas under video */}
         <div className="block sm:hidden px-4 pb-8 select-none relative z-20">
@@ -108,26 +109,41 @@ export default function HomePage({
             <ArrowRight className="w-4 h-4 text-slate-950" />
           </button>
         </div>
+      </section>
 
-        {/* ── Bottom Organic Wave: Seamless transition to Advantages (#ffffff) with ZERO lines ── */}
-        <div className="absolute bottom-0 inset-x-0 pointer-events-none select-none z-10 -mb-[1px]">
+      {/* ── 1. Advantages Section (Clean White) ── */}
+      <section className="relative py-16 lg:py-24 bg-white">
+        {/* ── Top Organic Wave: Seamlessly drapes UP over the bottom of Hero Banner ── */}
+        <div className="absolute -top-[30px] sm:-top-[46px] lg:-top-[62px] inset-x-0 pointer-events-none select-none z-20">
           <svg
-            className="w-full h-8 sm:h-12 lg:h-16 block"
+            className="w-full h-8 sm:h-12 lg:h-16 block overflow-visible"
             viewBox="0 0 1440 96"
             preserveAspectRatio="none"
             aria-hidden="true"
           >
             <path
-              d="M 0,50 C 290,15 490,95 720,55 C 950,15 1150,95 1440,50 L 1440,96 L 0,96 Z"
+              d="M 0,50 C 290,15 490,95 720,55 C 950,15 1150,95 1440,50 L 1440,98 L 0,98 Z"
               fill="#ffffff"
             />
           </svg>
         </div>
-      </section>
 
-      {/* ── 1. Advantages Section (Clean White) ── */}
-      <section className="py-16 lg:py-24 bg-white">
-        <div className="container-w">
+        {/* ── Bottom Organic Wave: Seamlessly drapes DOWN over the top of Categories Section ── */}
+        <div className="absolute -bottom-[30px] sm:-bottom-[46px] lg:-bottom-[62px] inset-x-0 pointer-events-none select-none z-20">
+          <svg
+            className="w-full h-8 sm:h-12 lg:h-16 block overflow-visible"
+            viewBox="0 0 1440 96"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M 0,-2 L 1440,-2 L 1440,50 C 1150,95 950,15 720,55 C 490,95 290,15 0,50 Z"
+              fill="#ffffff"
+            />
+          </svg>
+        </div>
+
+        <div className="container-w relative z-10">
           <h2 className="section-heading text-center text-slate-900">Почему выбирают нас</h2>
           <p className="section-subheading text-center mx-auto text-slate-600">
             Synergy Group — надёжный оптовый поставщик ковровых покрытий с собственными складами
@@ -155,7 +171,7 @@ export default function HomePage({
       </section>
 
       {/* ── 2. Categories Section (Dark Slate Stone Texture with Seamless Organic Waves) ── */}
-      <section className="relative py-20 lg:py-28 text-white overflow-hidden bg-slate-950">
+      <section className="relative py-20 lg:py-28 text-white bg-slate-950">
         {/* Dark Slate Stone Texture Background */}
         <div
           className="absolute inset-0 bg-cover bg-center pointer-events-none"
@@ -165,36 +181,6 @@ export default function HomePage({
         <div
           className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/30 to-black/65 pointer-events-none"
         />
-
-        {/* ── Top Organic Wave: Seamless transition from Advantages (#ffffff) with ZERO lines ── */}
-        <div className="absolute top-0 inset-x-0 pointer-events-none select-none z-10 -mt-[1px]">
-          <svg
-            className="w-full h-8 sm:h-12 lg:h-16 block"
-            viewBox="0 0 1440 96"
-            preserveAspectRatio="none"
-            aria-hidden="true"
-          >
-            <path
-              d="M 0,0 L 1440,0 L 1440,50 C 1150,95 950,15 720,55 C 490,95 290,15 0,50 Z"
-              fill="#ffffff"
-            />
-          </svg>
-        </div>
-
-        {/* ── Bottom Organic Wave: Seamless transition to Featured Products (#f8fafc) with ZERO lines ── */}
-        <div className="absolute bottom-0 inset-x-0 pointer-events-none select-none z-10 -mb-[1px]">
-          <svg
-            className="w-full h-8 sm:h-12 lg:h-16 block"
-            viewBox="0 0 1440 96"
-            preserveAspectRatio="none"
-            aria-hidden="true"
-          >
-            <path
-              d="M 0,50 C 290,15 490,95 720,55 C 950,15 1150,95 1440,50 L 1440,96 L 0,96 Z"
-              fill="#f8fafc"
-            />
-          </svg>
-        </div>
 
         <div className="container-w relative z-20">
           <div className="text-center">
@@ -270,8 +256,23 @@ export default function HomePage({
       </section>
 
       {/* ── 3. Featured Products Section (Clean Slate-50) ── */}
-      <section className="py-16 lg:py-24 bg-slate-50">
-        <div className="container-w">
+      <section className="relative py-16 lg:py-24 bg-slate-50">
+        {/* ── Top Organic Wave: Seamlessly drapes UP over the bottom of Categories Section ── */}
+        <div className="absolute -top-[30px] sm:-top-[46px] lg:-top-[62px] inset-x-0 pointer-events-none select-none z-20">
+          <svg
+            className="w-full h-8 sm:h-12 lg:h-16 block overflow-visible"
+            viewBox="0 0 1440 96"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M 0,50 C 290,15 490,95 720,55 C 950,15 1150,95 1440,50 L 1440,98 L 0,98 Z"
+              fill="#f8fafc"
+            />
+          </svg>
+        </div>
+
+        <div className="container-w relative z-10">
           <div className="flex items-end justify-between mb-10 lg:mb-14">
             <div>
               <span className="font-mono text-xs text-brand-700/80 uppercase tracking-widest block mb-1">
