@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { ArrowRight } from 'lucide-react';
 import B2BPartnerModal from './B2BPartnerModal';
-import AtmosphericFogTransition from './AtmosphericFogTransition';
 
 interface B2BPartnerCtaSectionProps {
   onNavigate?: (tab: string) => void;
@@ -29,11 +28,8 @@ export default function B2BPartnerCtaSection({ onNavigate: _onNavigate }: B2BPar
             }}
           />
 
-          {/* ── Volumetric Fog / Smoke Effect (Luminous Billowing Plumes at Card Base) ── */}
-          <AtmosphericFogTransition className="absolute inset-x-0 bottom-0 h-48 sm:h-72 pointer-events-none z-10" />
-
           {/* ── Delicate Transparent Content (Completely Transparent, No Nested Double Modal) ── */}
-          <div className="relative z-20 w-full max-w-[290px] sm:max-w-lg lg:max-w-xl mx-auto px-2 py-4 sm:px-10 sm:py-10 lg:py-12 bg-transparent flex flex-col items-center text-center">
+          <div className="relative z-10 w-full max-w-[290px] sm:max-w-lg lg:max-w-xl mx-auto px-2 py-4 sm:px-10 sm:py-10 lg:py-12 bg-transparent flex flex-col items-center text-center">
 
             {/* Main Luxury Heading */}
             <h2 className="font-display text-xl sm:text-4xl lg:text-[42px] font-bold text-white tracking-tight leading-[1.15] drop-shadow-[0_2px_14px_rgba(0,0,0,0.85)]">

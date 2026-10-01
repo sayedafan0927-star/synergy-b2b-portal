@@ -150,15 +150,15 @@
 
 @keyframes mobileTiltOscillate {
   0% {
-    transform: perspective(1000px) rotateX(-5.5deg) rotateY(6.5deg) scale3d(1.018, 1.018, 1.018) translateZ(8px);
+    transform: perspective(1000px) rotateX(-5.5deg) rotateY(6.5deg);
     box-shadow: -10px 14px 26px -4px rgba(0, 0, 0, 0.14);
   }
   50% {
-    transform: perspective(1000px) rotateX(4.5deg) rotateY(-5.5deg) scale3d(1.018, 1.018, 1.018) translateZ(8px);
+    transform: perspective(1000px) rotateX(4.5deg) rotateY(-5.5deg);
     box-shadow: 10px 14px 26px -4px rgba(0, 0, 0, 0.14);
   }
   100% {
-    transform: perspective(1000px) rotateX(-5.5deg) rotateY(6.5deg) scale3d(1.018, 1.018, 1.018) translateZ(8px);
+    transform: perspective(1000px) rotateX(-5.5deg) rotateY(6.5deg);
     box-shadow: -10px 14px 26px -4px rgba(0, 0, 0, 0.14);
   }
 }

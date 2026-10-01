@@ -325,6 +325,7 @@ export default function HomePage({
                   <ProductCard
                     product={product}
                     onNavigate={onNavigate}
+                    disableZoom={true}
                   />
                 </TiltCard>
               </div>

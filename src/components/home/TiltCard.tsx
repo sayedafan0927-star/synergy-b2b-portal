@@ -2,9 +2,9 @@ import { useState, useRef, useEffect, type ReactNode, type MouseEvent } from 're
 
 interface TiltCardProps {
   children: ReactNode;
-  maxTilt?: number; // max tilt angle in degrees (default 14)
+  maxTilt?: number; // max tilt angle in degrees (default 12)
   perspective?: number; // 3D perspective in px (default 1000)
-  scale?: number; // scale on hover (default 1.03)
+  scale?: number; // scale on hover (default 1 = pure tilt without zoom)
   glare?: boolean; // dynamic specular sheen glare
   autoTiltMobile?: boolean; // autonomous 3D tilt oscillation on mobile
   cardIndex?: number; // card index for staggered natural motion (default 0)
@@ -14,6 +14,7 @@ interface TiltCardProps {
 /**
  * TiltCard
  * High-performance 3D physical tilt depth effect:
+ * - Pure 3D angular deflection strictly WITHOUT size zooming/scaling.
  * - Desktop: Instant zero-latency mouse cursor tracking with directional cast shadow.
  * - Mobile: Autonomous, hypnotic 3D floating pendulum tilt loop (cards gently tilt by themselves).
  * - Specular highlight sheen gliding across the card surface in sync with tilt.
@@ -21,9 +22,9 @@ interface TiltCardProps {
  */
 export default function TiltCard({
   children,
-  maxTilt = 14,
+  maxTilt = 12,
   perspective = 1000,
-  scale = 1.03,
+  scale = 1,
   glare = true,
   autoTiltMobile = true,
   cardIndex = 0,
@@ -96,6 +97,12 @@ export default function TiltCard({
   const animDuration = 4.2 + (cardIndex % 3) * 0.7; // 4.2s, 4.9s, 5.6s
   const animDelay = (cardIndex * 0.8) % 3.0; // staggered phase start
 
+  const transformStyle = isMobile && autoTiltMobile
+    ? undefined // Handled by inline keyframes animation on mobile
+    : isHovered
+    ? `rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)${scale !== 1 ? ` scale3d(${scale}, ${scale}, ${scale})` : ''}`
+    : 'rotateX(0deg) rotateY(0deg)';
+
   return (
     <div
       ref={cardRef}
@@ -111,16 +118,12 @@ export default function TiltCard({
       <div
         className="w-full h-full rounded-2xl will-change-transform"
         style={{
-          transform: isMobile && autoTiltMobile
-            ? undefined // Handled by inline animation on mobile
-            : isHovered
-            ? `rotateX(${tilt.x}deg) rotateY(${tilt.y}deg) scale3d(${scale}, ${scale}, ${scale}) translateZ(12px)`
-            : 'rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1) translateZ(0px)',
+          transform: transformStyle,
           boxShadow: !isMobile && isHovered
-            ? `${-tilt.y * 1.8}px ${tilt.x * 1.8 + 12}px 30px -4px rgba(0, 0, 0, 0.2)`
+            ? `${-tilt.y * 1.5}px ${tilt.x * 1.5 + 8}px 24px -4px rgba(0, 0, 0, 0.16)`
             : '0 4px 14px rgba(0, 0, 0, 0.06)',
           transitionProperty: 'transform, box-shadow',
-          transitionDuration: isHovered ? '0ms' : '450ms',
+          transitionDuration: isHovered ? '0ms' : '400ms',
           transitionTimingFunction: isHovered ? 'linear' : 'cubic-bezier(0.16, 1, 0.3, 1)',
           transformStyle: 'preserve-3d',
           ...(isMobile && autoTiltMobile
