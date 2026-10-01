@@ -188,8 +188,8 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
                 }}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-colors duration-200 cursor-pointer ${
                   currentPage === page
-                    ? 'text-[#003365] bg-[#003365]/10 font-bold'
-                    : 'text-slate-700 hover:text-[#003365] hover:bg-black/5'
+                    ? 'text-brand-700 bg-brand-50 font-bold shadow-2xs'
+                    : 'text-slate-700 hover:text-brand-700 hover:bg-slate-100/70'
                 }`}
               >
                 {label}
@@ -307,7 +307,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
             <button
               type="button"
               onClick={() => onNavigate('cart')}
-              className="hidden sm:flex relative h-9 items-center gap-1.5 rounded-lg bg-slate-100 px-3 text-[#003365] transition-colors hover:bg-slate-200/80 border border-slate-200 shrink-0 cursor-pointer"
+              className="hidden sm:flex relative h-9 items-center gap-1.5 rounded-lg bg-slate-100 px-3 text-brand-700 transition-colors hover:bg-slate-200/80 border border-slate-200 shrink-0 cursor-pointer"
               title="Корзина"
             >
               <ShoppingCart className="h-[18px] w-[18px]" />

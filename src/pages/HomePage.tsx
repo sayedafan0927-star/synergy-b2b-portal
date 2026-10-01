@@ -229,8 +229,8 @@ export default function HomePage({
                   }`}
                 >
                   {/* Clean Frameless Symbol - Sits directly on stone background with zero box fill */}
-                  <div className={`aspect-square flex items-center justify-center ${
-                    isFirst ? 'w-[180px] sm:w-[220px] md:w-full' : 'w-full'
+                  <div className={`aspect-square flex items-center justify-center overflow-visible ${
+                    isFirst ? 'w-[220px] sm:w-[280px] md:w-full' : 'w-full'
                   }`}>
                     {category.video ? (
                       <video
@@ -244,7 +244,7 @@ export default function HomePage({
                         preload="auto"
                         poster={category.poster || category.image}
                         style={{ willChange: 'transform' }}
-                        className="h-full w-full object-contain mix-blend-screen transition-transform duration-500 group-hover:scale-105"
+                        className="h-full w-full object-contain mix-blend-screen transition-transform duration-500 scale-120 sm:scale-125 md:scale-120 lg:scale-125 group-hover:scale-[1.32]"
                       >
                         <source src={category.video} type="video/mp4" />
                       </video>
@@ -253,7 +253,7 @@ export default function HomePage({
                         src={category.image}
                         alt={category.name}
                         loading="lazy"
-                        className="h-full w-full object-contain mix-blend-screen transition-transform duration-500 group-hover:scale-105"
+                        className="h-full w-full object-contain mix-blend-screen transition-transform duration-500 scale-120 sm:scale-125 md:scale-120 lg:scale-125 group-hover:scale-[1.32]"
                       />
                     )}
                   </div>
