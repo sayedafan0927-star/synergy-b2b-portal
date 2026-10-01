@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ArrowRight } from 'lucide-react';
+import B2BPartnerModal from './B2BPartnerModal';
 
 interface B2BPartnerCtaSectionProps {
-  onNavigate: (tab: string) => void;
+  onNavigate?: (tab: string) => void;
 }
 
 /**
@@ -10,9 +11,10 @@ interface B2BPartnerCtaSectionProps {
  * - Кристаллическое матовое стекло (Frosted Glass), сквозь которое видна текстура ковра.
  * - Логотип Synergiya Group и премиальный заголовок «Стать партнёром».
  * - Компактный деликатный размер плашки (максимум открытого ворса ковра).
- * - Кнопка «Техно-Люкс» (шлифованная сталь), неоновый контур (#00FBFF) подсвечивается строго при наведении.
+ * - Кнопка «Техно-Люкс» (шлифованная сталь), открывает плавную выплывающую форму заявки в стиле Apple.
  */
-export default function B2BPartnerCtaSection({ onNavigate }: B2BPartnerCtaSectionProps) {
+export default function B2BPartnerCtaSection({ onNavigate: _onNavigate }: B2BPartnerCtaSectionProps) {
+  const [isModalOpen, setIsModalOpen] = useState(false);
   return (
     <section className="py-6 sm:py-16 lg:py-20 bg-white select-none">
       <div className="container-w">
@@ -44,7 +46,7 @@ export default function B2BPartnerCtaSection({ onNavigate }: B2BPartnerCtaSectio
             <div className="mt-4 sm:mt-7 w-full max-w-[260px] sm:max-w-[360px]">
               <button
                 type="button"
-                onClick={() => onNavigate('contacts')}
+                onClick={() => setIsModalOpen(true)}
                 className="group relative w-full block cursor-pointer select-none transition-all duration-300 transform-gpu active:scale-[0.985] hover:scale-[1.015] focus:outline-none"
               >
                 {/* 1. Titanium Outer Chamfer — ambient glow illuminates on hover */}
@@ -124,6 +126,12 @@ export default function B2BPartnerCtaSection({ onNavigate }: B2BPartnerCtaSectio
           </div>
         </div>
       </div>
+
+      {/* ── Apple-Style Floating Partner Application Modal ── */}
+      <B2BPartnerModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+      />
     </section>
   );
 }
