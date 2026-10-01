@@ -203,21 +203,14 @@ export default function HomePage({
       >
         <div className="container-w">
           <div className="text-center">
-            <span className="font-mono text-xs text-slate-400 uppercase tracking-widest block mb-2 drop-shadow-sm">
-              — Коллекции фабрик
-            </span>
             <h2 className="font-display text-2xl sm:text-3xl lg:text-4xl font-bold text-white tracking-tight drop-shadow-md">
               Категории ковров
             </h2>
-            <p className="mt-3 text-sm sm:text-base text-slate-300 font-body max-w-xl mx-auto drop-shadow-sm">
-              Подберите идеальное ковровое покрытие по типу и стилю для любого интерьера
-            </p>
           </div>
 
           <div className="mt-8 lg:mt-12 grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-6">
             {categories.map((category, idx) => {
               const isFirst = idx === 0;
-              const actualCount = countryCounts[category.name] || category.count || 0;
               const mediaScale = isFirst
                 ? 'scale-110 sm:scale-115 md:scale-110 lg:scale-115 group-hover:scale-[1.22]'
                 : 'scale-[1.32] sm:scale-[1.35] md:scale-110 lg:scale-115 group-hover:scale-[1.22]';
@@ -260,17 +253,11 @@ export default function HomePage({
                     )}
                   </div>
 
-                  {/* Centered Text strictly UNDER the animation */}
+                  {/* Centered Text: Pure country name */}
                   <div className="mt-2.5 md:mt-3 flex flex-col items-center">
-                    <span className="font-mono text-[9px] md:text-[10px] text-slate-400 uppercase tracking-widest block mb-0.5">
-                      {isFirst ? 'Прямые поставки • Хит продаж' : 'Прямые поставки'}
-                    </span>
-                    <h3 className="font-display text-base md:text-xl font-bold text-white group-hover:text-slate-200 transition-colors">
-                      {isFirst ? 'Ковры Турции' : category.name}
+                    <h3 className="font-display text-base md:text-xl font-bold text-white group-hover:text-slate-200 transition-colors tracking-wide">
+                      {category.name}
                     </h3>
-                    <span className="inline-block mt-1 md:mt-2 font-mono text-[9px] md:text-[11px] font-semibold text-slate-200 bg-white/5 border border-slate-400/25 px-2.5 py-0.5 md:py-1 rounded-full shadow-xs">
-                      {actualCount > 0 ? (isFirst ? `${actualCount} товаров в наличии` : `${actualCount} товаров`) : 'В наличии'}
-                    </span>
                   </div>
                 </button>
               );

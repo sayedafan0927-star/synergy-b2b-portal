@@ -557,14 +557,14 @@ export default function CatalogPage({
           </div>
         </div>
 
-        <div className="flex gap-6 items-start">
+        <div className="flex items-start">
           <CatalogFilterSidebar
             open={drawerOpen}
             onClose={() => setDrawerOpen(false)}
             {...filterProps}
           />
 
-          <div className="flex-1 min-w-0 w-full">
+          <div className="flex-1 min-w-0 w-full transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]">
             {filteredProducts.length > 0 ? (
               viewMode === 'grid' ? (
                 <>
