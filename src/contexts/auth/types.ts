@@ -1,10 +1,12 @@
 import type { User } from '@supabase/supabase-js';
 
 export type UserRole = 'admin' | 'manager_rm' | 'manager_lm' | 'supplier' | 'client';
+export type B2BSubRole = 'director' | 'buyer' | 'accountant';
 
 export interface Profile {
   id: string;
   role: UserRole;
+  b2b_role?: B2BSubRole;
   partner_id: string | null;
   full_name: string;
   company_name: string;
@@ -57,6 +59,10 @@ export interface AuthContextValue {
   isManager: boolean;
   isSupplier: boolean;
   isClient: boolean;
+  b2bRole: B2BSubRole;
+  isAccountant: boolean;
+  isBuyer: boolean;
+  isDirector: boolean;
   isImpersonating: boolean;
   impersonatedProfile: Profile | null;
   realProfile: Profile | null;

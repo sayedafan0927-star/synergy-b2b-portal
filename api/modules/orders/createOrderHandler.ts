@@ -73,6 +73,13 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
     }
   }
 
+  // 1.5. B2B Multi-Role Guard: Бухгалтер не может создавать заказы
+  if (callerAuth.role === 'client' && callerAuth.b2bRole === 'accountant') {
+    logger.warn('[Order] Accountant attempted to submit order', { userId: callerAuth.userId, correlationId });
+    res.status(403).json({ success: false, code: 'ACCOUNTANT_CANNOT_ORDER', error: 'Учетная запись бухгалтера не имеет прав на оформление заказов.' });
+    return;
+  }
+
   // 2. Валидация цен и защита от подделки (Anti-Tamper Pricing Guard)
   const userPriceType = callerAuth.priceType || 'wholesale';
   const pricingResult = await validateOrderPricing(rawPayload, userPriceType);

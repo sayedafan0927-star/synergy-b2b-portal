@@ -22,7 +22,7 @@ import {
   saveStoredDeactivationNotice,
 } from './auth/impersonationStore';
 
-export type { UserRole, Profile };
+export type { UserRole, B2BSubRole, Profile };
 export { getDeterministicEmployeeUuid };
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
@@ -38,7 +38,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, role, partner_id, full_name, company_name, phone, manager_id, price_type, impersonation_enabled')
+      .select('id, role, b2b_role, partner_id, full_name, company_name, phone, manager_id, price_type, impersonation_enabled')
       .eq('id', userId)
       .maybeSingle();
     if (!error && data) {
@@ -393,6 +393,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const effectiveProfile = impersonatedProfile ?? profile;
   const role = effectiveProfile?.role;
   const realRole = profile?.role;
+  const b2bRole: B2BSubRole = effectiveProfile?.b2b_role || 'director';
 
   return (
     <AuthContext.Provider
@@ -415,6 +416,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isManager: role === 'manager_rm' || role === 'manager_lm',
         isSupplier: role === 'supplier',
         isClient: role === 'client' || !role,
+        b2bRole,
+        isAccountant: b2bRole === 'accountant',
+        isBuyer: b2bRole === 'buyer',
+        isDirector: b2bRole === 'director',
         isImpersonating: impersonatedProfile !== null,
         impersonatedProfile,
         realProfile: profile,

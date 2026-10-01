@@ -17,6 +17,7 @@ export interface AuthenticatedContext {
   isServer: boolean;
   userId?: string;
   role?: 'admin' | 'manager_rm' | 'manager_lm' | 'supplier' | 'client';
+  b2bRole?: 'director' | 'buyer' | 'accountant';
   partnerId?: string | null;
   erpId?: number | null;
   priceType?: string;
@@ -169,7 +170,7 @@ export async function authenticateRequest(
     if (userId) {
       const { data: dbProfile } = await supabaseAdmin
         .from('profiles')
-        .select('id, role, partner_id, erp_id, full_name, company_name, phone, price_type, is_blocked_for_shipment')
+        .select('id, role, b2b_role, partner_id, erp_id, full_name, company_name, phone, price_type, is_blocked_for_shipment')
         .eq('id', userId)
         .maybeSingle();
       
@@ -179,7 +180,7 @@ export async function authenticateRequest(
       if (!profile && fallbackPartnerId) {
         const { data: pByPartner } = await supabaseAdmin
           .from('profiles')
-          .select('id, role, partner_id, erp_id, full_name, company_name, phone, price_type, is_blocked_for_shipment')
+          .select('id, role, b2b_role, partner_id, erp_id, full_name, company_name, phone, price_type, is_blocked_for_shipment')
           .eq('partner_id', fallbackPartnerId)
           .maybeSingle();
         profile = pByPartner;
@@ -188,6 +189,7 @@ export async function authenticateRequest(
 
     // При использовании HMAC-сессии допускаем валидированные данные профиля
     const effectiveRole = (profile?.role || fallbackRole || 'client') as any;
+    const effectiveB2bRole = (profile?.b2b_role || (hmacSessionData?.profile?.b2b_role) || 'director') as 'director' | 'buyer' | 'accountant';
     const effectivePartnerId = profile?.partner_id || fallbackPartnerId;
     const effectiveErpId = profile?.erp_id || (effectivePartnerId ? Number(effectivePartnerId) || null : null);
     const effectivePriceType = profile?.price_type || fallbackPriceType || 'wholesale';
@@ -242,6 +244,7 @@ export async function authenticateRequest(
       isServer: false,
       userId,
       role: effectiveRole,
+      b2bRole: effectiveB2bRole,
       partnerId: effectivePartnerId,
       erpId: effectiveErpId,
       priceType: effectivePriceType,

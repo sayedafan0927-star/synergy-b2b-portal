@@ -1854,7 +1854,32 @@ test_assert("checkRateLimit" in login_h_code and "auth_login_" in login_h_code, 
 test_assert("auth_employee_" in login_h_code and "TOO_MANY_REQUESTS" in login_h_code, "loginHandler.ts protects employee login from brute-force & returns HTTP 429")
 
 # ------------------------------------------------------------------------------
-# 55. Summary Report
+# 55. STAGE 31: B2B MULTI-ROLE CLIENT RBAC (DIRECTOR / BUYER / ACCOUNTANT)
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 55. STAGE 31: B2B MULTI-ROLE CLIENT RBAC ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "src", "contexts", "auth", "types.ts"), "r", encoding="utf-8") as fp:
+    auth_types_code = fp.read()
+test_assert("B2BSubRole" in auth_types_code and "'director' | 'buyer' | 'accountant'" in auth_types_code, "auth/types.ts defines B2BSubRole with director, buyer, and accountant roles")
+
+with open(os.path.join(ROOT_DIR, "api", "lib", "authGuard.ts"), "r", encoding="utf-8") as fp:
+    ag_code = fp.read()
+test_assert("b2bRole" in ag_code and "b2b_role" in ag_code, "authGuard.ts extracts and returns verified b2bRole in AuthenticatedContext")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "createOrderHandler.ts"), "r", encoding="utf-8") as fp:
+    coh_code = fp.read()
+test_assert("ACCOUNTANT_CANNOT_ORDER" in coh_code and "callerAuth.b2bRole === 'accountant'" in coh_code, "createOrderHandler.ts strictly blocks accountant role from submitting orders")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "cart", "CartCheckoutForm.tsx"), "r", encoding="utf-8") as fp:
+    ccf_code = fp.read()
+test_assert("isAccountant" in ccf_code and "Режим бухгалтера" in ccf_code, "CartCheckoutForm.tsx displays accountant advisory message and disables order submission")
+
+with open(os.path.join(ROOT_DIR, "src", "pages", "CartPage.tsx"), "r", encoding="utf-8") as fp:
+    cp_code = fp.read()
+test_assert("if (isAccountant)" in cp_code and "isAccountant={isAccountant}" in cp_code, "CartPage.tsx enforces frontend accountant checkout guard")
+
+# ------------------------------------------------------------------------------
+# 56. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

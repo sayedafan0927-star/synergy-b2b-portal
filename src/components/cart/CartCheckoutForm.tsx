@@ -35,6 +35,7 @@ interface CartCheckoutFormProps {
   creditLimit: number;
   currentDebt: number;
   overdueDebt: number;
+  isAccountant?: boolean;
 }
 
 export function CartCheckoutForm({
@@ -70,10 +71,11 @@ export function CartCheckoutForm({
   creditLimit,
   currentDebt,
   overdueDebt,
+  isAccountant = false,
 }: CartCheckoutFormProps) {
   const { formatPrice: fmtPrice } = useCurrency();
 
-  const isCheckoutDisabled = submitting || hasDepletedItems || hasZeroPriceItems || !isAuthenticated || Boolean(hasOverStockItems);
+  const isCheckoutDisabled = submitting || hasDepletedItems || hasZeroPriceItems || !isAuthenticated || Boolean(hasOverStockItems) || isAccountant;
 
   return (
     <div className="card p-4 sm:p-5 space-y-3.5 bg-white border border-slate-200 shadow-sm">
@@ -100,6 +102,15 @@ export function CartCheckoutForm({
           <span className="text-lg font-black text-brand-700">{fmtPrice(totalPrice)}</span>
         </div>
 
+        {isAccountant && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50/90 p-2.5 flex items-start gap-2 text-left">
+            <AlertCircle className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
+            <p className="text-[11px] text-blue-900 leading-tight">
+              <strong>Режим бухгалтера:</strong> доступ к просмотру и сверкам. Оформление заказов доступно закупщику или руководителю.
+            </p>
+          </div>
+        )}
+
         <button
           type="button"
           onClick={onSubmit}
@@ -115,6 +126,8 @@ export function CartCheckoutForm({
               <Loader2 className="h-4 w-4 animate-spin" />
               <span>Оформление заказа...</span>
             </>
+          ) : isAccountant ? (
+            <span>Только просмотр (Бухгалтер)</span>
           ) : !isAuthenticated ? (
             <span>Войдите для оформления заказа</span>
           ) : hasDepletedItems ? (

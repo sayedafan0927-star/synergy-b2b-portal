@@ -20,7 +20,7 @@ import {
 export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, productId?: string) => void }) {
   const { currency } = useCurrency();
   const { items, removeItem, updateQuantity, syncItemPrices, clearCart, totalItems, totalPrice, totalSqm } = useCart();
-  const { profile, isImpersonating, impersonatedProfile } = useAuth();
+  const { profile, isImpersonating, impersonatedProfile, isAccountant } = useAuth();
   const { products } = useProducts();
   const { getVariantPrice, getPricePerSqm } = useUserPricing();
   const { info: toastInfo } = useToast();
@@ -237,6 +237,11 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
   const handleSubmit = async () => {
     if (!user) {
       setSubmitError('Для оформления оптового заказа необходимо войти в личный кабинет.');
+      return;
+    }
+
+    if (isAccountant) {
+      setSubmitError('Учетная запись бухгалтера имеет доступ только к просмотру и сверкам. Оформление заказов доступно закупщику или руководителю компании.');
       return;
     }
 
@@ -504,6 +509,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
               creditLimit={creditLimit}
               currentDebt={currentDebt}
               overdueDebt={overdueDebt}
+              isAccountant={isAccountant}
             />
           </div>
         </div>
