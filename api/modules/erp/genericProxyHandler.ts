@@ -280,7 +280,7 @@ export async function handleGenericErpProxy(
         if (erpResponse.ok && jsonData?.success) {
           handleErpLoginToken(jsonData, supabase);
         } else {
-          const handled = await handleErpLoginFallback(req, res, TARGET_ERP_URL, SERVER_ERP_KEY, correlationId);
+          const handled = await handleErpLoginFallback(req, res, TARGET_ERP_URL, SERVER_ERP_KEY, correlationId, supabase);
           if (handled) return;
         }
       }

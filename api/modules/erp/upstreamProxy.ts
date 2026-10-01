@@ -110,6 +110,7 @@ export async function handleErpLoginFallback(
   targetErpUrl: string,
   serverErpKey: string,
   correlationId: string,
+  supabase?: SupabaseClient | null,
 ): Promise<boolean> {
   let loginBody: any = {};
   try {
@@ -192,12 +193,24 @@ export async function handleErpLoginFallback(
           counterparties = cpData.counterparties;
         }
       }
-      if (counterparties.length === 0) {
-        const allUrl = `${targetErpUrl}?action=counterparties`;
-        const allRes = await fetch(allUrl, { headers: { 'X-Portal-Key': serverErpKey } });
-        if (allRes.ok) {
-          const allData = await allRes.json();
-          counterparties = Array.isArray(allData) ? allData : allData?.counterparties || [];
+      if (counterparties.length === 0 && supabase) {
+        // Защита от DoS: вместо тяжелой выгрузки всех контрагентов из 1С используем точечный поиск в базе
+        const { data: localProfiles } = await supabase
+          .from('profiles')
+          .select('id, partner_id, full_name, company_name, phone, price_type, showroom_warehouse_id')
+          .eq('role', 'client')
+          .ilike('phone', `%${inputCleanPhone.slice(-10)}%`)
+          .limit(1);
+
+        if (localProfiles && localProfiles.length > 0) {
+          const lp = localProfiles[0];
+          counterparties = [{
+            id: lp.partner_id || lp.id,
+            name: lp.company_name || lp.full_name,
+            phone: lp.phone,
+            price_type: lp.price_type || 'wholesale',
+            showroom_warehouse_id: lp.showroom_warehouse_id,
+          }];
         }
       }
     } catch (cpErr) {

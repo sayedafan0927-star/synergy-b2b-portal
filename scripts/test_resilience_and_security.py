@@ -1940,7 +1940,23 @@ test_assert("timingSafeEqual" in es_p2, "erp-sso.ts uses timingSafeEqual for con
 test_assert("enforceRateLimit" in es_p2, "erp-sso.ts enforces rate limiting on SSO logins")
 
 # ------------------------------------------------------------------------------
-# 58. Summary Report
+# 58. Stage 34: Phase 3 & 4 Upstream Proxy DoS Protection & Multi-Warehouse Bulk Ordering
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 58. STAGE 34: UPSTREAM PROXY DOS DEFENSE & BULK ORDERING ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "erp", "upstreamProxy.ts"), "r", encoding="utf-8") as fp:
+    up_code = fp.read()
+test_assert("action=counterparties&phone=" in up_code, "upstreamProxy.ts performs targeted phone lookup")
+test_assert("const allUrl = `${targetErpUrl}?action=counterparties`;" not in up_code, "upstreamProxy.ts strictly eliminated unauthenticated full counterparties ERP dump")
+test_assert("from('profiles')" in up_code and "ilike('phone'" in up_code, "upstreamProxy.ts uses local Supabase profiles fallback preventing 1C DoS")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "cart", "ExcelBulkOrderModal.tsx"), "r", encoding="utf-8") as fp:
+    ebm_code = fp.read()
+test_assert("xlsx" in ebm_code and "Бинарный формат .xlsx" in ebm_code, "ExcelBulkOrderModal.tsx guards against corrupt binary .xlsx upload")
+test_assert("candidateWhs.find(w => Number(w.free_stock ?? w.stock ?? 0) > 0)" in ebm_code, "ExcelBulkOrderModal.tsx picks warehouse with positive stock rather than arbitrary 0-stock index")
+
+# ------------------------------------------------------------------------------
+# 59. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

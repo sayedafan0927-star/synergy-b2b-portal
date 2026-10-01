@@ -174,6 +174,11 @@ function sanitizeSpreadsheetCell(value: string): string {
   };
 
   const handleFileUpload = (file: File) => {
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    if (ext === 'xlsx' || ext === 'xls') {
+      toastError('Бинарный формат .xlsx не поддерживается. Экспортируйте файл в CSV или скопируйте ячейки во вкладку "Вставка текста".');
+      return;
+    }
     const reader = new FileReader();
     reader.onload = e => {
       const content = e.target?.result as string;
@@ -196,8 +201,10 @@ function sanitizeSpreadsheetCell(value: string): string {
       const prod = row.product!;
       const v = row.variant!;
       const orderQty = Math.min(row.qty, row.availableStock);
-      const wh = v.warehouses?.[0]?.warehouse_name || 'Основной Склад Астана';
-      const whId = v.warehouses?.[0]?.warehouse_id || 81;
+      const candidateWhs = v.warehouses || [];
+      const stockWh = candidateWhs.find(w => Number(w.free_stock ?? w.stock ?? 0) > 0) || candidateWhs[0];
+      const wh = stockWh?.warehouse_name || 'Основной Склад Астана';
+      const whId = stockWh?.warehouse_id || 81;
 
       addItem({
         productId: prod.id,
