@@ -8,6 +8,7 @@ import { useDisplaySettings } from '@/hooks/useDisplaySettings';
 import { isProductInStockForUser } from '@/lib/warehouseVisibility';
 import ProductCard from '@/components/ProductCard';
 import HeroBannerMedia from '@/components/home/HeroBannerMedia';
+import TechnoLuxuryButton from '@/components/home/TechnoLuxuryButton';
 import { useSynchronizedCategoryVideos } from '@/hooks/useSynchronizedCategoryVideos';
 
 const advantages = [
@@ -103,18 +104,13 @@ export default function HomePage({
       {/* ── Hero Video Banner (Pure animation + Harmonious End-State CTA) ── */}
       <section className="relative w-full bg-slate-950 pt-16 sm:pt-20 lg:pt-24">
         <HeroBannerMedia onNavigate={onNavigate} isReady={isReady} />
-        {/* Mobile Action Bar: Golden button on dark canvas under video */}
-        <div className="block sm:hidden px-4 pb-8 select-none relative z-20">
-          <button
-            type="button"
+        {/* Mobile Action Bar: Techno-Luxury button on dark canvas under video */}
+        <div className="block sm:hidden px-4 pt-1 pb-11 select-none relative z-20">
+          <TechnoLuxuryButton
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onClick={handleCatalogNavigate}
-            className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-slate-950 py-3.5 px-4 text-xs font-bold uppercase tracking-wider shadow-lg shadow-amber-500/25 active:scale-[0.98] transition-all cursor-pointer"
-          >
-            <span>ПЕРЕЙТИ В КАТАЛОГ КОВРОВ</span>
-            <ArrowRight className="w-4 h-4 text-slate-950" />
-          </button>
+          />
         </div>
       </section>
 
