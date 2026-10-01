@@ -96,57 +96,57 @@ export function SupplierReleasesTab({
   return (
     <div className="space-y-6">
       {/* Период и экспорт */}
-      <div className="card p-5 bg-white">
-        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide mr-1">
+      <div className="card p-3.5 sm:p-5 bg-white">
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 sm:gap-4">
+          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+            <span className="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wide mr-1">
               Период отчета:
             </span>
             <button
               onClick={() => setPeriodQuickPick('current_month')}
-              className="rounded-md px-2.5 py-1 text-xs font-medium transition-colors bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer"
+              className="rounded-md px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-medium transition-colors bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer"
             >
               Текущий месяц
             </button>
             <button
               onClick={() => setPeriodQuickPick('prev_month')}
-              className="rounded-md px-2.5 py-1 text-xs font-medium transition-colors bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer"
+              className="rounded-md px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-medium transition-colors bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer"
             >
               Предыдущий месяц
             </button>
             <button
               onClick={() => setPeriodQuickPick('q3')}
-              className="rounded-md px-2.5 py-1 text-xs font-medium transition-colors bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer"
+              className="rounded-md px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-medium transition-colors bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer"
             >
               3-й квартал
             </button>
             <button
               onClick={() => setPeriodQuickPick('year')}
-              className="rounded-md px-2.5 py-1 text-xs font-medium transition-colors bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer"
+              className="rounded-md px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-medium transition-colors bg-slate-100 text-slate-700 hover:bg-slate-200 cursor-pointer"
             >
               Весь {curYear} год
             </button>
           </div>
 
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1 text-xs">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-2 border-t border-slate-100 lg:border-t-0 lg:pt-0">
+            <div className="flex items-center gap-1.5 text-xs w-full sm:w-auto">
               <input
                 type="date"
                 value={startDate}
                 onChange={e => setStartDate(e.target.value)}
-                className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+                className="flex-1 sm:flex-initial rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-800 bg-white"
               />
-              <span className="text-slate-400">—</span>
+              <span className="text-slate-400 shrink-0">—</span>
               <input
                 type="date"
                 value={endDate}
                 onChange={e => setEndDate(e.target.value)}
-                className="rounded-md border border-slate-300 px-2 py-1 text-xs"
+                className="flex-1 sm:flex-initial rounded-lg border border-slate-300 px-2 py-1.5 text-xs text-slate-800 bg-white"
               />
             </div>
             <button
               onClick={handlePrint}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-xs cursor-pointer"
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-xs cursor-pointer w-full sm:w-auto shrink-0"
             >
               <Printer className="h-3.5 w-3.5" />
               Печать акта
@@ -156,40 +156,40 @@ export function SupplierReleasesTab({
       </div>
 
       {/* Финансовые показатели акта сверки */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="card p-5 bg-gradient-to-br from-emerald-600 to-emerald-700 text-white shadow-md">
-          <p className="text-xs uppercase tracking-wider text-emerald-100 font-semibold mb-1">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+        <div className="card p-4 sm:p-5 bg-gradient-to-br from-emerald-600 to-emerald-700 text-white shadow-md">
+          <p className="text-[10px] sm:text-xs uppercase tracking-wider text-emerald-100 font-semibold mb-1">
             К перечислению фабрике
           </p>
-          <p className="text-3xl font-extrabold">
+          <p className="text-2xl sm:text-3xl font-extrabold">
             ${(releasesData?.total_amount_usd ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
-          <p className="text-xs text-emerald-100 mt-2">
+          <p className="text-[11px] sm:text-xs text-emerald-100 mt-1.5 sm:mt-2">
             Сумма за реализованную продукцию (снятую с холда)
           </p>
         </div>
 
-        <div className="card p-5 bg-white border border-slate-200 shadow-xs">
-          <p className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">
+        <div className="card p-4 sm:p-5 bg-white border border-slate-200 shadow-xs">
+          <p className="text-[10px] sm:text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">
             Реализовано ковров
           </p>
-          <p className="text-3xl font-bold text-slate-900">
+          <p className="text-2xl sm:text-3xl font-bold text-slate-900">
             {releasesData?.total_released_pcs ?? 0}{' '}
-            <span className="text-sm font-normal text-slate-500">шт.</span>
+            <span className="text-xs sm:text-sm font-normal text-slate-500">шт.</span>
           </p>
-          <p className="text-xs text-slate-400 mt-2">
+          <p className="text-[11px] sm:text-xs text-slate-400 mt-1.5 sm:mt-2">
             {(releasesData?.total_released_sqm ?? 0).toFixed(1)} м² отпущено покупателям
           </p>
         </div>
 
-        <div className="card p-5 bg-white border border-slate-200 shadow-xs">
-          <p className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">
+        <div className="card p-4 sm:p-5 bg-white border border-slate-200 shadow-xs">
+          <p className="text-[10px] sm:text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">
             Документов реализации
           </p>
-          <p className="text-3xl font-bold text-slate-900">
+          <p className="text-2xl sm:text-3xl font-bold text-slate-900">
             {releasesData?.releases?.length ?? 0}
           </p>
-          <p className="text-xs text-slate-400 mt-2">
+          <p className="text-[11px] sm:text-xs text-slate-400 mt-1.5 sm:mt-2">
             Накладных и актов списания консигнации
           </p>
         </div>
@@ -224,64 +224,115 @@ export function SupplierReleasesTab({
           </button>
         </div>
       ) : (
-        <div className="card overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-            <h3 className="text-sm font-bold text-slate-900">
-              Реестр документов реализации ({releasesData.releases.length})
-            </h3>
-            <span className="text-xs text-slate-500 font-mono">
-              Период: {startDate} — {endDate}
-            </span>
+        <>
+          {/* Mobile view (< md) */}
+          <div className="md:hidden space-y-3">
+            <div className="px-1 py-1 flex items-center justify-between text-xs text-slate-500">
+              <span className="font-bold text-slate-800">
+                Документы реализации ({releasesData.releases.length})
+              </span>
+              <span className="font-mono text-[11px]">
+                {startDate} — {endDate}
+              </span>
+            </div>
+            {releasesData.releases.map((rel, idx) => {
+              const relKey = `${idx}-${rel.doc_number || ''}-${rel.date || ''}`;
+              return (
+                <div key={relKey} className="card p-3.5 bg-white border border-slate-200/80 shadow-xs space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono font-bold text-slate-900 text-xs">
+                      {rel.doc_number}
+                    </span>
+                    <span className="badge bg-slate-100 text-slate-600 text-[10px]">
+                      {rel.date}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-1.5">
+                      <span className="inline-block h-2 w-2 rounded-full bg-emerald-500"></span>
+                      <span className="text-slate-800 font-medium">Оптовый партнер</span>
+                    </div>
+                    <span className="text-slate-400 text-[11px]">{rel.city || 'Казахстан'}</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-100 text-center">
+                    <div className="bg-slate-50 rounded-lg p-1.5">
+                      <p className="text-[10px] text-slate-400">Кол-во</p>
+                      <p className="font-bold text-xs text-slate-900">{rel.released_qty} шт</p>
+                    </div>
+                    <div className="bg-slate-50 rounded-lg p-1.5">
+                      <p className="text-[10px] text-slate-400">Площадь</p>
+                      <p className="font-bold text-xs text-slate-900">{rel.released_sqm.toFixed(1)} м²</p>
+                    </div>
+                    <div className="bg-emerald-50 rounded-lg p-1.5">
+                      <p className="text-[10px] text-emerald-600 font-medium">К выплате</p>
+                      <p className="font-bold text-xs text-emerald-800">${rel.total_usd.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-xs font-semibold uppercase text-slate-400">
-                  <th className="py-3 px-4">Документ</th>
-                  <th className="py-3 px-4">Дата</th>
-                  <th className="py-3 px-4">Покупатель / Партнер</th>
-                  <th className="py-3 px-4">Город</th>
-                  <th className="py-3 px-4 text-right">Кол-во</th>
-                  <th className="py-3 px-4 text-right">Площадь</th>
-                  <th className="py-3 px-4 text-right">Сумма ($)</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {releasesData.releases.map((rel, idx) => {
-                  const relKey = `${idx}-${rel.doc_number || ''}-${rel.date || ''}`;
-                  return (
-                    <tr key={relKey} className="hover:bg-slate-50 transition-colors">
-                      <td className="py-3 px-4 font-mono font-bold text-slate-800 text-xs">
-                        {rel.doc_number}
-                      </td>
-                      <td className="py-3 px-4 text-xs text-slate-600 whitespace-nowrap">
-                        {rel.date}
-                      </td>
-                      <td className="py-3 px-4 font-medium text-slate-800">
-                        <div className="flex items-center gap-1.5">
-                          <span className="inline-block h-2 w-2 rounded-full bg-emerald-500"></span>
-                          <span className="text-slate-800 font-medium">Оптовый партнер</span>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-xs text-slate-500">
-                        {rel.city || 'Казахстан'}
-                      </td>
-                      <td className="py-3 px-4 text-right font-bold text-slate-900">
-                        {rel.released_qty} шт
-                      </td>
-                      <td className="py-3 px-4 text-right text-xs text-slate-500">
-                        {rel.released_sqm.toFixed(1)} м²
-                      </td>
-                      <td className="py-3 px-4 text-right font-bold text-emerald-700">
-                        ${rel.total_usd.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+
+          {/* Desktop view (>= md) */}
+          <div className="hidden md:block card overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <h3 className="text-sm font-bold text-slate-900">
+                Реестр документов реализации ({releasesData.releases.length})
+              </h3>
+              <span className="text-xs text-slate-500 font-mono">
+                Период: {startDate} — {endDate}
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-xs font-semibold uppercase text-slate-400">
+                    <th className="py-3 px-4">Документ</th>
+                    <th className="py-3 px-4">Дата</th>
+                    <th className="py-3 px-4">Покупатель / Партнер</th>
+                    <th className="py-3 px-4">Город</th>
+                    <th className="py-3 px-4 text-right">Кол-во</th>
+                    <th className="py-3 px-4 text-right">Площадь</th>
+                    <th className="py-3 px-4 text-right">Сумма ($)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {releasesData.releases.map((rel, idx) => {
+                    const relKey = `${idx}-${rel.doc_number || ''}-${rel.date || ''}`;
+                    return (
+                      <tr key={relKey} className="hover:bg-slate-50 transition-colors">
+                        <td className="py-3 px-4 font-mono font-bold text-slate-800 text-xs">
+                          {rel.doc_number}
+                        </td>
+                        <td className="py-3 px-4 text-xs text-slate-600 whitespace-nowrap">
+                          {rel.date}
+                        </td>
+                        <td className="py-3 px-4 font-medium text-slate-800">
+                          <div className="flex items-center gap-1.5">
+                            <span className="inline-block h-2 w-2 rounded-full bg-emerald-500"></span>
+                            <span className="text-slate-800 font-medium">Оптовый партнер</span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 text-xs text-slate-500">
+                          {rel.city || 'Казахстан'}
+                        </td>
+                        <td className="py-3 px-4 text-right font-bold text-slate-900">
+                          {rel.released_qty} шт
+                        </td>
+                        <td className="py-3 px-4 text-right text-xs text-slate-500">
+                          {rel.released_sqm.toFixed(1)} м²
+                        </td>
+                        <td className="py-3 px-4 text-right font-bold text-emerald-700">
+                          ${rel.total_usd.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );

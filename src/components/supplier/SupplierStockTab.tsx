@@ -8,11 +8,12 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { fetchSupplierNetworkStock } from '@/lib/erpApi';
-import type {
+import {
   SupplierNetworkStockResponse,
   SupplierStockItem,
   SupplierDistribution,
 } from '@/types';
+import { SupplierStockMobileCard } from './stock/SupplierStockMobileCard';
 
 export interface SupplierStockTabProps {
   selectedSupplierId: number;
@@ -110,21 +111,13 @@ export function SupplierStockTab({ selectedSupplierId, reloadCounter }: Supplier
 
       const matchedDist = (item.distribution || []).filter(dist => {
         const matchCity = cityFilter === 'all' || dist.city === cityFilter;
-        const matchType =
-          typeFilter === 'all' ||
-          (typeFilter === 'hub' && dist.type === 'central_hub') ||
-          (typeFilter === 'consignment' && dist.type !== 'central_hub');
+        const matchType = typeFilter === 'all' || (typeFilter === 'hub' ? dist.type === 'central_hub' : dist.type !== 'central_hub');
         return matchCity && matchType;
       });
 
-      if ((cityFilter !== 'all' || typeFilter !== 'all') && matchedDist.length === 0) {
-        continue;
-      }
+      if ((cityFilter !== 'all' || typeFilter !== 'all') && matchedDist.length === 0) continue;
 
-      const distToCount = (cityFilter === 'all' && typeFilter === 'all')
-        ? (item.distribution || [])
-        : matchedDist;
-
+      const distToCount = (cityFilter === 'all' && typeFilter === 'all') ? (item.distribution || []) : matchedDist;
       let itemFilteredQty = 0;
       let itemFilteredSqm = 0;
 
@@ -167,66 +160,66 @@ export function SupplierStockTab({ selectedSupplierId, reloadCounter }: Supplier
   return (
     <div className="space-y-6">
       {/* Сводные KPI карточки с точным пересчетом под фильтры */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="card p-4 bg-white border border-slate-200 shadow-xs">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+        <div className="card p-3 sm:p-4 bg-white border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 mb-1">
-            <span className="text-xs font-medium uppercase tracking-wider">
-              {cityFilter === 'all' && typeFilter === 'all' ? 'Всего в сети РК' : 'Остаток по фильтру'}
+            <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider truncate">
+              {cityFilter === 'all' && typeFilter === 'all' ? 'Всего в сети РК' : 'По фильтру'}
             </span>
-            <Layers className="h-4 w-4 text-brand-600" />
+            <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-brand-600 shrink-0" />
           </div>
-          <p className="text-2xl font-bold text-slate-900">
+          <p className="text-xl sm:text-2xl font-bold text-slate-900">
             {totalFilteredQty}{' '}
-            <span className="text-sm font-normal text-slate-500">шт.</span>
+            <span className="text-xs sm:text-sm font-normal text-slate-500">шт.</span>
           </p>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5 truncate">
             {totalFilteredSqm.toFixed(1)} м² продукции
           </p>
         </div>
 
-        <div className="card p-4 bg-white border border-slate-200 shadow-xs">
+        <div className="card p-3 sm:p-4 bg-white border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 mb-1">
-            <span className="text-xs font-medium uppercase tracking-wider">Центральный хаб</span>
-            <WarehouseIcon className="h-4 w-4 text-emerald-600" />
+            <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider truncate">Центральный хаб</span>
+            <WarehouseIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-emerald-600 shrink-0" />
           </div>
-          <p className="text-2xl font-bold text-emerald-950">
-            {hubQty} <span className="text-sm font-normal text-emerald-700">шт.</span>
+          <p className="text-xl sm:text-2xl font-bold text-emerald-950">
+            {hubQty} <span className="text-xs sm:text-sm font-normal text-emerald-700">шт.</span>
           </p>
-          <p className="text-xs text-emerald-600 mt-1">
+          <p className="text-[11px] sm:text-xs text-emerald-600 mt-0.5 truncate">
             Астана ({hubSqm.toFixed(1)} м²)
           </p>
         </div>
 
-        <div className="card p-4 bg-white border border-slate-200 shadow-xs">
+        <div className="card p-3 sm:p-4 bg-white border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 mb-1">
-            <span className="text-xs font-medium uppercase tracking-wider">Консигнация (Регионы)</span>
-            <Store className="h-4 w-4 text-indigo-600" />
+            <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider truncate">Консигнация</span>
+            <Store className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-indigo-600 shrink-0" />
           </div>
-          <p className="text-2xl font-bold text-indigo-950">
-            {consignmentQty} <span className="text-sm font-normal text-indigo-700">шт.</span>
+          <p className="text-xl sm:text-2xl font-bold text-indigo-950">
+            {consignmentQty} <span className="text-xs sm:text-sm font-normal text-indigo-700">шт.</span>
           </p>
-          <p className="text-xs text-indigo-600 mt-1">
-            В шоурумах партнеров ({consignmentSqm.toFixed(1)} м²)
+          <p className="text-[11px] sm:text-xs text-indigo-600 mt-0.5 truncate">
+            В шоурумах ({consignmentSqm.toFixed(1)} м²)
           </p>
         </div>
 
-        <div className="card p-4 bg-white border border-slate-200 shadow-xs">
+        <div className="card p-3 sm:p-4 bg-white border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 mb-1">
-            <span className="text-xs font-medium uppercase tracking-wider">Номенклатур</span>
-            <TrendingUp className="h-4 w-4 text-brand-600" />
+            <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider truncate">Номенклатур</span>
+            <TrendingUp className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-brand-600 shrink-0" />
           </div>
-          <p className="text-2xl font-bold text-slate-900">
+          <p className="text-xl sm:text-2xl font-bold text-slate-900">
             {filteredItems.length}
           </p>
-          <p className="text-xs text-slate-400 mt-1">
-            {availableCities.length > 0 ? `${availableCities.length} городов покрытия` : '1 город'}
+          <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5 truncate">
+            {availableCities.length > 0 ? `${availableCities.length} городов` : '1 город'}
           </p>
         </div>
       </div>
 
       {/* Панель фильтров */}
-      <div className="card p-4 bg-white">
-        <div className="flex flex-col md:flex-row gap-3 items-center justify-between">
+      <div className="card p-3 sm:p-4 bg-white">
+        <div className="flex flex-col md:flex-row gap-2.5 sm:gap-3 items-stretch md:items-center justify-between">
           <div className="relative w-full md:w-80">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <input
@@ -234,15 +227,15 @@ export function SupplierStockTab({ selectedSupplierId, reloadCounter }: Supplier
               placeholder="Поиск по артикулу, коллекции..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
-              className="w-full rounded-lg border border-slate-200 pl-9 pr-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+              className="w-full rounded-lg border border-slate-200 pl-9 pr-3 py-2 text-xs sm:text-sm focus:border-brand-500 focus:outline-none"
             />
           </div>
 
-          <div className="flex flex-wrap gap-2 w-full md:w-auto">
+          <div className="grid grid-cols-2 gap-2 w-full md:flex md:w-auto">
             <select
               value={cityFilter}
               onChange={e => setCityFilter(e.target.value)}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 focus:outline-none cursor-pointer"
+              className="w-full md:w-auto rounded-lg border border-slate-200 px-2.5 sm:px-3 py-2 text-xs font-medium text-slate-700 focus:outline-none bg-white truncate cursor-pointer"
             >
               <option value="all">Все города</option>
               {availableCities.map(city => (
@@ -255,9 +248,9 @@ export function SupplierStockTab({ selectedSupplierId, reloadCounter }: Supplier
             <select
               value={typeFilter}
               onChange={e => setTypeFilter(e.target.value)}
-              className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-medium text-slate-700 focus:outline-none cursor-pointer"
+              className="w-full md:w-auto rounded-lg border border-slate-200 px-2.5 sm:px-3 py-2 text-xs font-medium text-slate-700 focus:outline-none bg-white truncate cursor-pointer"
             >
-              <option value="all">Все типы размещения</option>
+              <option value="all">Все типы</option>
               <option value="hub">Основной хаб Астана</option>
               <option value="consignment">Консигнация у партнеров</option>
             </select>
@@ -265,7 +258,7 @@ export function SupplierStockTab({ selectedSupplierId, reloadCounter }: Supplier
         </div>
       </div>
 
-      {/* Таблица остатков с детализацией распределения */}
+      {/* Таблица / Карточки остатков с детализацией распределения */}
       {loadingStock ? (
         <div className="card p-12 text-center">
           <div className="inline-block h-8 w-8 animate-spin rounded-full border-2 border-brand-600 border-t-transparent mb-2" />
@@ -288,97 +281,95 @@ export function SupplierStockTab({ selectedSupplierId, reloadCounter }: Supplier
           </p>
         </div>
       ) : (
-        <div className="card overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase text-slate-500">
-                  <th className="py-3 px-4">Ковер / Артикул</th>
-                  <th className="py-3 px-4">Размер / Площадь</th>
-                  <th className="py-3 px-4">В наличии</th>
-                  <th className="py-3 px-4">Распределение по сети (Хаб и Партнеры)</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredItems.map(item => {
-                  const totalQty = item.total_network_qty ?? item.total_qty ?? 0;
-                  const totalSqm = item.total_network_sqm ?? item.total_sqm ?? 0;
-                  const sizeLabel =
-                    item.width && item.length
-                      ? `${item.width} × ${item.length} м`
-                      : item.size || 'Стандарт';
+        <>
+          {/* Mobile view: карточки для мобильных телефонов */}
+          <div className="md:hidden space-y-3">
+            {filteredItems.map(item => (
+              <SupplierStockMobileCard key={item.carpet_id} item={item} />
+            ))}
+          </div>
 
-                  return (
-                    <tr key={item.carpet_id} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="py-3.5 px-4 align-top">
-                        <p className="font-bold text-slate-900">{item.article}</p>
-                        <p className="text-xs text-brand-700 font-medium">{item.collection}</p>
-                        {item.name && (
-                          <p className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">{item.name}</p>
-                        )}
-                      </td>
-                      <td className="py-3.5 px-4 align-top whitespace-nowrap">
-                        <p className="font-semibold text-slate-800">{sizeLabel}</p>
-                        {item.area_sqm && (
-                          <p className="text-xs text-slate-400">{item.area_sqm} м² / шт</p>
-                        )}
-                      </td>
-                      <td className="py-3.5 px-4 align-top whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-800">
-                          {totalQty} шт
-                        </span>
-                        <p className="text-xs text-slate-500 mt-1">{totalSqm.toFixed(1)} м²</p>
-                      </td>
-                      <td className="py-3.5 px-4 align-top">
-                        <div className="space-y-1.5">
-                          {(item.distribution || []).map((dist: SupplierDistribution, dIdx: number) => {
-                            const q = dist.qty_pcs ?? dist.qty ?? 0;
-                            const s = dist.area_sqm ?? dist.sqm ?? 0;
-                            const isHub = dist.type === 'central_hub';
-                            const distKey = `${item.carpet_id}-${dIdx}-${dist.warehouse_id || ''}-${dist.city}`;
+          {/* Desktop view: классическая таблица */}
+          <div className="hidden md:block card overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase text-slate-500">
+                    <th className="py-3 px-4">Ковер / Артикул</th>
+                    <th className="py-3 px-4">Размер / Площадь</th>
+                    <th className="py-3 px-4">В наличии</th>
+                    <th className="py-3 px-4">Распределение по сети (Хаб и Партнеры)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredItems.map(item => {
+                    const totalQty = item.total_network_qty ?? item.total_qty ?? 0;
+                    const totalSqm = item.total_network_sqm ?? item.total_sqm ?? 0;
+                    const sizeLabel =
+                      item.width && item.length
+                        ? `${item.width} × ${item.length} м`
+                        : item.size || 'Стандарт';
 
-                            return (
-                              <div
-                                key={distKey}
-                                className={`flex items-center justify-between rounded-md p-2 text-xs ${
-                                  isHub
-                                    ? 'bg-emerald-50/80 border border-emerald-200/60 text-emerald-950'
-                                    : 'bg-indigo-50/80 border border-indigo-200/60 text-indigo-950'
-                                }`}
-                              >
-                                <div className="flex items-center gap-2">
-                                  {isHub ? (
-                                    <WarehouseIcon className="h-3.5 w-3.5 text-emerald-700 shrink-0" />
-                                  ) : (
-                                    <Store className="h-3.5 w-3.5 text-indigo-700 shrink-0" />
-                                  )}
-                                  <div>
-                                    <span className="font-bold">
-                                      {isHub
-                                        ? (dist.warehouse_name || 'Основной Склад Астана')
-                                        : dist.partner_name || dist.location_name || 'Партнерский магазин'}
-                                    </span>
-                                    <span className="text-[11px] opacity-75 ml-1.5">
-                                      • {dist.city === 'Алматы' ? 'Астана' : (dist.city || 'Астана')}
-                                    </span>
+                    return (
+                      <tr key={item.carpet_id} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="py-3.5 px-4 align-top">
+                          <p className="font-bold text-slate-900">{item.article}</p>
+                          <p className="text-xs text-brand-700 font-medium">{item.collection}</p>
+                          {item.name && (
+                            <p className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">{item.name}</p>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4 align-top whitespace-nowrap">
+                          <p className="font-semibold text-slate-800">{sizeLabel}</p>
+                          {item.area_sqm && (
+                            <p className="text-xs text-slate-400">{item.area_sqm} м² / шт</p>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4 align-top whitespace-nowrap">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-800">
+                            {totalQty} шт
+                          </span>
+                          <p className="text-xs text-slate-500 mt-1">{totalSqm.toFixed(1)} м²</p>
+                        </td>
+                        <td className="py-3.5 px-4 align-top">
+                          <div className="space-y-1.5">
+                            {(item.distribution || []).map((dist: SupplierDistribution, dIdx: number) => {
+                              const q = dist.qty_pcs ?? dist.qty ?? 0;
+                              const s = dist.area_sqm ?? dist.sqm ?? 0;
+                              const isHub = dist.type === 'central_hub';
+                              const distKey = `${item.carpet_id}-${dIdx}-${dist.warehouse_id || ''}-${dist.city}`;
+
+                              return (
+                                <div
+                                  key={distKey}
+                                  className={`flex items-center justify-between rounded-md p-2 text-xs ${
+                                    isHub ? 'bg-emerald-50/80 border border-emerald-200/60 text-emerald-950' : 'bg-indigo-50/80 border border-indigo-200/60 text-indigo-950'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    {isHub ? <WarehouseIcon className="h-3.5 w-3.5 text-emerald-700 shrink-0" /> : <Store className="h-3.5 w-3.5 text-indigo-700 shrink-0" />}
+                                    <div>
+                                      <span className="font-bold">{isHub ? (dist.warehouse_name || 'Основной Склад Астана') : dist.partner_name || dist.location_name || 'Партнерский магазин'}</span>
+                                      <span className="text-[11px] opacity-75 ml-1.5">• {dist.city === 'Алматы' ? 'Астана' : (dist.city || 'Астана')}</span>
+                                    </div>
+                                  </div>
+                                  <div className="text-right whitespace-nowrap pl-3">
+                                    <span className="font-bold text-xs">{q} шт</span>
+                                    <span className="text-[10px] opacity-75 ml-1">({s.toFixed(1)} м²)</span>
                                   </div>
                                 </div>
-                                <div className="text-right whitespace-nowrap pl-3">
-                                  <span className="font-bold text-xs">{q} шт</span>
-                                  <span className="text-[10px] opacity-75 ml-1">({s.toFixed(1)} м²)</span>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                              );
+                            })}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );

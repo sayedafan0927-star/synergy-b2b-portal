@@ -103,34 +103,34 @@ export function SupplierInboundTab({
       />
 
       {/* Фильтр статусов приемки */}
-      <div className="card p-4 bg-white flex flex-wrap items-center justify-between gap-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide mr-1">
+      <div className="card p-3.5 sm:p-4 bg-white flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4">
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+          <span className="text-[10px] sm:text-xs font-semibold text-slate-500 uppercase tracking-wide mr-1 w-full sm:w-auto">
             Фильтр партий:
           </span>
           <button
             onClick={() => setInboundFilter('all')}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+            className={`rounded-lg px-2.5 sm:px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
               inboundFilter === 'all'
                 ? 'bg-slate-900 text-white'
                 : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
             }`}
           >
-            Все партии ({totalShipments})
+            Все ({totalShipments})
           </button>
           <button
             onClick={() => setInboundFilter('discrepancy')}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+            className={`rounded-lg px-2.5 sm:px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
               inboundFilter === 'discrepancy'
                 ? 'bg-amber-600 text-white'
                 : 'bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-200'
             }`}
           >
-            Только с расхождениями ({discrepancyCount})
+            С расхождениями ({discrepancyCount})
           </button>
           <button
             onClick={() => setInboundFilter('matched')}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+            className={`rounded-lg px-2.5 sm:px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
               inboundFilter === 'matched'
                 ? 'bg-emerald-600 text-white'
                 : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200'
@@ -142,7 +142,7 @@ export function SupplierInboundTab({
 
         <button
           onClick={handlePrint}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-xs cursor-pointer"
+          className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors shadow-xs cursor-pointer w-full sm:w-auto shrink-0"
         >
           <Printer className="h-3.5 w-3.5" />
           Печать реестра
