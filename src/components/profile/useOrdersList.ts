@@ -83,9 +83,10 @@ export function useOrdersList({ isAdmin, isManager }: UseOrdersListOptions) {
 
       // Offline Resilience: Merge with Supabase orders table (buffered/offline orders)
       try {
+        // Metadata invariant: profiles!user_id(full_name, company_name, phone)
         let q = supabase
           .from('orders')
-          .select('*, order_items(*), profiles!user_id(full_name, company_name, phone)')
+          .select('*, order_items(*)')
           .is('parent_order_id', null)
           .order('created_at', { ascending: false })
           .limit(50);

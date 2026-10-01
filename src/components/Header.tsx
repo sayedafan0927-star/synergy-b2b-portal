@@ -151,12 +151,12 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
         </div>
       )}
 
-      {/* Parabolic Spline Arch (Zero straight horizontal cut lines) */}
+      {/* Subtle Micro Spline Arch on desktop (Hidden on mobile to eliminate video intrusion) */}
       <svg
-        className={`block absolute left-1/2 -translate-x-1/2 top-full -mt-px pointer-events-none transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] overflow-visible ${
+        className={`hidden sm:block absolute left-1/2 -translate-x-1/2 top-full -mt-px pointer-events-none transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] overflow-visible ${
           scrolled
-            ? 'w-[180px] sm:w-[280px] lg:w-[360px] h-[8px] sm:h-[14px] lg:h-[18px]'
-            : 'w-[240px] sm:w-[340px] lg:w-[480px] h-[13px] sm:h-[28px] lg:h-[42px]'
+            ? 'w-[200px] lg:w-[260px] h-[5px] lg:h-[7px]'
+            : 'w-[240px] lg:w-[320px] h-[8px] lg:h-[12px]'
         }`}
         viewBox="0 0 500 44"
         preserveAspectRatio="none"
@@ -171,8 +171,8 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
       </svg>
 
       <div className="container-w relative" style={{ zIndex: 10 }}>
-        <div className={`grid grid-cols-[1fr_auto_1fr] items-end pb-2 sm:pb-2.5 w-full gap-2 transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-          scrolled ? 'h-14 sm:h-16' : 'h-18 sm:h-20'
+        <div className={`grid grid-cols-[1fr_auto_1fr] items-center w-full gap-2 transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+          scrolled ? 'h-14' : 'h-14 sm:h-16'
         }`}>
           {/* Left Column (Desktop Navigation Links) */}
           <nav className="hidden lg:flex items-center h-9 gap-1.5 justify-self-start">
@@ -209,35 +209,35 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
             </button>
           </div>
 
-          {/* Center Column: Logo in Parabolic Arch (Fluid Apple-grade transition) */}
+          {/* Center Column: Logo (Compact, optical balance, zero dead space) */}
           <button
             type="button"
             onClick={() => onNavigate('home')}
-            className="justify-self-center flex flex-col items-center justify-end cursor-pointer transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] px-2 sm:px-4 min-w-[110px] sm:min-w-[160px]"
+            className="justify-self-center flex flex-col items-center justify-center cursor-pointer transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] px-2 sm:px-4 min-w-[100px] sm:min-w-[140px]"
             title="Synergiya Group — Главная"
             aria-label="Главная страница"
           >
-            {/* Upper Emblem: Smoothly fades, scales, and collapses height when scrolled */}
+            {/* Upper Emblem: Smoothly fades and collapses height when scrolled */}
             <div
               className={`transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] overflow-hidden flex items-center justify-center will-change-[max-height,opacity,transform] ${
                 scrolled 
                   ? 'max-h-0 opacity-0 -translate-y-2 scale-75 mb-0 pointer-events-none' 
-                  : 'max-h-9 sm:max-h-10 opacity-100 translate-y-0 scale-100 mb-0.5 sm:mb-1'
+                  : 'max-h-6 sm:max-h-7 opacity-100 translate-y-0 scale-100 mb-0.5'
               }`}
             >
               <img
                 src="/logo-emblem.png"
                 alt="Synergiya Crest"
-                className="h-7 sm:h-8 lg:h-9 w-auto object-contain transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
+                className="h-5 sm:h-6 lg:h-6.5 w-auto object-contain transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
               />
             </div>
 
-            {/* Brand Wordmark Typography: Level with left nav links and right buttons */}
-            <div className="h-9 flex items-center justify-center">
+            {/* Brand Wordmark Typography: Centered and crisp */}
+            <div className="flex items-center justify-center">
               <img
                 src="/logo-text.png"
                 alt="Synergiya Group"
-                className="h-4 sm:h-5 lg:h-5.5 w-auto object-contain transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
+                className="h-3.5 sm:h-4 lg:h-4.5 w-auto object-contain transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
               />
             </div>
           </button>

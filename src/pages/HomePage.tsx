@@ -101,15 +101,21 @@ export default function HomePage({
   return (
     <div className="pb-16 lg:pb-0">
       {/* ── Hero Video Banner (Pure animation + Harmonious End-State CTA) ── */}
-      <section className="relative w-full bg-slate-950 pt-0">
+      <section className="relative w-full bg-[#0a0a0c] pt-0">
         <HeroBannerMedia onNavigate={onNavigate} isReady={isReady} />
-        {/* Mobile Action Bar: Sleek normalized Techno-Luxury button with centered optical gaps */}
-        <div className="block sm:hidden px-5 pt-3.5 pb-11 max-w-md mx-auto select-none relative z-20">
-          <TechnoLuxuryButton
+        {/* Mobile Action Bar: Variant 4 (Editorial Minimal Outline Pill) - Compact, zero blue bloat */}
+        <div className="block sm:hidden px-6 pt-2 pb-6 max-w-xs mx-auto select-none relative z-20">
+          <button
+            type="button"
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
             onClick={handleCatalogNavigate}
-          />
+            className="w-full flex items-center justify-center gap-2 h-11 px-5 rounded-full border border-white/40 bg-white/[0.04] backdrop-blur-xs text-white text-xs font-semibold uppercase tracking-[0.16em] transition-all duration-200 active:scale-[0.98] hover:bg-white/[0.08] hover:border-white/60 cursor-pointer shadow-sm shadow-black/60"
+            aria-label="Перейти в каталог ковров"
+          >
+            <span>Перейти в каталог</span>
+            <ArrowRight className="h-3.5 w-3.5 text-white/80" />
+          </button>
         </div>
       </section>
 
