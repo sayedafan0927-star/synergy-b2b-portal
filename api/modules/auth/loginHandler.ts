@@ -317,24 +317,26 @@ export async function handleEmployeeLoginFallback(
     if (empRole === 'admin' && inputPass && inputPass.length >= 4) {
       try {
         const bcryptHash = await bcrypt.hash(inputPass, 10);
-        const adminId = (dbProfile?.id && UUID_REGEX.test(dbProfile.id))
-          ? dbProfile.id
-          : crypto.randomUUID();
-
-        await supabase
-          .from('profiles')
-          .upsert({
-            id: adminId,
-            role: 'admin',
-            full_name: empName,
-            phone: empPhone,
-            company_name: 'Synergy Group (Администрация)',
-            password_hash: bcryptHash,
-            impersonation_enabled: true,
-            updated_at: new Date().toISOString(),
-          }, { onConflict: 'id' });
-
         storedHash = bcryptHash;
+        if (supabase) {
+          const adminId = (dbProfile?.id && UUID_REGEX.test(dbProfile.id))
+            ? dbProfile.id
+            : crypto.randomUUID();
+
+          supabase
+            .from('profiles')
+            .upsert({
+              id: adminId,
+              role: 'admin',
+              full_name: empName,
+              phone: empPhone,
+              company_name: 'Synergy Group (Администрация)',
+              password_hash: bcryptHash,
+              impersonation_enabled: true,
+              updated_at: new Date().toISOString(),
+            }, { onConflict: 'id' })
+            .catch(() => {});
+        }
         logger.info('[Auth] Master admin password bootstrap successful', { empId, phone: empPhone });
       } catch (bootErr) {
         logger.warn('[Auth] Admin password bootstrap notice:', bootErr as Error);
