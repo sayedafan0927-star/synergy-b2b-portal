@@ -101,7 +101,7 @@ export default function HomePage({
   return (
     <div className="pb-16 lg:pb-0">
       {/* ── Hero Video Banner (Pure animation + Harmonious End-State CTA) ── */}
-      <section className="relative w-full bg-[#0a0a0c] pt-0">
+      <section className="relative w-full bg-[#0a0a0c] pt-[69px] sm:pt-[81px] lg:pt-[85px]">
         <HeroBannerMedia onNavigate={onNavigate} isReady={isReady} />
         {/* Mobile Action Bar: Variant 4 (Editorial Minimal Outline Pill) - Compact, zero blue bloat */}
         <div className="block sm:hidden px-6 pt-2 pb-6 max-w-xs mx-auto select-none relative z-20">

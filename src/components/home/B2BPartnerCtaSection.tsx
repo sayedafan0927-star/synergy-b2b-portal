@@ -43,7 +43,7 @@ export default function B2BPartnerCtaSection({ onNavigate: _onNavigate }: B2BPar
             </p>
 
             {/* ── Techno-Luxury Button (Illuminates ONLY on Hover) ── */}
-            <div className="mt-4 sm:mt-7 w-full max-w-[260px] sm:max-w-[360px]">
+            <div className="mt-4 sm:mt-7 w-full max-w-[220px] sm:max-w-[280px]">
               <button
                 type="button"
                 onClick={() => setIsModalOpen(true)}
@@ -51,18 +51,18 @@ export default function B2BPartnerCtaSection({ onNavigate: _onNavigate }: B2BPar
               >
                 {/* 1. Titanium Outer Chamfer — ambient glow illuminates on hover */}
                 <div 
-                  className="relative rounded-[16px] sm:rounded-[20px] p-[2px] transition-all duration-300 shadow-[0_6px_20px_rgba(0,0,0,0.6)] group-hover:shadow-[0_8px_30px_rgba(0,0,0,0.7),0_0_30px_rgba(0,251,255,0.6)]"
+                  className="relative rounded-[16px] sm:rounded-[18px] p-[2px] transition-all duration-300 shadow-[0_6px_20px_rgba(0,0,0,0.6)] group-hover:shadow-[0_8px_30px_rgba(0,0,0,0.7),0_0_30px_rgba(0,251,255,0.6)]"
                   style={{
                     background: 'linear-gradient(180deg, #4A586E 0%, #1E2838 50%, #0C121D 100%)',
                   }}
                 >
                   {/* 2. Trim Groove Container */}
                   <div 
-                    className="relative rounded-[14px] sm:rounded-[18px] p-[1.5px] transition-all duration-300 bg-slate-900 overflow-hidden"
+                    className="relative rounded-[14px] sm:rounded-[16px] p-[1.5px] transition-all duration-300 bg-slate-900 overflow-hidden"
                   >
                     {/* Glowing Cyan Layer (#00FBFF) — STRICTLY HIDDEN BY DEFAULT, GLOWS ONLY ON HOVER */}
                     <div 
-                      className="absolute inset-0 rounded-[14px] sm:rounded-[18px] opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
+                      className="absolute inset-0 rounded-[14px] sm:rounded-[16px] opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
                       style={{
                         background: 'linear-gradient(180deg, #8FFFFF 0%, #00FBFF 50%, #00B4BE 100%)',
                         boxShadow: '0 0 14px rgba(0, 251, 255, 0.9), inset 0 0 6px rgba(0, 251, 255, 0.9)',
@@ -71,18 +71,18 @@ export default function B2BPartnerCtaSection({ onNavigate: _onNavigate }: B2BPar
 
                     {/* Subtle Resting Metallic Rim (Visible when not hovering) */}
                     <div 
-                      className="absolute inset-0 rounded-[14px] sm:rounded-[18px] opacity-100 group-hover:opacity-0 transition-opacity duration-300 pointer-events-none"
+                      className="absolute inset-0 rounded-[14px] sm:rounded-[16px] opacity-100 group-hover:opacity-0 transition-opacity duration-300 pointer-events-none"
                       style={{
                         background: 'linear-gradient(180deg, #5A6980 0%, #2A3648 50%, #182230 100%)',
                       }}
                     />
 
                     {/* Micro Chassis Spacer */}
-                    <div className="relative rounded-[13px] sm:rounded-[16.5px] p-[1px] bg-slate-950">
+                    <div className="relative rounded-[13px] sm:rounded-[15px] p-[1px] bg-slate-950">
                       
                       {/* 3. Tactile Brushed Steel Face with Physical Sheen */}
                       <div 
-                        className="relative w-full h-[42px] sm:h-[56px] rounded-[12px] sm:rounded-[15.5px] px-3 sm:px-5 flex flex-col items-center justify-center overflow-hidden bg-cover bg-center transition-all duration-300"
+                        className="relative w-full h-[40px] sm:h-[46px] rounded-[12px] sm:rounded-[14px] px-4 sm:px-6 flex items-center justify-center overflow-hidden bg-cover bg-center transition-all duration-300"
                         style={{
                           backgroundImage: "url('/images/brushed_steel_plate.webp')",
                           boxShadow: 'inset 0 1px 2px rgba(255,255,255,0.9), inset 0 -1.5px 3px rgba(0,0,0,0.4)',
@@ -94,25 +94,17 @@ export default function B2BPartnerCtaSection({ onNavigate: _onNavigate }: B2BPar
                           className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out pointer-events-none" 
                         />
 
-                        {/* 4. Engraved Dark Typography */}
-                        <div className="relative z-10 flex flex-col items-center justify-center leading-tight">
+                        {/* 4. Engraved Dark Typography: Pure Russian CTA with Arrow */}
+                        <div className="relative z-10 flex items-center justify-center gap-2">
                           <span 
-                            className="font-display text-[10.5px] sm:text-[13.5px] font-bold uppercase tracking-[0.16em] text-[#0E1726] transition-colors duration-200 group-hover:text-[#060D18]"
+                            className="font-display text-[11px] sm:text-[13px] font-bold uppercase tracking-[0.16em] text-[#0E1726] transition-colors duration-200 group-hover:text-[#060D18]"
                             style={{
                               textShadow: '0 1px 0 rgba(255, 255, 255, 0.9), 0 -0.5px 0 rgba(0, 0, 0, 0.25)',
                             }}
                           >
-                            SYNERGIYA GROUP
+                            СТАТЬ ПАРТНЁРОМ
                           </span>
-                          <span 
-                            className="font-display text-[8px] sm:text-[10px] font-semibold uppercase tracking-[0.2em] sm:tracking-[0.22em] text-[#1E2E48] mt-0.5 inline-flex items-center gap-1.5 transition-colors duration-200 group-hover:text-[#004A7C]"
-                            style={{
-                              textShadow: '0 1px 0 rgba(255, 255, 255, 0.75)',
-                            }}
-                          >
-                            CONNECT NOW • СТАТЬ ПАРТНЁРОМ
-                            <ArrowRight className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-[#1E2E48] group-hover:text-[#004A7C] stroke-[2.5] inline-block transition-transform duration-200 group-hover:translate-x-1" />
-                          </span>
+                          <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#1E2E48] group-hover:text-[#004A7C] stroke-[2.5] inline-block transition-transform duration-200 group-hover:translate-x-1" />
                         </div>
 
                       </div>

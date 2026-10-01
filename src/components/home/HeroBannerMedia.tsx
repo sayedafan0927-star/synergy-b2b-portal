@@ -223,7 +223,7 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
         - Pure Cinema: Video plays completely clean without obstructing watermarks.
         - Strict GPU containment & isolation to eliminate reflows and battery drain.
       */}
-      <div className="relative w-full h-[285px] sm:h-[72vh] lg:h-[82vh] sm:min-h-[480px] max-h-[860px] overflow-hidden bg-[#0a0a0c] [contain:paint_layout] [isolation:isolate] transform-gpu">
+      <div className="relative w-full aspect-[16/9] sm:aspect-auto sm:h-[72vh] lg:h-[82vh] sm:min-h-[480px] max-h-[860px] overflow-hidden bg-[#0a0a0c] [contain:paint_layout] [isolation:isolate] transform-gpu">
         <video
           ref={videoRef}
           autoPlay
@@ -241,7 +241,7 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
             transform: 'translateZ(0)',
             backfaceVisibility: 'hidden',
           }}
-          className="w-full h-full object-cover object-[center_36%] sm:object-[center_right] transform-gpu pointer-events-none"
+          className="w-full h-full object-cover object-center sm:object-[center_right] transform-gpu pointer-events-none"
         >
           <source src={VIDEO_MP4} type="video/mp4" />
           <source src={VIDEO_WEBM} type="video/webm" />
@@ -307,12 +307,12 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
 
         {/* 
           Minimalist, non-intrusive replay button:
-          Positioned top-right on mobile, bottom-right on desktop.
+          Positioned top-3 right-3 on mobile, bottom-16/bottom-20 on desktop safely above the bottom organic wave.
         */}
         <button
           type="button"
           onClick={handleReplay}
-          className="absolute top-3 right-3 sm:top-auto sm:bottom-4 sm:right-4 z-30 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-black/40 hover:bg-black/80 text-white/60 hover:text-white border border-white/15 backdrop-blur-md flex items-center justify-center shadow transition-all duration-200 group/btn"
+          className="absolute top-3 right-3 sm:top-auto sm:bottom-16 lg:bottom-20 sm:right-6 lg:right-8 z-30 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-black/50 hover:bg-black/80 text-white/70 hover:text-white border border-white/20 backdrop-blur-md flex items-center justify-center shadow-lg transition-all duration-200 group/btn"
           title="Повторить видео с начала"
         >
           <RotateCcw className="w-3.5 h-3.5 transition-transform duration-300 group-hover/btn:-rotate-90" />
