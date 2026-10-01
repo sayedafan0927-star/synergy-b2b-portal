@@ -1749,7 +1749,32 @@ with open(os.path.join(ROOT_DIR, "api", "modules", "erp", "genericProxyHandler.t
 test_assert("checkCircuit('erp_gateway')" in gph_s25, "genericProxyHandler.ts protects upstream ERP with circuit breaker gate")
 
 # ------------------------------------------------------------------------------
-# 50. Summary Report
+# 50. Stage 26: P0 Audit Hardening — Orders RLS, IDOR Reservation, & Collision Guards
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 50. STAGE 26: P0 SECURITY, RLS HARDENING & COLLISION GUARDS ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "supabase", "migrations", "20261001091500_p0_critical_security_and_deadlock_hardening.sql"), "r", encoding="utf-8") as fp:
+    p0_mig = fp.read()
+test_assert("REVOKE INSERT, UPDATE, DELETE ON public.orders FROM anon, authenticated" in p0_mig, "P0-1: Direct client mutations to orders revoked from anon and authenticated")
+test_assert("REVOKE INSERT, UPDATE, DELETE ON public.order_items FROM anon, authenticated" in p0_mig, "P0-1: Direct client mutations to order_items revoked from anon and authenticated")
+test_assert("REVOKE EXECUTE ON FUNCTION public.release_order_reservations(uuid) FROM authenticated" in p0_mig, "P0-3: release_order_reservations revoked from public authenticated role")
+test_assert("v_order_user_id <> auth.uid()" in p0_mig, "P0-3: release_order_reservations verifies order ownership against auth.uid()")
+test_assert("v_sub_doc_number := v_order_number || '-W'" in p0_mig, "P0-2: create_order_atomic derives suborder number from unique v_order_number")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "orderSplitter.ts"), "r", encoding="utf-8") as fp:
+    os_code = fp.read()
+test_assert("uniqueOrderToken" in os_code and "Date.now().toString(36)" in os_code, "P0-2: orderSplitter generates unique token preventing suborder doc_number collisions")
+
+with open(os.path.join(ROOT_DIR, "api", "erp.ts"), "r", encoding="utf-8") as fp:
+    erp_s26 = fp.read()
+test_assert("req.query.phone = verifiedAuth.phone" in erp_s26, "P0-4: api/erp.ts sanitizes phone query parameter preventing BOLA order leaks")
+
+with open(os.path.join(ROOT_DIR, "api", "webhooks", "erp.ts"), "r", encoding="utf-8") as fp:
+    wh_s26 = fp.read()
+test_assert("canonicalPayload" in wh_s26 and "candidateSigs" in wh_s26, "P1-1: api/webhooks/erp.ts supports canonical JSON HMAC verification")
+
+# ------------------------------------------------------------------------------
+# 51. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

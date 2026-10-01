@@ -296,7 +296,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           });
         }
 
-        // Anti-IDOR: принудительно фиксируем partner_id клиента
+        // Anti-IDOR: принудительно фиксируем partner_id клиента и санируем phone
         if (verifiedAuth.partnerId) {
           req.query.partner_id = String(verifiedAuth.partnerId);
           req.query.counterparty_id = String(verifiedAuth.partnerId);
@@ -306,6 +306,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             req.body.counterparty_id = String(verifiedAuth.partnerId);
             req.body.client_id = String(verifiedAuth.partnerId);
           }
+        }
+        // Anti-BOLA: клиенты не могут фильтровать чужие заказы через сторонний phone
+        if (req.query.phone) {
+          req.query.phone = verifiedAuth.phone || '';
+        }
+        if (req.body && typeof req.body === 'object' && req.body.phone) {
+          req.body.phone = verifiedAuth.phone || '';
         }
       }
 

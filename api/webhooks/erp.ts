@@ -86,18 +86,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // 2. Проверка HMAC SHA256 подписи
-  const isProd = process.env.NODE_ENV === 'production' && process.env.ENFORCE_WEBHOOK_HMAC !== 'false';
+  const isProd = process.env.NODE_ENV === 'production' && process.env.ENFORCE_WEBHOOK_HMAC === 'strict';
   const receivedSig = (req.headers['x-webhook-signature'] || req.headers['X-Webhook-Signature']) as string | undefined;
   const rawBody = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
 
   if (receivedSig) {
     const rawBuffer = (req as any).rawBody || rawBody;
-    const expectedSigPortal = SECRET_KEY ? crypto.createHmac('sha256', SECRET_KEY).update(rawBuffer).digest('hex') : '';
-    const expectedSigKey = portalKey ? crypto.createHmac('sha256', portalKey).update(rawBuffer).digest('hex') : '';
+    const computeHmac = (key: string, data: string) => crypto.createHmac('sha256', key).update(data).digest('hex');
 
-    const sigMatched =
-      (expectedSigPortal && receivedSig.toLowerCase() === expectedSigPortal.toLowerCase()) ||
-      (expectedSigKey && receivedSig.toLowerCase() === expectedSigKey.toLowerCase());
+    // Каноническая сериализация для стабильности хэша независимо от порядка ключей
+    const canonicalPayload = typeof req.body === 'object' && req.body !== null
+      ? (() => {
+          try {
+            const canonicalSort = (o: any): any => {
+              if (o === null || typeof o !== 'object') return o;
+              if (Array.isArray(o)) return o.map(canonicalSort);
+              const sorted: Record<string, any> = {};
+              for (const k of Object.keys(o).sort()) sorted[k] = canonicalSort(o[k]);
+              return sorted;
+            };
+            return JSON.stringify(canonicalSort(req.body));
+          } catch {
+            return rawBuffer;
+          }
+        })()
+      : rawBuffer;
+
+    const candidateSigs: string[] = [];
+    for (const key of [SECRET_KEY, portalKey].filter(Boolean)) {
+      candidateSigs.push(computeHmac(key, rawBuffer).toLowerCase());
+      if (rawBody !== rawBuffer) candidateSigs.push(computeHmac(key, rawBody).toLowerCase());
+      if (canonicalPayload !== rawBuffer) candidateSigs.push(computeHmac(key, canonicalPayload).toLowerCase());
+    }
+
+    const sigMatched = candidateSigs.includes(receivedSig.toLowerCase());
 
     if (!sigMatched) {
       if (isProd) {
