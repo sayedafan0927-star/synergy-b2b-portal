@@ -431,7 +431,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 headers: { 'Content-Type': 'application/json', 'X-Portal-Key': SERVER_ERP_KEY, 'X-Correlation-ID': correlationId },
                 body: JSON.stringify({ order_id: co.order_number || co.id, status: 'cancelled', comment: 'Асинхронная отмена через Outbox Worker' }),
               });
-              if (cRes.ok) {
+              const cText = !cRes.ok ? await cRes.text().catch(() => '') : '';
+              const isOrderMissingInErp = cRes.status === 404 || cText.toLowerCase().includes('not found') || cText.toLowerCase().includes('не найден');
+
+              if (cRes.ok || isOrderMissingInErp) {
                 await supabase.from('orders').update({
                   last_error: null,
                   notes: `${co.notes || ''} [Отмена подтверждена ERP: ${new Date().toISOString()}]`.trim(),

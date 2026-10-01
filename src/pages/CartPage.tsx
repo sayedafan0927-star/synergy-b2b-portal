@@ -20,7 +20,7 @@ import {
 export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, productId?: string) => void }) {
   const { currency } = useCurrency();
   const { items, removeItem, updateQuantity, syncItemPrices, clearCart, totalItems, totalPrice, totalSqm } = useCart();
-  const { profile, isImpersonating, impersonatedProfile, isAccountant } = useAuth();
+  const { user, profile, isImpersonating, impersonatedProfile, isAccountant } = useAuth();
   const { products } = useProducts();
   const { getVariantPrice, getPricePerSqm } = useUserPricing();
   const { info: toastInfo } = useToast();

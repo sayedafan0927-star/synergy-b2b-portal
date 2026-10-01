@@ -178,6 +178,13 @@ export async function handleOrderStatusChanged(
         } catch (relErr) {
           console.warn('[Webhook ERP] Notice during release_order_reservations RPC:', relErr);
         }
+      } else if (['shipped', 'delivered', 'completed'].includes(targetStatus) && existingOrder?.id) {
+        // Проводка первичного документа в 1С (РТУ): бронь переходит в фактическое списание
+        try {
+          await supabaseServer.rpc('fulfill_order_reservations', { p_order_id: existingOrder.id });
+        } catch (fulErr) {
+          // Fallback if RPC pending migration
+        }
       }
 
       const updatePayload: Record<string, any> = {
@@ -185,6 +192,9 @@ export async function handleOrderStatusChanged(
         reservations_released: targetStatus === 'cancelled' ? true : undefined,
         updated_at: new Date().toISOString(),
       };
+      if (['shipped', 'delivered', 'completed'].includes(targetStatus)) {
+        updatePayload.reservations_released = true;
+      }
       if (orderNotes) {
         updatePayload.notes = orderNotes;
       }

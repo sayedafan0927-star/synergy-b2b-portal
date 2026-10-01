@@ -2,7 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, type React
 import { supabase } from '@/lib/supabase';
 import type { User } from '@supabase/supabase-js';
 import { authenticateClientViaErp } from '@/lib/erpApi';
-import type { UserRole, Profile, AuthContextValue, ClientSignInInput, EmployeeSignInInput } from './auth/types';
+import type { UserRole, B2BSubRole, Profile, AuthContextValue, ClientSignInInput, EmployeeSignInInput } from './auth/types';
 import {
   getDeterministicEmployeeUuid,
   createDemoUserAndProfile,

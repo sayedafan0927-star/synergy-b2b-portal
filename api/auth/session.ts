@@ -61,6 +61,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           error: 'Forbidden: Попытка выпуска сессионного токена для чужого контрагента заблокирована (Anti-IDOR Guard).',
         });
       }
+      if (!callerAuth.partnerId && requestedPartnerId) {
+        return res.status(403).json({
+          success: false,
+          error: 'Forbidden: Неавторизованное назначение partner_id запрещено для неподтвержденных пользователей.',
+        });
+      }
     }
 
     const userId = String(user?.id || profile?.id || callerAuth.userId || `user-${effectiveRole}`);
@@ -72,7 +78,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
     // Для клиентов фиксируем partnerId исключительно из подтвержденной сессии
     const partnerId = (!callerAuth.isServer && callerAuth.role === 'client')
-      ? (callerAuth.partnerId || (profile?.partner_id ? String(profile.partner_id) : null))
+      ? (callerAuth.partnerId || null)
       : (profile?.partner_id ? String(profile.partner_id) : (callerAuth.partnerId || null));
     const phone = String(profile?.phone || user?.phone || callerAuth.phone || '');
     const priceType = String(profile?.price_type || callerAuth.priceType || 'wholesale');

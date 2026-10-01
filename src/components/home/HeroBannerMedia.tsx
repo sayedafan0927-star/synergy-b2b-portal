@@ -132,8 +132,7 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
           autoPlay
           muted
           playsInline
-          // @ts-expect-error iOS Safari webkit prefix
-          webkit-playsinline="true"
+          {...({ 'webkit-playsinline': 'true' } as any)}
           preload="auto"
           poster={POSTER}
           onEnded={handleEnded}

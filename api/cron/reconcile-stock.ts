@@ -159,7 +159,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const { data: chunkItems } = await supabase
             .from('order_items')
             .select('sku, quantity, warehouse_id, orders!inner(status, reservations_released)')
-            .not('orders.status', 'in', '("cancelled","rejected","completed","delivered")')
+            .not('orders.status', 'in', '("cancelled","rejected","completed","delivered","shipped")')
             .or('reservations_released.is.null,reservations_released.eq.false', { foreignTable: 'orders' })
             .range(itemOffset, itemOffset + CHUNK_SIZE - 1);
 

@@ -203,21 +203,25 @@ export async function patchCachedCatalogStock(
     }).filter(r => r.sku.length > 0);
 
     if (rawRows.length > 0) {
-      // Проверяем версии существующих записей в БД
+      // Проверяем версии существующих записей в БД чанками для предотвращения 414 URI Too Long
       const skus = Array.from(new Set(rawRows.map(r => r.sku)));
-      const { data: existingBalances } = await supabase
-        .from('inventory_balances')
-        .select('sku, warehouse_id, state_version')
-        .in('sku', skus);
-
-      const existingMap = new Map<string, number>();
-      if (existingBalances) {
-        for (const eb of existingBalances) {
-          existingMap.set(`${eb.sku}::${eb.warehouse_id}`, Number(eb.state_version || 0));
-        }
+      const CHUNK_SIZE = 150;
+      const existingBalances: { sku: string; warehouse_id: number; state_version: number }[] = [];
+      for (let i = 0; i < skus.length; i += CHUNK_SIZE) {
+        const chunk = skus.slice(i, i + CHUNK_SIZE);
+        const { data } = await supabase
+          .from('inventory_balances')
+          .select('sku, warehouse_id, state_version')
+          .in('sku', chunk);
+        if (data) existingBalances.push(...data);
       }
 
-      // Отбрасываем устаревшие или дублирующиеся строки (пришедшие не по порядку: version_timestamp <= db.state_version)
+      const existingMap = new Map<string, number>();
+      for (const eb of existingBalances) {
+        existingMap.set(`${eb.sku}::${eb.warehouse_id}`, Number(eb.state_version || 0));
+      }
+
+      // Отбрасываем устаревшие или дублирующиеся строки (state_version <= db.state_version)
       const validRows = rawRows.filter(r => {
         const prevVer = existingMap.get(`${r.sku}::${r.warehouse_id}`);
         if (prevVer && prevVer >= r.state_version) {
@@ -228,16 +232,21 @@ export async function patchCachedCatalogStock(
       });
 
       if (validRows.length > 0) {
-        // Защита активных резервов: вычисляем объем броней в неотправленных/неподтвержденных заказах Outbox
+        // Защита активных резервов: вычисляем объем броней в неотправленных/неподтвержденных заказах
         try {
-          const { data: pendingItems } = await supabase
-            .from('order_items')
-            .select('sku, warehouse_id, quantity, orders!inner(status, reservations_released)')
-            .in('orders.status', ['pending', 'processing_sync'])
-            .or('reservations_released.is.null,reservations_released.eq.false', { foreignTable: 'orders' })
-            .in('sku', skus);
+          const pendingItems: any[] = [];
+          for (let i = 0; i < skus.length; i += CHUNK_SIZE) {
+            const chunk = skus.slice(i, i + CHUNK_SIZE);
+            const { data } = await supabase
+              .from('order_items')
+              .select('sku, warehouse_id, quantity, orders!inner(status, reservations_released)')
+              .in('orders.status', ['pending', 'processing_sync'])
+              .or('reservations_released.is.null,reservations_released.eq.false', { foreignTable: 'orders' })
+              .in('sku', chunk);
+            if (data) pendingItems.push(...data);
+          }
 
-          if (pendingItems && pendingItems.length > 0) {
+          if (pendingItems.length > 0) {
             const pendingMap = new Map<string, number>();
             for (const pi of pendingItems) {
               const k = `${String(pi.sku).trim().toUpperCase()}::${Number(pi.warehouse_id || 81)}`;
@@ -256,14 +265,17 @@ export async function patchCachedCatalogStock(
           console.warn('[CatalogCache] In-flight holds protection notice:', holdErr);
         }
 
-        const { error } = await supabase
-          .from('inventory_balances')
-          .upsert(validRows, { onConflict: 'sku,warehouse_id' });
-
-        if (!error) {
-          updatedInDb = validRows.length;
-        } else {
-          console.warn('[CatalogCache] Error upserting inventory_balances:', error);
+        // Пакетный upsert порциями по 200 записей
+        for (let i = 0; i < validRows.length; i += 200) {
+          const batch = validRows.slice(i, i + 200);
+          const { error } = await supabase
+            .from('inventory_balances')
+            .upsert(batch, { onConflict: 'sku,warehouse_id' });
+          if (!error) {
+            updatedInDb += batch.length;
+          } else {
+            console.warn('[CatalogCache] Error upserting inventory_balances batch:', error);
+          }
         }
       }
     }

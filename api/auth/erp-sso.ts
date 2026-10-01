@@ -277,6 +277,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         safeDest = trimmedDest;
       }
     }
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('Set-Cookie', `sso_session=${sessionToken}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=86400`);
     const redirectUrl = `${safeDest}${safeDest.includes('?') ? '&' : '?'}sso_session=${sessionToken}`;
 
     return res.redirect(302, redirectUrl);

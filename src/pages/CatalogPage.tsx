@@ -8,7 +8,7 @@ import {
   Table2,
   Globe,
 } from 'lucide-react';
-import type { PageId, Warehouse, StockSummary } from '@/types';
+import type { PageId, Warehouse, StockSummary, Product } from '@/types';
 import { useProducts } from '@/hooks/useProductData';
 import { useUserPricing } from '@/hooks/usePricing';
 import ProductCard from '@/components/ProductCard';

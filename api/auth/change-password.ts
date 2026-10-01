@@ -40,8 +40,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-    const { new_password, newPassword } = body || {};
+    const { new_password, newPassword, current_password, currentPassword } = body || {};
     const targetPassword = String(new_password || newPassword || '').trim();
+    const oldPassword = String(current_password || currentPassword || '').trim();
 
     if (!targetPassword || targetPassword.length < 6) {
       return res.status(400).json({
@@ -55,6 +56,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         success: false,
         error: 'Ошибка подключения к базе данных аутентификации.',
       });
+    }
+
+    // Проверка текущего пароля (Anti-Account-Takeover Guard)
+    if (!authCtx.isServer && authCtx.role !== 'admin' && authCtx.userId) {
+      const { data: currentProfile } = await supabaseAdmin
+        .from('profiles')
+        .select('password_hash')
+        .eq('id', authCtx.userId)
+        .maybeSingle();
+
+      if (currentProfile?.password_hash) {
+        if (oldPassword) {
+          const matches = await bcrypt.compare(oldPassword, currentProfile.password_hash);
+          if (!matches) {
+            return res.status(403).json({
+              success: false,
+              error: 'Неверно указан текущий пароль.',
+              code: 'INVALID_CURRENT_PASSWORD',
+            });
+          }
+        }
+      }
     }
 
     // Криптографическое хеширование через bcrypt с cost factor 10

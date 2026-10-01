@@ -185,12 +185,12 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
     ? rawPayload.contract_id.trim()
     : null;
 
+  const effectivePartnerId = String(
+    (callerAuth.role === 'client' ? callerAuth.partnerId : (rawPayload.partner_id || callerAuth.partnerId)) || ''
+  ).trim() || null;
+
   let atomicExecuted = false;
   try {
-    const effectivePartnerId = String(
-      (callerAuth.role === 'client' ? callerAuth.partnerId : (rawPayload.partner_id || callerAuth.partnerId)) || ''
-    ).trim() || null;
-
     const orderMasterPayload = {
       user_id: resolvedUserId,
       placed_by_id: callerAuth.userId || resolvedUserId,

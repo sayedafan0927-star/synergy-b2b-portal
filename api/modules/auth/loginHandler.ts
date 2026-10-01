@@ -297,7 +297,7 @@ export async function handleEmployeeLoginFallback(
   }
 
   // Загрузка пароля сотрудника: строго из защищенной базы данных profiles (Master Record)
-  const storedHash = String(dbProfile?.password_hash || process.env.INITIAL_EMPLOYEE_HASH || '').trim();
+  const storedHash = String(dbProfile?.password_hash || '').trim();
 
   // Если пароль в базе не настроен и нет стартового хэша - блокируем вход
   if (!storedHash) {

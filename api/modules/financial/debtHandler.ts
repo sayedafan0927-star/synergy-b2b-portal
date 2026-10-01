@@ -15,8 +15,16 @@ export async function handleCachedClientDebt(
   const isRefresh = req.query.refresh === 'true' || req.query.refresh === '1';
   let pId = String(req.query.partner_id || req.query.counterparty_id || req.query.client_id || (req.body && (req.body.partner_id || req.body.counterparty_id || req.body.client_id)) || '').trim();
 
-  // Anti-IDOR: Если запрашивает оптовый клиент, он имеет доступ ТОЛЬКО к своим финансовым данным
+  // Anti-IDOR & B2B RBAC: Если запрашивает оптовый клиент, он имеет доступ ТОЛЬКО к своим финансовым данным
   if (callerAuth && callerAuth.role === 'client' && !callerAuth.isServer) {
+    if (callerAuth.b2bRole === 'buyer') {
+      res.status(403).json({
+        success: false,
+        code: 'FORBIDDEN_FINANCIAL_ACCESS',
+        error: 'Доступ к финансовым взаиморасчетам и задолженности компании ограничен для роли закупщика.',
+      });
+      return true;
+    }
     const callerPartnerId = String(callerAuth.partnerId || '');
     if (!callerPartnerId) {
       res.status(403).json({ success: false, error: 'Доступ запрещен: партнерский ID клиента не привязан к профилю.' });

@@ -46,7 +46,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const rawPortalKey = (
     req.headers['x-portal-key'] ||
     req.headers['X-Portal-Key'] ||
-    req.query?.portal_key ||
     req.body?.portal_key
   ) as string | undefined;
 

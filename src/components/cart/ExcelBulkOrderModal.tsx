@@ -53,6 +53,24 @@ function sanitizeSpreadsheetCell(value: string): string {
   const processRawLines = (lines: string[]) => {
     const results: ParsedBulkRow[] = [];
 
+    // Индекс для мгновенного O(1) поиска по артикулу/коллекции и размеру
+    const exactLookupMap = new Map<string, { product: Product; variant: ProductVariant }>();
+    for (const prod of products) {
+      const artKeys = [
+        (prod.article || '').toLowerCase().replace(/[^a-z0-9а-яё]/gi, ''),
+        (prod.collection || '').toLowerCase().replace(/[^a-z0-9а-яё]/gi, ''),
+      ].filter(Boolean);
+
+      for (const v of prod.variants || []) {
+        const vSize = normalizeDimensions(v.size).toLowerCase().replace(/\s+/g, '');
+        const vSku = (v.sku || '').toLowerCase().replace(/[^a-z0-9а-яё]/gi, '');
+        if (vSku) exactLookupMap.set(`${vSku}::${vSize}`, { product: prod, variant: v });
+        for (const art of artKeys) {
+          exactLookupMap.set(`${art}::${vSize}`, { product: prod, variant: v });
+        }
+      }
+    }
+
     for (const rawLine of lines) {
       const trimmed = rawLine.trim();
       if (!trimmed || trimmed.toLowerCase().includes('артикул') || trimmed.toLowerCase().includes('sku')) {
@@ -67,24 +85,32 @@ function sanitizeSpreadsheetCell(value: string): string {
       const rawQty = parts[2] ? parseInt(parts[2].replace(/\D+/g, ''), 10) || 1 : 1;
 
       const cleanArt = rawArticle.toLowerCase().replace(/[^a-z0-9а-яё]/gi, '');
+      const cleanSize = rawSize.toLowerCase().replace(/\s+/g, '');
       let matchedProduct: Product | undefined;
       let matchedVariant: ProductVariant | undefined;
 
-      for (const prod of products) {
-        const prodArt = (prod.article || '').toLowerCase().replace(/[^a-z0-9а-яё]/gi, '');
-        const prodCol = (prod.collection || '').toLowerCase().replace(/[^a-z0-9а-яё]/gi, '');
+      // O(1) быстрый поиск по индексу
+      const directMatch = exactLookupMap.get(`${cleanArt}::${cleanSize}`);
+      if (directMatch) {
+        matchedProduct = directMatch.product;
+        matchedVariant = directMatch.variant;
+      } else {
+        // Fallback: подстрочный поиск для нестандартных или неполных записей
+        for (const prod of products) {
+          const prodArt = (prod.article || '').toLowerCase().replace(/[^a-z0-9а-яё]/gi, '');
+          const prodCol = (prod.collection || '').toLowerCase().replace(/[^a-z0-9а-яё]/gi, '');
 
-        if (prodArt.includes(cleanArt) || prodCol.includes(cleanArt) || cleanArt.includes(prodArt) || cleanArt.includes(prodCol)) {
-          const cleanSize = rawSize.toLowerCase().replace(/\s+/g, '');
-          const vMatch = prod.variants.find(v => {
-            const vSize = normalizeDimensions(v.size).toLowerCase().replace(/\s+/g, '');
-            return vSize === cleanSize || vSize.includes(cleanSize) || cleanSize.includes(vSize);
-          });
+          if (prodArt.includes(cleanArt) || prodCol.includes(cleanArt) || cleanArt.includes(prodArt) || cleanArt.includes(prodCol)) {
+            const vMatch = prod.variants.find(v => {
+              const vSize = normalizeDimensions(v.size).toLowerCase().replace(/\s+/g, '');
+              return vSize === cleanSize || vSize.includes(cleanSize) || cleanSize.includes(vSize);
+            });
 
-          if (vMatch) {
-            matchedProduct = prod;
-            matchedVariant = vMatch;
-            break;
+            if (vMatch) {
+              matchedProduct = prod;
+              matchedVariant = vMatch;
+              break;
+            }
           }
         }
       }

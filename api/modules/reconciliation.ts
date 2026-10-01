@@ -22,6 +22,13 @@ export async function handleReconciliationReport(
 
   let partnerId = String(req.query.partner_id || req.query.counterpartyId || req.body?.partner_id || req.body?.counterpartyId || '');
   if (authCtx.role === 'client') {
+    if (authCtx.b2bRole === 'buyer') {
+      return res.status(403).json({
+        success: false,
+        code: 'FORBIDDEN_FINANCIAL_ACCESS',
+        error: 'Доступ к актам сверки взаиморасчетов ограничен для роли закупщика. Обратитесь к бухгалтеру или руководителю компании.',
+      });
+    }
     // Клиент может запрашивать акт сверки ТОЛЬКО по своему подтвержденному partner_id (Anti-IDOR)
     partnerId = String(authCtx.partnerId || '');
     if (!partnerId) {

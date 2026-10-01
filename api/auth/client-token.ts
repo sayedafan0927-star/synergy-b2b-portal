@@ -56,6 +56,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (!authCtx.isServer && authCtx.role !== 'admin') {
       const callerPartnerId = String(authCtx.partnerId || '');
+      if (authCtx.role === 'client' && (!callerPartnerId || callerPartnerId !== partnerId)) {
+        return res.status(403).json({ success: false, error: 'Forbidden: Access to other clients is denied.' });
+      }
       if (callerPartnerId && callerPartnerId !== partnerId) {
         return res.status(403).json({ success: false, error: 'Forbidden: Access to other clients is denied.' });
       }
