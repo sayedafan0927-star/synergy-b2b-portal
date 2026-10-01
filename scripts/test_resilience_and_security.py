@@ -1278,7 +1278,7 @@ test_assert("exchange_rate_usd_kzt" in cc_s11 and "currency_rate_updated" in cc_
 
 with open(os.path.join(ROOT_DIR, "src", "components", "profile", "useOrdersList.ts"), "r", encoding="utf-8") as fp:
     uol_s11 = fp.read()
-test_assert("profiles:user_id(full_name, company_name, phone)" in uol_s11, "useOrdersList.ts joins order owner profile metadata")
+test_assert("profiles!user_id(full_name, company_name, phone)" in uol_s11 or "profiles:user_id(full_name, company_name, phone)" in uol_s11, "useOrdersList.ts joins order owner profile metadata")
 test_assert("profileData?.full_name || profile?.full_name" in uol_s11, "useOrdersList.ts attributes true client name preventing admin impersonation leak")
 
 with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "createOrderHandler.ts"), "r", encoding="utf-8") as fp:

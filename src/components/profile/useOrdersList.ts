@@ -85,7 +85,7 @@ export function useOrdersList({ isAdmin, isManager }: UseOrdersListOptions) {
       try {
         let q = supabase
           .from('orders')
-          .select('*, order_items(*), profiles:user_id(full_name, company_name, phone)')
+          .select('*, order_items(*), profiles!user_id(full_name, company_name, phone)')
           .is('parent_order_id', null)
           .order('created_at', { ascending: false })
           .limit(50);
@@ -93,7 +93,16 @@ export function useOrdersList({ isAdmin, isManager }: UseOrdersListOptions) {
         if (!isAdmin && !isManager && profile?.id) {
           q = q.eq('user_id', profile.id);
         }
-        const { data: dbOrders } = await q;
+        let { data: dbOrders, error: qErr } = await q;
+        if (qErr) {
+          const fallback = await supabase
+            .from('orders')
+            .select('*, order_items(*)')
+            .is('parent_order_id', null)
+            .order('created_at', { ascending: false })
+            .limit(50);
+          dbOrders = fallback.data;
+        }
         if (Array.isArray(dbOrders) && dbOrders.length > 0) {
           const knownDocNumbers = new Set(mappedErp.map(o => o.orderNumber).filter(Boolean));
           const knownIds = new Set(mappedErp.map(o => o.id));
