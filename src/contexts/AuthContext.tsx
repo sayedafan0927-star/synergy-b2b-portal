@@ -55,7 +55,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         urlParams.delete('sso_session');
         const newSearch = urlParams.toString();
         const cleanUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '');
-        window.history.replaceState({}, document.title, cleanUrl);
+        window.history.replaceState({ page: 'profile' }, document.title, cleanUrl);
+
+        try {
+          const p = JSON.parse(atob(ssoParam.replace(/-/g, '+').replace(/_/g, '/')));
+          if (p?.data?.user && p?.data?.profile) {
+            setUser(p.data.user);
+            setProfile(p.data.profile);
+            saveAuthSession(p.data.user, p.data.profile, ssoParam);
+          }
+        } catch {}
 
         fetch('/api/auth/verify-sso', {
           method: 'POST',

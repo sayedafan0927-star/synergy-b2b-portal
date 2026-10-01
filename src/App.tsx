@@ -181,6 +181,11 @@ function MainLayout({ children, page, navigate, showFooter }: { children: React.
 
 function parseUrlState(): { page: PageId; id?: string } {
   try {
+    const rawPath = typeof window !== 'undefined' ? window.location.pathname.replace(/^\/+|\/+$/g, '') : '';
+    if (rawPath && ['home', 'catalog', 'product', 'cart', 'contacts', 'login', 'profile'].includes(rawPath)) {
+      return { page: rawPath as PageId };
+    }
+
     const params = new URLSearchParams(window.location.search);
     const prodId = params.get('product');
     if (prodId) return { page: 'product', id: prodId };

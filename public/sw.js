@@ -1,5 +1,7 @@
-const CACHE_NAME = 'synergy-b2b-v18';
+const CACHE_NAME = 'synergy-b2b-v19';
 const STATIC_ASSETS = [
+  '/',
+  '/index.html',
   '/favicon.svg',
   '/manifest.json',
   '/Вектор_Синэнергия.png',
@@ -103,18 +105,34 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Handle Navigation (HTML Documents): Strictly Network-First to guarantee fresh index.html
-  if (request.mode === 'navigate' || request.destination === 'document') {
+  // CRITICAL: Bypass all other API routes completely - never intercept serverless functions with App Shell fallback
+  if (url.pathname.startsWith('/api/')) {
+    return;
+  }
+
+  // Handle HTML Documents & SPA Navigation routes (Network-First with index.html Fallback)
+  const isHtmlRoute =
+    request.mode === 'navigate' ||
+    request.destination === 'document' ||
+    (request.headers.get('accept') && request.headers.get('accept').includes('text/html')) ||
+    (!url.pathname.includes('.') && !url.pathname.startsWith('/api/'));
+
+  if (isHtmlRoute) {
     event.respondWith(
       (async () => {
         try {
           const networkResponse = await fetch(request);
+          if (networkResponse && networkResponse.status === 200) {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', responseToCache));
+          }
           return networkResponse;
         } catch {
-          const cached = await caches.match(request);
+          const cached =
+            (await caches.match(request)) ||
+            (await caches.match('/index.html')) ||
+            (await caches.match('/'));
           if (cached) return cached;
-          const indexCached = await caches.match('/index.html');
-          if (indexCached) return indexCached;
           return new Response('<h1>Офлайн-режим</h1><p>Проверьте подключение к сети.</p>', {
             status: 503,
             headers: { 'Content-Type': 'text/html; charset=utf-8' }
@@ -125,7 +143,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Handle Static & App Shell requests: Network-First with Cache Fallback
+  // Handle Static Asset requests (.js, .css, images, fonts): Network-First with Cache Fallback
   event.respondWith(
     (async () => {
       try {
@@ -143,7 +161,7 @@ self.addEventListener('fetch', (event) => {
       } catch {
         const cached = await caches.match(request);
         if (cached) return cached;
-        return new Response('Resource unavailable', { status: 504, statusText: 'Gateway Timeout' });
+        return new Response('Resource unavailable offline', { status: 503, statusText: 'Service Unavailable' });
       }
     })()
   );
