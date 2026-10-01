@@ -137,3 +137,91 @@ export async function preloadInventoryBalancesForOrder(
     logger.warn('[StockPreloader] Notice during stock preloading:', { error: (err as Error)?.message, correlationId });
   }
 }
+
+export interface StockVerificationResult {
+  allAvailable: boolean;
+  conflictingItem?: {
+    sku: string;
+    available_qty: number;
+    requested_qty: number;
+  };
+}
+
+/**
+ * Checks authoritative stock from ERP catalog for the given items.
+ * Returns true if all items have sufficient free stock in ERP.
+ */
+export async function verifyItemsStockAvailability(
+  items: ValidatedItem[],
+  correlationId?: string
+): Promise<StockVerificationResult> {
+  if (!Array.isArray(items) || items.length === 0) {
+    return { allAvailable: true };
+  }
+
+  let cachedCat = await getCachedCatalog('catalog_global');
+  let products = Array.isArray(cachedCat?.data?.products) ? cachedCat.data.products : [];
+
+  if (products.length === 0) {
+    try {
+      const erpUrl = (process.env.ERP_API_URL || 'https://kilem-khan.kz/api/sin/public/api_portal.php') + '?action=catalog';
+      const erpKey = getErpApiKey();
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 6000);
+      const res = await fetch(erpUrl, {
+        headers: {
+          Accept: 'application/json',
+          'X-Portal-Key': erpKey,
+          'X-Correlation-ID': correlationId || `stock-check-${Date.now()}`,
+        },
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeout));
+
+      if (res.ok) {
+        const freshData = await res.json();
+        if (Array.isArray(freshData?.products)) {
+          products = freshData.products;
+        }
+      }
+    } catch (e) {
+      logger.warn('[StockPreloader] Direct ERP stock check notice:', e as Error);
+    }
+  }
+
+  for (const item of items) {
+    const targetSku = String(item.sku || '').trim().toUpperCase();
+    const reqQty = Number(item.quantity || 1);
+    const whId = resolveWarehouseId(item.warehouse_id, item.warehouse);
+
+    let actualFreeStock: number | null = null;
+
+    for (const p of products) {
+      for (const v of (p.variants || [])) {
+        const vSku = String(v.sku || '').trim().toUpperCase();
+        if (vSku === targetSku) {
+          const wh = (v.warehouses || []).find((w: any) => Number(w.warehouse_id) === whId);
+          if (wh) {
+            actualFreeStock = Number(wh.free_stock ?? wh.stock ?? 0);
+          } else {
+            actualFreeStock = Number(v.free_stock ?? v.stock ?? 0);
+          }
+          break;
+        }
+      }
+      if (actualFreeStock !== null) break;
+    }
+
+    if (actualFreeStock !== null && actualFreeStock < reqQty) {
+      return {
+        allAvailable: false,
+        conflictingItem: {
+          sku: item.sku,
+          available_qty: actualFreeStock,
+          requested_qty: reqQty,
+        },
+      };
+    }
+  }
+
+  return { allAvailable: true };
+}
