@@ -431,3 +431,4 @@ export async function invalidateCatalogCache(cacheKey?: string): Promise<void> {
   }
   await invalidateRedisCatalogCache(cacheKey);
 }
+

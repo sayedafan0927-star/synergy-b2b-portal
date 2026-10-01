@@ -4,6 +4,7 @@ import { logger } from '../../lib/logger';
 import { checkCircuit, recordFailure, recordSuccess } from '../../lib/circuitBreaker';
 import { releaseAllReservedStock, ReservedStockItem } from '../../lib/saga';
 import { patchCachedCatalogStock, StockItemUpdate } from '../../lib/catalogCache';
+import { decrementCachedCatalogStock } from './stockCacheUpdater';
 import type { SplitOrderSummary } from './orderSplitter';
 import { isFatalBusinessError, dispatchDlqEmergencyAlert } from '../../outbox/outboxUtils';
 import { enqueueOutboxOrder } from '../../lib/queueBroker';
@@ -101,6 +102,7 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
   const circuit = await checkCircuit('erp_gateway');
   if (!circuit.permitted) {
     logger.warn('[Order Dispatcher] Circuit OPEN for erp_gateway. Fast-failing immediately to outbox buffer', { orderDoc: outboxOrderDoc, correlationId });
+    decrementCachedCatalogStock(reservedSkuItems, 'catalog_global', supabase).catch(() => {});
     triggerImmediateOutboxSync(req, correlationId, { orderId: outboxOrderId, orderDoc: outboxOrderDoc });
     res.status(200).json({
       success: true,
@@ -276,6 +278,8 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
           })
           .eq('id', outboxOrderId);
 
+        decrementCachedCatalogStock(reservedSkuItems, 'catalog_global', supabase).catch(() => {});
+
         // Каскадное подтверждение и нумерация дочерних подзаказов мультисклада
         try {
           const splitListFromErp = Array.isArray(jsonData?.split_orders) ? jsonData.split_orders : [];
@@ -363,6 +367,7 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
       statusCode: erpResponse.status,
       orderDoc: outboxOrderDoc,
     });
+    decrementCachedCatalogStock(reservedSkuItems, 'catalog_global', supabase).catch(() => {});
     triggerImmediateOutboxSync(req, correlationId, { orderId: outboxOrderId, orderDoc: outboxOrderDoc });
     res.status(200).json({
       success: true,
@@ -382,6 +387,7 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
       correlationId,
     });
 
+    decrementCachedCatalogStock(reservedSkuItems, 'catalog_global', supabase).catch(() => {});
     triggerImmediateOutboxSync(req, correlationId, { orderId: outboxOrderId, orderDoc: outboxOrderDoc });
     res.status(200).json({
       success: true,

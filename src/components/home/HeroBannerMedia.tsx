@@ -49,6 +49,24 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
       video.addEventListener('canplay', onCanPlay);
     }
 
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            if (video && video.paused) {
+              video.play().catch(() => {});
+            }
+          } else {
+            if (video) {
+              video.pause();
+            }
+          }
+        });
+      },
+      { threshold: 0.05 }
+    );
+    observer.observe(video);
+
     // Touch/click fallback for iOS devices in Low Power Mode
     const handleFirstGesture = () => {
       if (video && video.paused) {
@@ -59,6 +77,7 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
     window.addEventListener('click', handleFirstGesture, { once: true, passive: true });
 
     return () => {
+      observer.disconnect();
       window.removeEventListener('touchstart', handleFirstGesture);
       window.removeEventListener('click', handleFirstGesture);
     };

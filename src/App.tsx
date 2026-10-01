@@ -331,7 +331,7 @@ export default function App() {
 
   const renderPage = () => {
     switch (page) {
-      case 'home': return <HomePage onNavigate={navigate} isReady={preloaderDone} />;
+      case 'home': return null;
       case 'catalog': return (
         <CatalogPage
           key={catalogCollection ?? catalogCountry ?? catalogSearch ?? 'all'}
@@ -346,7 +346,7 @@ export default function App() {
       case 'contacts': return <ContactsPage onNavigate={navigate} />;
       case 'login': return <LoginPage onNavigate={navigate} />;
       case 'profile': return <ProfilePage onNavigate={navigate} />;
-      default: return <HomePage onNavigate={navigate} isReady={preloaderDone} />;
+      default: return null;
     }
   };
 
@@ -368,7 +368,10 @@ export default function App() {
                 <ErrorBoundary>
                   <MainLayout page={page} navigate={navigate} showFooter={showFooter}>
                     <Suspense fallback={<PageLoadingFallback page={page} />}>
-                      {renderPage()}
+                      <div className={page === 'home' ? 'contents' : 'hidden'} aria-hidden={page !== 'home'}>
+                        <HomePage onNavigate={navigate} isReady={preloaderDone} />
+                      </div>
+                      {page !== 'home' && renderPage()}
                     </Suspense>
                   </MainLayout>
                 </ErrorBoundary>

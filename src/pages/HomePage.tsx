@@ -216,7 +216,6 @@ export default function HomePage({
                       <video
                         ref={registerVideoRef(idx)}
                         autoPlay
-                        loop
                         muted
                         playsInline
                         {...({ 'webkit-playsinline': 'true' } as any)}
@@ -306,10 +305,10 @@ export default function HomePage({
           <div className="mt-8 text-center sm:hidden">
             <button
               onClick={() => onNavigate('catalog')}
-              className="btn-primary inline-flex items-center gap-2"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-7 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 active:scale-[0.98] transition-all duration-200 border border-slate-800 group"
             >
               Смотреть все
-              <ArrowRight className="h-4 w-4" />
+              <ArrowRight className="h-4 w-4 text-amber-400 group-hover:translate-x-0.5 transition-transform" />
             </button>
           </div>
         </div>

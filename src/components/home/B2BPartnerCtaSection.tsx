@@ -14,10 +14,10 @@ interface B2BPartnerCtaSectionProps {
  */
 export default function B2BPartnerCtaSection({ onNavigate }: B2BPartnerCtaSectionProps) {
   return (
-    <section className="py-8 sm:py-16 lg:py-20 bg-white select-none">
+    <section className="py-6 sm:py-16 lg:py-20 bg-white select-none">
       <div className="container-w">
         {/* ── 4K Macro Woven Carpet Background Container ── */}
-        <div className="relative overflow-hidden rounded-2xl sm:rounded-[36px] bg-slate-950 border border-slate-700/40 shadow-[0_25px_60px_rgba(0,14,35,0.35)] min-h-[320px] sm:min-h-[520px] lg:min-h-[560px] flex items-center justify-center p-3.5 sm:p-0">
+        <div className="relative overflow-hidden rounded-2xl sm:rounded-[36px] bg-slate-950 border border-slate-700/40 shadow-[0_25px_60px_rgba(0,14,35,0.35)] min-h-[280px] sm:min-h-[520px] lg:min-h-[560px] flex items-center justify-center p-3 sm:p-0">
           {/* High-res Macro Carpet Background with Authentic Frosted Glass Window */}
           <div 
             className="absolute inset-0 bg-cover bg-center transform scale-[1.01] transition-transform duration-1000 ease-out"
@@ -26,22 +26,22 @@ export default function B2BPartnerCtaSection({ onNavigate }: B2BPartnerCtaSectio
             }}
           />
 
-          {/* ── Delicate Transparent Card Container (Island Glass Card on Mobile) ── */}
-          <div className="relative z-10 w-full max-w-[340px] sm:max-w-lg lg:max-w-xl mx-auto px-4 py-6 sm:px-10 sm:py-10 lg:py-12 rounded-2xl sm:rounded-none bg-slate-950/45 sm:bg-transparent backdrop-blur-md sm:backdrop-blur-none border border-white/10 sm:border-none shadow-xl sm:shadow-none flex flex-col items-center text-center">
+          {/* ── Delicate Transparent Content (Completely Transparent, No Nested Double Modal) ── */}
+          <div className="relative z-10 w-full max-w-[290px] sm:max-w-lg lg:max-w-xl mx-auto px-2 py-4 sm:px-10 sm:py-10 lg:py-12 bg-transparent flex flex-col items-center text-center">
 
             {/* Main Luxury Heading */}
-            <h2 className="font-display text-2xl sm:text-4xl lg:text-[42px] font-bold text-white tracking-tight leading-[1.15] drop-shadow-[0_2px_14px_rgba(0,0,0,0.85)]">
+            <h2 className="font-display text-xl sm:text-4xl lg:text-[42px] font-bold text-white tracking-tight leading-[1.15] drop-shadow-[0_2px_14px_rgba(0,0,0,0.85)]">
               Стать партнёром
             </h2>
 
             {/* Subheading / Value Proposition */}
-            <p className="mt-2.5 sm:mt-4 text-xs sm:text-sm lg:text-base text-slate-100/90 font-body leading-relaxed max-w-sm sm:max-w-md font-light drop-shadow-[0_1px_8px_rgba(0,0,0,0.9)]">
+            <p className="mt-2 sm:mt-4 text-[11.5px] sm:text-sm lg:text-base text-slate-100/90 font-body leading-relaxed max-w-[260px] sm:max-w-md font-light drop-shadow-[0_1px_8px_rgba(0,0,0,0.9)]">
               Прямые оптовые поставки ведущих фабрик Турции, Бельгии и Ирана. Персональный B2B-менеджер,
               экспресс-отгрузка за 24 часа и резервирование складских остатков.
             </p>
 
             {/* ── Techno-Luxury Button (Illuminates ONLY on Hover) ── */}
-            <div className="mt-5 sm:mt-7 w-full max-w-[280px] sm:max-w-[360px]">
+            <div className="mt-4 sm:mt-7 w-full max-w-[260px] sm:max-w-[360px]">
               <button
                 type="button"
                 onClick={() => onNavigate('contacts')}
@@ -49,18 +49,18 @@ export default function B2BPartnerCtaSection({ onNavigate }: B2BPartnerCtaSectio
               >
                 {/* 1. Titanium Outer Chamfer — ambient glow illuminates on hover */}
                 <div 
-                  className="relative rounded-[18px] sm:rounded-[20px] p-[2px] transition-all duration-300 shadow-[0_6px_20px_rgba(0,0,0,0.6)] group-hover:shadow-[0_8px_30px_rgba(0,0,0,0.7),0_0_30px_rgba(0,251,255,0.6)]"
+                  className="relative rounded-[16px] sm:rounded-[20px] p-[2px] transition-all duration-300 shadow-[0_6px_20px_rgba(0,0,0,0.6)] group-hover:shadow-[0_8px_30px_rgba(0,0,0,0.7),0_0_30px_rgba(0,251,255,0.6)]"
                   style={{
                     background: 'linear-gradient(180deg, #4A586E 0%, #1E2838 50%, #0C121D 100%)',
                   }}
                 >
                   {/* 2. Trim Groove Container */}
                   <div 
-                    className="relative rounded-[16px] sm:rounded-[18px] p-[1.5px] transition-all duration-300 bg-slate-900 overflow-hidden"
+                    className="relative rounded-[14px] sm:rounded-[18px] p-[1.5px] transition-all duration-300 bg-slate-900 overflow-hidden"
                   >
                     {/* Glowing Cyan Layer (#00FBFF) — STRICTLY HIDDEN BY DEFAULT, GLOWS ONLY ON HOVER */}
                     <div 
-                      className="absolute inset-0 rounded-[16px] sm:rounded-[18px] opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
+                      className="absolute inset-0 rounded-[14px] sm:rounded-[18px] opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
                       style={{
                         background: 'linear-gradient(180deg, #8FFFFF 0%, #00FBFF 50%, #00B4BE 100%)',
                         boxShadow: '0 0 14px rgba(0, 251, 255, 0.9), inset 0 0 6px rgba(0, 251, 255, 0.9)',
@@ -69,18 +69,18 @@ export default function B2BPartnerCtaSection({ onNavigate }: B2BPartnerCtaSectio
 
                     {/* Subtle Resting Metallic Rim (Visible when not hovering) */}
                     <div 
-                      className="absolute inset-0 rounded-[16px] sm:rounded-[18px] opacity-100 group-hover:opacity-0 transition-opacity duration-300 pointer-events-none"
+                      className="absolute inset-0 rounded-[14px] sm:rounded-[18px] opacity-100 group-hover:opacity-0 transition-opacity duration-300 pointer-events-none"
                       style={{
                         background: 'linear-gradient(180deg, #5A6980 0%, #2A3648 50%, #182230 100%)',
                       }}
                     />
 
                     {/* Micro Chassis Spacer */}
-                    <div className="relative rounded-[15px] sm:rounded-[16.5px] p-[1px] bg-slate-950">
+                    <div className="relative rounded-[13px] sm:rounded-[16.5px] p-[1px] bg-slate-950">
                       
                       {/* 3. Tactile Brushed Steel Face with Physical Sheen */}
                       <div 
-                        className="relative w-full h-[46px] sm:h-[56px] rounded-[14px] sm:rounded-[15.5px] px-4 sm:px-5 flex flex-col items-center justify-center overflow-hidden bg-cover bg-center transition-all duration-300"
+                        className="relative w-full h-[42px] sm:h-[56px] rounded-[12px] sm:rounded-[15.5px] px-3 sm:px-5 flex flex-col items-center justify-center overflow-hidden bg-cover bg-center transition-all duration-300"
                         style={{
                           backgroundImage: "url('/images/brushed_steel_plate.webp')",
                           boxShadow: 'inset 0 1px 2px rgba(255,255,255,0.9), inset 0 -1.5px 3px rgba(0,0,0,0.4)',
@@ -95,7 +95,7 @@ export default function B2BPartnerCtaSection({ onNavigate }: B2BPartnerCtaSectio
                         {/* 4. Engraved Dark Typography */}
                         <div className="relative z-10 flex flex-col items-center justify-center leading-tight">
                           <span 
-                            className="font-display text-[11px] sm:text-[13.5px] font-bold uppercase tracking-[0.16em] text-[#0E1726] transition-colors duration-200 group-hover:text-[#060D18]"
+                            className="font-display text-[10.5px] sm:text-[13.5px] font-bold uppercase tracking-[0.16em] text-[#0E1726] transition-colors duration-200 group-hover:text-[#060D18]"
                             style={{
                               textShadow: '0 1px 0 rgba(255, 255, 255, 0.9), 0 -0.5px 0 rgba(0, 0, 0, 0.25)',
                             }}
@@ -103,7 +103,7 @@ export default function B2BPartnerCtaSection({ onNavigate }: B2BPartnerCtaSectio
                             SYNERGIYA GROUP
                           </span>
                           <span 
-                            className="font-display text-[8.5px] sm:text-[10px] font-semibold uppercase tracking-[0.2em] sm:tracking-[0.22em] text-[#1E2E48] mt-0.5 inline-flex items-center gap-1.5 transition-colors duration-200 group-hover:text-[#004A7C]"
+                            className="font-display text-[8px] sm:text-[10px] font-semibold uppercase tracking-[0.2em] sm:tracking-[0.22em] text-[#1E2E48] mt-0.5 inline-flex items-center gap-1.5 transition-colors duration-200 group-hover:text-[#004A7C]"
                             style={{
                               textShadow: '0 1px 0 rgba(255, 255, 255, 0.75)',
                             }}
