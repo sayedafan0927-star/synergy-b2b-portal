@@ -94,6 +94,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const action = String(req.query.action || req.body?.action || '').trim();
 
     // 0.8. Управление очередью недоставленных заказов DLQ (T-14)
+    if (action === 'debug_orders' && req.method === 'GET') {
+      const auth = await authenticateRequest(req, { allowServerKey: true });
+      if (!auth.isAuthenticated || (!auth.isServer && auth.role !== 'admin')) {
+        return res.status(403).json({ success: false, error: 'Access denied' });
+      }
+      const { data: rows, error } = await supabase
+        .from('orders')
+        .select('id, order_number, status, retry_count, next_retry_at, parent_order_id, created_at, last_error, notes, total_amount')
+        .order('created_at', { ascending: false })
+        .limit(10);
+      return res.status(200).json({ success: true, count: rows?.length || 0, rows, error: error?.message });
+    }
+
     if (action === 'dlq_orders' && req.method === 'GET') {
       return await handleDlqOrders(req, res, supabase);
     }
