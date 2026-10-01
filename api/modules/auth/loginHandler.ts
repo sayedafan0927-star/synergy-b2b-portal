@@ -289,10 +289,11 @@ export async function handleEmployeeLoginFallback(
   let dbProfile: any = null;
   if (supabase) {
     try {
+      const qLow = inputLogin.toLowerCase().trim();
       const { data } = await supabase
         .from('profiles')
         .select('id, password_hash, role')
-        .or(`phone.eq.${empPhone},manager_id.eq.${empId}`)
+        .or(`id.eq.${empId},phone.eq.${empPhone},manager_id.eq.${empId},full_name.ilike.%${qLow}%`)
         .maybeSingle();
       dbProfile = data;
     } catch (e) {

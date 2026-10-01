@@ -167,12 +167,37 @@ export async function handleErpLoginFallback(
     return false;
   });
 
-  if (matchedEmp) {
+  let effectiveEmp = matchedEmp;
+  if (!effectiveEmp && supabase) {
+    try {
+      const qLow = inputLogin.toLowerCase().trim();
+      const { data: dbAdmin } = await supabase
+        .from('profiles')
+        .select('id, full_name, role, phone, manager_id, password_hash')
+        .in('role', ['admin', 'manager_rm', 'manager_lm', 'supplier'])
+        .or(`full_name.ilike.%${qLow}%,phone.eq.${inputLogin}`)
+        .limit(1)
+        .maybeSingle();
+
+      if (dbAdmin) {
+        effectiveEmp = {
+          id: dbAdmin.id,
+          name: dbAdmin.full_name || inputLogin,
+          role: dbAdmin.role,
+          phone: dbAdmin.phone || inputLogin,
+        };
+      }
+    } catch (dbErr) {
+      console.warn('[AUTH] Error looking up admin profile in database:', dbErr);
+    }
+  }
+
+  if (effectiveEmp) {
     const inputPass = String(loginBody.password || req.query?.password || '').trim();
     const handled = await handleEmployeeLoginFallback(
       req,
       res,
-      matchedEmp,
+      effectiveEmp,
       inputCleanPhone,
       inputLogin,
       inputPass,
