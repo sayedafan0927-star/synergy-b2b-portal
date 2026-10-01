@@ -1984,6 +1984,39 @@ with open(os.path.join(ROOT_DIR, "api", "webhooks", "erp.ts"), "r", encoding="ut
 test_assert("WEBHOOK_TIMESTAMP_EXPIRED" in wh_fresh and "x-webhook-timestamp" in wh_fresh, "api/webhooks/erp.ts enforces 5-minute replay window against replay attacks")
 
 # ------------------------------------------------------------------------------
+# 60. STAGE 36: SINGLEFLIGHT ERP PROTECTION, SWR CACHING & B2B TENANT ISOLATION
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 60. STAGE 36: SINGLEFLIGHT ERP PROTECTION, SWR CACHING & B2B TENANT ISOLATION ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "catalog", "catalogSingleflight.ts"), "r", encoding="utf-8") as fp:
+    cs_txt = fp.read()
+test_assert("upstreamCatalogInFlight = new Map" in cs_txt, "catalogSingleflight.ts implements upstreamCatalogInFlight map to coalesce concurrent requests")
+test_assert("fetchUpstreamCatalogSingleflight" in cs_txt and "saveCachedCatalog" in cs_txt, "catalogSingleflight.ts fetches and caches catalog with circuit breaker protection")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "catalog", "catalogHandler.ts"), "r", encoding="utf-8") as fp:
+    ch_txt = fp.read()
+test_assert("fetchUpstreamCatalogSingleflight" in ch_txt, "catalogHandler.ts imports and delegates to fetchUpstreamCatalogSingleflight")
+test_assert("res.setHeader('X-Cache', 'STALE')" in ch_txt, "catalogHandler.ts serves Stale-While-Revalidate header for sub-second dealer response")
+test_assert("MISS_SINGLEFLIGHT" in ch_txt or "REFRESHED" in ch_txt, "catalogHandler.ts tags cold start / refresh responses with singleflight cache status")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "financial", "debtHandler.ts"), "r", encoding="utf-8") as fp:
+    dh_txt = fp.read()
+test_assert("res.setHeader('X-Cache', isFresh ? 'HIT' : 'STALE')" in dh_txt, "debtHandler.ts returns instant cached/stale debt balance preventing 1C DoS")
+test_assert("pId !== callerPartnerId" in dh_txt and "Anti-IDOR Guard" in dh_txt, "debtHandler.ts enforces Anti-IDOR check for B2B partner balances")
+test_assert("callerAuth.b2bRole === 'buyer'" in dh_txt and "FORBIDDEN_FINANCIAL_ACCESS" in dh_txt, "debtHandler.ts restricts buyer role from viewing company debt")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "reconciliation.ts"), "r", encoding="utf-8") as fp:
+    rec_txt = fp.read()
+test_assert("partnerId = String(authCtx.partnerId" in rec_txt, "reconciliation.ts enforces caller partnerId against IDOR tampering")
+test_assert("FORBIDDEN_COUNTERPARTY_SCOPE" in rec_txt, "reconciliation.ts scopes managers to their assigned territory")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "orderDispatcher.ts"), "r", encoding="utf-8") as fp:
+    od_txt = fp.read()
+test_assert("checkCircuit('erp_gateway')" in od_txt and "is_buffered_offline" in od_txt, "orderDispatcher.ts fast-fails to Outbox buffer when Circuit Breaker is OPEN")
+test_assert("triggerImmediateOutboxSync" in od_txt, "orderDispatcher.ts triggers immediate background outbox drain on 1C timeout")
+
+
+# ------------------------------------------------------------------------------
 # 60. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")

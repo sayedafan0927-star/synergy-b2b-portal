@@ -8,6 +8,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { getCachedCatalog, saveCachedCatalog } from '../../lib/catalogCache';
 import { sanitizePostgrestFilter } from '../../lib/security';
 import { getErpApiKey } from '../../lib/erpKey';
+import { fetchUpstreamCatalogSingleflight } from './catalogSingleflight';
 
 /**
  * Очистка и компактизация снимка каталога для предотвращения превышения
@@ -60,27 +61,65 @@ export async function handleCatalogRequests(
   serverErpKey?: string,
   correlationId?: string
 ): Promise<boolean> {
-  // 1. Быстрый ответ из L1/L2 кэша для полного каталога
+  // 1. Быстрый ответ из L1/L2 кэша для полного каталога (Singleflight + Stale-While-Revalidate)
   if ((action === 'catalog' || action === 'catalog_normalized') && req.method === 'GET') {
     const isRefresh = req.query.refresh === 'true' || req.query.refresh === '1';
-    if (!isRefresh) {
-      try {
-        const cached = await getCachedCatalog('catalog_global');
-        if (cached && cached.isFresh) {
-          res.setHeader('X-Cache', 'HIT');
-          res.setHeader('X-Cache-Age-Ms', String(cached.ageMs));
-          res.setHeader('X-Cache-Source', cached.source);
+    try {
+      const cached = await getCachedCatalog('catalog_global');
 
-          // Проверка на потенциальное превышение лимита 4.5 МБ Vercel
-          const payloadToSend = compactCatalogPayload(cached.data);
-          res.status(200).json(payloadToSend);
-          return true;
-        }
-      } catch (cacheLookupErr) {
-        console.warn('[Catalog Handler] Cache lookup warning:', cacheLookupErr);
+      // 1.1. Fresh HIT: свежий кэш отдается мгновенно
+      if (cached && cached.isFresh && !isRefresh) {
+        res.setHeader('X-Cache', 'HIT');
+        res.setHeader('X-Cache-Age-Ms', String(cached.ageMs));
+        res.setHeader('X-Cache-Source', cached.source);
+        const payloadToSend = compactCatalogPayload(cached.data);
+        res.status(200).json(payloadToSend);
+        return true;
       }
+
+      // 1.2. Stale-While-Revalidate: отдаем имеющийся кэш мгновенно, а свежий запрашиваем фоново через Singleflight
+      if (cached && cached.data && !isRefresh) {
+        res.setHeader('X-Cache', 'STALE');
+        res.setHeader('X-Cache-Age-Ms', String(cached.ageMs));
+        res.setHeader('X-Cache-Source', cached.source);
+        const payloadToSend = compactCatalogPayload(cached.data);
+        res.status(200).json(payloadToSend);
+
+        const refreshPromise = fetchUpstreamCatalogSingleflight({
+          targetErpUrl,
+          fallbackErpUrl,
+          serverErpKey,
+          correlationId,
+        }).catch(err => {
+          console.warn('[Catalog Handler] Background SWR refresh notice:', err?.message);
+        });
+
+        const vercelWaitUntil = (req as any).context?.waitUntil || (globalThis as any).waitUntil;
+        if (typeof vercelWaitUntil === 'function') {
+          vercelWaitUntil(refreshPromise);
+        }
+        return true;
+      }
+
+      // 1.3. Cold Start / Manual Refresh: единый Singleflight запрос в 1C (все параллельные ждут один промис)
+      const freshData = await fetchUpstreamCatalogSingleflight({
+        targetErpUrl,
+        fallbackErpUrl,
+        serverErpKey,
+        correlationId,
+        forceRefresh: isRefresh,
+      });
+
+      if (freshData) {
+        res.setHeader('X-Cache', isRefresh ? 'REFRESHED' : 'MISS_SINGLEFLIGHT');
+        const payloadToSend = compactCatalogPayload(freshData);
+        res.status(200).json(payloadToSend);
+        return true;
+      }
+    } catch (cacheLookupErr) {
+      console.warn('[Catalog Handler] Cache lookup warning:', cacheLookupErr);
     }
-    return false; // Позволяем диспетчеру обратиться к ERP при кэш-миссе
+    return false;
   }
 
   // 2. Точечный эндпоинт товара по ID или SKU
@@ -98,26 +137,15 @@ export async function handleCatalogRequests(
         catalogData = cached.data;
       }
 
-      // Если кэш пуст — загружаем боевой каталог из ERP и кэшируем
+      // Если кэш пуст — загружаем боевой каталог из ERP через Singleflight
       if (!catalogData) {
-        const ERP_API_URL = process.env.ERP_API_URL || 'https://kilem-khan.kz/api/sin/public/api_portal.php';
-        const apiKey = getErpApiKey();
-        const headers: Record<string, string> = { Accept: 'application/json' };
-        if (apiKey) headers['X-Portal-Key'] = apiKey;
-
         try {
-          const erpRes = await fetch(`${ERP_API_URL}?action=catalog`, { headers });
-          if (erpRes.ok) {
-            const fetched = await erpRes.json().catch(() => null);
-            if (fetched && fetched.success) {
-              const rawItems = fetched.items || fetched.products || [];
-              catalogData = {
-                success: true,
-                products: rawItems,
-              };
-              saveCachedCatalog(catalogData, 'catalog_global').catch(() => {});
-            }
-          }
+          catalogData = await fetchUpstreamCatalogSingleflight({
+            targetErpUrl,
+            fallbackErpUrl,
+            serverErpKey,
+            correlationId,
+          });
         } catch (fetchErr) {
           console.warn('[Catalog Handler] Notice fetching catalog for product lookup:', fetchErr);
         }

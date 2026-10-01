@@ -29,6 +29,11 @@ export function useSynchronizedCategoryVideos({
       return;
     }
 
+    // Skip heavy multi-video synchronization loop on mobile screens (< 768px)
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      return;
+    }
+
     const activeVideos = videoRefs.current.filter((v): v is HTMLVideoElement => Boolean(v));
     if (activeVideos.length === 0) return;
 

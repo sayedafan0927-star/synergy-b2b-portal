@@ -35,7 +35,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const action = String(req.query.action || req.body?.action || 'catalog_paginated');
-  return await handleCatalogRequests(
+  const handled = await handleCatalogRequests(
     req,
     res,
     action,
@@ -45,4 +45,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     SERVER_ERP_KEY,
     correlationId
   );
+
+  if (!handled && !res.writableEnded) {
+    res.status(404).json({
+      success: false,
+      error: `Действие каталога '${action}' не поддерживается или данные временно недоступны.`,
+    });
+  }
 }

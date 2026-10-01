@@ -109,10 +109,6 @@ export default function CurtainNavigationDrawer({
           >
             <X className="h-5 w-5" />
           </button>
-
-          <span className="font-mono text-[10px] tracking-[0.3em] uppercase text-white/40">
-            Synergy B2B
-          </span>
         </div>
 
         {/* Centered Editorial Navigation Links */}
@@ -189,10 +185,6 @@ export default function CurtainNavigationDrawer({
               {isShowroomMode ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
             </button>
           </div>
-
-          <span className="font-mono text-[10px] text-white/30 tracking-widest uppercase">
-            Алматы • Астана • Шымкент
-          </span>
         </div>
       </div>
     </div>

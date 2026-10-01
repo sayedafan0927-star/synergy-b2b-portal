@@ -90,14 +90,10 @@ export default function Footer({ onNavigate }: FooterProps) {
             <ul className="space-y-2 text-sm">
               <li className="flex justify-between">
                 <span className="text-slate-400">{t('footer.weekdays')}</span>
-                <span className="text-white">09:00 — 18:00</span>
+                <span className="text-white">09:00 — 17:00</span>
               </li>
               <li className="flex justify-between">
-                <span className="text-slate-400">{t('footer.saturday')}</span>
-                <span className="text-white">10:00 — 15:00</span>
-              </li>
-              <li className="flex justify-between">
-                <span className="text-slate-400">{t('footer.sunday')}</span>
+                <span className="text-slate-400">Сб, Вс</span>
                 <span className="text-slate-500">Выходной</span>
               </li>
             </ul>

@@ -66,9 +66,10 @@ export async function handleCachedClientDebt(
         .eq('partner_id', pId)
         .maybeSingle();
 
-      const syncAgeMs = cachedBal?.last_synced_at ? Date.now() - new Date(cachedBal.last_synced_at).getTime() : Infinity;
-      if (cachedBal && syncAgeMs < 5 * 60 * 1000) {
-        res.setHeader('X-Cache', 'HIT');
+      if (cachedBal) {
+        const syncAgeMs = cachedBal.last_synced_at ? Date.now() - new Date(cachedBal.last_synced_at).getTime() : Infinity;
+        const isFresh = syncAgeMs < 5 * 60 * 1000;
+        res.setHeader('X-Cache', isFresh ? 'HIT' : 'STALE');
         res.setHeader('X-Cache-Age-Ms', String(syncAgeMs));
         res.status(200).json({
           success: true,
@@ -83,7 +84,7 @@ export async function handleCachedClientDebt(
             is_overdue: Boolean(cachedBal.is_overdue),
             overdue_days: Number(cachedBal.overdue_days || 0),
           },
-          source: 'cache_partner_balances',
+          source: isFresh ? 'cache_partner_balances' : 'stale_partner_balances',
         });
         return true;
       }

@@ -213,18 +213,31 @@ export default function HomePage({
                     isFirst ? 'w-[180px] sm:w-[220px] md:w-full' : 'w-full'
                   }`}>
                     {category.video ? (
-                      <video
-                        ref={registerVideoRef(idx)}
-                        muted
-                        playsInline
-                        preload="metadata"
-                        poster={category.poster || category.image}
-                        className={`h-full w-full object-contain mix-blend-screen transition-all duration-700 group-hover:scale-105 ${
-                          isBreathing ? 'opacity-95' : 'opacity-100'
-                        }`}
-                      >
-                        <source src={category.video} type="video/mp4" />
-                      </video>
+                      <>
+                        {/* Mobile: Crystal-sharp 60fps graphic with zero decoder lag & zero battery drain */}
+                        <div className="md:hidden relative w-full h-full flex items-center justify-center">
+                          <img
+                            src={category.poster || category.image}
+                            alt={category.name}
+                            loading="eager"
+                            className="h-full w-full object-contain mix-blend-screen transition-transform duration-500 group-hover:scale-105 transform-gpu drop-shadow-[0_0_14px_rgba(251,191,36,0.35)]"
+                          />
+                        </div>
+
+                        {/* Desktop (md+): Synchronized multi-video playback */}
+                        <video
+                          ref={registerVideoRef(idx)}
+                          muted
+                          playsInline
+                          preload="metadata"
+                          poster={category.poster || category.image}
+                          className={`hidden md:block h-full w-full object-contain mix-blend-screen transition-all duration-700 group-hover:scale-105 ${
+                            isBreathing ? 'opacity-95' : 'opacity-100'
+                          }`}
+                        >
+                          <source src={category.video} type="video/mp4" />
+                        </video>
+                      </>
                     ) : (
                       <img
                         src={category.image}

@@ -64,14 +64,47 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
     };
   }, [isReady]);
 
+  const loopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (loopTimerRef.current) {
+        clearTimeout(loopTimerRef.current);
+      }
+    };
+  }, []);
+
   const handleEnded = () => {
+    const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 639px)').matches;
+    if (isMobile) {
+      // Mobile: pause on final frame for 1.5 seconds, then loop from beginning
+      if (videoRef.current) {
+        videoRef.current.pause();
+      }
+      if (loopTimerRef.current) clearTimeout(loopTimerRef.current);
+      loopTimerRef.current = setTimeout(() => {
+        const video = videoRef.current;
+        if (video) {
+          try {
+            video.currentTime = 0;
+          } catch {}
+          video.play().catch(() => {});
+        }
+      }, 1500);
+      return;
+    }
+
+    // Desktop: freeze on final frame and reveal floating glass card
     if (videoRef.current) {
-      videoRef.current.pause(); // Freeze on final frame
+      videoRef.current.pause();
     }
     setIsEnded(true);
   };
 
   const handleTimeUpdate = () => {
+    const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 639px)').matches;
+    if (isMobile) return; // Do not trigger desktop card state on mobile
+
     const video = videoRef.current;
     if (!video || !video.duration || Number.isNaN(video.duration)) return;
     if (video.currentTime >= video.duration - 0.4 && !isEnded) {
@@ -81,6 +114,10 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
 
   const handleReplay = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (loopTimerRef.current) {
+      clearTimeout(loopTimerRef.current);
+      loopTimerRef.current = null;
+    }
     if (!videoRef.current) return;
     setIsEnded(false);
     try {
