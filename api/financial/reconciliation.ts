@@ -4,9 +4,9 @@ import { applyCorrelationId } from '../lib/trace';
 import { enforceRateLimit } from '../lib/rateLimit';
 import { authenticateRequest } from '../lib/authGuard';
 import { handleReconciliationReport } from '../modules/reconciliation';
-import { getErpApiKey } from '../lib/erpKey';
+import { getErpApiKey, getTargetErpUrl } from '../lib/erpKey';
 
-const TARGET_ERP_URL = process.env.ERP_API_URL || 'https://erp.synergy-tech.kz/api_portal.php';
+const TARGET_ERP_URL = getTargetErpUrl();
 const SERVER_ERP_KEY = getErpApiKey();
 
 /**

@@ -1,12 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 import { applyCorsHeaders } from './lib/cors';
-import { getErpApiKey } from './lib/erpKey';
+import { getErpApiKey, getTargetErpUrl } from './lib/erpKey';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
 const SERVER_ERP_KEY = getErpApiKey();
-const TARGET_ERP_URL = process.env.ERP_API_URL || 'https://erp.synergy-tech.kz/api_portal.php';
+const TARGET_ERP_URL = getTargetErpUrl();
 
 const supabase = SUPABASE_URL && SUPABASE_KEY ? createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 

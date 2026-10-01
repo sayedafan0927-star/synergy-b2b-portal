@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { getCachedCatalog } from '../../lib/catalogCache';
 import { resolveWarehouseId, ValidatedItem } from '../../lib/pricingValidator';
 import { logger } from '../../lib/logger';
-import { getErpApiKey } from '../../lib/erpKey';
+import { getErpApiKey, getTargetErpUrl } from '../../lib/erpKey';
 
 /**
  * Pre-seeds inventory_balances in PostgreSQL for the items in an order
@@ -50,7 +50,7 @@ export async function preloadInventoryBalancesForOrder(
     // Если кэш пуст, пробуем запросить ERP напрямую
     if (products.length === 0) {
       try {
-        const erpUrl = (process.env.ERP_API_URL || 'https://erp.synergy-tech.kz/api_portal.php') + '?action=catalog';
+        const erpUrl = getTargetErpUrl() + '?action=catalog';
         const erpKey = getErpApiKey();
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 6000);
@@ -164,7 +164,7 @@ export async function verifyItemsStockAvailability(
 
   if (products.length === 0) {
     try {
-      const erpUrl = (process.env.ERP_API_URL || 'https://erp.synergy-tech.kz/api_portal.php') + '?action=catalog';
+      const erpUrl = getTargetErpUrl() + '?action=catalog';
       const erpKey = getErpApiKey();
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 6000);

@@ -4,7 +4,7 @@ import { recordAuditLog } from '../audit/logs';
 import { applyCorrelationId } from '../lib/trace';
 import { enforceRateLimit } from '../lib/rateLimit';
 import { applyCorsHeaders } from '../lib/cors';
-import { getErpApiKey } from '../lib/erpKey';
+import { getErpApiKey, getTargetErpUrl } from '../lib/erpKey';
 import { checkCircuit } from '../lib/circuitBreaker';
 import { dequeueOutboxOrders } from '../lib/queueBroker';
 import { dispatchDlqEmergencyAlert, buildOutboxErpPayload, computeBackoffNextRetry, isFatalBusinessError } from './outboxUtils';
@@ -15,7 +15,7 @@ export { dispatchDlqEmergencyAlert };
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
 const SERVER_ERP_KEY = getErpApiKey();
-const TARGET_ERP_URL = process.env.ERP_API_URL || 'https://erp.synergy-tech.kz/api_portal.php';
+const TARGET_ERP_URL = getTargetErpUrl();
 
 const supabase = (SUPABASE_URL && SUPABASE_KEY)
   ? createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })

@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { getCachedCatalog } from './catalogCache';
-import { getErpApiKey } from './erpKey';
+import { getErpApiKey, getTargetErpUrl } from './erpKey';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
@@ -196,7 +196,7 @@ export async function validateAndPriceOrder(
 
       if (products.length === 0) {
         try {
-          const erpUrl = (process.env.ERP_API_URL || 'https://erp.synergy-tech.kz/api_portal.php') + '?action=catalog';
+          const erpUrl = getTargetErpUrl() + '?action=catalog';
           const erpKey = getErpApiKey();
           const controller = new AbortController();
           const timeout = setTimeout(() => controller.abort(), 6000);

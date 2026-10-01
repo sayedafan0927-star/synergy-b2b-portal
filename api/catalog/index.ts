@@ -4,10 +4,10 @@ import { applyCorsHeaders } from '../lib/cors';
 import { applyCorrelationId } from '../lib/trace';
 import { enforceRateLimit } from '../lib/rateLimit';
 import { handleCatalogRequests } from '../modules/catalog/catalogHandler';
-import { getErpApiKey } from '../lib/erpKey';
+import { getErpApiKey, getTargetErpUrl, getErpFallbackUrl } from '../lib/erpKey';
 
-const TARGET_ERP_URL = process.env.ERP_API_URL || 'https://erp.synergy-tech.kz/api_portal.php';
-const ERP_FALLBACK_URL = process.env.ERP_FALLBACK_URL || 'https://erp.synergy-tech.kz/api_portal.php';
+const TARGET_ERP_URL = getTargetErpUrl();
+const ERP_FALLBACK_URL = getErpFallbackUrl();
 const SERVER_ERP_KEY = getErpApiKey();
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
