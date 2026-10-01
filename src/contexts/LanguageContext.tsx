@@ -46,6 +46,8 @@ const translations: Record<Language, Record<string, string>> = {
     'contacts.success_title': 'Заявка отправлена',
     'contacts.success_desc': 'Ваша заявка зарегистрирована в системе. Наш менеджер свяжется с вами в ближайшее время.',
     'contacts.send_more': 'Отправить ещё',
+    'b2b.partner_modal_brand': 'Synergia group',
+    'b2b.partner_modal_title': 'ФОРМА ДЛЯ СОТРУДНИЧЕСТВА',
 
     // Товар и карточка
     'product.back_catalog': 'Назад в каталог',
@@ -128,6 +130,8 @@ const translations: Record<Language, Record<string, string>> = {
     'contacts.success_title': 'Өтінім қабылданды',
     'contacts.success_desc': 'Сіздің өтініміңіз жүйеге тіркелді. Менеджеріміз жақын арада хабарласады.',
     'contacts.send_more': 'Тағы жіберу',
+    'b2b.partner_modal_brand': 'Synergia group',
+    'b2b.partner_modal_title': 'ЫНТЫМАҚТАСТЫҚ ФОРМАСЫ',
 
     // Товар и карточка
     'product.back_catalog': 'Каталогқа оралу',

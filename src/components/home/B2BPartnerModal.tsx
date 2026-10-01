@@ -181,17 +181,14 @@ export default function B2BPartnerModal({ isOpen, onClose }: B2BPartnerModalProp
           </div>
 
           {/* Modal Header */}
-          <div className="px-6 sm:px-8 pt-4 sm:pt-7 pb-4 flex items-start justify-between border-b border-slate-100">
+          <div className="px-6 sm:px-8 pt-5 sm:pt-7 pb-4 flex items-start justify-between border-b border-slate-100">
             <div>
-              <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-semibold tracking-wider uppercase bg-brand-50 text-brand-800 mb-1.5">
-                SYNERGIYA GROUP • B2B
-              </span>
-              <h2 id="b2b-modal-title" className="font-display text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
-                {t('b2b.partner_cta_title') || 'Стать партнёром'}
-              </h2>
-              <p className="mt-1 text-xs sm:text-sm text-slate-500 font-light leading-relaxed">
-                {t('b2b.partner_cta_desc') || 'Заполните заявку, чтобы получить оптовый прайс, образцы и персонального менеджера.'}
+              <p className="text-[11px] sm:text-xs font-semibold uppercase tracking-[0.2em] text-slate-400 mb-1">
+                {t('b2b.partner_modal_brand') || 'Synergia group'}
               </p>
+              <h2 id="b2b-modal-title" className="font-display text-xl sm:text-2xl lg:text-[26px] font-bold text-slate-900 tracking-wide uppercase">
+                {t('b2b.partner_modal_title') || 'ФОРМА ДЛЯ СОТРУДНИЧЕСТВА'}
+              </h2>
             </div>
 
             {/* Apple Circular Close Button */}
