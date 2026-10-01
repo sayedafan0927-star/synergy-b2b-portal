@@ -17,6 +17,7 @@ import { dispatchApprovalRequest } from '../../approvals/whatsapp';
 import { recordFailure, recordSuccess } from '../../lib/circuitBreaker';
 import { validateClientCreditExposure } from './exposureValidator';
 import { buildSplitOrdersPayload, insertSequentialSplitOrders, SplitOrderSummary } from './orderSplitter';
+import { preloadInventoryBalancesForOrder } from './stockPreloader';
 
 export interface CreateOrderContext {
   req: VercelRequest;
@@ -199,6 +200,8 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
     const splitOrdersPayload = isMultiWarehouse
       ? buildSplitOrdersPayload(pricingResult.items, distinctWarehouses, incomingIdempotencyKey, rawPayload.comment)
       : [];
+
+    await preloadInventoryBalancesForOrder(supabase, pricingResult.items, correlationId);
 
     const { data: atomicData, error: atomicErr } = await supabase.rpc('create_order_atomic', {
       p_order: orderMasterPayload,
