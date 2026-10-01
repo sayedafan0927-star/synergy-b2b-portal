@@ -29,6 +29,27 @@ export async function handleCachedClientDebt(
     pId = callerPartnerId;
   }
 
+  // Multi-Tenancy Scoping: Менеджеры могут просматривать только прикрепленных контрагентов
+  if (callerAuth && (callerAuth.role === 'manager_rm' || callerAuth.role === 'manager_lm') && !callerAuth.isServer) {
+    if (pId && callerAuth.userId) {
+      const { data: clientManaged } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('partner_id', pId)
+        .eq('manager_id', callerAuth.userId)
+        .maybeSingle();
+
+      if (!clientManaged) {
+        res.status(403).json({
+          success: false,
+          error: 'Доступ запрещен: данный контрагент не относится к вашей региональной зоне ответственности.',
+          code: 'FORBIDDEN_COUNTERPARTY_SCOPE',
+        });
+        return true;
+      }
+    }
+  }
+
   if (pId && !isRefresh) {
     try {
       const { data: cachedBal } = await supabase

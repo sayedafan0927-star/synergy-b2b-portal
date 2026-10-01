@@ -281,6 +281,11 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
 
               if (isFailed) {
                 anySuborderFailed = true;
+                try {
+                  await supabase.rpc('release_order_reservations', { p_order_id: child.id });
+                } catch (subRelErr) {
+                  logger.warn('[Order Dispatcher] Suborder reservation release warning:', subRelErr as Error);
+                }
                 await supabase
                   .from('orders')
                   .update({

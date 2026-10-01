@@ -112,6 +112,7 @@ export async function authenticateRequest(
     let fallbackPhone: string | undefined;
     let fallbackFullName: string | undefined;
     let fallbackPriceType: string | undefined;
+    let hmacProfileB2bRole: 'director' | 'buyer' | 'accountant' | undefined;
     let session2FA = false;
     let supabase2FA = false;
 
@@ -139,6 +140,7 @@ export async function authenticateRequest(
               fallbackPhone = p.phone || u.phone;
               fallbackFullName = p.full_name || u.full_name || u.user_metadata?.full_name;
               fallbackPriceType = p.price_type || 'wholesale';
+              hmacProfileB2bRole = p.b2b_role;
               session2FA = Boolean(parsed.data.two_factor_verified || parsed.data.is_2fa_verified);
             }
           }
@@ -189,7 +191,7 @@ export async function authenticateRequest(
 
     // При использовании HMAC-сессии допускаем валидированные данные профиля
     const effectiveRole = (profile?.role || fallbackRole || 'client') as any;
-    const effectiveB2bRole = (profile?.b2b_role || (hmacSessionData?.profile?.b2b_role) || 'director') as 'director' | 'buyer' | 'accountant';
+    const effectiveB2bRole = (profile?.b2b_role || hmacProfileB2bRole || 'director') as 'director' | 'buyer' | 'accountant';
     const effectivePartnerId = profile?.partner_id || fallbackPartnerId;
     const effectiveErpId = profile?.erp_id || (effectivePartnerId ? Number(effectivePartnerId) || null : null);
     const effectivePriceType = profile?.price_type || fallbackPriceType || 'wholesale';

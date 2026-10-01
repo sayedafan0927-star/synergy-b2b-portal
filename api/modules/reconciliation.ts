@@ -1,6 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { createClient } from '@supabase/supabase-js';
 import { authenticateRequest } from '../lib/authGuard';
 import { recordAuditLog } from '../audit/logs';
+
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
+const supabaseServer = (SUPABASE_URL && SUPABASE_KEY)
+  ? createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })
+  : null as any;
 
 export async function handleReconciliationReport(
   req: VercelRequest,
@@ -22,9 +29,25 @@ export async function handleReconciliationReport(
     }
     req.query.partner_id = partnerId;
   } else if (!authCtx.isServer && authCtx.role !== 'admin') {
-    // Для менеджеров: обязательное наличие partner_id
+    // Для менеджеров: обязательное наличие partner_id и проверка прикрепления контрагента
     if (!partnerId) {
       return res.status(400).json({ success: false, error: 'Параметр partner_id обязателен для формирования акта сверки.' });
+    }
+    if ((authCtx.role === 'manager_rm' || authCtx.role === 'manager_lm') && supabaseServer && authCtx.userId) {
+      const { data: managedProfile } = await supabaseServer
+        .from('profiles')
+        .select('id')
+        .eq('partner_id', partnerId)
+        .eq('manager_id', authCtx.userId)
+        .maybeSingle();
+
+      if (!managedProfile) {
+        return res.status(403).json({
+          success: false,
+          error: 'Доступ запрещен: данный контрагент не относится к вашей региональной зоне ответственности.',
+          code: 'FORBIDDEN_COUNTERPARTY_SCOPE',
+        });
+      }
     }
   }
 

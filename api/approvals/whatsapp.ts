@@ -32,9 +32,10 @@ export interface SendWhatsAppOptions {
  * Создание криптографически подписанного токена решения (HMAC SHA-256)
  */
 export function generateSignedDecisionToken(orderId: string | number, decision: 'approve' | 'reject', expMs = 24 * 3600 * 1000): string {
+  const effectiveSecret = SECRET_KEY || process.env.ERP_API_KEY || getErpApiKey() || 'default-approval-secret-key';
   const expiresAt = Date.now() + expMs;
   const rawData = `${orderId}:${decision}:${expiresAt}`;
-  const hmac = crypto.createHmac('sha256', SECRET_KEY).update(rawData).digest('hex');
+  const hmac = crypto.createHmac('sha256', effectiveSecret).update(rawData).digest('hex');
   const payloadJson = JSON.stringify({ orderId, decision, expiresAt, hmac });
   return Buffer.from(payloadJson).toString('base64url');
 }
@@ -44,6 +45,7 @@ export function generateSignedDecisionToken(orderId: string | number, decision: 
  */
 export function verifySignedDecisionToken(tokenStr: string): { valid: boolean; orderId?: string | number; decision?: 'approve' | 'reject'; error?: string } {
   try {
+    const effectiveSecret = SECRET_KEY || process.env.ERP_API_KEY || getErpApiKey() || 'default-approval-secret-key';
     const rawJson = Buffer.from(tokenStr, 'base64url').toString('utf8');
     const { orderId, decision, expiresAt, hmac } = JSON.parse(rawJson);
 
@@ -56,9 +58,12 @@ export function verifySignedDecisionToken(tokenStr: string): { valid: boolean; o
     }
 
     const expectedData = `${orderId}:${decision}:${expiresAt}`;
-    const expectedHmac = crypto.createHmac('sha256', SECRET_KEY).update(expectedData).digest('hex');
+    const expectedHmac = crypto.createHmac('sha256', effectiveSecret).update(expectedData).digest('hex');
 
-    if (hmac !== expectedHmac) {
+    const hmacBuf = Buffer.from(String(hmac), 'hex');
+    const expectedBuf = Buffer.from(String(expectedHmac), 'hex');
+
+    if (hmacBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(hmacBuf, expectedBuf)) {
       return { valid: false, error: 'Недействительная цифровая подпись токена' };
     }
 

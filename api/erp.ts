@@ -217,7 +217,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         exp: Math.floor(Date.now() / 1000) + 7 * 24 * 3600,
       };
 
-      const JWT_SECRET = process.env.PORTAL_JWT_SECRET || process.env.SUPABASE_JWT_SECRET || SERVER_ERP_KEY || 'fallback-secret-2026';
+      const JWT_SECRET = process.env.PORTAL_JWT_SECRET || process.env.SUPABASE_JWT_SECRET || SERVER_ERP_KEY;
+      if (!JWT_SECRET) {
+        return res.status(500).json({ success: false, error: 'Internal Server Error: Missing JWT signing secret configuration.' });
+      }
       const b64Url = (str: string | Buffer) => Buffer.from(str as any).toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
       const header = b64Url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
       const payload = b64Url(JSON.stringify(tokenPayload));

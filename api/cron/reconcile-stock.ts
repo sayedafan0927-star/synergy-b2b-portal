@@ -149,34 +149,64 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (supabase) {
       try {
         // Подсчитываем реальные активные брони по заказам клиентов (Zero Ghost Reservation)
+        // Пагинация для гарантированной вычитки всех активных позиций без срезки PostgREST в 1000 строк
         const actualActiveOrderReservations = new Map<string, number>();
-        const { data: activeOrderItems } = await supabase
-          .from('order_items')
-          .select('sku, quantity, warehouse_id, orders!inner(status, reservations_released)')
-          .not('orders.status', 'in', '("cancelled","rejected","completed","delivered")')
-          .or('reservations_released.is.null,reservations_released.eq.false', { foreignTable: 'orders' });
+        let itemOffset = 0;
+        const CHUNK_SIZE = 1000;
+        let hasMoreItems = true;
 
-        if (activeOrderItems) {
-          for (const item of activeOrderItems) {
-            const sku = String(item.sku || '').trim().toUpperCase();
-            const wh = Number(item.warehouse_id || 81);
-            const qty = Number(item.quantity || 0);
-            if (sku && qty > 0) {
-              const key = `${sku}::${wh}`;
-              actualActiveOrderReservations.set(key, (actualActiveOrderReservations.get(key) || 0) + qty);
-              actualActiveOrderReservations.set(sku, (actualActiveOrderReservations.get(sku) || 0) + qty);
+        while (hasMoreItems) {
+          const { data: chunkItems } = await supabase
+            .from('order_items')
+            .select('sku, quantity, warehouse_id, orders!inner(status, reservations_released)')
+            .not('orders.status', 'in', '("cancelled","rejected","completed","delivered")')
+            .or('reservations_released.is.null,reservations_released.eq.false', { foreignTable: 'orders' })
+            .range(itemOffset, itemOffset + CHUNK_SIZE - 1);
+
+          if (chunkItems && chunkItems.length > 0) {
+            for (const item of chunkItems) {
+              const sku = String(item.sku || '').trim().toUpperCase();
+              const wh = Number(item.warehouse_id || 81);
+              const qty = Number(item.quantity || 0);
+              if (sku && qty > 0) {
+                const key = `${sku}::${wh}`;
+                actualActiveOrderReservations.set(key, (actualActiveOrderReservations.get(key) || 0) + qty);
+                actualActiveOrderReservations.set(sku, (actualActiveOrderReservations.get(sku) || 0) + qty);
+              }
             }
+            itemOffset += chunkItems.length;
+            if (chunkItems.length < CHUNK_SIZE) {
+              hasMoreItems = false;
+            }
+          } else {
+            hasMoreItems = false;
           }
         }
 
-        // Queries canonical .select('sku, reserved_stock') with warehouse granularity
-        const { data: dbBalances, error: qErr } = await supabase
-          .from('inventory_balances')
-          .select('sku, reserved_stock, warehouse_id')
-          .gt('reserved_stock', 0)
-          .limit(5000);
+        // Queries canonical .select('sku, reserved_stock') with warehouse granularity and full chunk pagination
+        const allActiveBalances: any[] = [];
+        let balOffset = 0;
+        let hasMoreBalances = true;
 
-        let activeBalances = (!qErr && dbBalances) ? dbBalances : null;
+        while (hasMoreBalances) {
+          const { data: chunkBalances, error: qErr } = await supabase
+            .from('inventory_balances')
+            .select('sku, reserved_stock, warehouse_id')
+            .gt('reserved_stock', 0)
+            .range(balOffset, balOffset + CHUNK_SIZE - 1);
+
+          if (!qErr && chunkBalances && chunkBalances.length > 0) {
+            allActiveBalances.push(...chunkBalances);
+            balOffset += chunkBalances.length;
+            if (chunkBalances.length < CHUNK_SIZE) {
+              hasMoreBalances = false;
+            }
+          } else {
+            hasMoreBalances = false;
+          }
+        }
+
+        let activeBalances = allActiveBalances.length > 0 ? allActiveBalances : null;
         if (!activeBalances) {
           const { data: fallbackBalances } = await supabase
             .from('inventory_balances')
