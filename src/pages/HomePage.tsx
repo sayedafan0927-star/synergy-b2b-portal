@@ -10,6 +10,8 @@ import ProductCard from '@/components/ProductCard';
 import HeroBannerMedia from '@/components/home/HeroBannerMedia';
 import TechnoLuxuryButton from '@/components/home/TechnoLuxuryButton';
 import B2BPartnerCtaSection from '@/components/home/B2BPartnerCtaSection';
+import TiltCard from '@/components/home/TiltCard';
+import AtmosphericFogTransition from '@/components/home/AtmosphericFogTransition';
 import { useSynchronizedCategoryVideos } from '@/hooks/useSynchronizedCategoryVideos';
 
 const advantages = [
@@ -101,7 +103,7 @@ export default function HomePage({
   return (
     <div className="pb-16 lg:pb-0">
       {/* ── Hero Video Banner (Pure animation + Harmonious End-State CTA) ── */}
-      <section className="relative w-full bg-[#0a0a0c] pt-[69px] sm:pt-[81px] lg:pt-[85px]">
+      <section className="relative w-full bg-[#0a0a0c] pt-0">
         <HeroBannerMedia onNavigate={onNavigate} isReady={isReady} />
         {/* Mobile Action Bar: Variant 4 (Editorial Minimal Outline Pill) - Compact, zero blue bloat */}
         <div className="block sm:hidden px-6 pt-2 pb-6 max-w-xs mx-auto select-none relative z-20">
@@ -309,13 +311,20 @@ export default function HomePage({
             </button>
           </div>
 
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+          {/* Mobile: Tactile Horizontal Swipe Carousel with peek | Desktop: 4-Column Grid with 3D Tilt */}
+          <div className="flex sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 overflow-x-auto sm:overflow-visible snap-x snap-mandatory no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0 pb-4 sm:pb-0">
             {featuredProducts.map((product) => (
-              <ProductCard
+              <div
                 key={product.id}
-                product={product}
-                onNavigate={onNavigate}
-              />
+                className="w-[78vw] max-w-[290px] shrink-0 snap-start sm:w-auto sm:max-w-none"
+              >
+                <TiltCard maxTilt={10} glare={true}>
+                  <ProductCard
+                    product={product}
+                    onNavigate={onNavigate}
+                  />
+                </TiltCard>
+              </div>
             ))}
           </div>
 
@@ -330,6 +339,9 @@ export default function HomePage({
           </div>
         </div>
       </section>
+
+      {/* ── Atmospheric Scroll: Volumetric Fog / Smoke Transition ── */}
+      <AtmosphericFogTransition className="h-28 sm:h-40 -mt-16 sm:-mt-24 relative z-20" />
 
       {/* ── 4. CTA Banner Section (Concept 2: Pure Macro Glassmorphism + Techno-Luxury Button) ── */}
       <B2BPartnerCtaSection onNavigate={(tab) => onNavigate(tab as PageId)} />
