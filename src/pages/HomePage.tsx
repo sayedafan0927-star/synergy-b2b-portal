@@ -104,8 +104,8 @@ export default function HomePage({
       {/* ── Hero Video Banner (Pure animation + Harmonious End-State CTA) ── */}
       <section className="relative w-full bg-slate-950 pt-16 sm:pt-20 lg:pt-24">
         <HeroBannerMedia onNavigate={onNavigate} isReady={isReady} />
-        {/* Mobile Action Bar: Sleek normalized Techno-Luxury button */}
-        <div className="block sm:hidden px-5 py-3.5 max-w-md mx-auto select-none relative z-20">
+        {/* Mobile Action Bar: Sleek normalized Techno-Luxury button with centered optical gaps */}
+        <div className="block sm:hidden px-5 pt-3.5 pb-11 max-w-md mx-auto select-none relative z-20">
           <TechnoLuxuryButton
             onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
