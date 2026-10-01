@@ -314,7 +314,7 @@ export default function HomePage({
       </section>
 
       {/* ── 4. CTA Banner Section (Concept 2: Pure Macro Glassmorphism + Techno-Luxury Button) ── */}
-      <B2BPartnerCtaSection onNavigate={onNavigate} />
+      <B2BPartnerCtaSection onNavigate={(tab) => onNavigate(tab as PageId)} />
     </div>
   );
 }

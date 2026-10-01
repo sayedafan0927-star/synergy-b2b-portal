@@ -6,12 +6,8 @@ import { enforceRateLimit } from '../lib/rateLimit';
 import { applyCorsHeaders } from '../lib/cors';
 import { getErpApiKey } from '../lib/erpKey';
 import { checkCircuit } from '../lib/circuitBreaker';
-import {
-  dispatchDlqEmergencyAlert,
-  buildOutboxErpPayload,
-  computeBackoffNextRetry,
-  isFatalBusinessError,
-} from './outboxUtils';
+import { dequeueOutboxOrders } from '../lib/queueBroker';
+import { dispatchDlqEmergencyAlert, buildOutboxErpPayload, computeBackoffNextRetry, isFatalBusinessError } from './outboxUtils';
 
 // Re-export for backwards compatibility and test introspection
 export { dispatchDlqEmergencyAlert };
@@ -73,7 +69,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.warn('[Outbox Sync] Stale claim recovery warning:', staleErr);
     }
 
-    // 1. Атомарный конкурентно-безопасный захват заказов (FOR UPDATE SKIP LOCKED)
+    // 1. Атомарный конкурентно-безопасный захват заказов (Queue Broker + FOR UPDATE SKIP LOCKED)
+    await dequeueOutboxOrders(4).catch(() => {});
     let pendingOrders: any[] | null = null;
     let claimedViaRpc = false;
 

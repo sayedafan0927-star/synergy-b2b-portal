@@ -47,11 +47,13 @@ interface L1CacheEntry {
 const l1StateCache = new Map<string, L1CacheEntry>();
 const L1_TTL_MS = 5000;
 
-async function getServiceState(serviceName: string): Promise<ServiceState> {
+async function getServiceState(serviceName: string, bypassL1 = false): Promise<ServiceState> {
   const now = Date.now();
-  const cachedL1 = l1StateCache.get(serviceName);
-  if (cachedL1 && cachedL1.expiry > now) {
-    return cachedL1.state;
+  if (!bypassL1) {
+    const cachedL1 = l1StateCache.get(serviceName);
+    if (cachedL1 && cachedL1.expiry > now) {
+      return cachedL1.state;
+    }
   }
 
   const redis = getRedisClient();
@@ -169,7 +171,7 @@ export async function recordFailure(
   serviceName: string,
   config: CircuitBreakerConfig = DEFAULT_CONFIG
 ): Promise<void> {
-  const s = await getServiceState(serviceName);
+  const s = await getServiceState(serviceName, true);
   s.consecutiveFailures++;
   s.lastFailureTime = Date.now();
 

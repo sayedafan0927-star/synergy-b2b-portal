@@ -208,13 +208,9 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
 
     const orderItemsPayload = pricingResult.items.map(it => ({
       product_id: String(it.productId || it.item_id || it.sku || ''),
-      product_name: String(it.sku || 'Ковровое изделие'),
-      size: String(it.size || 'Стандарт'),
-      sku: String(it.sku || ''),
-      warehouse: String(it.warehouse || 'Основной Склад Астана'),
-      warehouse_id: resolveWarehouseId(it.warehouse_id, it.warehouse),
-      price: Number(it.price) || 0,
-      quantity: Number(it.quantity) || 1,
+      product_name: String(it.sku || 'Ковровое изделие'), size: String(it.size || 'Стандарт'), sku: String(it.sku || ''),
+      warehouse: String(it.warehouse || 'Основной Склад Астана'), warehouse_id: resolveWarehouseId(it.warehouse_id, it.warehouse),
+      price: Number(it.price) || 0, quantity: Number(it.quantity) || 1,
     }));
 
     const splitOrdersPayload = isMultiWarehouse
@@ -237,6 +233,22 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
           error: errMsg.replace('INSUFFICIENT_STOCK:', '').trim() || 'Недостаточно свободного остатка для оформления заказа.',
         });
         return;
+      }
+      if (incomingIdempotencyKey && (errMsg.includes('unique') || errMsg.includes('orders_idempotency_key_key') || (atomicErr as any).code === '23505')) {
+        const { data: replayOrder } = await supabase.from('orders').select('id, order_number, status, total_amount').eq('idempotency_key', incomingIdempotencyKey).maybeSingle();
+        if (replayOrder) {
+          logger.info('[Order] Returning order via concurrent Idempotency Key collision', { orderId: replayOrder.id });
+          res.status(200).json({
+            success: true,
+            is_idempotent_replay: true,
+            order_number: replayOrder.order_number,
+            order_id: replayOrder.id,
+            status: replayOrder.status,
+            total_amount: replayOrder.total_amount,
+            message: 'Заказ уже зарегистрирован параллельным запросом (Idempotency Key Concurrent HIT).',
+          });
+          return;
+        }
       }
       logger.warn('[Order] create_order_atomic RPC notice, falling back to sequential saga:', atomicErr);
     } else if (atomicData && (atomicData.success || atomicData.order_id)) {
@@ -425,22 +437,11 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
     client_phone: rawPayload.client_phone || rawPayload.buyer?.phone,
     items: pricingResult.items.map(it => {
       const itemObj: Record<string, any> = {
-        item_id: it.item_id,
-        sku: it.sku,
-        width: it.width,
-        length: it.length,
-        area_sqm: it.area_sqm,
-        quantity: it.quantity,
-        price: it.price,
-        total_line: it.total_line,
-        warehouse: it.warehouse,
+        item_id: it.item_id, sku: it.sku, width: it.width, length: it.length, area_sqm: it.area_sqm,
+        quantity: it.quantity, price: it.price, total_line: it.total_line, warehouse: it.warehouse,
         warehouse_id: it.warehouse_id || primaryWarehouseId,
       };
-      // Гарантия отсутствия ячеек WMS в заказе
-      delete itemObj.cell;
-      delete itemObj.cell_code;
-      delete itemObj.rack;
-      delete itemObj.location;
+      delete itemObj.cell; delete itemObj.cell_code; delete itemObj.rack; delete itemObj.location;
       return itemObj;
     }),
     total_amount: finalTotalAmount,

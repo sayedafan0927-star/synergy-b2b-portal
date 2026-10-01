@@ -84,8 +84,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
-  // 2. Проверка HMAC SHA256 подписи
-  const isProd = process.env.NODE_ENV === 'production' && process.env.ENFORCE_WEBHOOK_HMAC === 'strict';
+  // 2. Проверка HMAC SHA256 подписи (Fail-Closed в production по умолчанию)
+  const isProd = (process.env.NODE_ENV === 'production' && process.env.ENFORCE_WEBHOOK_HMAC !== 'false') || process.env.ENFORCE_WEBHOOK_HMAC === 'strict';
   const receivedSig = (req.headers['x-webhook-signature'] || req.headers['X-Webhook-Signature']) as string | undefined;
   const rawBody = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
 

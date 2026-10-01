@@ -6,13 +6,28 @@ import { releaseAllReservedStock, ReservedStockItem } from '../../lib/saga';
 import { patchCachedCatalogStock, StockItemUpdate } from '../../lib/catalogCache';
 import type { SplitOrderSummary } from './orderSplitter';
 import { isFatalBusinessError, dispatchDlqEmergencyAlert } from '../../outbox/outboxUtils';
+import { enqueueOutboxOrder } from '../../lib/queueBroker';
 
 /**
  * Неблокирующий вызов воркера Outbox для мгновенного сброса заказа в ERP (sub-second sync)
  * Устраняет 2-минутную задержку ожидания Vercel Cron и защищен от Serverless Runtime Freeze.
  */
-export function triggerImmediateOutboxSync(req: VercelRequest, correlationId: string): void {
+export function triggerImmediateOutboxSync(
+  req: VercelRequest,
+  correlationId: string,
+  orderMeta?: { orderId?: string | null; orderDoc?: string }
+): void {
   try {
+    if (orderMeta?.orderId && orderMeta?.orderDoc) {
+      enqueueOutboxOrder({
+        orderId: orderMeta.orderId,
+        orderDoc: orderMeta.orderDoc,
+        correlationId,
+      }).catch(err => {
+        logger.debug('[Outbox Queue Broker Enqueue Notice]', { error: (err as Error)?.message });
+      });
+    }
+
     const rawHost = String(req.headers['host'] || '').trim().toLowerCase();
     const allowedHosts = new Set(['b2b.synergy.kz', 'synergy-b2b-portal.vercel.app', 'localhost:3000', 'localhost:5173', '127.0.0.1:3000', '127.0.0.1:5173', (process.env.VERCEL_URL || '').toLowerCase().trim()].filter(Boolean));
 
@@ -86,7 +101,7 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
   const circuit = await checkCircuit('erp_gateway');
   if (!circuit.permitted) {
     logger.warn('[Order Dispatcher] Circuit OPEN for erp_gateway. Fast-failing immediately to outbox buffer', { orderDoc: outboxOrderDoc, correlationId });
-    triggerImmediateOutboxSync(req, correlationId);
+    triggerImmediateOutboxSync(req, correlationId, { orderId: outboxOrderId, orderDoc: outboxOrderDoc });
     res.status(200).json({
       success: true,
       outbox_queued: true,
@@ -348,7 +363,7 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
       statusCode: erpResponse.status,
       orderDoc: outboxOrderDoc,
     });
-    triggerImmediateOutboxSync(req, correlationId);
+    triggerImmediateOutboxSync(req, correlationId, { orderId: outboxOrderId, orderDoc: outboxOrderDoc });
     res.status(200).json({
       success: true,
       outbox_queued: true,
@@ -367,7 +382,7 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
       correlationId,
     });
 
-    triggerImmediateOutboxSync(req, correlationId);
+    triggerImmediateOutboxSync(req, correlationId, { orderId: outboxOrderId, orderDoc: outboxOrderDoc });
     res.status(200).json({
       success: true,
       outbox_queued: true,
