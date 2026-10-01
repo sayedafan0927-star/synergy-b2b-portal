@@ -164,7 +164,7 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
           <div className="relative container-w py-6 sm:py-10">
             {/* ── Techno-Luxury End-State Call To Action Card ── */}
             <div 
-              className={`max-w-[480px] lg:max-w-[540px] rounded-[32px] shadow-[0_25px_60px_rgba(0,0,0,0.9),0_0_50px_rgba(0,251,255,0.22)] transition-all duration-1000 ease-[cubic-bezier(0.16,1,0.3,1)] relative select-none ${
+              className={`max-w-[480px] lg:max-w-[540px] rounded-[32px] bg-slate-950/95 backdrop-blur-2xl shadow-[0_25px_60px_rgba(0,0,0,0.95),0_0_50px_rgba(0,251,255,0.25)] transition-all duration-700 ease-[cubic-bezier(0.16,1,0.3,1)] relative select-none ${
                 isEnded 
                   ? 'opacity-100 translate-y-0 scale-100 pointer-events-auto' 
                   : 'opacity-0 translate-y-16 scale-[0.92] pointer-events-none'
