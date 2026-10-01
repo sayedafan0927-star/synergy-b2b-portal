@@ -1,29 +1,32 @@
-import { useState, useRef, type ReactNode, type MouseEvent } from 'react';
+import { useState, useRef, useEffect, type ReactNode, type MouseEvent } from 'react';
 
 interface TiltCardProps {
   children: ReactNode;
-  maxTilt?: number; // max tilt angle in degrees (default 15)
+  maxTilt?: number; // max tilt angle in degrees (default 14)
   perspective?: number; // 3D perspective in px (default 1000)
-  scale?: number; // scale on hover (default 1.035)
+  scale?: number; // scale on hover (default 1.03)
   glare?: boolean; // dynamic specular sheen glare
+  autoTiltMobile?: boolean; // autonomous 3D tilt oscillation on mobile
+  cardIndex?: number; // card index for staggered natural motion (default 0)
   className?: string;
 }
 
 /**
  * TiltCard
- * High-precision 3D physical depth tilt effect (Tilt.js / Apple TV parity).
- * - Real-time zero-latency angular deflection mapped to cursor position.
- * - Dynamic 3D directional cast shadow moving opposite to tilt angle.
- * - Physical specular highlight sheen tracking cursor coordinates.
- * - Gentle spring dampening on cursor leave.
- * - Touch-safe: passive on touch devices to preserve fluid native scrolling.
+ * High-performance 3D physical tilt depth effect:
+ * - Desktop: Instant zero-latency mouse cursor tracking with directional cast shadow.
+ * - Mobile: Autonomous, hypnotic 3D floating pendulum tilt loop (cards gently tilt by themselves).
+ * - Specular highlight sheen gliding across the card surface in sync with tilt.
+ * - Hardware-accelerated GPU transforms with preserve-3d context.
  */
 export default function TiltCard({
   children,
-  maxTilt = 15,
+  maxTilt = 14,
   perspective = 1000,
-  scale = 1.035,
+  scale = 1.03,
   glare = true,
+  autoTiltMobile = true,
+  cardIndex = 0,
   className = '',
 }: TiltCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
@@ -35,8 +38,20 @@ export default function TiltCard({
     opacity: 0,
   });
   const [isHovered, setIsHovered] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 640 || 'ontouchstart' in window);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile, { passive: true });
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const handleMouseMove = (e: MouseEvent<HTMLDivElement>) => {
+    if (isMobile) return;
+
     const el = cardRef.current;
     if (!el) return;
 
@@ -44,11 +59,9 @@ export default function TiltCard({
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    // Normalized coordinates (-0.5 to 0.5)
     const normX = mouseX / rect.width - 0.5;
     const normY = mouseY / rect.height - 0.5;
 
-    // Calculate 3D rotation angles
     const rotateY = Number((normX * maxTilt).toFixed(2));
     const rotateX = Number((-normY * maxTilt).toFixed(2));
 
@@ -57,25 +70,31 @@ export default function TiltCard({
       y: rotateY,
       glareX: Math.round((mouseX / rect.width) * 100),
       glareY: Math.round((mouseY / rect.height) * 100),
-      opacity: 0.38,
+      opacity: 0.35,
     });
     if (!isHovered) setIsHovered(true);
   };
 
   const handleMouseEnter = () => {
-    setIsHovered(true);
+    if (!isMobile) setIsHovered(true);
   };
 
   const handleMouseLeave = () => {
-    setIsHovered(false);
-    setTilt({
-      x: 0,
-      y: 0,
-      glareX: 50,
-      glareY: 50,
-      opacity: 0,
-    });
+    if (!isMobile) {
+      setIsHovered(false);
+      setTilt({
+        x: 0,
+        y: 0,
+        glareX: 50,
+        glareY: 50,
+        opacity: 0,
+      });
+    }
   };
+
+  // Staggered autonomous mobile animation parameters
+  const animDuration = 4.2 + (cardIndex % 3) * 0.7; // 4.2s, 4.9s, 5.6s
+  const animDelay = (cardIndex * 0.8) % 3.0; // staggered phase start
 
   return (
     <div
@@ -92,28 +111,37 @@ export default function TiltCard({
       <div
         className="w-full h-full rounded-2xl will-change-transform"
         style={{
-          transform: isHovered
-            ? `rotateX(${tilt.x}deg) rotateY(${tilt.y}deg) scale3d(${scale}, ${scale}, ${scale}) translateZ(14px)`
+          transform: isMobile && autoTiltMobile
+            ? undefined // Handled by inline animation on mobile
+            : isHovered
+            ? `rotateX(${tilt.x}deg) rotateY(${tilt.y}deg) scale3d(${scale}, ${scale}, ${scale}) translateZ(12px)`
             : 'rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1) translateZ(0px)',
-          boxShadow: isHovered
-            ? `${-tilt.y * 1.8}px ${tilt.x * 1.8 + 14}px 34px -4px rgba(0, 0, 0, 0.22)`
+          boxShadow: !isMobile && isHovered
+            ? `${-tilt.y * 1.8}px ${tilt.x * 1.8 + 12}px 30px -4px rgba(0, 0, 0, 0.2)`
             : '0 4px 14px rgba(0, 0, 0, 0.06)',
           transitionProperty: 'transform, box-shadow',
           transitionDuration: isHovered ? '0ms' : '450ms',
           transitionTimingFunction: isHovered ? 'linear' : 'cubic-bezier(0.16, 1, 0.3, 1)',
           transformStyle: 'preserve-3d',
+          ...(isMobile && autoTiltMobile
+            ? {
+                animation: `mobileTiltOscillate ${animDuration}s ease-in-out ${animDelay}s infinite alternate`,
+              }
+            : {}),
         }}
       >
         {children}
 
-        {/* Dynamic Specular Sheen Glare */}
+        {/* Dynamic Specular Sheen Glare (Desktop Hover or Mobile Idle Sheen) */}
         {glare && (
           <div
             aria-hidden="true"
             className="absolute inset-0 rounded-2xl pointer-events-none transition-opacity duration-200 overflow-hidden z-30"
             style={{
-              opacity: tilt.opacity,
-              background: `radial-gradient(circle 360px at ${tilt.glareX}% ${tilt.glareY}%, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0.15) 45%, transparent 80%)`,
+              opacity: isMobile ? 0.25 : tilt.opacity,
+              background: isMobile
+                ? 'radial-gradient(circle 240px at 50% 30%, rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 0.1) 40%, transparent 75%)'
+                : `radial-gradient(circle 320px at ${tilt.glareX}% ${tilt.glareY}%, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0.15) 45%, transparent 80%)`,
               mixBlendMode: 'overlay',
             }}
           />

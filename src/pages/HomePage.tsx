@@ -11,6 +11,7 @@ import HeroBannerMedia from '@/components/home/HeroBannerMedia';
 import TechnoLuxuryButton from '@/components/home/TechnoLuxuryButton';
 import B2BPartnerCtaSection from '@/components/home/B2BPartnerCtaSection';
 import TiltCard from '@/components/home/TiltCard';
+import PopularProductsSmokeBackdrop from '@/components/home/PopularProductsSmokeBackdrop';
 import { useSynchronizedCategoryVideos } from '@/hooks/useSynchronizedCategoryVideos';
 
 const advantages = [
@@ -102,7 +103,7 @@ export default function HomePage({
   return (
     <div className="pb-16 lg:pb-0">
       {/* ── Hero Video Banner (Pure animation + Harmonious End-State CTA) ── */}
-      <section className="relative w-full bg-[#0a0a0c] pt-0">
+      <section className="relative w-full bg-[#0a0a0c] pt-[60px] sm:pt-[70px] lg:pt-[74px]">
         <HeroBannerMedia onNavigate={onNavigate} isReady={isReady} />
         {/* Mobile Action Bar: Variant 4 (Editorial Minimal Outline Pill) - Compact, zero blue bloat */}
         <div className="block sm:hidden px-6 pt-2 pb-6 max-w-xs mx-auto select-none relative z-20">
@@ -273,8 +274,11 @@ export default function HomePage({
         </div>
       </section>
 
-      {/* ── 3. Featured Products Section (Clean Slate-50) ── */}
-      <section className="relative py-16 lg:py-24 bg-slate-50 [content-visibility:auto] [contain-intrinsic-size:1px_800px]">
+      {/* ── 3. Featured Products Section (Clean Slate-50 + Volumetric Blue-Slate Smoke Backdrop) ── */}
+      <section className="relative py-16 lg:py-24 bg-slate-50 overflow-hidden [content-visibility:auto] [contain-intrinsic-size:1px_800px]">
+        {/* ── Volumetric Smoke / Mist: Billowing thin plumes of blue-grey fog between cards & background ── */}
+        <PopularProductsSmokeBackdrop />
+
         {/* ── Top Organic Wave: Seamlessly drapes UP over the bottom of Categories Section ── */}
         <div className="absolute -top-[30px] sm:-top-[46px] lg:-top-[62px] inset-x-0 pointer-events-none select-none z-20">
           <svg
@@ -291,7 +295,7 @@ export default function HomePage({
         </div>
 
         <div className="container-w relative z-10">
-          <div className="flex items-end justify-between mb-10 lg:mb-14">
+          <div className="flex items-end justify-between mb-8 sm:mb-10 lg:mb-14">
             <div>
               <span className="font-mono text-xs text-brand-700/80 uppercase tracking-widest block mb-1">
                 — Выбор оптовых клиентов
@@ -310,14 +314,14 @@ export default function HomePage({
             </button>
           </div>
 
-          {/* Mobile: Tactile Horizontal Swipe Carousel with peek | Desktop: 4-Column Grid with 3D Tilt */}
-          <div className="flex sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 overflow-x-auto sm:overflow-visible snap-x snap-mandatory no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0 pb-4 sm:pb-0">
-            {featuredProducts.map((product) => (
+          {/* Mobile: 2 Cards Fit Comfortably Side-by-Side + Autonomous 3D Tilt | Desktop: 4-Column Grid with 3D Mouse Tilt */}
+          <div className="flex sm:grid sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 lg:gap-6 overflow-x-auto sm:overflow-visible snap-x snap-mandatory no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0 pb-4 sm:pb-0">
+            {featuredProducts.map((product, idx) => (
               <div
                 key={product.id}
-                className="w-[78vw] max-w-[290px] shrink-0 snap-start sm:w-auto sm:max-w-none"
+                className="w-[45vw] min-w-[150px] max-w-[185px] shrink-0 snap-start sm:w-auto sm:max-w-none"
               >
-                <TiltCard maxTilt={10} glare={true}>
+                <TiltCard cardIndex={idx} maxTilt={14} autoTiltMobile={true} glare={true}>
                   <ProductCard
                     product={product}
                     onNavigate={onNavigate}

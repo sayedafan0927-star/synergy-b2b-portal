@@ -241,7 +241,7 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
             transform: 'translateZ(0)',
             backfaceVisibility: 'hidden',
           }}
-          className="w-full h-full object-cover object-[center_34%] sm:object-[center_30%] transform-gpu pointer-events-none"
+          className="w-full h-full object-cover object-[center_28%] sm:object-[center_24%] transform-gpu pointer-events-none"
         >
           <source src={VIDEO_MP4} type="video/mp4" />
           <source src={VIDEO_WEBM} type="video/webm" />
