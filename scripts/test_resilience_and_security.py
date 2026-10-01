@@ -1732,7 +1732,24 @@ with open(os.path.join(ROOT_DIR, "src", "components", "cart", "ExcelBulkOrderMod
 test_assert("/api/catalog/resolve-batch" in ebm_code and "fetchSingleProductFromErp" not in ebm_code, "ExcelBulkOrderModal.tsx uses batch resolution eliminating N+1 sequential HTTP requests")
 
 # ------------------------------------------------------------------------------
-# 49. Summary Report
+# 49. Stage 25: Phase 3 Hardening — Circuit Breaker & Graceful Degradation Buffer
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 49. STAGE 25: PHASE 3 HARDENING & GRACEFUL DEGRADATION ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "orderDispatcher.ts"), "r", encoding="utf-8") as fp:
+    od_s25 = fp.read()
+test_assert("checkCircuit('erp_gateway')" in od_s25 and "Fast-failing immediately to outbox buffer" in od_s25, "orderDispatcher.ts fast-fails immediately to outbox buffer when circuit is OPEN")
+
+with open(os.path.join(ROOT_DIR, "api", "outbox", "sync.ts"), "r", encoding="utf-8") as fp:
+    outbox_s25 = fp.read()
+test_assert("checkCircuit('erp_gateway')" in outbox_s25 and "circuit_open: true" in outbox_s25, "api/outbox/sync.ts respects circuit breaker and pauses queue drain during ERP outages")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "erp", "genericProxyHandler.ts"), "r", encoding="utf-8") as fp:
+    gph_s25 = fp.read()
+test_assert("checkCircuit('erp_gateway')" in gph_s25, "genericProxyHandler.ts protects upstream ERP with circuit breaker gate")
+
+# ------------------------------------------------------------------------------
+# 50. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

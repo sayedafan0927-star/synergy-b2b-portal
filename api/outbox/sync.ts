@@ -5,6 +5,7 @@ import { applyCorrelationId } from '../lib/trace';
 import { enforceRateLimit } from '../lib/rateLimit';
 import { applyCorsHeaders } from '../lib/cors';
 import { getErpApiKey } from '../lib/erpKey';
+import { checkCircuit } from '../lib/circuitBreaker';
 import {
   dispatchDlqEmergencyAlert,
   buildOutboxErpPayload,
@@ -108,6 +109,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         message: 'Очередь Outbox пуста или все заказы ожидают своего тайм-аута ретрая.',
         count: 0,
         processed: [],
+      });
+    }
+
+    // Circuit Breaker Guard: не бомбардируем аварийный шлюз ERP при открытом контуре
+    const circuit = await checkCircuit('erp_gateway');
+    if (!circuit.permitted) {
+      return res.status(200).json({
+        success: true,
+        circuit_open: true,
+        message: 'Circuit breaker for erp_gateway is OPEN. Postponing outbox drain until recovery.',
+        count: pendingOrders.length,
       });
     }
 

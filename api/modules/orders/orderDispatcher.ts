@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '../../lib/logger';
-import { recordFailure, recordSuccess } from '../../lib/circuitBreaker';
+import { checkCircuit, recordFailure, recordSuccess } from '../../lib/circuitBreaker';
 import { releaseAllReservedStock, ReservedStockItem } from '../../lib/saga';
 import { patchCachedCatalogStock, StockItemUpdate } from '../../lib/catalogCache';
 import type { SplitOrderSummary } from './orderSplitter';
@@ -14,15 +14,7 @@ import { isFatalBusinessError, dispatchDlqEmergencyAlert } from '../../outbox/ou
 export function triggerImmediateOutboxSync(req: VercelRequest, correlationId: string): void {
   try {
     const rawHost = String(req.headers['host'] || '').trim().toLowerCase();
-    const allowedHosts = new Set([
-      'b2b.synergy.kz',
-      'synergy-b2b-portal.vercel.app',
-      'localhost:3000',
-      'localhost:5173',
-      '127.0.0.1:3000',
-      '127.0.0.1:5173',
-      (process.env.VERCEL_URL || '').toLowerCase().trim(),
-    ].filter(Boolean));
+    const allowedHosts = new Set(['b2b.synergy.kz', 'synergy-b2b-portal.vercel.app', 'localhost:3000', 'localhost:5173', '127.0.0.1:3000', '127.0.0.1:5173', (process.env.VERCEL_URL || '').toLowerCase().trim()].filter(Boolean));
 
     // Anti-SSRF: Verify host header against whitelist, default to primary production domain or VERCEL_URL
     const safeHost = allowedHosts.has(rawHost) ? rawHost : (process.env.VERCEL_URL || 'b2b.synergy.kz');
@@ -89,6 +81,23 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
     reservedSkuItems,
     supabase,
   } = params;
+
+  // 0. Circuit Breaker Fast-Fail to persistent outbox buffer (Graceful Degradation)
+  const circuit = await checkCircuit('erp_gateway');
+  if (!circuit.permitted) {
+    logger.warn('[Order Dispatcher] Circuit OPEN for erp_gateway. Fast-failing immediately to outbox buffer', { orderDoc: outboxOrderDoc, correlationId });
+    triggerImmediateOutboxSync(req, correlationId);
+    res.status(200).json({
+      success: true,
+      outbox_queued: true,
+      is_buffered_offline: true,
+      order_number: outboxOrderDoc,
+      order_id: outboxOrderId,
+      split_orders: createdSplitOrders,
+      message: 'Заказ принят и сохранен в буфере портала. Синхронизация с ERP выполнится автоматически.',
+    });
+    return;
+  }
 
   const controller = new AbortController();
   const erpTimeoutId = setTimeout(() => controller.abort(), 2500);
