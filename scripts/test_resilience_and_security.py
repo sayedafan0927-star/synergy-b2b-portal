@@ -2073,7 +2073,29 @@ with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "createOrderHandler
 test_assert("Promise.all([" in coh_fresh and "validateClientCreditExposure" in coh_fresh, "createOrderHandler.ts executes compliance check and settings query in parallel")
 
 # ------------------------------------------------------------------------------
-# 63. Summary Report
+# 63. Stage 39: Fulfillment Idempotency, Anti-BOLA & Manager Regional Scoping
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 63. STAGE 39: FULFILLMENT IDEMPOTENCY & ANTI-BOLA INVARIANTS ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "supabase", "migrations", "20261001161500_harden_fulfill_order_reservations_idempotency.sql"), "r", encoding="utf-8") as fp:
+    ful_sql = fp.read()
+test_assert("v_is_already_fulfilled" in ful_sql and "FOR UPDATE" in ful_sql, "fulfill_order_reservations enforces FOR UPDATE concurrency check preventing duplicate deductions")
+test_assert("ORDER BY oi.sku ASC, COALESCE(oi.warehouse_id, 81) ASC" in ful_sql, "fulfill_order_reservations sorts inventory locks by SKU and warehouse_id preventing deadlocks")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "cancelOrderHandler.ts"), "r", encoding="utf-8") as fp:
+    can_fresh = fp.read()
+test_assert("isManager" in can_fresh and "clientProfile?.manager_id" in can_fresh and "FORBIDDEN_REGIONAL_SCOPE" in can_fresh, "cancelOrderHandler.ts enforces Anti-BOLA regional assignment checks for branch managers")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "catalog", "catalogHandler.ts"), "r", encoding="utf-8") as fp:
+    cat_fresh = fp.read()
+test_assert("SNAPSHOT_PAGINATED" in cat_fresh and "inStockOnly" in cat_fresh, "catalogHandler.ts serves canonical snapshot paginated results eliminating empty pages")
+
+with open(os.path.join(ROOT_DIR, "api", "erp.ts"), "r", encoding="utf-8") as fp:
+    erp_fresh = fp.read()
+test_assert("req.query.manager_id = String(verifiedAuth.userId)" in erp_fresh, "api/erp.ts scopes regional/line manager queries with manager_id preventing republic-wide data leaks")
+
+# ------------------------------------------------------------------------------
+# 64. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

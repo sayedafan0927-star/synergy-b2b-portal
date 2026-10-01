@@ -13,7 +13,19 @@ AS $$
 DECLARE
   v_item record;
   v_count integer := 0;
+  v_is_already_fulfilled boolean;
 BEGIN
+  -- Concurrency Guard: Lock order row with FOR UPDATE to prevent duplicate fulfillment deduction
+  SELECT COALESCE(reservations_released, false)
+  INTO v_is_already_fulfilled
+  FROM public.orders
+  WHERE id = p_order_id
+  FOR UPDATE;
+
+  IF v_is_already_fulfilled IS TRUE THEN
+    RETURN 0;
+  END IF;
+
   FOR v_item IN
     SELECT 
       oi.sku,
@@ -24,7 +36,7 @@ BEGIN
       AND oi.sku IS NOT NULL AND oi.sku <> ''
       AND oi.quantity > 0
     GROUP BY oi.sku, COALESCE(oi.warehouse_id, 81)
-    ORDER BY oi.sku ASC
+    ORDER BY oi.sku ASC, COALESCE(oi.warehouse_id, 81) ASC
   LOOP
     UPDATE public.inventory_balances
     SET 

@@ -44,9 +44,11 @@ export async function handleCancelOrder(options: CancelOrderOptions): Promise<vo
     return;
   }
 
-  // 2. Проверка прав доступа (Anti-IDOR)
-  const isStaff = callerAuth.isServer || callerAuth.role === 'admin' || callerAuth.role === 'manager_rm' || callerAuth.role === 'manager_lm';
-  if (!isStaff) {
+  // 2. Проверка прав доступа (Anti-IDOR & Anti-BOLA)
+  const isGlobalAdmin = callerAuth.isServer || callerAuth.role === 'admin';
+  const isManager = callerAuth.role === 'manager_rm' || callerAuth.role === 'manager_lm';
+
+  if (!isGlobalAdmin && !isManager) {
     const isOwner = (order.user_id && String(order.user_id) === String(callerAuth.userId)) ||
                     (order.placed_by_id && String(order.placed_by_id) === String(callerAuth.userId));
     if (!isOwner) {
@@ -56,6 +58,33 @@ export async function handleCancelOrder(options: CancelOrderOptions): Promise<vo
         correlationId,
       });
       res.status(403).json({ success: false, error: 'Доступ запрещен: отмена чужого заказа невозможна (Anti-IDOR).' });
+      return;
+    }
+  }
+
+  // Для менеджеров филиалов: строгая проверка закрепления клиента (Anti-BOLA)
+  if (isManager && !isGlobalAdmin && callerAuth.userId && order.user_id) {
+    const { data: clientProfile } = await supabase
+      .from('profiles')
+      .select('id, manager_id')
+      .eq('id', order.user_id)
+      .maybeSingle();
+
+    const isClientAssigned = clientProfile?.manager_id && String(clientProfile.manager_id) === String(callerAuth.userId);
+    const isOrderPlacedByManager = order.placed_by_id && String(order.placed_by_id) === String(callerAuth.userId);
+
+    if (!isClientAssigned && !isOrderPlacedByManager) {
+      logger.warn('[CancelOrder] Cross-regional BOLA cancellation blocked', {
+        orderId: order.id,
+        callerManagerId: callerAuth.userId,
+        clientManagerId: clientProfile?.manager_id,
+        correlationId,
+      });
+      res.status(403).json({
+        success: false,
+        error: 'Доступ запрещен: данный заказ относится к клиенту другого регионального филиала (Anti-BOLA).',
+        code: 'FORBIDDEN_REGIONAL_SCOPE',
+      });
       return;
     }
   }

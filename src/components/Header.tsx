@@ -97,7 +97,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
 
   return (
     <header
-      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] bg-white ${
+      className={`fixed top-0 left-0 right-0 ${mobileOpen ? 'z-[100]' : 'z-50'} transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] bg-white ${
         scrolled ? 'shadow-xs' : ''
       }`}
       style={{ backgroundColor: '#ffffff' }}

@@ -214,6 +214,48 @@ export async function handleCatalogRequests(
     const inStockOnly = req.query.in_stock === 'true' || req.query.in_stock === '1';
 
     try {
+      // 3.1. Первичный быстрый путь: пагинация по каноническому снимку каталога (Sub-second, 0 DB load)
+      const cachedSnapshot = await getCachedCatalog('catalog_global');
+      if (cachedSnapshot?.data?.products && Array.isArray(cachedSnapshot.data.products)) {
+        let list = cachedSnapshot.data.products;
+        if (category) list = list.filter((p: any) => p.category === category);
+        if (collection) list = list.filter((p: any) => p.collection?.toLowerCase().includes(collection.toLowerCase()));
+        if (search) {
+          const sLower = search.toLowerCase();
+          list = list.filter((p: any) =>
+            p.name?.toLowerCase().includes(sLower) ||
+            p.collection?.toLowerCase().includes(sLower) ||
+            p.id?.toLowerCase().includes(sLower) ||
+            (p.variants || []).some((v: any) => v.sku?.toLowerCase().includes(sLower))
+          );
+        }
+        if (sizeCluster) {
+          list = list.filter((p: any) => (p.variants || []).some((v: any) => v.size_cluster === sizeCluster));
+        }
+        if (isRunner) {
+          list = list.filter((p: any) => (p.variants || []).some((v: any) => v.is_runner));
+        }
+        if (inStockOnly) {
+          list = list.filter((p: any) => (p.variants || []).some((v: any) => (v.stock || v.free_stock || v.total_stock || 0) > 0));
+        }
+
+        const total = list.length;
+        const paginated = list.slice(offset, offset + limit);
+
+        res.setHeader('X-Cache', 'SNAPSHOT_PAGINATED');
+        res.status(200).json({
+          success: true,
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+          items: paginated,
+          source: 'cache_snapshot',
+        });
+        return true;
+      }
+
+      // 3.2. Резервный путь: прямой запрос к PostgREST базы данных
       let query = supabase
         .from('products')
         .select(`
@@ -238,96 +280,32 @@ export async function handleCatalogRequests(
               stock
             )
           )
-        `, { count: 'exact' });
+        `, { count: 'estimated' });
 
-      if (category) {
-        query = query.eq('category', category);
-      }
-      if (collection) {
-        query = query.ilike('collection', `%${collection}%`);
-      }
-      if (search) {
-        query = query.or(`name.ilike.%${search}%,collection.ilike.%${search}%,id.ilike.%${search}%`);
-      }
+      if (category) query = query.eq('category', category);
+      if (collection) query = query.ilike('collection', `%${collection}%`);
+      if (search) query = query.or(`name.ilike.%${search}%,collection.ilike.%${search}%,id.ilike.%${search}%`);
 
       query = query.range(offset, offset + limit - 1).order('name', { ascending: true });
 
       const { data, count, error } = await query;
-
       if (error) {
-        // Fallback к кэшированному снепшоту каталога
-        const cached = await getCachedCatalog('catalog_global');
-        if (cached && cached.data && Array.isArray(cached.data.products)) {
-          let list = cached.data.products;
-          if (category) list = list.filter((p: any) => p.category === category);
-          if (collection) list = list.filter((p: any) => p.collection?.toLowerCase().includes(collection.toLowerCase()));
-          if (search) {
-            const sLower = search.toLowerCase();
-            list = list.filter((p: any) =>
-              p.name?.toLowerCase().includes(sLower) ||
-              p.collection?.toLowerCase().includes(sLower) ||
-              p.id?.toLowerCase().includes(sLower) ||
-              (p.variants || []).some((v: any) => v.sku?.toLowerCase().includes(sLower))
-            );
-          }
-          if (sizeCluster) {
-            list = list.filter((p: any) => (p.variants || []).some((v: any) => v.size_cluster === sizeCluster));
-          }
-          if (isRunner) {
-            list = list.filter((p: any) => (p.variants || []).some((v: any) => v.is_runner));
-          }
-          if (inStockOnly) {
-            list = list.filter((p: any) => (p.variants || []).some((v: any) => (v.stock || v.total_stock || 0) > 0));
-          }
-          const total = list.length;
-          const paginated = list.slice(offset, offset + limit);
-          res.status(200).json({
-            success: true,
-            page,
-            limit,
-            total,
-            totalPages: Math.ceil(total / limit),
-            items: paginated,
-            source: 'cache_fallback',
-          });
-          return true;
-        }
         res.status(500).json({ success: false, error: error.message });
         return true;
       }
 
       let canonicalSkuMap = new Map<string, { free_stock: number; base_price: number; warehouses: any[] }>();
-      try {
-        const cachedSnapshot = await getCachedCatalog('catalog_global');
-        if (cachedSnapshot?.data?.products && Array.isArray(cachedSnapshot.data.products)) {
-          for (const cp of cachedSnapshot.data.products) {
-            for (const cv of (cp.variants || [])) {
-              const cSku = String(cv.sku || '').trim().toUpperCase();
-              if (cSku) {
-                canonicalSkuMap.set(cSku, {
-                  free_stock: Number(cv.free_stock ?? cv.stock ?? 0),
-                  base_price: Number(cv.base_price || cv.price || 0),
-                  warehouses: Array.isArray(cv.warehouses) ? cv.warehouses : [],
-                });
-              }
-            }
-          }
-        }
-      } catch {}
-
       let items = (data || []).map((p: any) => {
         const variants = (p.product_variants || []).map((v: any) => {
           const vSkuUpper = String(v.sku || '').trim().toUpperCase();
           const canonical = canonicalSkuMap.get(vSkuUpper);
           const stocks = v.warehouse_stock || [];
           const totalStock = canonical ? canonical.free_stock : stocks.reduce((acc: number, s: any) => acc + (Number(s.stock) || 0), 0);
-          const basePrice = canonical && canonical.base_price > 0 ? canonical.base_price : (Number(v.base_price) || 0);
-
           return {
             id: v.id,
             size: v.size,
             sku: v.sku,
-            base_price: basePrice,
+            base_price: canonical?.base_price || Number(v.base_price) || 0,
             stock: totalStock,
             free_stock: totalStock,
             warehouses: canonical?.warehouses || v.warehouses,
@@ -337,8 +315,6 @@ export async function handleCatalogRequests(
             }, {}),
           };
         });
-
-        const totalProductStock = variants.reduce((acc: number, v: any) => acc + v.stock, 0);
 
         return {
           id: p.id,
@@ -353,7 +329,7 @@ export async function handleCatalogRequests(
           pile_height: p.pile_height,
           images: p.images || [],
           variants,
-          total_stock: totalProductStock,
+          total_stock: variants.reduce((acc: number, v: any) => acc + v.stock, 0),
         };
       });
 

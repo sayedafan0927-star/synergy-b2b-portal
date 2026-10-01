@@ -323,6 +323,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
+      // Межфилиальный скоупинг для региональных и линейных менеджеров (Anti-Cross-Branch Data Leak)
+      if ((verifiedAuth.role === 'manager_rm' || verifiedAuth.role === 'manager_lm') && !isAdmin && !verifiedAuth.isServer) {
+        if (verifiedAuth.userId) {
+          req.query.manager_id = String(verifiedAuth.userId);
+          if (req.body && typeof req.body === 'object') {
+            req.body.manager_id = String(verifiedAuth.userId);
+          }
+        }
+      }
+
       // Ограничение доступа для поставщиков к данным только своей фабрики
       if (verifiedAuth.role === 'supplier' && !isAdmin && !verifiedAuth.isServer) {
         const callerSuppId = String(verifiedAuth.partnerId || verifiedAuth.erpId || '');

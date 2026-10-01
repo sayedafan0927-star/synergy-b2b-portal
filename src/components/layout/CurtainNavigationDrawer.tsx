@@ -112,7 +112,7 @@ export default function CurtainNavigationDrawer({
         </div>
 
         {/* Centered Editorial Navigation Links */}
-        <nav className="my-auto py-8 flex flex-col items-center justify-center text-center space-y-5 sm:space-y-6">
+        <nav className="my-auto py-4 sm:py-8 flex flex-col items-center justify-center text-center space-y-4 sm:space-y-6">
           {menuItems.map(({ label, page }) => {
             const isActive = currentPage === page;
             return (
@@ -134,8 +134,8 @@ export default function CurtainNavigationDrawer({
           })}
         </nav>
 
-        {/* Bottom Centered Circular Icon Controls (Exact Thompson's Tea Reference) */}
-        <div className="w-full max-w-md mx-auto pt-6 border-t border-white/10 flex flex-col items-center gap-4">
+        {/* Bottom Centered Circular Icon Controls (Perfect Optical Center & Spacing) */}
+        <div className="w-full max-w-md mx-auto mt-auto pt-5 pb-6 sm:pb-8 border-t border-white/10 flex flex-col items-center justify-center gap-4">
           <div className="flex items-center justify-center gap-4">
             {/* WhatsApp */}
             <a
