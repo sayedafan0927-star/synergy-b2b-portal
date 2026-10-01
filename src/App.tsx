@@ -264,8 +264,20 @@ export default function App() {
       window.history.pushState({ page: target, id }, '', url.pathname + url.search);
     }
 
-    window.scrollTo({ top: 0, behavior: 'auto' });
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    });
   }, []);
+
+  // Guarantee scroll-to-top on page and filter transitions
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    const raf = requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [page, catalogCountry, catalogCollection, catalogSearch]);
 
   // Синхронизация с системной кнопкой «Назад» и свайпом назад
   useEffect(() => {

@@ -81,6 +81,7 @@ export default function CatalogPage({
     resetFilters,
     saveCatalogSnapshot,
     attemptScrollRestoration,
+    hasSavedState,
   } = useCatalogStatePersistence({ initialCollection, initialCountry, initialSearch });
 
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -299,6 +300,16 @@ export default function CatalogPage({
     selectedCollections.size,
     selectedCountries.size,
   ]);
+
+  useEffect(() => {
+    if (!hasSavedState) {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      const raf = requestAnimationFrame(() => {
+        window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      });
+      return () => cancelAnimationFrame(raf);
+    }
+  }, [hasSavedState, initialCountry, initialCollection, initialSearch]);
 
   useEffect(() => {
     if (!loading && products.length > 0) {

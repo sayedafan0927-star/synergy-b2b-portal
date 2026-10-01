@@ -100,6 +100,7 @@ export function useCatalogStatePersistence(options: UseCatalogStatePersistenceOp
   // Retrieve saved snapshot if not an explicit navigation link (such as banner click or search redirect)
   const savedState = useMemo(() => {
     if (initialCollection || initialCountry || initialSearch) {
+      clearCatalogState();
       return null;
     }
     return readCatalogState();
