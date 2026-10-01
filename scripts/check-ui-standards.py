@@ -125,6 +125,30 @@ def check_touch_blockers(filepath: Path) -> list:
             errors.append(f"[{filepath.name}:{line_idx}] Button has 'opacity-0' without 'pointer-events-none' or 'hidden', which intercepts mobile taps!")
     return errors
 
+def check_blend_mode_isolation(filepath: Path) -> list:
+    """Anti-Black-Box Invariant: If a component uses mix-blend-screen, verify that neither it nor its parent has isolation:isolate or contain:paint."""
+    errors = []
+    text = filepath.read_text(encoding="utf-8")
+    if "mix-blend-screen" in text:
+        for idx, line in enumerate(text.splitlines(), start=1):
+            if ("isolation:isolate" in line or "contain:paint" in line) and ("aspect-square" in line or "video" in line):
+                errors.append(f"[{filepath.name}:{idx}] Anti-Black-Box Invariant: 'isolation:isolate' or 'contain:paint' detected on container with mix-blend-mode! This creates a black box around transparent elements.")
+    return errors
+
+def check_video_attributes(filepath: Path) -> list:
+    """Video Standard: All <video> elements must specify playsInline and muted for mobile autoplay & performance."""
+    errors = []
+    text = filepath.read_text(encoding="utf-8")
+    if "<video" in text:
+        for idx, line in enumerate(text.splitlines(), start=1):
+            if "<video" in line:
+                block = "\n".join(text.splitlines()[idx-1:idx+25])
+                if "playsInline" not in block and "playsinline" not in block:
+                    errors.append(f"[{filepath.name}:{idx}] Video Standard: <video> missing required 'playsInline' attribute for mobile.")
+                if "muted" not in block:
+                    errors.append(f"[{filepath.name}:{idx}] Video Standard: <video> missing required 'muted' attribute for silent autoplay.")
+    return errors
+
 def main():
     print("=" * 60)
     print(" Synergy B2B Portal — UI/UX & Responsive Standards Check")
@@ -138,6 +162,10 @@ def main():
         SRC / "pages" / "HomePage.tsx",
         SRC / "pages" / "ProfilePage.tsx",
         SRC / "components" / "ProductCard.tsx",
+        SRC / "components" / "Header.tsx",
+        SRC / "components" / "home" / "HeroBannerMedia.tsx",
+        SRC / "components" / "home" / "B2BPartnerModal.tsx",
+        SRC / "components" / "layout" / "CurtainNavigationDrawer.tsx",
         *(SRC / "components" / "admin").rglob("*.tsx"),
         *(SRC / "components" / "profile").rglob("*.tsx"),
         *(SRC / "components" / "supplier").rglob("*.tsx"),
@@ -153,6 +181,8 @@ def main():
         all_errors.extend(check_jsx_balance(f))
         all_errors.extend(check_image_proportions(f))
         all_errors.extend(check_touch_blockers(f))
+        all_errors.extend(check_blend_mode_isolation(f))
+        all_errors.extend(check_video_attributes(f))
         
     print("-" * 60)
     if all_errors:
@@ -165,6 +195,8 @@ def main():
         print("   - All JSX tags properly nested and closed")
         print("   - No cropped carpet images (all use object-contain)")
         print("   - No invisible buttons intercepting mobile touches")
+        print("   - Anti-Black-Box Invariant: mix-blend-mode elements free from isolation wrappers")
+        print("   - Video Standard: All <video> elements configured with playsInline and muted")
         sys.exit(0)
 
 if __name__ == "__main__":
