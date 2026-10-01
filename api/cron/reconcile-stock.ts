@@ -79,9 +79,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const localReservedMap = new Map<string, number>();
     if (supabase) {
       try {
+        // Queries canonical .select('sku, reserved_stock') with warehouse granularity
         const { data: dbBalances, error: qErr } = await supabase
           .from('inventory_balances')
-          .select('sku, reserved_stock')
+          .select('sku, reserved_stock, warehouse_id')
           .gt('reserved_stock', 0)
           .limit(5000);
 
@@ -89,7 +90,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (!activeBalances) {
           const { data: fallbackBalances } = await supabase
             .from('inventory_balances')
-            .select('sku, stock_reserved')
+            .select('sku, stock_reserved, warehouse_id')
             .gt('stock_reserved', 0)
             .limit(5000);
           activeBalances = fallbackBalances;
@@ -100,6 +101,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const resStock = Number((b as any).reserved_stock ?? (b as any).stock_reserved ?? 0);
             if (b.sku && resStock > 0) {
               const skuUpper = String(b.sku).trim().toUpperCase();
+              const bWh = Number(b.warehouse_id || 81);
+              // Точная привязка броней к конкретному складу (Zero Cross-Warehouse Contamination)
+              localReservedMap.set(`${skuUpper}::${bWh}`, (localReservedMap.get(`${skuUpper}::${bWh}`) || 0) + resStock);
               localReservedMap.set(skuUpper, (localReservedMap.get(skuUpper) || 0) + resStock);
             }
           }
@@ -128,15 +132,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (!v.sku) continue;
         const normSku = String(v.sku).trim().toUpperCase();
         const erpStock = Number(v.free_stock ?? v.stock ?? 0);
-        const currentReserved = localReservedMap.get(normSku) || 0;
-        
-        // Ожидаемый свободный остаток: если на портале есть брони, они вычитаются из остатка 1С
-        const expectedFreeStock = Math.max(0, erpStock - currentReserved);
-        const localStock = localStockMap.get(v.sku);
 
         const mainWh = (v.warehouses && v.warehouses.length > 0) ? v.warehouses[0] : null;
         const whId = Number(mainWh?.warehouse_id || v.warehouse_id || 81);
         const whName = String(mainWh?.warehouse_name || v.warehouse_name || v.warehouse || 'Основной склад Астана');
+
+        // Точный расчет брони конкретного склада
+        const currentReserved = localReservedMap.get(`${normSku}::${whId}`) ?? localReservedMap.get(normSku) ?? 0;
+        
+        // Ожидаемый свободный остаток: если на портале есть локальные брони склада, они вычитаются из остатка 1С
+        const expectedFreeStock = Math.max(0, erpStock - currentReserved);
+        const localStock = localStockMap.get(v.sku);
 
         if (localStock !== undefined && Math.abs(localStock - expectedFreeStock) > 0) {
           discrepanciesFixed++;

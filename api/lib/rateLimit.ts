@@ -9,15 +9,27 @@ interface RateLimitRecord {
 const rateLimitMap = new Map<string, RateLimitRecord>();
 
 export function getClientIp(req: VercelRequest): string {
+  // 1. Приоритет: защищенные заголовки Edge провайдера (Vercel/Cloudflare), защищенные от клиентской подделки
+  const realIp = req.headers['x-real-ip'];
+  if (realIp) {
+    const rIp = Array.isArray(realIp) ? realIp[0] : realIp;
+    if (rIp && typeof rIp === 'string' && rIp.trim()) return rIp.trim();
+  }
+
+  const vercelIp = req.headers['x-vercel-proxied-for'];
+  if (vercelIp) {
+    const vIp = Array.isArray(vercelIp) ? vercelIp[0] : vercelIp;
+    if (vIp && typeof vIp === 'string' && vIp.trim()) return vIp.trim();
+  }
+
+  // 2. Вторичный источник: x-forwarded-for
   const forwarded = req.headers['x-forwarded-for'];
   if (forwarded) {
     const list = Array.isArray(forwarded) ? forwarded[0] : forwarded;
-    return list.split(',')[0].trim();
+    const client = list.split(',')[0].trim();
+    if (client) return client;
   }
-  const realIp = req.headers['x-real-ip'];
-  if (realIp) {
-    return Array.isArray(realIp) ? realIp[0] : realIp;
-  }
+
   return req.socket?.remoteAddress || '127.0.0.1';
 }
 

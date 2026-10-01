@@ -263,8 +263,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const sessionToken = Buffer.from(JSON.stringify(signedTokenPayload)).toString('base64url');
 
-    const dest = redirect_to ? String(redirect_to) : '/profile';
-    const redirectUrl = `${dest}${dest.includes('?') ? '&' : '?'}sso_session=${sessionToken}`;
+    // Anti-Open-Redirect Guard: разрешены строго внутренние относительные пути (/profile, /catalog и т.д.)
+    let safeDest = '/profile';
+    if (redirect_to && typeof redirect_to === 'string') {
+      const trimmedDest = redirect_to.trim();
+      // Запрещаем протоколы (http:, https:), protocol-relative URL (//evil.com) и обратные слэши
+      if (trimmedDest.startsWith('/') && !trimmedDest.startsWith('//') && !trimmedDest.includes('\\') && !/^\/[a-z0-9]+:/i.test(trimmedDest)) {
+        safeDest = trimmedDest;
+      }
+    }
+    const redirectUrl = `${safeDest}${safeDest.includes('?') ? '&' : '?'}sso_session=${sessionToken}`;
 
     return res.redirect(302, redirectUrl);
   } catch (err: any) {

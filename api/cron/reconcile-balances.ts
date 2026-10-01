@@ -41,13 +41,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const startTime = Date.now();
 
   try {
-    // 1. Извлекаем список активных B2B-контрагентов с partner_id
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit || '50'), 10) || 50, 1), 250);
+    const offset = Math.max(parseInt(String(req.query.offset || '0'), 10) || 0, 0);
+
+    // 1. Извлекаем список активных B2B-контрагентов с partner_id с пагинацией
     const { data: clients, error: clientsErr } = await supabase
       .from('profiles')
       .select('id, partner_id, full_name, company_name, phone, debt_usd, credit_limit_usd, is_blocked_for_shipment')
       .not('partner_id', 'is', null)
       .eq('role', 'client')
-      .limit(250);
+      .range(offset, offset + limit - 1);
 
     if (clientsErr) {
       throw new Error(`Failed to fetch client profiles: ${clientsErr.message}`);
@@ -186,6 +189,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // 4. Резервный режим поштучных запросов (если батч-эндпоинт недоступен)
     if (!bulkSucceeded) {
       for (const client of clients) {
+        if (Date.now() - startTime > 45000) {
+          console.warn('[Reconciliation] Time budget exceeded (45s), aborting remaining per-client reconciliations.');
+          break;
+        }
         checkedCount++;
         const partnerId = String(client.partner_id);
 

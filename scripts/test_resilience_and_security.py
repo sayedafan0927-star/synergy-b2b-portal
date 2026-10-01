@@ -1680,7 +1680,29 @@ with open(os.path.join(ROOT_DIR, "api", "approvals", "action.ts"), "r", encoding
 test_assert(act_code.find("release_order_reservations") < act_code.find("reservations_released: !isApprove ? true : undefined"), "action.ts releases order reservations BEFORE setting reservations_released flag on reject")
 
 # ------------------------------------------------------------------------------
-# 47. Summary Report
+# 47. Stage 23: Phase 1 Stabilization — Open Redirect, Rate Limiter, Stock Recon & Balance Budgeting
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 47. STAGE 23: PHASE 1 STABILIZATION & RESILIENCE ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "api", "auth", "erp-sso.ts"), "r", encoding="utf-8") as fp:
+    sso_code = fp.read()
+test_assert("trimmedDest.startsWith('/')" in sso_code and "trimmedDest.startsWith('//')" in sso_code, "erp-sso.ts prevents open redirect and SSO JWT theft by sanitizing target URL")
+
+with open(os.path.join(ROOT_DIR, "api", "lib", "rateLimit.ts"), "r", encoding="utf-8") as fp:
+    rl_code = fp.read()
+test_assert("x-real-ip" in rl_code and "x-vercel-proxied-for" in rl_code, "rateLimit.ts prioritizes verified platform headers (x-real-ip, x-vercel-proxied-for) to prevent spoofing")
+
+with open(os.path.join(ROOT_DIR, "api", "cron", "reconcile-stock.ts"), "r", encoding="utf-8") as fp:
+    rs_code = fp.read()
+test_assert("${skuUpper}::${bWh}" in rs_code, "reconcile-stock.ts uses warehouse-granular composite key for reservation tracking")
+
+with open(os.path.join(ROOT_DIR, "api", "cron", "reconcile-balances.ts"), "r", encoding="utf-8") as fp:
+    rb_code = fp.read()
+test_assert("req.query.limit" in rb_code and "req.query.offset" in rb_code, "reconcile-balances.ts supports paginated chunks via query limit and offset")
+test_assert("Date.now() - startTime > 45000" in rb_code, "reconcile-balances.ts implements 45s execution time budget to prevent Vercel gateway timeout")
+
+# ------------------------------------------------------------------------------
+# 48. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests
