@@ -365,6 +365,10 @@ with open(catalog_page_path, "r", encoding="utf-8") as fp:
 if os.path.exists(catalog_drawer_path):
     with open(catalog_drawer_path, "r", encoding="utf-8") as fp:
         catalog_code += fp.read()
+catalog_filter_content_path = os.path.join(ROOT_DIR, "src", "components", "catalog", "CatalogFilterContent.tsx")
+if os.path.exists(catalog_filter_content_path):
+    with open(catalog_filter_content_path, "r", encoding="utf-8") as fp:
+        catalog_code += fp.read()
 catalog_search_norm_path = os.path.join(ROOT_DIR, "src", "lib", "searchNormalization.ts")
 if os.path.exists(catalog_search_norm_path):
     with open(catalog_search_norm_path, "r", encoding="utf-8") as fp:

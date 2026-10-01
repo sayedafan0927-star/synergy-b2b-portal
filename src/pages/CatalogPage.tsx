@@ -18,7 +18,10 @@ import { useDisplaySettings } from '@/hooks/useDisplaySettings';
 import { filterWarehousesForClient, isProductInStockForUser, getClientWarehouseSettings } from '@/lib/warehouseVisibility';
 import {
   FilterDrawer,
+  CatalogFilterSidebar,
   CatalogStockTable,
+  CatalogLoadingSkeleton,
+  CatalogLoadError,
   StockReservationsModal,
   ActiveFilterChips,
   useCatalogStatePersistence,
@@ -342,51 +345,32 @@ export default function CatalogPage({
     return () => obs.disconnect();
   }, [hasMore]);
 
-  if (loading) {
-    return (
-      <section className="min-h-screen bg-slate-50 pt-20 pb-24 lg:pb-8">
-        <div className="container-w">
-          <div className="mb-8">
-            <div className="skeleton h-8 w-64 mb-3" />
-            <div className="skeleton h-4 w-96 max-w-full" />
-          </div>
-          <div className="mb-6 flex gap-3">
-            <div className="skeleton h-11 w-28" />
-            <div className="skeleton h-11 w-40" />
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 lg:gap-6">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="card overflow-hidden">
-                <div className="skeleton aspect-[4/3] rounded-none" />
-                <div className="p-3 sm:p-4 space-y-2">
-                  <div className="skeleton h-3 w-full" />
-                  <div className="skeleton h-3 w-2/3" />
-                  <div className="skeleton h-4 w-20 mt-2" />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-    );
-  }
+  if (loading) return <CatalogLoadingSkeleton />;
+  if (loadError) return <CatalogLoadError />;
 
-  if (loadError) {
-    return (
-      <section className="min-h-screen bg-slate-50 pt-20 pb-24 lg:pb-8 flex items-center justify-center">
-        <div className="text-center max-w-md px-4">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50 mb-5 mx-auto">
-            <X className="h-7 w-7 text-red-500" />
-          </div>
-          <h3 className="text-lg font-semibold text-slate-800 mb-2">Не удалось загрузить каталог</h3>
-          <p className="text-sm text-slate-500 mb-5">Проверьте подключение к интернету и попробуйте снова</p>
-          <button type="button" onClick={() => window.location.reload()} className="btn-primary cursor-pointer">
-            Повторить
-          </button>
-        </div>
-      </section>
-    );
-  }
+  const filterProps = {
+    searchQuery,
+    setSearchQuery,
+    selectedCollections,
+    toggleCollection: (v: string) => setSelectedCollections(s => toggle(s, v)),
+    selectedManufacturers,
+    toggleManufacturer: (v: string) => setSelectedManufacturers(s => toggle(s, v)),
+    selectedCountries,
+    toggleCountry: (v: string) => setSelectedCountries(s => toggle(s, v)),
+    selectedWarehouses,
+    toggleWarehouse: (v: string) => setSelectedWarehouses(s => toggle(s, v)),
+    selectedSizes,
+    toggleSize: (v: string) => setSelectedSizes(s => toggle(s, v)),
+    selectedClusters,
+    toggleCluster: (v: string) => setSelectedClusters(s => toggle(s, v)),
+    activeFilterCount,
+    resetFilters,
+    allCollections,
+    allManufacturers,
+    allCountries,
+    allWarehouses,
+    allSizes,
+  };
 
   return (
     <DecklePaperWrapper>
@@ -497,11 +481,15 @@ export default function CatalogPage({
             </div>
             <button
               type="button"
-              onClick={() => setDrawerOpen(true)}
-              className="relative flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 hover:border-slate-300 shrink-0 cursor-pointer shadow-2xs"
+              onClick={() => setDrawerOpen(!drawerOpen)}
+              className={`relative flex items-center gap-2 rounded-lg border px-3.5 py-2.5 text-sm font-medium transition-colors shrink-0 cursor-pointer shadow-2xs ${
+                drawerOpen
+                  ? 'border-brand-600 bg-brand-50 text-brand-700 font-semibold'
+                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300'
+              }`}
             >
               <SlidersHorizontal className="h-4 w-4 text-slate-600" />
-              <span>Фильтр</span>
+              <span>{drawerOpen ? 'Свернуть фильтры' : 'Фильтр'}</span>
               {activeFilterCount > 0 && (
                 <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-700 px-1 text-[10px] font-bold text-white">
                   {activeFilterCount}
@@ -569,75 +557,67 @@ export default function CatalogPage({
           </div>
         </div>
 
-        {filteredProducts.length > 0 ? (
-          viewMode === 'grid' ? (
-            <>
-              <div className="relative">
-                <CatalogGridPetroglyphs />
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5 gap-4 lg:gap-6">
-                  {visibleProducts.map(p => (
-                    <ProductCard key={p.id} product={p} onNavigate={handleProductNavigate} />
-                  ))}
-                </div>
-              </div>
-              {hasMore && (
-                <div className="mt-8 flex flex-col items-center gap-3">
-                  <div ref={sentinelRef} className="h-1" />
-                  <button
-                    type="button"
-                    onClick={() => setVisibleCount(c => c + 12)}
-                    className="btn-secondary cursor-pointer"
-                  >
-                    Показать ещё ({filteredProducts.length - visibleCount})
-                  </button>
-                </div>
-              )}
-            </>
-          ) : (
-            <CatalogStockTable
-              filteredProducts={filteredProducts}
-              selectedWarehouse={stockWarehouse}
-              onNavigate={handleProductNavigate}
-            />
-          )
-        ) : (
-          <div className="flex flex-col items-center justify-center py-24 text-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 mb-5">
-              <SlidersHorizontal className="h-7 w-7 text-slate-400" />
-            </div>
-            <h3 className="text-lg font-semibold text-slate-800 mb-2">Товары не найдены</h3>
-            <p className="text-sm text-slate-500 max-w-sm">Попробуйте изменить параметры поиска или сбросить фильтры</p>
-            <button type="button" onClick={resetFilters} className="btn-secondary mt-5 cursor-pointer">
-              Сбросить фильтры
-            </button>
-          </div>
-        )}
+        <div className="flex gap-6 items-start">
+          <CatalogFilterSidebar
+            open={drawerOpen}
+            onClose={() => setDrawerOpen(false)}
+            {...filterProps}
+          />
 
-      <FilterDrawer
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-        searchQuery={searchQuery}
-        setSearchQuery={setSearchQuery}
-        selectedCollections={selectedCollections}
-        toggleCollection={v => setSelectedCollections(s => toggle(s, v))}
-        selectedManufacturers={selectedManufacturers}
-        toggleManufacturer={v => setSelectedManufacturers(s => toggle(s, v))}
-        selectedCountries={selectedCountries}
-        toggleCountry={v => setSelectedCountries(s => toggle(s, v))}
-        selectedWarehouses={selectedWarehouses}
-        toggleWarehouse={v => setSelectedWarehouses(s => toggle(s, v))}
-        selectedSizes={selectedSizes}
-        toggleSize={v => setSelectedSizes(s => toggle(s, v))}
-        selectedClusters={selectedClusters}
-        toggleCluster={v => setSelectedClusters(s => toggle(s, v))}
-        activeFilterCount={activeFilterCount}
-        resetFilters={resetFilters}
-        allCollections={allCollections}
-        allManufacturers={allManufacturers}
-        allCountries={allCountries}
-        allWarehouses={allWarehouses}
-        allSizes={allSizes}
-      />
+          <div className="flex-1 min-w-0 w-full">
+            {filteredProducts.length > 0 ? (
+              viewMode === 'grid' ? (
+                <>
+                  <div className="relative">
+                    <CatalogGridPetroglyphs />
+                    <div className={`grid grid-cols-2 md:grid-cols-3 ${
+                      drawerOpen ? 'lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-4' : 'lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-5'
+                    } gap-4 lg:gap-6`}>
+                      {visibleProducts.map(p => (
+                        <ProductCard key={p.id} product={p} onNavigate={handleProductNavigate} />
+                      ))}
+                    </div>
+                  </div>
+                  {hasMore && (
+                    <div className="mt-8 flex flex-col items-center gap-3">
+                      <div ref={sentinelRef} className="h-1" />
+                      <button
+                        type="button"
+                        onClick={() => setVisibleCount(c => c + 12)}
+                        className="btn-secondary cursor-pointer"
+                      >
+                        Показать ещё ({filteredProducts.length - visibleCount})
+                      </button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <CatalogStockTable
+                  filteredProducts={filteredProducts}
+                  selectedWarehouse={stockWarehouse}
+                  onNavigate={handleProductNavigate}
+                />
+              )
+            ) : (
+              <div className="flex flex-col items-center justify-center py-24 text-center">
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 mb-5">
+                  <SlidersHorizontal className="h-7 w-7 text-slate-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-slate-800 mb-2">Товары не найдены</h3>
+                <p className="text-sm text-slate-500 max-w-sm">Попробуйте изменить параметры поиска или сбросить фильтры</p>
+                <button type="button" onClick={resetFilters} className="btn-secondary mt-5 cursor-pointer">
+                  Сбросить фильтры
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <FilterDrawer
+          open={drawerOpen}
+          onClose={() => setDrawerOpen(false)}
+          {...filterProps}
+        />
 
       {canViewStockSummary && (
         <StockReservationsModal

@@ -1,5 +1,8 @@
 export { FilterDrawer, FilterSection, CheckItem } from './FilterDrawer';
+export { CatalogFilterSidebar } from './CatalogFilterSidebar';
+export { CatalogFilterContent } from './CatalogFilterContent';
 export { CatalogStockTable } from './CatalogStockTable';
+export { CatalogLoadingSkeleton, CatalogLoadError } from './CatalogStateFeedback';
 export { StockReservationsModal } from './StockReservationsModal';
 export { ActiveFilterChips } from './ActiveFilterChips';
 export {

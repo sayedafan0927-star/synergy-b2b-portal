@@ -171,11 +171,11 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
       </svg>
 
       <div className="container-w relative" style={{ zIndex: 10 }}>
-        <div className={`grid grid-cols-[1fr_auto_1fr] items-center w-full gap-2 transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
-          scrolled ? 'h-14 sm:h-16' : 'h-16 sm:h-18'
+        <div className={`grid grid-cols-[1fr_auto_1fr] items-end pb-2 sm:pb-2.5 w-full gap-2 transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+          scrolled ? 'h-14 sm:h-16' : 'h-18 sm:h-20'
         }`}>
           {/* Left Column (Desktop Navigation Links) */}
-          <nav className="hidden lg:flex items-center gap-1.5 justify-self-start">
+          <nav className="hidden lg:flex items-center h-9 gap-1.5 justify-self-start">
             {navLinks.map(({ label, page }) => (
               <button
                 key={page}
@@ -186,7 +186,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
                 onTouchStart={() => {
                   if (page === 'catalog') import('@/pages/CatalogPage');
                 }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wider transition-colors duration-200 cursor-pointer ${
+                className={`h-9 px-3 flex items-center rounded-lg text-xs font-semibold uppercase tracking-wider transition-colors duration-200 cursor-pointer ${
                   currentPage === page
                     ? 'text-brand-700 bg-brand-50 font-bold shadow-2xs'
                     : 'text-slate-700 hover:text-brand-700 hover:bg-slate-100/70'
@@ -197,7 +197,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
             ))}
           </nav>
           {/* Left Column Mobile Controls (Variant 1: Symmetric Search) */}
-          <div className="lg:hidden justify-self-start flex items-center">
+          <div className="lg:hidden justify-self-start flex items-center h-9">
             <button
               type="button"
               onClick={() => setCommandPaletteOpen(true)}
@@ -213,9 +213,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
           <button
             type="button"
             onClick={() => onNavigate('home')}
-            className={`justify-self-center flex flex-col items-center justify-center cursor-pointer transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] py-1 px-2 sm:px-4 min-w-[110px] sm:min-w-[160px] ${
-              scrolled ? 'translate-y-0 sm:translate-y-1' : 'translate-y-1 sm:translate-y-2'
-            }`}
+            className="justify-self-center flex flex-col items-center justify-end cursor-pointer transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] px-2 sm:px-4 min-w-[110px] sm:min-w-[160px]"
             title="Synergiya Group — Главная"
             aria-label="Главная страница"
           >
@@ -224,26 +222,28 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
               className={`transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] overflow-hidden flex items-center justify-center will-change-[max-height,opacity,transform] ${
                 scrolled 
                   ? 'max-h-0 opacity-0 -translate-y-2 scale-75 mb-0 pointer-events-none' 
-                  : 'max-h-12 sm:max-h-14 opacity-100 translate-y-0 scale-100 mb-0.5 sm:mb-1'
+                  : 'max-h-9 sm:max-h-10 opacity-100 translate-y-0 scale-100 mb-0.5 sm:mb-1'
               }`}
             >
               <img
                 src="/logo-emblem.png"
                 alt="Synergiya Crest"
-                className="h-8 sm:h-10 lg:h-12 w-auto object-contain transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
+                className="h-7 sm:h-8 lg:h-9 w-auto object-contain transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
               />
             </div>
 
-            {/* Brand Wordmark Typography */}
-            <img
-              src="/logo-text.png"
-              alt="Synergiya Group"
-              className="h-4 sm:h-5 lg:h-6 w-auto object-contain transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
-            />
+            {/* Brand Wordmark Typography: Level with left nav links and right buttons */}
+            <div className="h-9 flex items-center justify-center">
+              <img
+                src="/logo-text.png"
+                alt="Synergiya Group"
+                className="h-4 sm:h-5 lg:h-5.5 w-auto object-contain transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
+              />
+            </div>
           </button>
 
           {/* Right Column: Minimalist Controls (Variant 3: Search + Profile + Cart + Menu) */}
-          <div className="justify-self-end flex items-center justify-end gap-1.5 sm:gap-2">
+          <div className="justify-self-end flex items-center justify-end h-9 gap-1.5 sm:gap-2">
             {/* Offline Orders Queue Badge */}
             {offlineCount > 0 && (
               <button

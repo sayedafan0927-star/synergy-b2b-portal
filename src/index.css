@@ -131,14 +131,12 @@
 
   /* Windows D3D11 / Chromium GPU Compositing & Layer Isolation */
   .modal-gpu-card {
-    transform: translate3d(0, 0, 0);
     -webkit-backface-visibility: hidden;
     backface-visibility: hidden;
     will-change: transform, opacity;
   }
 
   .modal-gpu-backdrop {
-    transform: translate3d(0, 0, 0);
     -webkit-backface-visibility: hidden;
     backface-visibility: hidden;
     will-change: opacity;
