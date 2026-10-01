@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '../../lib/logger';
 import { recordAuditLog } from '../../audit/logs';
+import { triggerImmediateOutboxSync } from './orderDispatcher';
 
 export interface CancelOrderOptions {
   req: VercelRequest;
@@ -118,10 +119,15 @@ export async function handleCancelOrder(options: CancelOrderOptions): Promise<vo
     .update({
       status: 'cancelled',
       reservations_released: true,
-      notes: `${comment} [Отменен через B2B-портал: ${nowIso}]`,
+      last_error: erpNotified ? null : 'pending_erp_cancel',
+      notes: `${comment} [Отменен через B2B-портал: ${nowIso}${erpNotified ? ' (ERP подтвержден)' : ' (Ожидает синхронизации отмены с ERP: pending_erp_cancel)'}]`,
       updated_at: nowIso,
     })
     .or(`id.eq.${order.id},parent_order_id.eq.${order.id}`);
+
+  if (!erpNotified) {
+    triggerImmediateOutboxSync(req, correlationId);
+  }
 
   // 7. Оповещение Realtime-канала
   try {

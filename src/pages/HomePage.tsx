@@ -8,6 +8,7 @@ import { useDisplaySettings } from '@/hooks/useDisplaySettings';
 import { isProductInStockForUser } from '@/lib/warehouseVisibility';
 import ProductCard from '@/components/ProductCard';
 import HeroBannerMedia from '@/components/home/HeroBannerMedia';
+import { useSynchronizedCategoryVideos } from '@/hooks/useSynchronizedCategoryVideos';
 
 const advantages = [
   {
@@ -44,6 +45,12 @@ export default function HomePage({
   const isEffectiveAdmin = isAdmin && !isImpersonating;
   const { settings: displaySettings } = useDisplaySettings();
   const hideOutOfStock = displaySettings.hide_out_of_stock_products !== false;
+
+  const {
+    sectionRef: categoriesSectionRef,
+    registerVideoRef,
+    isBreathing,
+  } = useSynchronizedCategoryVideos();
 
   const featuredProducts = useMemo(() => {
     const available = products.filter(p => isProductInStockForUser(p, profile, isEffectiveAdmin, hideOutOfStock));
@@ -172,6 +179,7 @@ export default function HomePage({
 
       {/* ── 2. Categories Section (Dark Slate Stone Texture with Seamless Organic Waves) ── */}
       <section
+        ref={categoriesSectionRef}
         className="relative py-20 lg:py-28 text-white bg-cover bg-center bg-no-repeat"
         style={{
           backgroundImage: `linear-gradient(to bottom, rgba(15,23,42,0.35), rgba(15,23,42,0.15), rgba(15,23,42,0.45)), url('/images/dark_slate_texture.webp')`
@@ -209,13 +217,14 @@ export default function HomePage({
                   }`}>
                     {category.video ? (
                       <video
-                        autoPlay
-                        loop
+                        ref={registerVideoRef(idx)}
                         muted
                         playsInline
                         preload="metadata"
                         poster={category.poster || category.image}
-                        className="h-full w-full object-contain mix-blend-screen transition-transform duration-500 group-hover:scale-105"
+                        className={`h-full w-full object-contain mix-blend-screen transition-all duration-700 group-hover:scale-105 ${
+                          isBreathing ? 'opacity-95' : 'opacity-100'
+                        }`}
                       >
                         <source src={category.video} type="video/mp4" />
                       </video>

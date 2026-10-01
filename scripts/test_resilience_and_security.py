@@ -1879,7 +1879,36 @@ with open(os.path.join(ROOT_DIR, "src", "pages", "CartPage.tsx"), "r", encoding=
 test_assert("if (isAccountant)" in cp_code and "isAccountant={isAccountant}" in cp_code, "CartPage.tsx enforces frontend accountant checkout guard")
 
 # ------------------------------------------------------------------------------
-# 56. Summary Report
+# 56. STAGE 32: PHASE 1 P0 SECURITY & RESILIENCE HARDENING
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}--- 56. STAGE 32: PHASE 1 P0 SECURITY & RESILIENCE HARDENING ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "api", "erp.ts"), "r", encoding="utf-8") as fp:
+    erp_p1 = fp.read()
+test_assert("'reconcile_all_balances'" not in erp_p1.split("const PUBLIC_ACTIONS")[1].split("]);")[0], "api/erp.ts strictly removed reconcile_all_balances from PUBLIC_ACTIONS (Anti-Leak Guard)")
+test_assert("'suppliers'" not in erp_p1.split("const PUBLIC_ACTIONS")[1].split("]);")[0], "api/erp.ts strictly removed suppliers from PUBLIC_ACTIONS")
+test_assert("'reconcile_all_balances'" in erp_p1.split("const ADMIN_ACTIONS")[1].split("]);")[0], "api/erp.ts protects reconcile_all_balances with ADMIN_ACTIONS")
+test_assert("'suppliers'" in erp_p1.split("const STAFF_ACTIONS")[1].split("]);")[0], "api/erp.ts protects suppliers under STAFF_ACTIONS")
+
+with open(os.path.join(ROOT_DIR, "api", "lib", "catalogCache.ts"), "r", encoding="utf-8") as fp:
+    cc_p1 = fp.read()
+test_assert("pendingItems" in cc_p1 and "in_flight_holds" in cc_p1.lower() or "holdQty" in cc_p1, "catalogCache.ts protects in-flight reservations from incoming ERP stock webhooks")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "cancelOrderHandler.ts"), "r", encoding="utf-8") as fp:
+    coh_p1 = fp.read()
+test_assert("pending_erp_cancel" in coh_p1 and "triggerImmediateOutboxSync" in coh_p1, "cancelOrderHandler.ts registers pending_erp_cancel and triggers immediate outbox sync on ERP disconnect")
+
+with open(os.path.join(ROOT_DIR, "api", "outbox", "sync.ts"), "r", encoding="utf-8") as fp:
+    obs_p1 = fp.read()
+test_assert("pending_erp_cancel" in obs_p1 and "update_order_status" in obs_p1, "api/outbox/sync.ts drains pending_erp_cancel orders guaranteeing 1C ERP delivery")
+
+with open(os.path.join(ROOT_DIR, "api", "approvals", "whatsapp.ts"), "r", encoding="utf-8") as fp:
+    wa_p1 = fp.read()
+test_assert("default-approval-secret-key" not in wa_p1, "whatsapp.ts strictly eliminated hardcoded fallback approval secret")
+test_assert("getApprovalSecret" in wa_p1 and "Approval signing key is not configured" in wa_p1, "whatsapp.ts enforces fail-fast error when signing key is missing")
+
+# ------------------------------------------------------------------------------
+# 57. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

@@ -414,6 +414,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
+    // 4. Гарантированный дренаж отмененных заказов (Async Order Cancellation Drain)
+    if (Date.now() - startTime < MAX_EXECUTION_MS) {
+      try {
+        const { data: cancelPending } = await supabase
+          .from('orders')
+          .select('id, order_number, notes')
+          .eq('last_error', 'pending_erp_cancel')
+          .limit(3);
+
+        if (cancelPending && cancelPending.length > 0) {
+          for (const co of cancelPending) {
+            try {
+              const cRes = await fetch(`${TARGET_ERP_URL}?action=update_order_status`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Portal-Key': SERVER_ERP_KEY, 'X-Correlation-ID': correlationId },
+                body: JSON.stringify({ order_id: co.order_number || co.id, status: 'cancelled', comment: 'Асинхронная отмена через Outbox Worker' }),
+              });
+              if (cRes.ok) {
+                await supabase.from('orders').update({
+                  last_error: null,
+                  notes: `${co.notes || ''} [Отмена подтверждена ERP: ${new Date().toISOString()}]`.trim(),
+                  updated_at: new Date().toISOString(),
+                }).eq('id', co.id);
+              }
+            } catch (coErr) {
+              console.warn('[Outbox Sync] Async cancel retry error:', coErr);
+            }
+          }
+        }
+      } catch (cancelErr) {
+        console.warn('[Outbox Sync] Cancel query error:', cancelErr);
+      }
+    }
+
     const succeeded = results.filter(r => r.success).length;
     const failed = results.filter(r => !r.success && !r.dlq).length;
     const dlq = results.filter(r => r.dlq).length;

@@ -43,14 +43,12 @@ const PUBLIC_ACTIONS = new Set([
   'catalog_normalized',
   'catalog_paginated',
   'resolve_catalog_batch',
-  'reconcile_all_balances',
   'product',
   'ping',
   'login',
   'logout',
   'create_lead',
   'notify_dealer_registration',
-  'suppliers',
   'display_settings',
   'request_approval',
   'session_token',
@@ -62,12 +60,14 @@ const ADMIN_ACTIONS = new Set([
   'update_order_status',
   'sync_bundle',
   'financial_balance',
+  'reconcile_all_balances',
 ]);
 
 // Защищенные служебные действия персонала (admin, manager_rm, manager_lm, server)
 const STAFF_ACTIONS = new Set([
   'counterparties',
   'regional_managers',
+  'suppliers',
 ]);
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -264,10 +264,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       if (STAFF_ACTIONS.has(action) && !isStaff && !verifiedAuth.isServer) {
-        return res.status(403).json({
-          success: false,
-          error: 'Forbidden: Доступ к служебным справочникам контрагентов разрешен только сотрудникам компании.',
-        });
+        if (!(action === 'suppliers' && verifiedAuth.role === 'supplier')) {
+          return res.status(403).json({
+            success: false,
+            error: 'Forbidden: Доступ к служебным справочникам разрешен только сотрудникам компании.',
+          });
+        }
       }
 
       // Whitelist для оптовых клиентов: блокируем BOLA и несанкционированные действия

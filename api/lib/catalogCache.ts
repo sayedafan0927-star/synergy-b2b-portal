@@ -228,6 +228,34 @@ export async function patchCachedCatalogStock(
       });
 
       if (validRows.length > 0) {
+        // Защита активных резервов: вычисляем объем броней в неотправленных/неподтвержденных заказах Outbox
+        try {
+          const { data: pendingItems } = await supabase
+            .from('order_items')
+            .select('sku, warehouse_id, quantity, orders!inner(status, reservations_released)')
+            .in('orders.status', ['pending', 'processing_sync'])
+            .or('reservations_released.is.null,reservations_released.eq.false', { foreignTable: 'orders' })
+            .in('sku', skus);
+
+          if (pendingItems && pendingItems.length > 0) {
+            const pendingMap = new Map<string, number>();
+            for (const pi of pendingItems) {
+              const k = `${String(pi.sku).trim().toUpperCase()}::${Number(pi.warehouse_id || 81)}`;
+              pendingMap.set(k, (pendingMap.get(k) || 0) + Number(pi.quantity || 0));
+            }
+            for (const r of validRows) {
+              const k = `${r.sku.toUpperCase()}::${r.warehouse_id}`;
+              const holdQty = pendingMap.get(k) || 0;
+              if (holdQty > 0) {
+                r.free_stock = Math.max(0, r.free_stock - holdQty);
+                r.reserved_stock = Math.max(r.reserved_stock, holdQty);
+              }
+            }
+          }
+        } catch (holdErr) {
+          console.warn('[CatalogCache] In-flight holds protection notice:', holdErr);
+        }
+
         const { error } = await supabase
           .from('inventory_balances')
           .upsert(validRows, { onConflict: 'sku,warehouse_id' });

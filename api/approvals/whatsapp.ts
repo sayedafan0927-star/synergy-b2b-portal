@@ -28,11 +28,23 @@ export interface SendWhatsAppOptions {
   clientName?: string;
 }
 
+function getApprovalSecret(): string {
+  const secret = (
+    SECRET_KEY ||
+    process.env.ERP_API_KEY ||
+    getErpApiKey()
+  )?.trim();
+  if (!secret || secret.length < 16) {
+    throw new Error('Approval signing key is not configured or too short (PORTAL_SECRET_KEY / ERP_API_KEY required).');
+  }
+  return secret;
+}
+
 /**
  * Создание криптографически подписанного токена решения (HMAC SHA-256)
  */
 export function generateSignedDecisionToken(orderId: string | number, decision: 'approve' | 'reject', expMs = 24 * 3600 * 1000): string {
-  const effectiveSecret = SECRET_KEY || process.env.ERP_API_KEY || getErpApiKey() || 'default-approval-secret-key';
+  const effectiveSecret = getApprovalSecret();
   const expiresAt = Date.now() + expMs;
   const rawData = `${orderId}:${decision}:${expiresAt}`;
   const hmac = crypto.createHmac('sha256', effectiveSecret).update(rawData).digest('hex');
@@ -45,7 +57,7 @@ export function generateSignedDecisionToken(orderId: string | number, decision: 
  */
 export function verifySignedDecisionToken(tokenStr: string): { valid: boolean; orderId?: string | number; decision?: 'approve' | 'reject'; error?: string } {
   try {
-    const effectiveSecret = SECRET_KEY || process.env.ERP_API_KEY || getErpApiKey() || 'default-approval-secret-key';
+    const effectiveSecret = getApprovalSecret();
     const rawJson = Buffer.from(tokenStr, 'base64url').toString('utf8');
     const { orderId, decision, expiresAt, hmac } = JSON.parse(rawJson);
 
