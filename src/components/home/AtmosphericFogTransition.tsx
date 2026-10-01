@@ -3,14 +3,20 @@ import { useRef, useEffect } from 'react';
 /**
  * AtmosphericFogTransition
  * Volumetric Fog / Smoke Effect (Atmospheric Scroll / Parallax Fog)
- * Inspired by high-end luxury editorial interfaces (e.g. Voyage UI).
- * - Gentle, ethereal, low-opacity smoke wisps billowing near the bottom rim
- * - Reacts to user scroll velocity and scroll position with subtle vertical parallax
- * - Procedural particle mist with soft blur & organic alpha falloff
- * - Strictly non-intrusive (subtle, atmospheric, doesn't obscure content)
- * - Automatically pauses when out of viewport for peak performance & battery life
+ * Directly inspired by luxury editorial UI (Voyage UI Dribbble reference).
+ * - Rich, clearly visible, ethereal smoke plumes billowing gently near the bottom rim
+ * - Multi-depth volumetric particle system reacting smoothly to scroll velocity
+ * - Cinematic lighting with cool pearl (#E2E8F0) and subtle champagne reflections
+ * - Continuous organic billow physics + dynamic parallax lift
+ * - Zero CPU waste: auto-pauses via IntersectionObserver when off-screen
  */
-export default function AtmosphericFogTransition({ className = '' }: { className?: string }) {
+export default function AtmosphericFogTransition({ 
+  className = '',
+  intensity = 1.0 
+}: { 
+  className?: string;
+  intensity?: number;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -27,7 +33,6 @@ export default function AtmosphericFogTransition({ className = '' }: { className
     let width = 0;
     let height = 0;
 
-    // Handle high-DPI crispness while keeping performance light
     const resize = () => {
       const rect = container.getBoundingClientRect();
       width = rect.width;
@@ -41,17 +46,15 @@ export default function AtmosphericFogTransition({ className = '' }: { className
     resize();
     window.addEventListener('resize', resize, { passive: true });
 
-    // Track scroll for atmospheric parallax drift
     let lastScrollY = window.scrollY;
     let scrollVelocity = 0;
     const onScroll = () => {
       const currentScroll = window.scrollY;
-      scrollVelocity = (currentScroll - lastScrollY) * 0.15;
+      scrollVelocity = (currentScroll - lastScrollY) * 0.22;
       lastScrollY = currentScroll;
     };
     window.addEventListener('scroll', onScroll, { passive: true });
 
-    // Procedural fog particles
     interface FogParticle {
       x: number;
       y: number;
@@ -60,22 +63,24 @@ export default function AtmosphericFogTransition({ className = '' }: { className
       vx: number;
       vy: number;
       phase: number;
+      scale: number;
       hue: number;
     }
 
-    const PARTICLE_COUNT = 18;
+    const PARTICLE_COUNT = 28;
     const particles: FogParticle[] = [];
 
     for (let i = 0; i < PARTICLE_COUNT; i++) {
       particles.push({
         x: Math.random() * (width || 1200),
-        y: (height || 240) * (0.35 + Math.random() * 0.65),
-        radius: 90 + Math.random() * 140,
-        baseAlpha: 0.035 + Math.random() * 0.055, // Delicate, barely noticeable mist
-        vx: (Math.random() - 0.45) * 0.28,
-        vy: -0.05 - Math.random() * 0.08,
+        y: (height || 260) * (0.3 + Math.random() * 0.7),
+        radius: 130 + Math.random() * 170,
+        baseAlpha: (0.16 + Math.random() * 0.18) * intensity, // Rich, clearly visible, cinematic
+        vx: (Math.random() - 0.48) * 0.35,
+        vy: -0.06 - Math.random() * 0.12,
         phase: Math.random() * Math.PI * 2,
-        hue: Math.random() > 0.6 ? 210 : 40, // Cool steel vs gentle warm champagne reflection
+        scale: 0.85 + Math.random() * 0.3,
+        hue: i % 3 === 0 ? 215 : 42, // Pearl slate vs ethereal warm mist
       });
     }
 
@@ -84,56 +89,56 @@ export default function AtmosphericFogTransition({ className = '' }: { className
     const render = () => {
       if (!isVisible) return;
 
-      time += 0.012;
-      // Decay scroll velocity smoothly
-      scrollVelocity *= 0.92;
+      time += 0.015;
+      scrollVelocity *= 0.93;
 
       ctx.clearRect(0, 0, width, height);
 
       for (let i = 0; i < particles.length; i++) {
         const p = particles[i];
 
-        // Organic undulating motion + scroll reaction
-        p.x += p.vx + Math.sin(time + p.phase) * 0.18;
-        p.y += p.vy - scrollVelocity * 0.35;
+        // Volumetric undulating motion + scroll velocity reaction
+        p.x += p.vx + Math.sin(time * 0.9 + p.phase) * 0.25;
+        p.y += p.vy - scrollVelocity * 0.45;
 
         // Wrap around seamlessly
-        if (p.x < -p.radius * 2) p.x = width + p.radius;
-        if (p.x > width + p.radius * 2) p.x = -p.radius;
-        if (p.y < height * 0.1) {
-          p.y = height + p.radius * 0.5;
+        if (p.x < -p.radius * 1.5) p.x = width + p.radius * 1.5;
+        if (p.x > width + p.radius * 1.5) p.x = -p.radius * 1.5;
+        if (p.y < height * 0.05) {
+          p.y = height + p.radius * 0.4;
           p.x = Math.random() * width;
         }
-        if (p.y > height + p.radius) {
-          p.y = height * 0.3;
+        if (p.y > height + p.radius * 0.8) {
+          p.y = height * 0.4;
         }
 
-        // Draw soft radial puff
-        const currentAlpha = p.baseAlpha * (0.85 + Math.sin(time * 0.7 + p.phase) * 0.15);
-        const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.radius);
+        const currentAlpha = p.baseAlpha * (0.8 + Math.sin(time * 0.8 + p.phase) * 0.2);
+        const rad = p.radius * p.scale;
+        const grad = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, rad);
 
-        if (p.hue === 210) {
-          // Cool airy mist
-          grad.addColorStop(0, `rgba(215, 230, 245, ${currentAlpha})`);
-          grad.addColorStop(0.5, `rgba(200, 218, 238, ${currentAlpha * 0.45})`);
-          grad.addColorStop(1, 'rgba(200, 218, 238, 0)');
+        if (p.hue === 215) {
+          // Luminous Pearl / Platinum smoke billow
+          grad.addColorStop(0, `rgba(235, 244, 255, ${currentAlpha})`);
+          grad.addColorStop(0.35, `rgba(210, 230, 252, ${currentAlpha * 0.65})`);
+          grad.addColorStop(0.7, `rgba(180, 210, 245, ${currentAlpha * 0.25})`);
+          grad.addColorStop(1, 'rgba(180, 210, 245, 0)');
         } else {
-          // Warm ethereal champagne mist
-          grad.addColorStop(0, `rgba(245, 240, 228, ${currentAlpha * 0.9})`);
-          grad.addColorStop(0.5, `rgba(235, 228, 212, ${currentAlpha * 0.4})`);
-          grad.addColorStop(1, 'rgba(235, 228, 212, 0)');
+          // Warm champagne ethereal atmospheric wisp
+          grad.addColorStop(0, `rgba(255, 250, 240, ${currentAlpha * 0.95})`);
+          grad.addColorStop(0.4, `rgba(248, 238, 222, ${currentAlpha * 0.6})`);
+          grad.addColorStop(0.75, `rgba(238, 225, 205, ${currentAlpha * 0.22})`);
+          grad.addColorStop(1, 'rgba(238, 225, 205, 0)');
         }
 
         ctx.fillStyle = grad;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, rad, 0, Math.PI * 2);
         ctx.fill();
       }
 
       animId = requestAnimationFrame(render);
     };
 
-    // Pause canvas physics when scrolled away
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
@@ -160,7 +165,7 @@ export default function AtmosphericFogTransition({ className = '' }: { className
       window.removeEventListener('resize', resize);
       window.removeEventListener('scroll', onScroll);
     };
-  }, []);
+  }, [intensity]);
 
   return (
     <div
@@ -168,28 +173,28 @@ export default function AtmosphericFogTransition({ className = '' }: { className
       aria-hidden="true"
       className={`relative w-full overflow-hidden pointer-events-none select-none ${className}`}
     >
-      {/* ── Layer 1: Atmospheric Canvas Particles (Scroll & Drift Physics) ── */}
+      {/* ── Layer 1: Volumetric Canvas Smoke Particles (Parallax Motion) ── */}
       <canvas
         ref={canvasRef}
-        className="absolute inset-0 w-full h-full block transform-gpu pointer-events-none"
+        className="absolute inset-0 w-full h-full block transform-gpu pointer-events-none mix-blend-screen"
       />
 
-      {/* ── Layer 2: Ethereal Ambient Fog Ribbons (Soft Glowing Wisps) ── */}
+      {/* ── Layer 2: Ethereal Billowing Smoke Glow Contour ── */}
       <div 
-        className="absolute inset-x-0 bottom-0 h-32 sm:h-44 pointer-events-none opacity-40 mix-blend-screen"
+        className="absolute inset-x-0 bottom-0 h-36 sm:h-52 pointer-events-none mix-blend-screen"
         style={{
-          background: 'radial-gradient(ellipse 85% 70% at 50% 100%, rgba(220, 235, 255, 0.22) 0%, rgba(245, 240, 230, 0.12) 40%, transparent 80%)',
-          filter: 'blur(20px)',
+          background: 'radial-gradient(ellipse 95% 85% at 50% 100%, rgba(225, 240, 255, 0.42) 0%, rgba(250, 245, 235, 0.28) 45%, transparent 85%)',
+          filter: 'blur(28px)',
         }}
       />
 
-      {/* ── Layer 3: Ultra-subtle Ground Smoke Contour ── */}
+      {/* ── Layer 3: Dynamic Low-Lying Atmospheric Mist Wave ── */}
       <div 
-        className="absolute inset-x-0 bottom-0 h-16 sm:h-24 pointer-events-none opacity-30"
+        className="absolute inset-x-0 bottom-0 h-20 sm:h-32 pointer-events-none"
         style={{
-          background: 'linear-gradient(to top, rgba(255, 255, 255, 0.35) 0%, transparent 100%)',
-          maskImage: 'radial-gradient(ellipse 90% 100% at 50% 100%, black 30%, transparent 100%)',
-          WebkitMaskImage: 'radial-gradient(ellipse 90% 100% at 50% 100%, black 30%, transparent 100%)',
+          background: 'linear-gradient(to top, rgba(255, 255, 255, 0.5) 0%, rgba(230, 240, 255, 0.2) 60%, transparent 100%)',
+          maskImage: 'radial-gradient(ellipse 95% 100% at 50% 100%, black 50%, transparent 100%)',
+          WebkitMaskImage: 'radial-gradient(ellipse 95% 100% at 50% 100%, black 50%, transparent 100%)',
         }}
       />
     </div>

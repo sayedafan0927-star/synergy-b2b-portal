@@ -1,28 +1,28 @@
-import { useState, useRef, type ReactNode, type PointerEvent } from 'react';
+import { useState, useRef, type ReactNode, type MouseEvent } from 'react';
 
 interface TiltCardProps {
   children: ReactNode;
-  maxTilt?: number; // max tilt in degrees (default 10)
-  perspective?: number; // perspective in px (default 1000)
-  scale?: number; // scale on hover (default 1.02)
-  glare?: boolean; // whether to show specular light glare
+  maxTilt?: number; // max tilt angle in degrees (default 15)
+  perspective?: number; // 3D perspective in px (default 1000)
+  scale?: number; // scale on hover (default 1.035)
+  glare?: boolean; // dynamic specular sheen glare
   className?: string;
 }
 
 /**
  * TiltCard
- * High-performance 3D Tilt physical depth effect (inspired by Tilt.js / Apple TV UI).
- * - Reacts dynamically to mouse coordinates with physical angular rotation.
- * - Hardware-accelerated GPU transforms with preserve-3d context.
- * - Specular dynamic light sheen reflecting across the surface.
- * - Graceful spring return on pointer leave.
- * - Passive on touch to maintain fluid native scrolling.
+ * High-precision 3D physical depth tilt effect (Tilt.js / Apple TV parity).
+ * - Real-time zero-latency angular deflection mapped to cursor position.
+ * - Dynamic 3D directional cast shadow moving opposite to tilt angle.
+ * - Physical specular highlight sheen tracking cursor coordinates.
+ * - Gentle spring dampening on cursor leave.
+ * - Touch-safe: passive on touch devices to preserve fluid native scrolling.
  */
 export default function TiltCard({
   children,
-  maxTilt = 10,
+  maxTilt = 15,
   perspective = 1000,
-  scale = 1.02,
+  scale = 1.035,
   glare = true,
   className = '',
 }: TiltCardProps) {
@@ -36,10 +36,7 @@ export default function TiltCard({
   });
   const [isHovered, setIsHovered] = useState(false);
 
-  const handlePointerMove = (e: PointerEvent<HTMLDivElement>) => {
-    // Only apply 3D tilt on mouse pointers (not touch/pen) to preserve frictionless scrolling
-    if (e.pointerType === 'touch') return;
-
+  const handleMouseMove = (e: MouseEvent<HTMLDivElement>) => {
     const el = cardRef.current;
     if (!el) return;
 
@@ -51,53 +48,58 @@ export default function TiltCard({
     const normX = mouseX / rect.width - 0.5;
     const normY = mouseY / rect.height - 0.5;
 
-    // Target rotation angles (deg)
-    const rotateY = normX * maxTilt;
-    const rotateX = -normY * maxTilt;
+    // Calculate 3D rotation angles
+    const rotateY = Number((normX * maxTilt).toFixed(2));
+    const rotateX = Number((-normY * maxTilt).toFixed(2));
 
     setTilt({
       x: rotateX,
       y: rotateY,
-      glareX: (mouseX / rect.width) * 100,
-      glareY: (mouseY / rect.height) * 100,
-      opacity: 0.28,
+      glareX: Math.round((mouseX / rect.width) * 100),
+      glareY: Math.round((mouseY / rect.height) * 100),
+      opacity: 0.38,
     });
+    if (!isHovered) setIsHovered(true);
   };
 
-  const handlePointerEnter = (e: PointerEvent<HTMLDivElement>) => {
-    if (e.pointerType === 'touch') return;
+  const handleMouseEnter = () => {
     setIsHovered(true);
   };
 
-  const handlePointerLeave = () => {
+  const handleMouseLeave = () => {
     setIsHovered(false);
-    setTilt(prev => ({
-      ...prev,
+    setTilt({
       x: 0,
       y: 0,
+      glareX: 50,
+      glareY: 50,
       opacity: 0,
-    }));
+    });
   };
 
   return (
     <div
       ref={cardRef}
-      onPointerMove={handlePointerMove}
-      onPointerEnter={handlePointerEnter}
-      onPointerLeave={handlePointerLeave}
-      className={`relative transform-gpu will-change-transform ${className}`}
+      onMouseMove={handleMouseMove}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      className={`relative transform-gpu ${className}`}
       style={{
         perspective: `${perspective}px`,
         transformStyle: 'preserve-3d',
       }}
     >
       <div
-        className="w-full h-full transition-transform ease-out will-change-transform rounded-2xl"
+        className="w-full h-full rounded-2xl will-change-transform"
         style={{
           transform: isHovered
-            ? `rotateX(${tilt.x.toFixed(2)}deg) rotateY(${tilt.y.toFixed(2)}deg) scale3d(${scale}, ${scale}, ${scale})`
-            : 'rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1)',
-          transitionDuration: isHovered ? '90ms' : '500ms',
+            ? `rotateX(${tilt.x}deg) rotateY(${tilt.y}deg) scale3d(${scale}, ${scale}, ${scale}) translateZ(14px)`
+            : 'rotateX(0deg) rotateY(0deg) scale3d(1, 1, 1) translateZ(0px)',
+          boxShadow: isHovered
+            ? `${-tilt.y * 1.8}px ${tilt.x * 1.8 + 14}px 34px -4px rgba(0, 0, 0, 0.22)`
+            : '0 4px 14px rgba(0, 0, 0, 0.06)',
+          transitionProperty: 'transform, box-shadow',
+          transitionDuration: isHovered ? '0ms' : '450ms',
           transitionTimingFunction: isHovered ? 'linear' : 'cubic-bezier(0.16, 1, 0.3, 1)',
           transformStyle: 'preserve-3d',
         }}
@@ -108,10 +110,10 @@ export default function TiltCard({
         {glare && (
           <div
             aria-hidden="true"
-            className="absolute inset-0 rounded-2xl pointer-events-none transition-opacity duration-300 overflow-hidden z-30"
+            className="absolute inset-0 rounded-2xl pointer-events-none transition-opacity duration-200 overflow-hidden z-30"
             style={{
               opacity: tilt.opacity,
-              background: `radial-gradient(circle 320px at ${tilt.glareX}% ${tilt.glareY}%, rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 0.1) 40%, transparent 80%)`,
+              background: `radial-gradient(circle 360px at ${tilt.glareX}% ${tilt.glareY}%, rgba(255, 255, 255, 0.6) 0%, rgba(255, 255, 255, 0.15) 45%, transparent 80%)`,
               mixBlendMode: 'overlay',
             }}
           />

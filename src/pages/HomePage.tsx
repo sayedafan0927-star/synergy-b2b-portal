@@ -11,7 +11,6 @@ import HeroBannerMedia from '@/components/home/HeroBannerMedia';
 import TechnoLuxuryButton from '@/components/home/TechnoLuxuryButton';
 import B2BPartnerCtaSection from '@/components/home/B2BPartnerCtaSection';
 import TiltCard from '@/components/home/TiltCard';
-import AtmosphericFogTransition from '@/components/home/AtmosphericFogTransition';
 import { useSynchronizedCategoryVideos } from '@/hooks/useSynchronizedCategoryVideos';
 
 const advantages = [
@@ -339,9 +338,6 @@ export default function HomePage({
           </div>
         </div>
       </section>
-
-      {/* ── Atmospheric Scroll: Volumetric Fog / Smoke Transition ── */}
-      <AtmosphericFogTransition className="h-28 sm:h-40 -mt-16 sm:-mt-24 relative z-20" />
 
       {/* ── 4. CTA Banner Section (Concept 2: Pure Macro Glassmorphism + Techno-Luxury Button) ── */}
       <B2BPartnerCtaSection onNavigate={(tab) => onNavigate(tab as PageId)} />

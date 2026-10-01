@@ -28,7 +28,6 @@ export function CartItemsTable({
   onClearCart,
 }: CartItemsTableProps) {
   const { formatPrice: fmtPrice } = useCurrency();
-  const [mobileCardView, setMobileCardView] = useState(false);
 
   const collections = Array.from(new Set(items.map(it => it.collection))).filter(Boolean);
   const displayedItems = activeCollection ? items.filter(it => it.collection === activeCollection) : items;
@@ -83,26 +82,6 @@ export function CartItemsTable({
         </div>
 
         <div className="flex items-center gap-2 ml-auto">
-          {/* Переключатель вида на мобильных */}
-          <div className="sm:hidden flex items-center border border-slate-200 rounded-md bg-white p-0.5">
-            <button
-              type="button"
-              onClick={() => setMobileCardView(false)}
-              className={`p-1 rounded ${!mobileCardView ? 'bg-slate-100 text-slate-900' : 'text-slate-400'}`}
-              title="Таблица"
-            >
-              <Table className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setMobileCardView(true)}
-              className={`p-1 rounded ${mobileCardView ? 'bg-slate-100 text-slate-900' : 'text-slate-400'}`}
-              title="Карточки"
-            >
-              <LayoutGrid className="h-3.5 w-3.5" />
-            </button>
-          </div>
-
           <button
             type="button"
             onClick={onClearCart}
@@ -114,8 +93,8 @@ export function CartItemsTable({
         </div>
       </div>
 
-      {/* ─── 1. High-Density B2B Data Grid (Desktop & Tablet) ─── */}
-      <div className={`card overflow-hidden border border-slate-200 bg-white shadow-2xs ${mobileCardView ? 'hidden sm:block' : 'block'}`}>
+      {/* ─── 1. High-Density B2B Data Grid (Desktop & Tablet only: hidden on mobile) ─── */}
+      <div className="card overflow-hidden border border-slate-200 bg-white shadow-2xs hidden sm:block">
         <div className="overflow-x-auto max-h-[620px] overflow-y-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead className="sticky top-0 bg-slate-50/95 backdrop-blur-xs border-b border-slate-200 z-10 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
@@ -277,8 +256,8 @@ export function CartItemsTable({
         </div>
       </div>
 
-      {/* ─── 2. Мобильный карточный режим (при включении на смартфонах) ─── */}
-      <div className={`space-y-2.5 ${mobileCardView ? 'block sm:hidden' : 'hidden'}`}>
+      {/* ─── 2. Мобильный карточный режим (адаптировано для смартфонов, 0 гориз. скролла) ─── */}
+      <div className="space-y-3 block sm:hidden">
         {displayedItems.map(item => {
           const key = `${item.productId}-${item.size}-${item.warehouse}`;
           const sqm = calcSqm(item.size, item.quantity);
@@ -289,60 +268,76 @@ export function CartItemsTable({
           return (
             <div
               key={key}
-              className={`card p-3 flex flex-col gap-2.5 ${
+              className={`card p-3.5 flex flex-col gap-3 rounded-xl border border-slate-200 bg-white shadow-xs ${
                 isDepleted ? 'bg-rose-50/70 border-rose-200' : isZeroPrice ? 'bg-amber-50/60 border-amber-200' : ''
               }`}
             >
-              <div className="flex items-start gap-2.5">
+              <div className="flex items-start gap-3">
                 <ProductImage
                   src={item.image}
                   alt={item.productName}
                   loading="lazy"
                   decoding="async"
-                  width={48}
-                  className="h-12 w-12 shrink-0 rounded-md object-contain bg-slate-50 border border-slate-200 p-0.5"
+                  width={64}
+                  className="h-16 w-16 shrink-0 rounded-lg object-contain bg-slate-50 border border-slate-200 p-1"
                 />
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-slate-900 truncate">{item.productName}</p>
-                  <p className="text-[10px] text-slate-500 font-mono mt-0.5">{item.sku} • {item.warehouse}</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="badge text-[10px] py-0.5">{item.size}</span>
-                    <span className="text-[10.5px] text-slate-600">{fmt2(sqm)} м²</span>
+                  <p className="text-xs sm:text-sm font-bold text-slate-900 leading-snug line-clamp-2">{item.productName}</p>
+                  <p className="text-[11px] text-slate-500 font-mono mt-0.5">{item.sku}</p>
+                  <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                    <span className="badge text-[10px] font-bold py-0.5 px-2 bg-slate-100 text-slate-800">{item.size} ({fmt2(sqm)} м²)</span>
+                    <span className="text-[10.5px] px-1.5 py-0.5 rounded bg-brand-50 text-brand-800 font-medium">
+                      {item.warehouse}
+                    </span>
+                    {typeof item.maxStock === 'number' && (
+                      <span className="text-[10px] text-slate-500">
+                        {item.maxStock === 0 ? '❌ Нет в наличии' : `Доступно: ${item.maxStock} шт`}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => onRemoveItem(item.productId, item.size, item.warehouse)}
-                  className="p-1 text-slate-400 hover:text-rose-600"
+                  className="h-8 w-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer shrink-0"
+                  title="Удалить"
+                  aria-label="Удалить товар"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
 
-              <div className="flex items-center justify-between border-t border-slate-100 pt-2 text-xs">
-                <div className="flex items-center rounded-md border border-slate-300 bg-white">
+              <div className="flex items-center justify-between border-t border-slate-100 pt-2.5">
+                <div className="flex items-center rounded-lg border border-slate-300 bg-white shadow-2xs">
                   <button
                     type="button"
                     onClick={() => onUpdateQuantity(item.productId, item.size, item.warehouse, item.quantity - 1)}
                     disabled={item.quantity <= 1 || isDepleted}
-                    className="h-7 w-7 flex items-center justify-center text-slate-600 disabled:opacity-30"
+                    className="h-8 w-8 flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-colors rounded-l-lg"
+                    title="Уменьшить"
+                    aria-label="Уменьшить количество"
                   >
-                    <Minus className="h-3 w-3" />
+                    <Minus className="h-3.5 w-3.5" />
                   </button>
-                  <span className="w-8 text-center font-bold text-xs">{item.quantity}</span>
+                  <span className="w-9 text-center font-bold text-xs text-slate-900">{item.quantity}</span>
                   <button
                     type="button"
                     onClick={() => onUpdateQuantity(item.productId, item.size, item.warehouse, item.quantity + 1)}
                     disabled={isDepleted || (item.maxStock !== undefined && item.quantity >= item.maxStock)}
-                    className="h-7 w-7 flex items-center justify-center text-slate-600 disabled:opacity-30"
+                    className="h-8 w-8 flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-colors rounded-r-lg"
+                    title="Увеличить"
+                    aria-label="Увеличить количество"
                   >
-                    <Plus className="h-3 w-3" />
+                    <Plus className="h-3.5 w-3.5" />
                   </button>
                 </div>
                 <div className="text-right">
-                  <span className="font-extrabold text-brand-700 text-sm">
+                  <div className="text-[11px] text-slate-500">
+                    {fmtPrice(item.price)} / шт
+                  </div>
+                  <div className="font-extrabold text-brand-700 text-sm sm:text-base">
                     {isZeroPrice ? 'Уточняется' : fmtPrice(lineTotal)}
-                  </span>
+                  </div>
                 </div>
               </div>
             </div>
