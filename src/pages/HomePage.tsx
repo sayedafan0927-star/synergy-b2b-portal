@@ -219,13 +219,16 @@ export default function HomePage({
             {categories.map((category, idx) => {
               const isFirst = idx === 0;
               const actualCount = countryCounts[category.name] || category.count || 0;
+              const mediaScale = isFirst
+                ? 'scale-110 sm:scale-115 md:scale-110 lg:scale-115 group-hover:scale-[1.22]'
+                : 'scale-[1.32] sm:scale-[1.35] md:scale-110 lg:scale-115 group-hover:scale-[1.22]';
               return (
                 <button
                   key={category.id}
                   type="button"
                   onClick={() => onNavigate('catalog', category.id)}
-                  className={`group flex flex-col items-center rounded-2xl cursor-pointer transition-all duration-300 text-center bg-transparent border border-slate-500/35 hover:border-slate-300/70 p-3 md:p-4 shadow-lg shadow-black/20 hover:shadow-slate-400/10 ${
-                    isFirst ? 'col-span-2 md:col-span-1' : 'col-span-1'
+                  className={`group flex flex-col items-center rounded-2xl cursor-pointer transition-all duration-300 text-center bg-transparent border border-slate-500/35 hover:border-slate-300/70 shadow-lg shadow-black/20 hover:shadow-slate-400/10 ${
+                    isFirst ? 'col-span-2 md:col-span-1 p-3 md:p-4' : 'col-span-1 p-2 sm:p-3 md:p-4'
                   }`}
                 >
                   {/* Clean Frameless Symbol - Sits directly on stone background with zero box fill */}
@@ -244,7 +247,7 @@ export default function HomePage({
                         preload="auto"
                         poster={category.poster || category.image}
                         style={{ willChange: 'transform' }}
-                        className="h-full w-full object-contain mix-blend-screen transition-transform duration-500 scale-110 sm:scale-115 md:scale-110 lg:scale-115 group-hover:scale-[1.22]"
+                        className={`h-full w-full object-contain mix-blend-screen transition-transform duration-500 ${mediaScale}`}
                       >
                         <source src={category.video} type="video/mp4" />
                       </video>
@@ -253,7 +256,7 @@ export default function HomePage({
                         src={category.image}
                         alt={category.name}
                         loading="lazy"
-                        className="h-full w-full object-contain mix-blend-screen transition-transform duration-500 scale-110 sm:scale-115 md:scale-110 lg:scale-115 group-hover:scale-[1.22]"
+                        className={`h-full w-full object-contain mix-blend-screen transition-transform duration-500 ${mediaScale}`}
                       />
                     )}
                   </div>
