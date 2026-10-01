@@ -223,7 +223,7 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
         - Pure Cinema: Video plays completely clean without obstructing watermarks.
         - Strict GPU containment & isolation to eliminate reflows and battery drain.
       */}
-      <div className="relative w-full aspect-[16/9] sm:aspect-auto sm:h-[72vh] lg:h-[82vh] sm:min-h-[480px] max-h-[860px] overflow-hidden bg-slate-950 [contain:paint_layout] [isolation:isolate] transform-gpu">
+      <div className="relative w-full h-[285px] sm:h-[72vh] lg:h-[82vh] sm:min-h-[480px] max-h-[860px] overflow-hidden bg-[#0a0a0c] [contain:paint_layout] [isolation:isolate] transform-gpu">
         <video
           ref={videoRef}
           autoPlay
@@ -241,7 +241,7 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
             transform: 'translateZ(0)',
             backfaceVisibility: 'hidden',
           }}
-          className="w-full h-full object-cover object-center sm:object-[center_right] transform-gpu pointer-events-none"
+          className="w-full h-full object-cover object-[center_36%] sm:object-[center_right] transform-gpu pointer-events-none"
         >
           <source src={VIDEO_MP4} type="video/mp4" />
           <source src={VIDEO_WEBM} type="video/webm" />
