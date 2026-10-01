@@ -164,7 +164,7 @@ export async function validateAndPriceOrder(
   const discountMultiplier = (100 - discountPercent) / 100;
 
   // Загружаем актуальные базовые цены из PostgreSQL (product_variants)
-  let dbVariantsMap = new Map<string, { base_price: number; sku: string; size: string; product_id: string }>();
+  let dbVariantsMap = new Map<string, { base_price: number; sku: string; size: string; product_id: string; item_id?: number }>();
   if (skusToLookup.length > 0 && supabaseAdmin) {
     try {
       const { data: dbVariants } = await supabaseAdmin
@@ -233,6 +233,7 @@ export async function validateAndPriceOrder(
                     sku: v.sku || vSku,
                     size: v.size || p.size || 'Стандарт',
                     product_id: String(p.id || ''),
+                    item_id: Number(v.item_id || v.id) || undefined,
                   });
                 }
               }
@@ -247,6 +248,7 @@ export async function validateAndPriceOrder(
                 sku: p.sku || pSku,
                 size: p.size || 'Стандарт',
                 product_id: String(p.id || ''),
+                item_id: Number(p.item_id || p.id) || undefined,
               });
             }
           }
@@ -316,10 +318,14 @@ export async function validateAndPriceOrder(
     const area = Number(raw.area_sqm) > 0 ? Number(raw.area_sqm) : (width * length > 0 ? Math.round(width * length * 100) / 100 : dims.area);
     const pricePerSqm = area > 0 ? Math.round((authoritativePrice / area) * 100) / 100 : (raw.price_per_sqm || 0);
 
+    const rawNumId = Number(raw.item_id);
+    const resolvedItemId = dbVariant?.item_id ||
+      (!isNaN(rawNumId) && rawNumId > 0 && rawNumId < 10000000 ? rawNumId : undefined);
+
     validatedItems.push({
       sku: raw.sku || dbVariant?.sku || 'UNKNOWN-SKU',
       productId: String(raw.productId || dbVariant?.product_id || raw.item_id || ''),
-      item_id: Number(raw.item_id) > 0 ? Number(raw.item_id) : undefined,
+      item_id: resolvedItemId,
       size,
       quantity: qty,
       price: authoritativePrice,

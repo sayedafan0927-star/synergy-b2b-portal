@@ -300,7 +300,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
       city: selectedCity,
       comment: fullComment,
       items: items.map(item => ({
-        item_id: item.item_id || (Number(item.productId) > 0 ? Number(item.productId) : undefined),
+        item_id: item.item_id,
         productId: item.productId,
         size: item.size,
         sku: item.sku,
