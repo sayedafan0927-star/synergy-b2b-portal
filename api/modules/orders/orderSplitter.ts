@@ -62,6 +62,7 @@ export async function insertSequentialSplitOrders(
   contractId: string | null,
   rawComment: string | undefined,
   authoritativeRate?: number,
+  partnerId?: string | null,
 ): Promise<SplitOrderSummary[]> {
   const createdSplitOrders: SplitOrderSummary[] = [];
   let splitIdx = 1;
@@ -79,6 +80,7 @@ export async function insertSequentialSplitOrders(
         order_number: subDoc,
         user_id: resolvedUserId,
         placed_by_id: callerAuthUserId || resolvedUserId,
+        partner_id: partnerId || null,
         warehouse: wh,
         notes: `[Мультисклад ${splitIdx}/${distinctWarehouses.length}: ${wh}] ${rawComment || ''}`.trim(),
         total_amount: whAmount,

@@ -60,7 +60,10 @@ function verifyErpToken(tokenStr: string, queryParams?: Record<string, any>): { 
     const payloadToSign = `${managerId}:${role}:${timestamp}`;
     const expectedSig = crypto.createHmac('sha256', SECRET_KEY).update(payloadToSign).digest('hex');
 
-    if (tokenStr.toLowerCase() === expectedSig.toLowerCase()) {
+    const sigBuf = Buffer.from(tokenStr.toLowerCase(), 'utf8');
+    const expectedBuf = Buffer.from(expectedSig.toLowerCase(), 'utf8');
+
+    if (sigBuf.length === expectedBuf.length && crypto.timingSafeEqual(sigBuf, expectedBuf)) {
       // Проверка срока жизни ссылки (15 минут по спецификации)
       const nowSec = Math.floor(Date.now() / 1000);
       if (Math.abs(nowSec - timestamp) > 900) {
@@ -90,7 +93,9 @@ function verifyErpToken(tokenStr: string, queryParams?: Record<string, any>): { 
     }
 
     const expectedSig = crypto.createHmac('sha256', SECRET_KEY).update(JSON.stringify(data)).digest('hex');
-    if (sig !== expectedSig) {
+    const sigBuf = Buffer.from(String(sig), 'utf8');
+    const expectedBuf = Buffer.from(expectedSig, 'utf8');
+    if (sigBuf.length !== expectedBuf.length || !crypto.timingSafeEqual(sigBuf, expectedBuf)) {
       return { valid: false, error: 'Подпись токена не совпадает с секретным ключом портала' };
     }
 

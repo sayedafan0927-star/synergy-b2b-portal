@@ -1908,7 +1908,39 @@ test_assert("default-approval-secret-key" not in wa_p1, "whatsapp.ts strictly el
 test_assert("getApprovalSecret" in wa_p1 and "Approval signing key is not configured" in wa_p1, "whatsapp.ts enforces fail-fast error when signing key is missing")
 
 # ------------------------------------------------------------------------------
-# 57. Summary Report
+# 57. Stage 33: Phase 2 B2B Multi-Tenancy Scoping, Tenant RLS & SSO Timing Attack Protection
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 57. STAGE 33: MULTI-TENANCY SCOPING, RLS POLICIES & SSO HARDENING ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "supabase", "migrations", "20261001110000_p1_b2b_multi_tenancy_orders_partner_id.sql"), "r", encoding="utf-8") as fp:
+    mt_sql = fp.read()
+test_assert("idx_orders_partner_id" in mt_sql, "Migration creates idx_orders_partner_id index")
+test_assert("v_partner_id" in mt_sql and "partner_id" in mt_sql, "create_order_atomic sets partner_id for master and split orders")
+test_assert("orders.partner_id = (SELECT partner_id FROM public.profiles WHERE id = auth.uid())" in mt_sql, "orders_select RLS policy allows team visibility within same partner_id tenant")
+test_assert("o.partner_id = (SELECT partner_id FROM public.profiles WHERE id = auth.uid())" in mt_sql, "order_items_select RLS policy enforces tenant-wide order items visibility")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "createOrderHandler.ts"), "r", encoding="utf-8") as fp:
+    coh_p2 = fp.read()
+test_assert("effectivePartnerId" in coh_p2, "createOrderHandler computes and passes effectivePartnerId")
+test_assert("partner_id: effectivePartnerId" in coh_p2, "createOrderHandler passes partner_id in master order payload")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "orderSplitter.ts"), "r", encoding="utf-8") as fp:
+    os_p2 = fp.read()
+test_assert("partnerId?: string | null" in os_p2 and "partner_id: partnerId || null" in os_p2, "orderSplitter.ts propagates partner_id to multi-warehouse suborders")
+
+with open(os.path.join(ROOT_DIR, "api", "auth", "verify-sso.ts"), "r", encoding="utf-8") as fp:
+    vsso_p2 = fp.read()
+test_assert("timingSafeEqual" in vsso_p2, "verify-sso.ts uses timingSafeEqual for constant-time HMAC check against timing attacks")
+test_assert("enforceRateLimit" in vsso_p2, "verify-sso.ts applies rate limiting against brute force")
+test_assert("isRevoked" in vsso_p2, "verify-sso.ts validates token revocation against Redis blacklist")
+
+with open(os.path.join(ROOT_DIR, "api", "auth", "erp-sso.ts"), "r", encoding="utf-8") as fp:
+    es_p2 = fp.read()
+test_assert("timingSafeEqual" in es_p2, "erp-sso.ts uses timingSafeEqual for constant-time HMAC comparison")
+test_assert("enforceRateLimit" in es_p2, "erp-sso.ts enforces rate limiting on SSO logins")
+
+# ------------------------------------------------------------------------------
+# 58. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

@@ -187,9 +187,14 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
 
   let atomicExecuted = false;
   try {
+    const effectivePartnerId = String(
+      (callerAuth.role === 'client' ? callerAuth.partnerId : (rawPayload.partner_id || callerAuth.partnerId)) || ''
+    ).trim() || null;
+
     const orderMasterPayload = {
       user_id: resolvedUserId,
       placed_by_id: callerAuth.userId || resolvedUserId,
+      partner_id: effectivePartnerId,
       warehouse: pricingResult.items[0]?.warehouse || 'Основной Склад Астана',
       notes: isMultiWarehouse ? `[Мультисклад (${distinctWarehouses.length} склада)] ${rawPayload.comment || ''}`.trim() : (rawPayload.comment || ''),
       total_amount: finalTotalAmount,
@@ -322,6 +327,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
         .insert({
           user_id: resolvedUserId,
           placed_by_id: callerAuth.userId || resolvedUserId,
+          partner_id: (callerAuth.role === 'client' ? callerAuth.partnerId : (rawPayload.partner_id || callerAuth.partnerId)) || null,
           warehouse: pricingResult.items[0]?.warehouse || 'Основной Склад Астана',
           notes: isMultiWarehouse ? `[Мультисклад (${distinctWarehouses.length} склада)] ${rawPayload.comment || ''}`.trim() : (rawPayload.comment || ''),
           total_amount: finalTotalAmount,
@@ -357,14 +363,10 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
           safeContractId,
           rawPayload.comment,
           authoritativeRate,
+          effectivePartnerId,
         );
       } else {
-        createdSplitOrders = [{
-          doc_number: outboxOrderDoc,
-          warehouse: distinctWarehouses[0] || 'Основной Склад Астана',
-          amount: finalTotalAmount,
-          items_count: finalTotalItems,
-        }];
+        createdSplitOrders = [{ doc_number: outboxOrderDoc, warehouse: distinctWarehouses[0] || 'Основной Склад Астана', amount: finalTotalAmount, items_count: finalTotalItems }];
       }
 
       const orderItemRows = pricingResult.items.map(it => ({
@@ -379,9 +381,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
         quantity: Number(it.quantity) || 1,
       }));
 
-      if (orderItemRows.length > 0) {
-        await supabase.from('order_items').insert(orderItemRows);
-      }
+      if (orderItemRows.length > 0) await supabase.from('order_items').insert(orderItemRows);
 
       if (serverRequiresApproval) {
         dispatchApprovalRequest({
