@@ -51,7 +51,6 @@ export default function HomePage({
   const {
     sectionRef: categoriesSectionRef,
     registerVideoRef,
-    isBreathing,
   } = useSynchronizedCategoryVideos();
 
   const featuredProducts = useMemo(() => {
