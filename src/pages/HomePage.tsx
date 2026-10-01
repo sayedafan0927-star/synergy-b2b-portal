@@ -171,26 +171,21 @@ export default function HomePage({
       </section>
 
       {/* ── 2. Categories Section (Dark Slate Stone Texture with Seamless Organic Waves) ── */}
-      <section className="relative py-20 lg:py-28 text-white bg-slate-950">
-        {/* Dark Slate Stone Texture Background */}
-        <div
-          className="absolute inset-0 bg-cover bg-center pointer-events-none"
-          style={{ backgroundImage: `url('/images/dark_slate_texture.webp')` }}
-        />
-        {/* Tactile Ambient Lighting Overlay */}
-        <div
-          className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/30 to-black/65 pointer-events-none"
-        />
-
-        <div className="container-w relative z-20">
+      <section
+        className="relative py-20 lg:py-28 text-white bg-cover bg-center bg-no-repeat"
+        style={{
+          backgroundImage: `linear-gradient(to bottom, rgba(15,23,42,0.35), rgba(15,23,42,0.15), rgba(15,23,42,0.45)), url('/images/dark_slate_texture.webp')`
+        }}
+      >
+        <div className="container-w">
           <div className="text-center">
-            <span className="font-mono text-xs text-amber-300/90 uppercase tracking-widest block mb-2 drop-shadow-sm">
+            <span className="font-mono text-xs text-slate-400 uppercase tracking-widest block mb-2 drop-shadow-sm">
               — Коллекции фабрик
             </span>
             <h2 className="font-display text-2xl sm:text-3xl lg:text-4xl font-bold text-white tracking-tight drop-shadow-md">
               Категории ковров
             </h2>
-            <p className="mt-3 text-sm sm:text-base text-slate-200 font-body max-w-xl mx-auto drop-shadow-sm">
+            <p className="mt-3 text-sm sm:text-base text-slate-300 font-body max-w-xl mx-auto drop-shadow-sm">
               Подберите идеальное ковровое покрытие по типу и стилю для любого интерьера
             </p>
           </div>
@@ -198,27 +193,18 @@ export default function HomePage({
           <div className="mt-8 lg:mt-12 grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-6">
             {categories.map((category, idx) => {
               const isFirst = idx === 0;
-              const isChina = category.name === 'Китай' || category.id.includes('Китай');
               const actualCount = countryCounts[category.name] || category.count || 0;
               return (
                 <button
                   key={category.id}
                   type="button"
                   onClick={() => onNavigate('catalog', category.id)}
-                  className={`group flex flex-col items-center rounded-2xl cursor-pointer transition-all duration-300 text-center backdrop-blur-md ${
-                    isFirst
-                      ? 'col-span-2 md:col-span-1 bg-black/40 border border-amber-500/35 hover:border-amber-400/80 p-3 md:p-4 shadow-2xl hover:shadow-amber-500/10'
-                      : isChina
-                        ? 'col-span-1 bg-black/25 border border-slate-300/30 hover:border-slate-200/60 p-2.5 md:p-4 shadow-xl hover:shadow-slate-300/10'
-                        : 'col-span-1 bg-black/30 border border-white/15 hover:border-amber-400/60 p-2.5 md:p-4 shadow-xl hover:shadow-amber-500/10'
+                  className={`group flex flex-col items-center rounded-2xl cursor-pointer transition-all duration-300 text-center bg-transparent border border-slate-500/35 hover:border-slate-300/70 p-3 md:p-4 shadow-lg shadow-black/20 hover:shadow-slate-400/10 ${
+                    isFirst ? 'col-span-2 md:col-span-1' : 'col-span-1'
                   }`}
                 >
-                  {/* Video Frame Box - China is frameless & seamless; Turkey and Iran maintain classic frames */}
-                  <div className={`aspect-square rounded-xl overflow-hidden ${
-                    isChina
-                      ? 'border-0 bg-transparent'
-                      : 'bg-black/50 border border-white/10'
-                  } ${
+                  {/* Clean Frameless Symbol - Sits directly on stone background with zero box fill */}
+                  <div className={`aspect-square flex items-center justify-center ${
                     isFirst ? 'w-[180px] sm:w-[220px] md:w-full' : 'w-full'
                   }`}>
                     {category.video ? (
@@ -229,7 +215,7 @@ export default function HomePage({
                         playsInline
                         preload="metadata"
                         poster={category.poster || category.image}
-                        className="h-full w-full object-contain transition-transform duration-500 group-hover:scale-105"
+                        className="h-full w-full object-contain mix-blend-screen transition-transform duration-500 group-hover:scale-105"
                       >
                         <source src={category.video} type="video/mp4" />
                       </video>
@@ -238,20 +224,20 @@ export default function HomePage({
                         src={category.image}
                         alt={category.name}
                         loading="lazy"
-                        className="h-full w-full object-contain transition-transform duration-500 group-hover:scale-105"
+                        className="h-full w-full object-contain mix-blend-screen transition-transform duration-500 group-hover:scale-105"
                       />
                     )}
                   </div>
 
                   {/* Centered Text strictly UNDER the animation */}
                   <div className="mt-2.5 md:mt-3 flex flex-col items-center">
-                    <span className="font-mono text-[9px] md:text-[10px] text-amber-300/90 uppercase tracking-widest block mb-0.5">
+                    <span className="font-mono text-[9px] md:text-[10px] text-slate-400 uppercase tracking-widest block mb-0.5">
                       {isFirst ? 'Прямые поставки • Хит продаж' : 'Прямые поставки'}
                     </span>
-                    <h3 className="font-display text-base md:text-xl font-bold text-white group-hover:text-amber-300 transition-colors">
+                    <h3 className="font-display text-base md:text-xl font-bold text-white group-hover:text-slate-200 transition-colors">
                       {isFirst ? 'Ковры Турции' : category.name}
                     </h3>
-                    <span className="inline-block mt-1 md:mt-2 font-mono text-[9px] md:text-[11px] font-semibold text-amber-300 bg-amber-500/20 border border-amber-500/40 px-2.5 py-0.5 md:py-1 rounded-full shadow-xs">
+                    <span className="inline-block mt-1 md:mt-2 font-mono text-[9px] md:text-[11px] font-semibold text-slate-200 bg-white/5 border border-slate-400/25 px-2.5 py-0.5 md:py-1 rounded-full shadow-xs">
                       {actualCount > 0 ? (isFirst ? `${actualCount} товаров в наличии` : `${actualCount} товаров`) : 'В наличии'}
                     </span>
                   </div>
