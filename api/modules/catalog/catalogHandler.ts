@@ -296,16 +296,41 @@ export async function handleCatalogRequests(
         return true;
       }
 
+      let canonicalSkuMap = new Map<string, { free_stock: number; base_price: number; warehouses: any[] }>();
+      try {
+        const cachedSnapshot = await getCachedCatalog('catalog_global');
+        if (cachedSnapshot?.data?.products && Array.isArray(cachedSnapshot.data.products)) {
+          for (const cp of cachedSnapshot.data.products) {
+            for (const cv of (cp.variants || [])) {
+              const cSku = String(cv.sku || '').trim().toUpperCase();
+              if (cSku) {
+                canonicalSkuMap.set(cSku, {
+                  free_stock: Number(cv.free_stock ?? cv.stock ?? 0),
+                  base_price: Number(cv.base_price || cv.price || 0),
+                  warehouses: Array.isArray(cv.warehouses) ? cv.warehouses : [],
+                });
+              }
+            }
+          }
+        }
+      } catch {}
+
       let items = (data || []).map((p: any) => {
         const variants = (p.product_variants || []).map((v: any) => {
+          const vSkuUpper = String(v.sku || '').trim().toUpperCase();
+          const canonical = canonicalSkuMap.get(vSkuUpper);
           const stocks = v.warehouse_stock || [];
-          const totalStock = stocks.reduce((acc: number, s: any) => acc + (Number(s.stock) || 0), 0);
+          const totalStock = canonical ? canonical.free_stock : stocks.reduce((acc: number, s: any) => acc + (Number(s.stock) || 0), 0);
+          const basePrice = canonical && canonical.base_price > 0 ? canonical.base_price : (Number(v.base_price) || 0);
+
           return {
             id: v.id,
             size: v.size,
             sku: v.sku,
-            base_price: Number(v.base_price) || 0,
+            base_price: basePrice,
             stock: totalStock,
+            free_stock: totalStock,
+            warehouses: canonical?.warehouses || v.warehouses,
             stocks_by_city: stocks.reduce((acc: Record<string, number>, s: any) => {
               acc[s.city] = Number(s.stock) || 0;
               return acc;
