@@ -25,10 +25,43 @@ export function useSynchronizedCategoryVideos({}: UseSynchronizedCategoryVideosO
     }
   }, []);
 
+  const frameCallbackIdRef = useRef<number | null>(null);
+
+  const freezeAndHold = useCallback(() => {
+    if (isHoldingPauseRef.current) return;
+    isHoldingPauseRef.current = true;
+    setIsBreathing(true);
+
+    if (cycleTimeoutRef.current) {
+      clearTimeout(cycleTimeoutRef.current);
+      cycleTimeoutRef.current = null;
+    }
+
+    const activeVideos = videoRefs.current.filter((v): v is HTMLVideoElement => Boolean(v));
+    activeVideos.forEach((v) => {
+      try {
+        v.pause();
+      } catch {}
+    });
+
+    // Hold pause on final face for exactly 1.5 seconds (1500ms)
+    cycleTimeoutRef.current = setTimeout(() => {
+      if (isVisibleRef.current) {
+        runSyncCycle();
+      }
+    }, 1500);
+  }, []);
+
   const runSyncCycle = useCallback(() => {
     if (cycleTimeoutRef.current) {
       clearTimeout(cycleTimeoutRef.current);
       cycleTimeoutRef.current = null;
+    }
+
+    const primaryVid = videoRefs.current[0];
+    if (primaryVid && frameCallbackIdRef.current !== null && 'cancelVideoFrameCallback' in primaryVid) {
+      (primaryVid as any).cancelVideoFrameCallback(frameCallbackIdRef.current);
+      frameCallbackIdRef.current = null;
     }
 
     if (!isVisibleRef.current || document.visibilityState === 'hidden') {
@@ -52,24 +85,25 @@ export function useSynchronizedCategoryVideos({}: UseSynchronizedCategoryVideosO
       } catch {}
     });
 
-    // 2. Play duration is 6.0 seconds. At 5.95s, freeze on final frame (full face)
-    cycleTimeoutRef.current = setTimeout(() => {
-      isHoldingPauseRef.current = true;
-      setIsBreathing(true);
-      activeVideos.forEach((v) => {
-        try {
-          v.pause();
-        } catch {}
-      });
-
-      // 3. Hold pause on final face for exactly 1.5 seconds (1500ms)
-      cycleTimeoutRef.current = setTimeout(() => {
-        if (isVisibleRef.current) {
-          runSyncCycle();
+    // 2. High-precision hardware frame sync using requestVideoFrameCallback (60Hz / 120Hz ProMotion)
+    const primary = activeVideos[0];
+    if (primary && 'requestVideoFrameCallback' in primary) {
+      const checkFrame = (_now: DOMHighResTimeStamp, metadata: { mediaTime: number }) => {
+        if (!isVisibleRef.current || isHoldingPauseRef.current) return;
+        if (metadata.mediaTime >= 5.85) {
+          freezeAndHold();
+          return;
         }
-      }, 1500);
+        frameCallbackIdRef.current = (primary as any).requestVideoFrameCallback(checkFrame);
+      };
+      frameCallbackIdRef.current = (primary as any).requestVideoFrameCallback(checkFrame);
+    }
+
+    // 3. Fallback timer at 5.95s in case rVFC is unsupported on legacy browsers
+    cycleTimeoutRef.current = setTimeout(() => {
+      freezeAndHold();
     }, 5950);
-  }, []);
+  }, [freezeAndHold]);
 
   // Handle Visibility and Viewport Intersection
   useEffect(() => {
@@ -123,6 +157,11 @@ export function useSynchronizedCategoryVideos({}: UseSynchronizedCategoryVideosO
       window.removeEventListener('click', handleFirstGesture);
       if (cycleTimeoutRef.current) {
         clearTimeout(cycleTimeoutRef.current);
+      }
+      const primaryVid = videoRefs.current[0];
+      if (primaryVid && frameCallbackIdRef.current !== null && 'cancelVideoFrameCallback' in primaryVid) {
+        (primaryVid as any).cancelVideoFrameCallback(frameCallbackIdRef.current);
+        frameCallbackIdRef.current = null;
       }
       if (sectionEl) {
         observer.unobserve(sectionEl);

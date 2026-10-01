@@ -208,7 +208,7 @@ export default function HomePage({
                   }`}
                 >
                   {/* Clean Frameless Symbol - Sits directly on stone background with zero box fill */}
-                  <div className={`aspect-square flex items-center justify-center ${
+                  <div className={`aspect-square flex items-center justify-center [isolation:isolate] [contain:paint_layout] transform-gpu ${
                     isFirst ? 'w-[180px] sm:w-[220px] md:w-full' : 'w-full'
                   }`}>
                     {category.video ? (
@@ -220,8 +220,12 @@ export default function HomePage({
                         {...({ 'webkit-playsinline': 'true' } as any)}
                         preload="auto"
                         poster={category.poster || category.image}
-                        style={{ willChange: 'transform' }}
-                        className="h-full w-full object-contain mix-blend-screen transform-gpu transition-transform duration-500 group-hover:scale-105"
+                        style={{
+                          willChange: 'transform',
+                          transform: 'translateZ(0)',
+                          backfaceVisibility: 'hidden',
+                        }}
+                        className="h-full w-full object-contain mix-blend-screen transform-gpu transition-transform duration-500 group-hover:scale-105 pointer-events-none"
                       >
                         <source src={category.video} type="video/mp4" />
                       </video>
@@ -230,7 +234,7 @@ export default function HomePage({
                         src={category.image}
                         alt={category.name}
                         loading="lazy"
-                        className="h-full w-full object-contain mix-blend-screen transition-transform duration-500 group-hover:scale-105"
+                        className="h-full w-full object-contain mix-blend-screen transition-transform duration-500 group-hover:scale-105 pointer-events-none"
                       />
                     )}
                   </div>

@@ -113,6 +113,38 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
     }, 1500);
   };
 
+  // High-performance hardware frame presentation callback (60Hz / 120Hz ProMotion VSync)
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    let callbackId: number | null = null;
+    let isCancelled = false;
+
+    const onFrame = (_now: DOMHighResTimeStamp, metadata: { mediaTime: number }) => {
+      if (isCancelled) return;
+      if (video.duration && !Number.isNaN(video.duration)) {
+        if (metadata.mediaTime >= video.duration - 0.35 && !isEnded) {
+          setIsEnded(true);
+        }
+      }
+      if ('requestVideoFrameCallback' in video) {
+        callbackId = (video as any).requestVideoFrameCallback(onFrame);
+      }
+    };
+
+    if ('requestVideoFrameCallback' in video) {
+      callbackId = (video as any).requestVideoFrameCallback(onFrame);
+    }
+
+    return () => {
+      isCancelled = true;
+      if (callbackId !== null && 'cancelVideoFrameCallback' in video) {
+        (video as any).cancelVideoFrameCallback(callbackId);
+      }
+    };
+  }, [isEnded]);
+
   const handleTimeUpdate = () => {
     const video = videoRef.current;
     if (!video || !video.duration || Number.isNaN(video.duration)) return;
@@ -171,8 +203,9 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
         - Mobile (< sm): aspect-[16/9] renders 100% of the video frame with zero clipping (full leopard + carpet).
         - Desktop (sm+): full-height hero banner sm:h-[72vh] lg:h-[82vh] with object-cover.
         - Pure Cinema: Video plays completely clean without obstructing watermarks.
+        - Strict GPU containment & isolation to eliminate reflows and battery drain.
       */}
-      <div className="relative w-full aspect-[16/9] sm:aspect-auto sm:h-[72vh] lg:h-[82vh] sm:min-h-[480px] max-h-[860px] overflow-hidden bg-slate-950">
+      <div className="relative w-full aspect-[16/9] sm:aspect-auto sm:h-[72vh] lg:h-[82vh] sm:min-h-[480px] max-h-[860px] overflow-hidden bg-slate-950 [contain:paint_layout] [isolation:isolate] transform-gpu">
         <video
           ref={videoRef}
           autoPlay
@@ -183,8 +216,12 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
           poster={POSTER}
           onEnded={handleEnded}
           onTimeUpdate={handleTimeUpdate}
-          style={{ willChange: 'transform' }}
-          className="w-full h-full object-cover object-center sm:object-[center_right] transform-gpu"
+          style={{
+            willChange: 'transform, opacity',
+            transform: 'translateZ(0)',
+            backfaceVisibility: 'hidden',
+          }}
+          className="w-full h-full object-cover object-center sm:object-[center_right] transform-gpu pointer-events-none"
         >
           <source src={VIDEO_MP4} type="video/mp4" />
           <source src={VIDEO_WEBM} type="video/webm" />
