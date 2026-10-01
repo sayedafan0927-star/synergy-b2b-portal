@@ -11,6 +11,7 @@ export function useSynchronizedCategoryVideos({}: UseSynchronizedCategoryVideosO
   const isVisibleRef = useRef(false);
   const cycleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isHoldingPauseRef = useRef(false);
+  const [isBreathing, setIsBreathing] = useState(false);
 
   const registerVideoRef = useCallback((index: number) => (el: HTMLVideoElement | null) => {
     videoRefs.current[index] = el;
@@ -38,6 +39,7 @@ export function useSynchronizedCategoryVideos({}: UseSynchronizedCategoryVideosO
     if (activeVideos.length === 0) return;
 
     isHoldingPauseRef.current = false;
+    setIsBreathing(false);
 
     // 1. Reset all videos to frame 0 and play in lockstep
     activeVideos.forEach((v) => {
@@ -53,6 +55,7 @@ export function useSynchronizedCategoryVideos({}: UseSynchronizedCategoryVideosO
     // 2. Play duration is 6.0 seconds. At 5.95s, freeze on final frame (full face)
     cycleTimeoutRef.current = setTimeout(() => {
       isHoldingPauseRef.current = true;
+      setIsBreathing(true);
       activeVideos.forEach((v) => {
         try {
           v.pause();

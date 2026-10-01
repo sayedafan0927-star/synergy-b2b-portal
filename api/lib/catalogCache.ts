@@ -239,7 +239,8 @@ export async function patchCachedCatalogStock(
             const chunk = skus.slice(i, i + CHUNK_SIZE);
             const { data } = await supabase
               .from('order_items')
-              .select('sku, warehouse_id, quantity, orders!inner(status, reservations_released)')
+              .select('sku, warehouse_id, quantity, orders!inner(status, reservations_released, parent_order_id)')
+              .is('orders.parent_order_id', null)
               .in('orders.status', ['pending', 'processing_sync'])
               .or('reservations_released.is.null,reservations_released.eq.false', { foreignTable: 'orders' })
               .in('sku', chunk);
