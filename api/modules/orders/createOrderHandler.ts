@@ -214,10 +214,18 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
       }
       if (errMsg.includes('INSUFFICIENT_STOCK')) {
         logger.warn('[Order] Atomic checkout rejected due to insufficient stock:', { error: errMsg, correlationId });
+        const cleanError = errMsg.replace(/^.*?INSUFFICIENT_STOCK:\s*/i, '').trim();
+        const m1 = cleanError.match(/SKU\s*"?([^"\s]+)"?\s*\(доступно:\s*(\d+),\s*запрошено:\s*(\d+)\)/i);
+        const m2 = cleanError.match(/SKU\s*"?([^"\s]+)"?.*?only\s*(\d+)\s*free items,\s*requested\s*(\d+)/i);
+        const m3 = cleanError.match(/артикула\s*"?([^"\s]+)"?/i);
+        const parsedSku = m1 ? m1[1] : m2 ? m2[1] : m3 ? m3[1] : undefined;
+        const availQty = m1 ? parseInt(m1[2], 10) : m2 ? parseInt(m2[2], 10) : 0;
+        const reqQty = m1 ? parseInt(m1[3], 10) : m2 ? parseInt(m2[3], 10) : undefined;
         res.status(409).json({
           success: false,
           code: 'INSUFFICIENT_STOCK',
-          error: errMsg.replace('INSUFFICIENT_STOCK:', '').trim() || 'Недостаточно свободного остатка для оформления заказа.',
+          error: cleanError || 'Недостаточно свободного остатка для оформления заказа.',
+          details: { code: 'INSUFFICIENT_STOCK', sku: parsedSku, available_qty: availQty, requested_qty: reqQty },
         });
         return;
       }
@@ -316,6 +324,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
         success: false,
         code: 'INSUFFICIENT_STOCK',
         error: `Недостаточно свободного остатка для артикула "${reservationFailedSku}". Товар был зарезервирован другим покупателем.`,
+        details: { code: 'INSUFFICIENT_STOCK', sku: reservationFailedSku, available_qty: 0 },
       });
       return;
     }

@@ -119,11 +119,17 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
     let adjustedCount = 0;
 
     // 1. Точечный конфликт от сервера при нехватке остатка (INSUFFICIENT_STOCK)
-    if (stockConflictDetails?.sku && typeof stockConflictDetails.available_qty === 'number') {
-      const targetSku = stockConflictDetails.sku.trim().toLowerCase();
-      const avail = Math.max(0, stockConflictDetails.available_qty);
+    if (stockConflictDetails) {
+      const targetSku = String(stockConflictDetails.sku || '').trim().toLowerCase();
+      const avail = typeof stockConflictDetails.available_qty === 'number'
+        ? Math.max(0, stockConflictDetails.available_qty)
+        : 0;
+
       for (const it of items) {
-        if ((it.sku && it.sku.trim().toLowerCase() === targetSku) || it.productId === stockConflictDetails.sku) {
+        const itSku = String(it.sku || '').trim().toLowerCase();
+        const itProdId = String(it.productId || '').trim().toLowerCase();
+        const isTarget = (targetSku && (itSku === targetSku || itProdId === targetSku)) || items.length === 1;
+        if (isTarget) {
           if (avail === 0) {
             removeItem(it.productId, it.size, it.warehouse);
             adjustedCount++;
@@ -381,7 +387,18 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
 
       setSubmitError(err.message || 'Ошибка оформления заказа');
       if (err.code === 'INSUFFICIENT_STOCK' || err.details?.code === 'INSUFFICIENT_STOCK') {
-        setStockConflictDetails(err.details || {});
+        const details = err.details || {};
+        setStockConflictDetails(details);
+        const targetSku = String(details.sku || '').trim().toLowerCase();
+        const avail = typeof details.available_qty === 'number' ? Math.max(0, details.available_qty) : 0;
+        syncItemPrices(item => {
+          const itSku = String(item.sku || '').trim().toLowerCase();
+          const itProdId = String(item.productId || '').trim().toLowerCase();
+          if ((targetSku && (itSku === targetSku || itProdId === targetSku)) || items.length === 1) {
+            return { price: item.price, price_per_sqm: item.price_per_sqm, maxStock: avail };
+          }
+          return null;
+        });
       } else {
         setStockConflictDetails(null);
       }

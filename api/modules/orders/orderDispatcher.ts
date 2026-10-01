@@ -199,10 +199,19 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
         logger.warn('[Order] Conflict stock invalidation notice:', patchErr as Error);
       }
 
+      const rawErr = jsonData?.error || '';
+      const m1 = rawErr.match(/SKU\s*"?([^"\s]+)"?\s*\(доступно:\s*(\d+),\s*запрошено:\s*(\d+)\)/i);
+      const m2 = rawErr.match(/SKU\s*"?([^"\s]+)"?.*?only\s*(\d+)\s*free items,\s*requested\s*(\d+)/i);
+      const m3 = rawErr.match(/артикула\s*"?([^"\s]+)"?/i);
+      const parsedSku = jsonData?.details?.sku || (m1 ? m1[1] : m2 ? m2[1] : m3 ? m3[1] : reservedSkuItems[0]?.sku);
+      const availQty = typeof jsonData?.details?.available_qty === 'number' ? jsonData.details.available_qty : m1 ? parseInt(m1[2], 10) : m2 ? parseInt(m2[2], 10) : 0;
+      const reqQty = typeof jsonData?.details?.requested_qty === 'number' ? jsonData.details.requested_qty : m1 ? parseInt(m1[3], 10) : m2 ? parseInt(m2[3], 10) : undefined;
+
       res.status(409).json({
         success: false,
         code: 'INSUFFICIENT_STOCK',
-        error: jsonData?.error || '1C:ERP отклонила заказ: недостаточно товара на складе.',
+        error: rawErr || '1C:ERP отклонила заказ: недостаточно товара на складе.',
+        details: { code: 'INSUFFICIENT_STOCK', sku: parsedSku, available_qty: availQty, requested_qty: reqQty, ...(jsonData?.details || {}) },
       });
       return;
     }

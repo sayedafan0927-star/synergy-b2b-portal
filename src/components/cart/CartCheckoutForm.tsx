@@ -273,7 +273,9 @@ export function CartCheckoutForm({
               <CheckCircle2 className="h-3.5 w-3.5" />
               <span>
                 {stockConflictDetails && typeof stockConflictDetails.available_qty === 'number'
-                  ? `Скорректировать до остатка (${stockConflictDetails.available_qty} шт) в 1 клик`
+                  ? stockConflictDetails.available_qty === 0
+                    ? 'Удалить отсутствующий товар из заказа в 1 клик'
+                    : `Скорректировать до остатка (${stockConflictDetails.available_qty} шт) в 1 клик`
                   : 'Скорректировать заказ до доступного остатка в 1 клик'}
               </span>
             </button>

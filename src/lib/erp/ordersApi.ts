@@ -154,7 +154,31 @@ export async function submitOrderToErp(payload: CreateOrderPayload): Promise<Erp
     if (lastResponse.status === 409 || errorData?.error_code === 'INSUFFICIENT_STOCK' || errorData?.code === 'INSUFFICIENT_STOCK' || errorData?.details?.code === 'INSUFFICIENT_STOCK') {
       const err = new Error(errorData?.error || 'Недостаточно свободного остатка на складе. Товар только что был зарезервирован другим покупателем.');
       (err as any).code = 'INSUFFICIENT_STOCK';
-      (err as any).details = errorData?.details;
+
+      let details = errorData?.details ? { ...errorData.details } : {};
+      if (!details.sku) {
+        const msg = String(errorData?.error || '');
+        const m1 = msg.match(/SKU\s*"?([^"\s]+)"?\s*\(доступно:\s*(\d+),\s*запрошено:\s*(\d+)\)/i);
+        const m2 = msg.match(/SKU\s*"?([^"\s]+)"?.*?only\s*(\d+)\s*free items,\s*requested\s*(\d+)/i);
+        const m3 = msg.match(/артикула\s*"?([^"\s]+)"?/i);
+        if (m1) {
+          details.sku = m1[1];
+          details.available_qty = parseInt(m1[2], 10);
+          details.requested_qty = parseInt(m1[3], 10);
+        } else if (m2) {
+          details.sku = m2[1];
+          details.available_qty = parseInt(m2[2], 10);
+          details.requested_qty = parseInt(m2[3], 10);
+        } else if (m3) {
+          details.sku = m3[1];
+          details.available_qty = 0;
+        }
+      }
+      if (details.available_qty === undefined && (details.free_stock !== undefined || details.stock !== undefined)) {
+        details.available_qty = Number(details.free_stock ?? details.stock);
+      }
+
+      (err as any).details = details;
       throw err;
     }
     throw new Error(data.error || `Ошибка сервера (${lastResponse.status})`);
