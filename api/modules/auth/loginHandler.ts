@@ -9,6 +9,7 @@ import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { createClient } from '@supabase/supabase-js';
 import { logger } from '../../lib/logger';
+import { checkRateLimit } from '../../lib/rateLimit';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
@@ -36,6 +37,27 @@ export async function handleLoginFallback(
   inputPass: string,
   correlationId: string
 ): Promise<boolean> {
+  // 0. Brute-Force & Credential Stuffing Guard (5 attempts / 60s per client/IP)
+  const rl = await checkRateLimit(req, res, {
+    limit: 5,
+    windowSeconds: 60,
+    actionPrefix: `auth_login_${inputCleanPhone || 'client'}`,
+  });
+
+  if (!rl.allowed) {
+    logger.warn('[Auth] Rate limit exceeded on client login', {
+      phone: inputCleanPhone,
+      ip: rl.ip,
+      correlationId,
+    });
+    res.status(429).json({
+      success: false,
+      code: 'TOO_MANY_REQUESTS',
+      error: `Слишком много попыток входа. Повторите попытку через ${rl.resetSeconds} сек.`,
+    });
+    return true;
+  }
+
   // 1. Проверка активности клиента
   if (
     matchedClient.is_active === 0 ||
@@ -217,6 +239,27 @@ export async function handleEmployeeLoginFallback(
   inputPass: string,
   correlationId: string
 ): Promise<boolean> {
+  // 0. Brute-Force & Credential Stuffing Guard (5 attempts / 60s per employee/IP)
+  const rl = await checkRateLimit(req, res, {
+    limit: 5,
+    windowSeconds: 60,
+    actionPrefix: `auth_employee_${matchedEmp.id || inputCleanPhone || 'emp'}`,
+  });
+
+  if (!rl.allowed) {
+    logger.warn('[Auth] Rate limit exceeded on employee login', {
+      empId: matchedEmp.id,
+      ip: rl.ip,
+      correlationId,
+    });
+    res.status(429).json({
+      success: false,
+      code: 'TOO_MANY_REQUESTS',
+      error: `Слишком много попыток входа. Повторите попытку через ${rl.resetSeconds} сек.`,
+    });
+    return true;
+  }
+
   // 1. Проверяем наличие введенного пароля
   if (!inputPass) {
     logger.warn('[Auth P0 Guard] Employee login rejected: missing password', {

@@ -56,8 +56,17 @@ export async function handleResolveCatalogBatch(
     return;
   }
 
-  // Cap batch size at 500 items per request
-  const safeItems = items.slice(0, 500);
+function sanitizeCellString(str: string): string {
+  if (!str) return '';
+  return str.replace(/^[=+\-@\t\r%|]+/, '').trim();
+}
+
+// Cap batch size at 500 items per request and sanitize formula prefixes (CWE-1236)
+  const safeItems = items.slice(0, 500).map(it => ({
+    ...it,
+    article: sanitizeCellString(it.article),
+    size: sanitizeCellString(it.size || ''),
+  }));
 
   // 1. Извлекаем снимок каталога из L1 RAM или L2 DB
   const cached = await getCachedCatalog('catalog_global');

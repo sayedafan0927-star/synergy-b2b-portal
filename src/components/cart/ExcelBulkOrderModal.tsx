@@ -45,6 +45,11 @@ export function ExcelBulkOrderModal({ isOpen, onClose }: ExcelBulkOrderModalProp
     URL.revokeObjectURL(url);
   };
 
+function sanitizeSpreadsheetCell(value: string): string {
+  if (!value) return '';
+  return value.replace(/^[=+\-@\t\r%|]+/, '').trim();
+}
+
   const processRawLines = (lines: string[]) => {
     const results: ParsedBulkRow[] = [];
 
@@ -57,8 +62,8 @@ export function ExcelBulkOrderModal({ isOpen, onClose }: ExcelBulkOrderModalProp
       const parts = trimmed.split(/[\t;,]+/).map(p => p.trim());
       if (parts.length < 2) continue;
 
-      const rawArticle = parts[0];
-      const rawSize = normalizeDimensions(parts[1]);
+      const rawArticle = sanitizeSpreadsheetCell(parts[0]);
+      const rawSize = normalizeDimensions(sanitizeSpreadsheetCell(parts[1]));
       const rawQty = parts[2] ? parseInt(parts[2].replace(/\D+/g, ''), 10) || 1 : 1;
 
       const cleanArt = rawArticle.toLowerCase().replace(/[^a-z0-9а-яё]/gi, '');

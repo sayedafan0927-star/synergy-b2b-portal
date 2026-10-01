@@ -1836,7 +1836,25 @@ test_assert("autoRetriedDlqCount" in rec_stock_code and "DLQ_AUTO_RETRY" in rec_
 test_assert("Fatal Business Error" in rec_stock_code, "reconcile-stock.ts protects fatal business errors from unwanted DLQ retry loops")
 
 # ------------------------------------------------------------------------------
-# 54. Summary Report
+# 54. STAGE 30: FORMULA INJECTION (CWE-1236) & LOGIN BRUTE-FORCE DEFENSE
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 54. STAGE 30: FORMULA INJECTION & BRUTE-FORCE DEFENSE ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "cart", "ExcelBulkOrderModal.tsx"), "r", encoding="utf-8") as fp:
+    bulk_code = fp.read()
+test_assert("sanitizeSpreadsheetCell" in bulk_code and "[=+\\-@\\t\\r%|]+" in bulk_code, "ExcelBulkOrderModal.tsx sanitizes spreadsheet cells against formula injection (CWE-1236)")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "catalog", "resolveBatchHandler.ts"), "r", encoding="utf-8") as fp:
+    rb_sec_code = fp.read()
+test_assert("sanitizeCellString" in rb_sec_code and "[=+\\-@\\t\\r%|]+" in rb_sec_code, "resolveBatchHandler.ts sanitizes batch inputs against formula injection (CWE-1236)")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "auth", "loginHandler.ts"), "r", encoding="utf-8") as fp:
+    login_h_code = fp.read()
+test_assert("checkRateLimit" in login_h_code and "auth_login_" in login_h_code, "loginHandler.ts protects client login from brute-force & credential stuffing via rate limiting")
+test_assert("auth_employee_" in login_h_code and "TOO_MANY_REQUESTS" in login_h_code, "loginHandler.ts protects employee login from brute-force & returns HTTP 429")
+
+# ------------------------------------------------------------------------------
+# 55. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests
