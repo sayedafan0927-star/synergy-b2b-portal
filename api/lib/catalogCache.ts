@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { getRedisCatalogCache, setRedisCatalogCache, invalidateRedisCatalogCache } from './catalogDistributedCache';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
@@ -7,10 +8,8 @@ const supabase = (SUPABASE_URL && SUPABASE_KEY)
   ? createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })
   : null as any;
 
-// Default cache TTL: 60 seconds for fresh HIT, after which background revalidation is encouraged
 const CACHE_FRESH_TTL_MS = 60 * 1000;
 
-// Level 1 In-Memory Cache (RAM) to handle micro-bursts and high concurrency
 interface MemoryCacheEntry {
   data: any;
   cachedAt: number;
@@ -27,22 +26,23 @@ export interface CachedCatalogResult {
 }
 
 /**
- * Получить закэшированный снимок каталога (L1 RAM -> L2 Supabase DB)
+ * Получить закэшированный снимок каталога (L1 RAM -> Redis -> L2 Supabase DB)
  */
 export async function getCachedCatalog(cacheKey = 'catalog_global'): Promise<CachedCatalogResult | null> {
   const now = Date.now();
 
-  // 1. Проверяем L1 Memory Cache
+  // 1. L1 Memory Cache
   const mem = memoryCache.get(cacheKey);
   if (mem) {
     const ageMs = now - mem.cachedAt;
-    return {
-      data: mem.data,
-      ageMs,
-      isFresh: ageMs < CACHE_FRESH_TTL_MS,
-      version: mem.version,
-      source: 'memory',
-    };
+    return { data: mem.data, ageMs, isFresh: ageMs < CACHE_FRESH_TTL_MS, version: mem.version, source: 'memory' };
+  }
+
+  // 1.5. L2 Distributed Redis Cache
+  const redisData = await getRedisCatalogCache(cacheKey);
+  if (redisData) {
+    memoryCache.set(cacheKey, { data: redisData, cachedAt: now, version: 1 });
+    return { data: redisData, ageMs: 0, isFresh: true, version: 1, source: 'memory' };
   }
 
   // 2. Проверяем L2 Database Staging Cache
@@ -94,12 +94,9 @@ export async function saveCachedCatalog(catalogData: any, cacheKey = 'catalog_gl
   const currentMem = memoryCache.get(cacheKey);
   const nextVersion = (currentMem?.version || 0) + 1;
 
-  // Обновляем L1 Memory
-  memoryCache.set(cacheKey, {
-    data: catalogData,
-    cachedAt: now,
-    version: nextVersion,
-  });
+  // Обновляем L1 Memory и асинхронно L2 Redis
+  memoryCache.set(cacheKey, { data: catalogData, cachedAt: now, version: nextVersion });
+  setRedisCatalogCache(cacheKey, catalogData).catch(() => {});
 
   // Асинхронно сохраняем в L2 DB
   if (!supabase) return true;
@@ -371,4 +368,5 @@ export async function invalidateCatalogCache(cacheKey?: string): Promise<void> {
   } else {
     memoryCache.clear();
   }
+  await invalidateRedisCatalogCache(cacheKey);
 }

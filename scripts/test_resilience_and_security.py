@@ -1702,7 +1702,37 @@ test_assert("req.query.limit" in rb_code and "req.query.offset" in rb_code, "rec
 test_assert("Date.now() - startTime > 45000" in rb_code, "reconcile-balances.ts implements 45s execution time budget to prevent Vercel gateway timeout")
 
 # ------------------------------------------------------------------------------
-# 48. Summary Report
+# 48. Stage 24: Phase 2 Decoupling — Batch Catalog Resolver & Distributed Redis Cache
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 48. STAGE 24: PHASE 2 ARCHITECTURAL DECOUPLING & SCALABILITY ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "catalog", "resolveBatchHandler.ts"), "r", encoding="utf-8") as fp:
+    rbh_code = fp.read()
+test_assert("handleResolveCatalogBatch" in rbh_code and "productIndex" in rbh_code, "resolveBatchHandler.ts implements O(1) in-memory indexed batch catalog resolver")
+test_assert("safeItems = items.slice(0, 500)" in rbh_code, "resolveBatchHandler.ts limits batch size to 500 items preventing DoS/memory spikes")
+
+with open(os.path.join(ROOT_DIR, "api", "catalog", "resolve-batch.ts"), "r", encoding="utf-8") as fp:
+    res_b_code = fp.read()
+test_assert("catalog_resolve_batch" in res_b_code and "handleResolveCatalogBatch" in res_b_code, "api/catalog/resolve-batch.ts exposes rate-limited serverless endpoint")
+
+with open(os.path.join(ROOT_DIR, "api", "erp.ts"), "r", encoding="utf-8") as fp:
+    erp_s24 = fp.read()
+test_assert("resolve_catalog_batch" in erp_s24, "api/erp.ts routes resolve_catalog_batch in unified gateway")
+
+with open(os.path.join(ROOT_DIR, "api", "lib", "catalogDistributedCache.ts"), "r", encoding="utf-8") as fp:
+    dist_code = fp.read()
+test_assert("getRedisCatalogCache" in dist_code and "setRedisCatalogCache" in dist_code and "invalidateRedisCatalogCache" in dist_code, "catalogDistributedCache.ts exports distributed Redis cache layer")
+
+with open(os.path.join(ROOT_DIR, "api", "lib", "catalogCache.ts"), "r", encoding="utf-8") as fp:
+    cc_s24 = fp.read()
+test_assert("getRedisCatalogCache" in cc_s24 and "invalidateRedisCatalogCache" in cc_s24, "catalogCache.ts coordinates multi-tier L1 memory and L2 Redis caching")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "cart", "ExcelBulkOrderModal.tsx"), "r", encoding="utf-8") as fp:
+    ebm_code = fp.read()
+test_assert("/api/catalog/resolve-batch" in ebm_code and "fetchSingleProductFromErp" not in ebm_code, "ExcelBulkOrderModal.tsx uses batch resolution eliminating N+1 sequential HTTP requests")
+
+# ------------------------------------------------------------------------------
+# 49. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

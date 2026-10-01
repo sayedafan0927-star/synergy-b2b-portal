@@ -9,6 +9,7 @@ import { handleCreateLead } from './modules/leads';
 import { handleNotifyDealerRegistration } from './modules/auth/dealerRegistrationNotification';
 import { handleReconciliationReport } from './modules/reconciliation';
 import { handleCatalogRequests } from './modules/catalog/catalogHandler';
+import { handleResolveCatalogBatch } from './modules/catalog/resolveBatchHandler';
 import { handleCreateOrder } from './modules/orders/createOrderHandler';
 import { handleCachedClientDebt } from './modules/financial/debtHandler';
 import { handleFinancialBalanceSheet } from './modules/financial/balanceHandler';
@@ -40,6 +41,7 @@ const PUBLIC_ACTIONS = new Set([
   'catalog',
   'catalog_normalized',
   'catalog_paginated',
+  'resolve_catalog_batch',
   'reconcile_all_balances',
   'product',
   'ping',
@@ -122,6 +124,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (action === 'catalog' || action === 'catalog_normalized' || action === 'product' || action === 'catalog_paginated') {
       const handled = await handleCatalogRequests(req, res, action, supabase, TARGET_ERP_URL, ERP_FALLBACK_URL, SERVER_ERP_KEY, correlationId);
       if (handled) return;
+    }
+
+    if (action === 'resolve_catalog_batch' && req.method === 'POST') {
+      return await handleResolveCatalogBatch(req, res, supabase);
     }
 
     // 1.1. Прямой опрос кэша финансового баланса контрагента (PostgreSQL) с аутентификацией
@@ -266,6 +272,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           'catalog',
           'catalog_normalized',
           'catalog_paginated',
+          'resolve_catalog_batch',
           'product',
           'create_order',
           'client_debt',
