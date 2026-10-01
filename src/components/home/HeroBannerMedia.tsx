@@ -49,27 +49,44 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
       video.addEventListener('canplay', onCanPlay);
     }
 
+    const isVisibleRef = { current: true };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        if (video && !video.paused) {
+          video.pause();
+        }
+      } else {
+        if (video && video.paused && isVisibleRef.current) {
+          video.play().catch(() => {});
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
-            if (video && video.paused) {
+            isVisibleRef.current = true;
+            if (document.visibilityState !== 'hidden' && video && video.paused) {
               video.play().catch(() => {});
             }
           } else {
+            isVisibleRef.current = false;
             if (video && !video.paused) {
               video.pause();
             }
           }
         });
       },
-      { threshold: 0.05, rootMargin: '120px 0px 120px 0px' }
+      { threshold: 0.05 }
     );
     observer.observe(video);
 
     // Touch/click fallback for iOS devices in Low Power Mode
     const handleFirstGesture = () => {
-      if (video && video.paused) {
+      if (video && video.paused && isVisibleRef.current) {
         video.play().catch(() => {});
       }
     };
@@ -77,6 +94,7 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
     window.addEventListener('click', handleFirstGesture, { once: true, passive: true });
 
     return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       observer.disconnect();
       window.removeEventListener('touchstart', handleFirstGesture);
       window.removeEventListener('click', handleFirstGesture);

@@ -105,14 +105,78 @@ export function useSynchronizedCategoryVideos({}: UseSynchronizedCategoryVideosO
     }, 5950);
   }, [freezeAndHold]);
 
+  const resumePlayback = useCallback(() => {
+    if (!isVisibleRef.current || document.visibilityState === 'hidden') {
+      return;
+    }
+
+    const activeVideos = videoRefs.current.filter((v): v is HTMLVideoElement => Boolean(v));
+    if (activeVideos.length === 0) return;
+
+    // If currently in freeze pause on final face, let freeze finish its hold and cycle
+    if (isHoldingPauseRef.current) {
+      if (!cycleTimeoutRef.current) {
+        cycleTimeoutRef.current = setTimeout(() => {
+          if (isVisibleRef.current) {
+            runSyncCycle();
+          }
+        }, 1500);
+      }
+      return;
+    }
+
+    const primaryVid = activeVideos[0];
+    const targetTime = primaryVid ? primaryVid.currentTime : 0;
+
+    // If video was already at or beyond 5.85s or at 0, run fresh cycle
+    if (targetTime >= 5.85 || targetTime === 0) {
+      runSyncCycle();
+      return;
+    }
+
+    activeVideos.forEach((v) => {
+      try {
+        if (Math.abs(v.currentTime - targetTime) > 0.06) {
+          v.currentTime = targetTime;
+        }
+        const playPromise = v.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(() => {});
+        }
+      } catch {}
+    });
+
+    if (primaryVid && 'requestVideoFrameCallback' in primaryVid) {
+      const checkFrame = (_now: DOMHighResTimeStamp, metadata: { mediaTime: number }) => {
+        if (!isVisibleRef.current || isHoldingPauseRef.current) return;
+        if (metadata.mediaTime >= 5.85) {
+          freezeAndHold();
+          return;
+        }
+        frameCallbackIdRef.current = (primaryVid as any).requestVideoFrameCallback(checkFrame);
+      };
+      frameCallbackIdRef.current = (primaryVid as any).requestVideoFrameCallback(checkFrame);
+    }
+
+    const remainingMs = Math.max(200, (6.0 - targetTime) * 1000);
+    cycleTimeoutRef.current = setTimeout(() => {
+      freezeAndHold();
+    }, remainingMs);
+  }, [freezeAndHold, runSyncCycle]);
+
   // Handle Visibility and Viewport Intersection
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
         if (cycleTimeoutRef.current) clearTimeout(cycleTimeoutRef.current);
+        const primaryVid = videoRefs.current[0];
+        if (primaryVid && frameCallbackIdRef.current !== null && 'cancelVideoFrameCallback' in primaryVid) {
+          (primaryVid as any).cancelVideoFrameCallback(frameCallbackIdRef.current);
+          frameCallbackIdRef.current = null;
+        }
         videoRefs.current.forEach((v) => v?.pause());
       } else if (isVisibleRef.current) {
-        runSyncCycle();
+        resumePlayback();
       }
     };
 
@@ -123,18 +187,23 @@ export function useSynchronizedCategoryVideos({}: UseSynchronizedCategoryVideosO
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
             isVisibleRef.current = true;
-            runSyncCycle();
+            resumePlayback();
           } else {
             isVisibleRef.current = false;
             if (cycleTimeoutRef.current) {
               clearTimeout(cycleTimeoutRef.current);
               cycleTimeoutRef.current = null;
             }
+            const primaryVid = videoRefs.current[0];
+            if (primaryVid && frameCallbackIdRef.current !== null && 'cancelVideoFrameCallback' in primaryVid) {
+              (primaryVid as any).cancelVideoFrameCallback(frameCallbackIdRef.current);
+              frameCallbackIdRef.current = null;
+            }
             videoRefs.current.forEach((v) => v?.pause());
           }
         });
       },
-      { threshold: 0.05, rootMargin: '250px 0px 100px 0px' }
+      { threshold: 0.05 }
     );
 
     const sectionEl = sectionRef.current;
@@ -145,7 +214,7 @@ export function useSynchronizedCategoryVideos({}: UseSynchronizedCategoryVideosO
     // Touch/click fallback for iOS Low Power Mode
     const handleFirstGesture = () => {
       if (isVisibleRef.current && !isHoldingPauseRef.current) {
-        runSyncCycle();
+        resumePlayback();
       }
     };
     window.addEventListener('touchstart', handleFirstGesture, { once: true, passive: true });
