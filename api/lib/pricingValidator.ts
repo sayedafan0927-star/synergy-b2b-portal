@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { getCachedCatalog } from './catalogCache';
+import { getErpApiKey } from './erpKey';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
@@ -190,10 +191,37 @@ export async function validateAndPriceOrder(
   const missingSkus = skusToLookup.filter(sku => !dbVariantsMap.has(sku.toUpperCase()));
   if (missingSkus.length > 0) {
     try {
-      const cached = await getCachedCatalog('catalog_global');
-      if (cached?.data?.products && Array.isArray(cached.data.products)) {
+      let cached = await getCachedCatalog('catalog_global');
+      let products = Array.isArray(cached?.data?.products) ? cached.data.products : [];
+
+      if (products.length === 0) {
+        try {
+          const erpUrl = (process.env.ERP_API_URL || 'https://kilem-khan.kz/api/sin/public/api_portal.php') + '?action=catalog';
+          const erpKey = getErpApiKey();
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 6000);
+          const res = await fetch(erpUrl, {
+            headers: {
+              Accept: 'application/json',
+              'X-Portal-Key': erpKey,
+            },
+            signal: controller.signal,
+          }).finally(() => clearTimeout(timeout));
+
+          if (res.ok) {
+            const freshData = await res.json();
+            if (Array.isArray(freshData?.products)) {
+              products = freshData.products;
+            }
+          }
+        } catch (erpFetchErr) {
+          console.warn('[PricingValidator] Direct ERP catalog fetch notice:', erpFetchErr);
+        }
+      }
+
+      if (products && Array.isArray(products) && products.length > 0) {
         const missingUpper = new Set(missingSkus.map(s => s.toUpperCase()));
-        for (const p of cached.data.products) {
+        for (const p of products) {
           if (Array.isArray(p.variants)) {
             for (const v of p.variants) {
               const vSku = String(v.sku || '').trim().toUpperCase();
