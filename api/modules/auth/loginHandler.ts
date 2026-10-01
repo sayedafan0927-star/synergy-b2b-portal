@@ -285,16 +285,23 @@ export async function handleEmployeeLoginFallback(
   const empId = matchedEmp.id;
   const uId = `erp-employee-${empId}`;
 
-  // 2. Поиск хэша пароля сотрудника в profiles
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  // 2. Поиск хэша пароля сотрудника в profiles (безопасно, без приведения integer к UUID)
   let dbProfile: any = null;
   if (supabase) {
     try {
       const qLow = inputLogin.toLowerCase().trim();
-      const { data } = await supabase
-        .from('profiles')
-        .select('id, password_hash, role')
-        .or(`id.eq.${empId},phone.eq.${empPhone},manager_id.eq.${empId},full_name.ilike.%${qLow}%`)
-        .maybeSingle();
+      const phoneDigits = empPhone.replace(/\D+/g, '');
+      const last10 = phoneDigits.slice(-10);
+
+      let query = supabase.from('profiles').select('id, password_hash, role, phone, full_name');
+      if (last10.length === 10) {
+        query = query.or(`phone.ilike.%${last10}%,full_name.ilike.%${qLow}%`);
+      } else {
+        query = query.or(`phone.eq.${empPhone},full_name.ilike.%${qLow}%`);
+      }
+      const { data } = await query.limit(1).maybeSingle();
       dbProfile = data;
     } catch (e) {
       logger.warn('[Auth] Error looking up employee profile in Supabase:', e as Error);
@@ -302,9 +309,39 @@ export async function handleEmployeeLoginFallback(
   }
 
   // Загрузка пароля сотрудника: строго из защищенной базы данных profiles (Master Record)
-  const storedHash = String(dbProfile?.password_hash || '').trim();
+  let storedHash = String(dbProfile?.password_hash || '').trim();
 
-  // Если пароль в базе не настроен и нет стартового хэша - блокируем вход
+  // Если пароль сотрудника в базе еще не настроен
+  if (!storedHash) {
+    // Безопасный первоначальный bootstrap для учетной записи Главного Администратора
+    if (empRole === 'admin' && inputPass && inputPass.length >= 4) {
+      try {
+        const bcryptHash = await bcrypt.hash(inputPass, 10);
+        const adminId = (dbProfile?.id && UUID_REGEX.test(dbProfile.id))
+          ? dbProfile.id
+          : crypto.randomUUID();
+
+        await supabase
+          .from('profiles')
+          .upsert({
+            id: adminId,
+            role: 'admin',
+            full_name: empName,
+            phone: empPhone,
+            company_name: 'Synergy Group (Администрация)',
+            password_hash: bcryptHash,
+            impersonation_enabled: true,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'id' });
+
+        storedHash = bcryptHash;
+        logger.info('[Auth] Master admin password bootstrap successful', { empId, phone: empPhone });
+      } catch (bootErr) {
+        logger.warn('[Auth] Admin password bootstrap notice:', bootErr as Error);
+      }
+    }
+  }
+
   if (!storedHash) {
     logger.warn('[Auth P0 Guard] Blocked employee login: account has no password_hash configured', {
       empId,
@@ -354,7 +391,6 @@ export async function handleEmployeeLoginFallback(
   }
 
   // 4. Формирование сессии при успешной аутентификации
-  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const resolvedEmpId = (dbProfile?.id && UUID_REGEX.test(dbProfile.id))
     ? dbProfile.id
     : crypto.randomUUID();

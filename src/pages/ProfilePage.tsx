@@ -21,6 +21,7 @@ import {
 } from '@/lib/erpApi';
 import { useShowroomMode } from '@/contexts/ShowroomModeContext';
 import SupplierCabinet from '@/components/SupplierCabinet';
+import LoginPage from './LoginPage';
 import { AdminDisplaySettingsTab, AdminUsersTab, AdminErpSyncTab } from '@/components/admin';
 import {
   type Order,
@@ -158,14 +159,7 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
   }
 
   if (!user || !profile) {
-    return (
-      <section className="min-h-screen bg-slate-50 pt-20 pb-24 lg:pb-8 flex items-center justify-center">
-        <div className="mx-auto max-w-md px-4 py-16 text-center">
-          <h2 className="text-xl font-bold text-slate-900">Необходима авторизация</h2>
-          <p className="mt-2 text-sm text-slate-500">Войдите в аккаунт для доступа к личному кабинету</p>
-        </div>
-      </section>
-    );
+    return <LoginPage onNavigate={onNavigate} />;
   }
 
   const tabs: Array<{ id: TabId; label: string; icon: any; show: boolean }> = [
