@@ -47,14 +47,6 @@
     @apply outline-none ring-2 ring-brand-500 ring-offset-2 ring-offset-white;
   }
 
-  /* Hardware-accelerated video rendering for zero-latency mobile playback */
-  video {
-    -webkit-transform: translateZ(0);
-    transform: translateZ(0);
-    -webkit-backface-visibility: hidden;
-    backface-visibility: hidden;
-  }
-
   /* Respect reduced motion preferences */
   @media (prefers-reduced-motion: reduce) {
     html {

@@ -208,7 +208,7 @@ export default function HomePage({
                   }`}
                 >
                   {/* Clean Frameless Symbol - Sits directly on stone background with zero box fill */}
-                  <div className={`aspect-square flex items-center justify-center [isolation:isolate] [contain:paint_layout] transform-gpu ${
+                  <div className={`aspect-square flex items-center justify-center ${
                     isFirst ? 'w-[180px] sm:w-[220px] md:w-full' : 'w-full'
                   }`}>
                     {category.video ? (
@@ -222,12 +222,8 @@ export default function HomePage({
                         disableRemotePlayback
                         preload="auto"
                         poster={category.poster || category.image}
-                        style={{
-                          willChange: 'transform',
-                          transform: 'translateZ(0)',
-                          backfaceVisibility: 'hidden',
-                        }}
-                        className="h-full w-full object-contain mix-blend-screen transform-gpu transition-transform duration-500 group-hover:scale-105 pointer-events-none"
+                        style={{ willChange: 'transform' }}
+                        className="h-full w-full object-contain mix-blend-screen transition-transform duration-500 group-hover:scale-105"
                       >
                         <source src={category.video} type="video/mp4" />
                       </video>
@@ -236,7 +232,7 @@ export default function HomePage({
                         src={category.image}
                         alt={category.name}
                         loading="lazy"
-                        className="h-full w-full object-contain mix-blend-screen transition-transform duration-500 group-hover:scale-105 pointer-events-none"
+                        className="h-full w-full object-contain mix-blend-screen transition-transform duration-500 group-hover:scale-105"
                       />
                     )}
                   </div>
