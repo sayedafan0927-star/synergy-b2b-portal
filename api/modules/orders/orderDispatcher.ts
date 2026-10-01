@@ -13,9 +13,21 @@ import { isFatalBusinessError, dispatchDlqEmergencyAlert } from '../../outbox/ou
  */
 export function triggerImmediateOutboxSync(req: VercelRequest, correlationId: string): void {
   try {
-    const host = req.headers['host'] || 'localhost:3000';
-    const proto = (req.headers['x-forwarded-proto'] as string) || (String(host).includes('localhost') ? 'http' : 'https');
-    const workerUrl = `${proto}://${host}/api/outbox/sync`;
+    const rawHost = String(req.headers['host'] || '').trim().toLowerCase();
+    const allowedHosts = new Set([
+      'b2b.synergy.kz',
+      'synergy-b2b-portal.vercel.app',
+      'localhost:3000',
+      'localhost:5173',
+      '127.0.0.1:3000',
+      '127.0.0.1:5173',
+      (process.env.VERCEL_URL || '').toLowerCase().trim(),
+    ].filter(Boolean));
+
+    // Anti-SSRF: Verify host header against whitelist, default to primary production domain or VERCEL_URL
+    const safeHost = allowedHosts.has(rawHost) ? rawHost : (process.env.VERCEL_URL || 'b2b.synergy.kz');
+    const proto = (req.headers['x-forwarded-proto'] as string) || (safeHost.includes('localhost') || safeHost.includes('127.0.0.1') ? 'http' : 'https');
+    const workerUrl = `${proto}://${safeHost}/api/outbox/sync`;
     const cronSecret = process.env.CRON_SECRET || process.env.PORTAL_SECRET_KEY || '';
 
     // Fire-and-forget: не блокируем ответ клиенту

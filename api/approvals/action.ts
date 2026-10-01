@@ -81,7 +81,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
-      // 2.1. Обновляем статус заказа в Supabase
+      // 2.1. При отклонении заказа: СНАЧАЛА возвращаем зарезервированные остатки на склад
+      // Функция release_order_reservations требует reservations_released = false, поэтому вызывается до флага!
+      if (!isApprove && supabase) {
+        try {
+          const { data: ordRow } = await supabase
+            .from('orders')
+            .select('id')
+            .or(`id.eq.${orderId},order_number.eq.${orderId}`)
+            .maybeSingle();
+
+          const releaseTargetId = ordRow?.id || orderId;
+          await supabase.rpc('release_order_reservations', { p_order_id: releaseTargetId });
+        } catch (relErr: any) {
+          console.warn('[Approval Action] Error releasing reservations on reject:', relErr?.message);
+        }
+      }
+
+      // 2.2. Обновляем статус заказа в Supabase
       const { data: dbOrders, error: dbError } = await supabase
         .from('orders')
         .update({
@@ -113,12 +130,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
-      // При отклонении заказа немедленно освобождаем резервы склада в PostgreSQL
+      // При отклонении заказа каскадно отменяем мультискладские подзаказы
       if (!isApprove) {
         try {
-          await supabase.rpc('release_order_reservations', { p_order_id: targetOrderId });
-
-          // Каскадная отмена для мультискладских подзаказов
           const { data: subOrders } = await supabase
             .from('orders')
             .select('id')
@@ -135,7 +149,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               .eq('parent_order_id', targetOrderId);
           }
         } catch (relErr: any) {
-          console.warn('[Approval Action] Error releasing reservations on reject:', relErr?.message);
+          console.warn('[Approval Action] Error cascading cancel to suborders:', relErr?.message);
         }
       }
 

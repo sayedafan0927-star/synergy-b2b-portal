@@ -61,6 +61,12 @@ const ADMIN_ACTIONS = new Set([
   'financial_balance',
 ]);
 
+// Защищенные служебные действия персонала (admin, manager_rm, manager_lm, server)
+const STAFF_ACTIONS = new Set([
+  'counterparties',
+  'regional_managers',
+]);
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const startTime = Date.now();
   try {
@@ -118,9 +124,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (handled) return;
     }
 
-    // 1.1. Прямой опрос кэша финансового баланса контрагента (PostgreSQL)
+    // 1.1. Прямой опрос кэша финансового баланса контрагента (PostgreSQL) с аутентификацией
     if ((action === 'client_debt' || action === 'get_client_debt') && req.method === 'GET' && supabase) {
-      const handled = await handleCachedClientDebt(req, res, supabase);
+      const callerAuth = await authenticateRequest(req, { allowServerKey: true });
+      if (!callerAuth.isAuthenticated) {
+        return res.status(401).json({ success: false, error: 'Требуется авторизация для просмотра задолженности' });
+      }
+      const handled = await handleCachedClientDebt(req, res, supabase, callerAuth);
       if (handled) return;
     }
 
@@ -234,11 +244,62 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const isAdmin = verifiedAuth.role === 'admin';
+      const isStaff = isAdmin || verifiedAuth.role === 'manager_rm' || verifiedAuth.role === 'manager_lm';
+
       if (ADMIN_ACTIONS.has(action) && !isAdmin && !verifiedAuth.isServer) {
         return res.status(403).json({
           success: false,
           error: 'Forbidden: Недостаточно прав для выполнения административного действия',
         });
+      }
+
+      if (STAFF_ACTIONS.has(action) && !isStaff && !verifiedAuth.isServer) {
+        return res.status(403).json({
+          success: false,
+          error: 'Forbidden: Доступ к служебным справочникам контрагентов разрешен только сотрудникам компании.',
+        });
+      }
+
+      // Whitelist для оптовых клиентов: блокируем BOLA и несанкционированные действия
+      if (verifiedAuth.role === 'client' && !verifiedAuth.isServer) {
+        const CLIENT_ALLOWED_ACTIONS = new Set([
+          'catalog',
+          'catalog_normalized',
+          'catalog_paginated',
+          'product',
+          'create_order',
+          'client_debt',
+          'get_client_debt',
+          'refresh_balance',
+          'active_reservations',
+          'create_lead',
+          'reconciliation_report',
+          'get_reconciliation_report',
+          'request_approval',
+          'logout',
+          'display_settings',
+          'orders',
+          'my_orders',
+        ]);
+
+        if (!CLIENT_ALLOWED_ACTIONS.has(action)) {
+          return res.status(403).json({
+            success: false,
+            error: 'Forbidden: Действие недоступно для учетной записи клиента.',
+          });
+        }
+
+        // Anti-IDOR: принудительно фиксируем partner_id клиента
+        if (verifiedAuth.partnerId) {
+          req.query.partner_id = String(verifiedAuth.partnerId);
+          req.query.counterparty_id = String(verifiedAuth.partnerId);
+          req.query.client_id = String(verifiedAuth.partnerId);
+          if (req.body && typeof req.body === 'object') {
+            req.body.partner_id = String(verifiedAuth.partnerId);
+            req.body.counterparty_id = String(verifiedAuth.partnerId);
+            req.body.client_id = String(verifiedAuth.partnerId);
+          }
+        }
       }
 
       // Ограничение доступа для поставщиков к данным только своей фабрики

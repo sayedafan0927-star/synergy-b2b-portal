@@ -253,25 +253,8 @@ export async function handleEmployeeLoginFallback(
     }
   }
 
-  // Защищенные стартовые SHA-256 хэши для ключевых сотрудников ERP:
-  // afan (87086984543): 'Aidafa0927!'
-  // остальные сотрудники: 'Synergy2026'
-  const DEFAULT_EMPLOYEE_HASHES: Record<string, string> = {
-    '2': 'b5ea9d36ead0a9326ac1bc5f4eccfe9ca0c2beab0730e1641eefa9eadefc3737', // afan (Aidafa0927!)
-    '87086984543': 'b5ea9d36ead0a9326ac1bc5f4eccfe9ca0c2beab0730e1641eefa9eadefc3737', // afan
-    '1': 'f898c400752061ba5d0fa4773c4277ea8ef1be7611d9c6d82c25a3d9fab7ad54', // admin1 (Synergy2026)
-    '87082449730': 'f898c400752061ba5d0fa4773c4277ea8ef1be7611d9c6d82c25a3d9fab7ad54',
-    '9': 'f898c400752061ba5d0fa4773c4277ea8ef1be7611d9c6d82c25a3d9fab7ad54', // Нурбол Торебеков (Synergy2026)
-    '87768818101': 'f898c400752061ba5d0fa4773c4277ea8ef1be7611d9c6d82c25a3d9fab7ad54',
-    '12': 'f898c400752061ba5d0fa4773c4277ea8ef1be7611d9c6d82c25a3d9fab7ad54', // Ришат Худайберды (Synergy2026)
-    '87714691133': 'f898c400752061ba5d0fa4773c4277ea8ef1be7611d9c6d82c25a3d9fab7ad54',
-    '15': 'f898c400752061ba5d0fa4773c4277ea8ef1be7611d9c6d82c25a3d9fab7ad54', // Суженова Ботагоз (Synergy2026)
-    '87785806866': 'f898c400752061ba5d0fa4773c4277ea8ef1be7611d9c6d82c25a3d9fab7ad54',
-    '17': 'f898c400752061ba5d0fa4773c4277ea8ef1be7611d9c6d82c25a3d9fab7ad54', // Раби (Synergy2026)
-  };
-
-  const cleanPhone = String(empPhone || '').replace(/\D+/g, '');
-  const storedHash = String(dbProfile?.password_hash || DEFAULT_EMPLOYEE_HASHES[String(empId)] || DEFAULT_EMPLOYEE_HASHES[cleanPhone] || '').trim();
+  // Загрузка пароля сотрудника: строго из защищенной базы данных profiles (Master Record)
+  const storedHash = String(dbProfile?.password_hash || process.env.INITIAL_EMPLOYEE_HASH || '').trim();
 
   // Если пароль в базе не настроен и нет стартового хэша - блокируем вход
   if (!storedHash) {

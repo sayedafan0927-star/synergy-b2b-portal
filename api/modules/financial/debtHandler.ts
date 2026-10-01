@@ -9,10 +9,25 @@ import { logger } from '../../lib/logger';
 export async function handleCachedClientDebt(
   req: VercelRequest,
   res: VercelResponse,
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  callerAuth?: any
 ): Promise<boolean> {
   const isRefresh = req.query.refresh === 'true' || req.query.refresh === '1';
-  const pId = String(req.query.partner_id || req.query.counterparty_id || req.query.client_id || (req.body && (req.body.partner_id || req.body.counterparty_id || req.body.client_id)) || '').trim();
+  let pId = String(req.query.partner_id || req.query.counterparty_id || req.query.client_id || (req.body && (req.body.partner_id || req.body.counterparty_id || req.body.client_id)) || '').trim();
+
+  // Anti-IDOR: Если запрашивает оптовый клиент, он имеет доступ ТОЛЬКО к своим финансовым данным
+  if (callerAuth && callerAuth.role === 'client' && !callerAuth.isServer) {
+    const callerPartnerId = String(callerAuth.partnerId || '');
+    if (!callerPartnerId) {
+      res.status(403).json({ success: false, error: 'Доступ запрещен: партнерский ID клиента не привязан к профилю.' });
+      return true;
+    }
+    if (pId && pId !== callerPartnerId) {
+      res.status(403).json({ success: false, error: 'Доступ запрещен: просмотр задолженности других контрагентов запрещен (Anti-IDOR Guard).' });
+      return true;
+    }
+    pId = callerPartnerId;
+  }
 
   if (pId && !isRefresh) {
     try {

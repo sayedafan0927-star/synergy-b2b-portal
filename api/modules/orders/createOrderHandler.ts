@@ -227,11 +227,14 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
         return;
       }
       logger.warn('[Order] create_order_atomic RPC notice, falling back to sequential saga:', atomicErr);
-    } else if (atomicData && atomicData.success) {
+    } else if (atomicData && (atomicData.success || atomicData.order_id)) {
       outboxOrderId = atomicData.order_id;
       outboxOrderDoc = atomicData.order_number;
-      createdSplitOrders = Array.isArray(atomicData.split_orders) && atomicData.split_orders.length > 0
+      const splitList = (Array.isArray(atomicData.split_orders) && atomicData.split_orders.length > 0)
         ? atomicData.split_orders
+        : ((Array.isArray(atomicData.sub_orders) && atomicData.sub_orders.length > 0) ? atomicData.sub_orders : []);
+      createdSplitOrders = splitList.length > 0
+        ? splitList
         : [{
             doc_number: outboxOrderDoc,
             warehouse: distinctWarehouses[0] || 'Основной Склад Астана',

@@ -1644,7 +1644,43 @@ with open(os.path.join(ROOT_DIR, "src", "pages", "CatalogPage.tsx"), "r", encodi
 test_assert("initialSearch" in cp_p21, "CatalogPage passes initialSearch to state persistence")
 
 # ------------------------------------------------------------------------------
-# 46. Summary Report
+# 46. Stage 22: Phase 0 Hotfix — SSRF, Anti-BOLA, Zero-Hardcode & Atomic Stock Contract
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 46. STAGE 22: PHASE 0 HOTFIX & RESILIENCE AUDIT ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "orderDispatcher.ts"), "r", encoding="utf-8") as fp:
+    od_code = fp.read()
+test_assert("allowedHosts" in od_code and "safeHost" in od_code, "orderDispatcher.ts implements strict host whitelist to prevent SSRF and secret token theft")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "auth", "loginHandler.ts"), "r", encoding="utf-8") as fp:
+    lh_code = fp.read()
+test_assert("DEFAULT_EMPLOYEE_HASHES" not in lh_code, "loginHandler.ts eliminated hardcoded employee password hashes dictionary")
+test_assert("Aidafa0927!" not in lh_code and "Synergy2026" not in lh_code, "loginHandler.ts zero residual plaintext passwords in comments or source")
+
+with open(os.path.join(ROOT_DIR, "api", "erp.ts"), "r", encoding="utf-8") as fp:
+    erp_p0 = fp.read()
+test_assert("STAFF_ACTIONS" in erp_p0 and "counterparties" in erp_p0 and "regional_managers" in erp_p0, "api/erp.ts isolates counterparties and regional_managers under STAFF_ACTIONS")
+test_assert("CLIENT_ALLOWED_ACTIONS" in erp_p0, "api/erp.ts enforces strict whitelist of allowed actions for client role")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "financial", "debtHandler.ts"), "r", encoding="utf-8") as fp:
+    dh_code = fp.read()
+test_assert("callerAuth.role === 'client'" in dh_code and "callerPartnerId" in dh_code, "debtHandler.ts enforces Anti-IDOR check ensuring clients can only query their own debt")
+
+with open(os.path.join(ROOT_DIR, "supabase", "migrations", "20261001083000_fix_atomic_order_contract_and_deadlocks.sql"), "r", encoding="utf-8") as fp:
+    mig_code = fp.read()
+test_assert("'success', true" in mig_code, "Migration 20261001083000 explicitly returns 'success', true in create_order_atomic")
+test_assert("ORDER BY (elem->>'sku')::text ASC" in mig_code, "Migration 20261001083000 enforces deterministic ORDER BY to prevent deadlocks")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "createOrderHandler.ts"), "r", encoding="utf-8") as fp:
+    coh_code = fp.read()
+test_assert("atomicData.order_id" in coh_code, "createOrderHandler.ts verifies atomicData.order_id to prevent double reservations")
+
+with open(os.path.join(ROOT_DIR, "api", "approvals", "action.ts"), "r", encoding="utf-8") as fp:
+    act_code = fp.read()
+test_assert(act_code.find("release_order_reservations") < act_code.find("reservations_released: !isApprove ? true : undefined"), "action.ts releases order reservations BEFORE setting reservations_released flag on reject")
+
+# ------------------------------------------------------------------------------
+# 47. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests
