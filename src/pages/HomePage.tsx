@@ -1,5 +1,5 @@
 import { useMemo, useRef } from 'react';
-import { Truck, Shield, Clock, Warehouse, ArrowRight } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import type { PageId } from '@/types';
 import { categories } from '@/data/categories';
 import { useProducts } from '@/hooks/useProductData';
@@ -14,24 +14,24 @@ import { useSynchronizedCategoryVideos } from '@/hooks/useSynchronizedCategoryVi
 
 const advantages = [
   {
-    icon: Truck,
-    title: 'Оптовые цены',
-    description: 'Прямые поставки от производителей без посредников. Гибкая система скидок при крупных заказах.',
+    image: '/images/advantages/advantage_loom.webp',
+    title: 'Прямой доступ к станкам',
+    description: 'Уникальная возможность работать напрямую с производственными мощностями ведущих фабрик.',
   },
   {
-    icon: Shield,
-    title: 'Гарантия качества',
-    description: 'Все товары сертифицированы и проходят контроль качества. Работаем только с проверенными брендами.',
+    image: '/images/advantages/advantage_rolls.webp',
+    title: 'Автоматизация остатков',
+    description: 'Точное управление и минимизация тканевых отходов при нарезке и комплектации заказов.',
   },
   {
-    icon: Clock,
-    title: 'Быстрая доставка',
-    description: 'Отгрузка в течение 24 часов со склада. Доставка по всему Казахстану и странам СНГ.',
+    image: '/images/advantages/advantage_compass.webp',
+    title: 'Персональная логистика',
+    description: 'Индивидуальные маршруты и гарантированные сроки доставки по всему Казахстану и СНГ.',
   },
   {
-    icon: Warehouse,
-    title: 'Складские остатки',
-    description: 'Более 1500 наименований всегда в наличии на трёх складах. Актуальные остатки онлайн.',
+    image: '/images/advantages/advantage_paisley.webp',
+    title: 'Эксклюзивные коллекции',
+    description: 'Доступ к лимитированным дизайнам ковровых коллекций и уникальным премиальным текстурам.',
   },
 ];
 
@@ -147,26 +147,47 @@ export default function HomePage({
         </div>
 
         <div className="container-w relative z-10">
-          <h2 className="section-heading text-center text-slate-900">Почему выбирают нас</h2>
-          <p className="section-subheading text-center mx-auto text-slate-600">
-            Synergy Group — надёжный оптовый поставщик ковровых покрытий с собственными складами
-          </p>
+          <div className="text-center max-w-3xl mx-auto mb-12 lg:mb-16">
+            <span className="font-mono text-xs sm:text-sm text-brand-700 font-semibold uppercase tracking-[0.25em] block mb-2">
+              SYNERGIYA GROUP
+            </span>
+            <h2 className="font-display text-2xl sm:text-4xl lg:text-5xl font-light tracking-wide text-slate-900 uppercase">
+              Ваши преимущества
+            </h2>
+            <p className="mt-3 text-sm sm:text-base text-slate-600 font-body max-w-xl mx-auto">
+              Прямые оптовые поставки ковровых покрытий от ведущих мировых фабрик с собственными распределительными центрами
+            </p>
+          </div>
 
-          <div className="mt-10 lg:mt-14 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 lg:gap-6">
             {advantages.map((item) => (
               <div
                 key={item.title}
-                className="card p-6 text-center sm:text-left bg-white/95 border border-amber-900/10 hover:border-amber-400/50 shadow-xs hover:shadow-xl transition-all duration-300 relative group rounded-2xl"
+                className="card flex flex-col justify-between p-6 sm:p-7 text-left bg-white border border-slate-200/90 hover:border-brand-600/70 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-300 relative group rounded-2xl cursor-default"
               >
-                <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-amber-400/10 text-brand-800 border border-amber-400/25 mb-4 group-hover:scale-105 transition-transform">
-                  <item.icon className="h-6 w-6 text-brand-700" />
+                <div>
+                  {/* Clean Transparent Ink Illustration */}
+                  <div className="h-32 sm:h-36 flex items-center justify-center mb-6 overflow-hidden">
+                    <img
+                      src={item.image}
+                      alt={item.title}
+                      loading="lazy"
+                      decoding="async"
+                      className="max-h-full max-w-full object-contain filter drop-shadow-xs group-hover:scale-105 transition-transform duration-500"
+                    />
+                  </div>
+                  <h3 className="font-display text-sm sm:text-base font-bold text-slate-900 uppercase tracking-wide leading-snug group-hover:text-brand-800 transition-colors">
+                    {item.title}
+                  </h3>
+                  <p className="mt-2.5 text-xs sm:text-sm text-slate-600 font-body leading-relaxed">
+                    {item.description}
+                  </p>
                 </div>
-                <h3 className="font-display text-base font-semibold text-slate-900">
-                  {item.title}
-                </h3>
-                <p className="mt-2 text-sm text-slate-600 font-body leading-relaxed">
-                  {item.description}
-                </p>
+
+                {/* Minimalist corner arrow strictly matching reference design */}
+                <div className="mt-5 pt-3 flex justify-end items-center border-t border-slate-100 group-hover:border-slate-200/80 transition-colors">
+                  <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-brand-700 group-hover:translate-x-1 transition-all duration-300" />
+                </div>
               </div>
             ))}
           </div>
