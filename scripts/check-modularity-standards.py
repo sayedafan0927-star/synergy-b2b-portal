@@ -23,6 +23,7 @@ THRESHOLDS = {
     "api": {"max": 480, "warn": 380, "name": "API Handlers & Middleware (api/)"},
     "lib": {"max": 450, "warn": 380, "name": "Libraries & Stores (src/lib/, hooks/, contexts/)"},
     "types": {"max": 500, "warn": 400, "name": "Type Definitions (src/types/)"},
+    "i18n": {"max": 750, "warn": 600, "name": "Localization Dictionaries (src/i18n/)"},
     "default": {"max": 450, "warn": 380, "name": "General Source Files"},
 }
 
@@ -35,6 +36,8 @@ def get_category(rel_path: str) -> str:
         return "api"
     elif rel_path.startswith("src/types/"):
         return "types"
+    elif rel_path.startswith("src/i18n/"):
+        return "i18n"
     elif rel_path.startswith("src/lib/") or rel_path.startswith("src/hooks/") or rel_path.startswith("src/contexts/"):
         return "lib"
     return "default"

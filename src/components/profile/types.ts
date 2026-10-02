@@ -21,6 +21,11 @@ export interface RepeatItemAdded {
   size: string;
   requestedQty: number;
   addedQty: number;
+  image?: string;
+  sku?: string;
+  collection?: string;
+  price?: number;
+  area_sqm?: number;
   originalWarehouse?: string;
   warehouse?: string;
   isWarehouseSubstituted?: boolean;
@@ -31,6 +36,11 @@ export interface RepeatItemMissing {
   size: string;
   requestedQty: number;
   reason: string;
+  image?: string;
+  sku?: string;
+  collection?: string;
+  warehouse?: string;
+  price?: number;
 }
 
 export interface RepeatResult {

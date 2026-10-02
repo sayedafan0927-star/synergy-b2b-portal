@@ -42,6 +42,30 @@ function parseSizeArea(sizeStr?: string): number {
   return 1;
 }
 
+function clean1CName(rawName?: string): { name: string; sku: string; collection: string } {
+  if (!rawName) return { name: 'Ковер', sku: '', collection: '' };
+  const m = rawName.match(/^([A-ZА-Я0-9\s-]+?)(?:\s*<[^>]*>)?\s*\(([^)]+)\)/i);
+  if (m) {
+    const coll = m[1].replace(/^(ковер|дорожка)\s+/i, '').trim();
+    const inside = m[2].trim();
+    const firstComma = inside.indexOf(',');
+    if (firstComma > 0) {
+      const sku = inside.slice(0, firstComma).trim();
+      const afterFirst = inside.slice(firstComma + 1).trim();
+      const typeMatch = afterFirst.match(/\b(STAN|R|СТАН|РУЛОН)\b\s*,\s*([^)]+)$/i);
+      const color = typeMatch ? typeMatch[2].trim() : '';
+      return {
+        name: `${coll} ${sku}${color ? ` • ${color}` : ''}`,
+        sku,
+        collection: coll,
+      };
+    }
+  }
+  const clean = rawName.replace(/<[^>]+>/g, '').trim();
+  const coll = clean.split(' ')[0] || '';
+  return { name: clean, sku: '', collection: coll };
+}
+
   try {
     const skuFilter = req.query.sku ? String(req.query.sku).trim() : null;
     const searchFilter = req.query.q ? String(req.query.q).toLowerCase().trim() : null;
@@ -149,10 +173,11 @@ function parseSizeArea(sizeStr?: string): number {
       const items = rawItems.map((it: any) => {
         const qty = Number(it.quantity) || 1;
         const areaSqm = parseSizeArea(it.size);
+        const cleaned = clean1CName(it.product_name || it.name || '');
         return {
-          sku: it.sku || '',
-          product_name: it.product_name || 'Ковер',
-          collection: it.collection || '',
+          sku: it.sku || cleaned.sku || '',
+          product_name: cleaned.name || it.product_name || 'Ковер',
+          collection: it.collection || cleaned.collection || '',
           size: it.size || 'Стандарт',
           warehouse: it.warehouse || o.warehouse || 'Основной Склад Астана',
           quantity: qty,
@@ -203,10 +228,11 @@ function parseSizeArea(sizeStr?: string): number {
               const items = rawItems.map((it: any) => {
                 const qty = Number(it.quantity) || 1;
                 const area = Number(it.area_sqm) || parseSizeArea(it.size);
+                const cleaned = clean1CName(it.name || it.product_name || '');
                 return {
-                  sku: it.sku || '',
-                  product_name: it.name || 'Ковер',
-                  collection: it.name?.split(' ')[0] || '',
+                  sku: it.sku || cleaned.sku || '',
+                  product_name: cleaned.name || it.name || 'Ковер',
+                  collection: it.collection || cleaned.collection || it.name?.split(' ')[0] || '',
                   size: it.size || (it.width && it.length ? `${it.width} × ${it.length}` : 'Стандарт'),
                   warehouse: o.warehouse_name || 'Основной Склад Астана',
                   quantity: qty,

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Phone, Clock, ChevronDown, Package } from 'lucide-react';
+import { Phone, Clock, ChevronDown, Package, Building2, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import type { ActiveReservation } from '@/lib/erpApi';
 import { useLanguage } from '@/contexts/LanguageContext';
 
@@ -8,7 +8,30 @@ interface ReservationCardProps {
   isExpanded: boolean;
   isCatalogMatch: boolean;
   onToggleExpand: () => void;
-  formatTtl: (holdExpiresAt?: string, createdAt?: string) => { label: string; isExpiringSoon: boolean };
+  formatTtl: (holdExpiresAt?: string, createdAt?: string) => { label: string; isExpiringSoon: boolean; isExpired: boolean };
+}
+
+export function clean1CName(rawName?: string): { name: string; sku: string; color: string } {
+  if (!rawName) return { name: 'Ковер', sku: '', color: '' };
+  const m = rawName.match(/^([A-ZА-Я0-9\s-]+?)(?:\s*<[^>]*>)?\s*\(([^)]+)\)/i);
+  if (m) {
+    const coll = m[1].replace(/^(ковер|дорожка)\s+/i, '').trim();
+    const inside = m[2].trim();
+    const firstComma = inside.indexOf(',');
+    if (firstComma > 0) {
+      const sku = inside.slice(0, firstComma).trim();
+      const afterFirst = inside.slice(firstComma + 1).trim();
+      const typeMatch = afterFirst.match(/\b(STAN|R|СТАН|РУЛОН)\b\s*,\s*([^)]+)$/i);
+      const color = typeMatch ? typeMatch[2].trim() : '';
+      return {
+        name: `${coll} ${sku}${color ? ` • ${color}` : ''}`,
+        sku,
+        color,
+      };
+    }
+  }
+  const clean = rawName.replace(/<[^>]+>/g, '').trim();
+  return { name: clean, sku: '', color: '' };
 }
 
 export function ReservationCard({
@@ -24,7 +47,9 @@ export function ReservationCard({
   return (
     <div
       className={`card transition-all overflow-hidden ${
-        isCatalogMatch
+        ttl.isExpired
+          ? 'border-slate-200 bg-slate-50/40 opacity-90'
+          : isCatalogMatch
           ? 'border-amber-300 bg-amber-50/15 shadow-2xs'
           : 'border-slate-200 hover:border-slate-300'
       }`}
@@ -34,10 +59,12 @@ export function ReservationCard({
         className="p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer bg-white hover:bg-slate-50/50 select-none"
         onClick={onToggleExpand}
       >
-        <div className="flex items-start sm:items-center gap-3 min-w-0">
+        <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
           <div
             className={`flex h-10 w-10 items-center justify-center rounded-xl font-bold text-sm shrink-0 ${
-              isCatalogMatch
+              ttl.isExpired
+                ? 'bg-slate-100 text-slate-500'
+                : isCatalogMatch
                 ? 'bg-amber-100 text-amber-900 border border-amber-300'
                 : 'bg-slate-100 text-slate-600'
             }`}
@@ -55,15 +82,24 @@ export function ReservationCard({
                 </span>
               )}
               {isCatalogMatch && (
-                <span className="badge text-[10px] font-bold bg-amber-500 text-white shadow-2xs">
-                  🎯 {t('reservations.badge_current_catalog')}
+                <span className="badge text-[10px] font-bold bg-amber-600 text-white shadow-2xs">
+                  {t('reservations.badge_current_catalog')}
+                </span>
+              )}
+              {ttl.isExpired ? (
+                <span className="badge text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                  {t('reservations.status_expired_badge')}
+                </span>
+              ) : (
+                <span className="badge text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                  {t('reservations.status_active_badge')}
                 </span>
               )}
               <span
                 className={`badge text-[10px] font-bold ${
                   res.status === 'processing'
                     ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                    : 'bg-amber-50 text-amber-800 border border-amber-200'
+                    : 'bg-slate-100 text-slate-700 border border-slate-200'
                 }`}
               >
                 {res.status === 'processing'
@@ -86,29 +122,43 @@ export function ReservationCard({
                   <span>{res.client_phone}</span>
                 </a>
               )}
-              <span className="inline-flex items-center gap-1 text-slate-400">
-                🏢 {res.warehouse}
+              <span className="inline-flex items-center gap-1 text-slate-500">
+                <Building2 className="h-3 w-3 text-slate-400" />
+                <span>{res.warehouse}</span>
               </span>
             </div>
 
-            {/* Direct Product Preview: carpet names, size and quantities visible at a glance */}
+            {/* Direct Product Preview: clean nomenclature row with no emojis */}
             {res.items && res.items.length > 0 && (
-              <div className="mt-2 flex items-center gap-1.5 flex-wrap">
-                {res.items.map((it, idx) => (
-                  <span
-                    key={idx}
-                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold ${
-                      isCatalogMatch
-                        ? 'bg-amber-100/90 text-amber-950 border border-amber-300'
-                        : 'bg-slate-100 text-slate-800 border border-slate-200'
-                    }`}
-                  >
-                    <Package className="h-3 w-3 text-amber-600 shrink-0" />
-                    <span className="truncate max-w-[180px] sm:max-w-none">{it.product_name}</span>
-                    <span className="text-slate-600 font-mono font-normal">({it.size})</span>
-                    <span className="font-bold font-mono text-amber-800">×{it.quantity}</span>
-                  </span>
-                ))}
+              <div className="mt-2.5 space-y-1.5">
+                {res.items.map((it, idx) => {
+                  const cleaned = clean1CName(it.product_name);
+                  return (
+                    <div
+                      key={idx}
+                      className={`rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2 border text-xs ${
+                        isCatalogMatch
+                          ? 'bg-amber-50/70 border-amber-200 text-amber-950'
+                          : 'bg-slate-50 border-slate-200/80 text-slate-800'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <Package className="h-3.5 w-3.5 text-amber-700 shrink-0" />
+                        <span className="font-semibold truncate">
+                          {cleaned.name}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0 text-[11px] font-mono">
+                        <span className="bg-white border border-slate-200 px-1.5 py-0.5 rounded text-slate-700 whitespace-nowrap">
+                          {it.size}
+                        </span>
+                        <span className="bg-amber-100 border border-amber-300 font-extrabold text-amber-900 px-1.5 py-0.5 rounded whitespace-nowrap">
+                          {it.quantity} {t('common.pcs')}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -125,10 +175,18 @@ export function ReservationCard({
             </p>
             <div
               className={`text-[11px] font-medium flex items-center gap-1 sm:justify-end ${
-                ttl.isExpiringSoon ? 'text-rose-600 font-semibold' : 'text-slate-500'
+                ttl.isExpired
+                  ? 'text-rose-600 font-semibold'
+                  : ttl.isExpiringSoon
+                  ? 'text-amber-600 font-semibold'
+                  : 'text-slate-500'
               }`}
             >
-              <Clock className="h-3 w-3 shrink-0" />
+              {ttl.isExpired ? (
+                <AlertTriangle className="h-3 w-3 shrink-0 text-rose-500" />
+              ) : (
+                <Clock className="h-3 w-3 shrink-0 text-slate-400" />
+              )}
               <span>{ttl.label}</span>
             </div>
           </div>
@@ -165,32 +223,35 @@ export function ReservationCard({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-slate-700">
-                {res.items.map((item, idx) => (
-                  <tr key={idx} className="hover:bg-slate-25">
-                    <td className="py-2 px-3">
-                      <span className="font-semibold text-slate-900 block truncate max-w-[200px] sm:max-w-xs">
-                        {item.product_name}
-                      </span>
-                      {item.sku && (
-                        <span className="font-mono text-[10px] text-slate-400">
-                          {t('reservations.art_label')} {item.sku}
+                {res.items.map((item, idx) => {
+                  const cleaned = clean1CName(item.product_name);
+                  return (
+                    <tr key={idx} className="hover:bg-slate-25">
+                      <td className="py-2 px-3">
+                        <span className="font-semibold text-slate-900 block truncate max-w-[220px] sm:max-w-xs">
+                          {cleaned.name}
                         </span>
-                      )}
-                    </td>
-                    <td className="py-2 px-2 font-mono font-medium text-slate-800 whitespace-nowrap">
-                      {item.size}
-                    </td>
-                    <td className="py-2 px-2 text-slate-500 text-[11px] whitespace-nowrap">
-                      {item.warehouse}
-                    </td>
-                    <td className="py-2 px-2 text-right font-bold text-slate-900 whitespace-nowrap">
-                      {item.quantity} {t('common.pcs')}
-                    </td>
-                    <td className="py-2 px-3 text-right font-semibold text-emerald-800 whitespace-nowrap font-mono">
-                      {item.total_sqm} {t('common.sqm')}
-                    </td>
-                  </tr>
-                ))}
+                        {item.sku && (
+                          <span className="font-mono text-[10px] text-slate-400">
+                            {t('reservations.art_label')} {item.sku}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-2 px-2 font-mono font-medium text-slate-800 whitespace-nowrap">
+                        {item.size}
+                      </td>
+                      <td className="py-2 px-2 text-slate-500 text-[11px] whitespace-nowrap">
+                        {item.warehouse}
+                      </td>
+                      <td className="py-2 px-2 text-right font-bold text-slate-900 whitespace-nowrap">
+                        {item.quantity} {t('common.pcs')}
+                      </td>
+                      <td className="py-2 px-3 text-right font-semibold text-emerald-800 whitespace-nowrap font-mono">
+                        {item.total_sqm} {t('common.sqm')}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

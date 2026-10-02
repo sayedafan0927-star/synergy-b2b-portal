@@ -5,12 +5,14 @@ import {
   Clock,
   RefreshCw,
   ShieldAlert,
+  AlertCircle,
+  Building2,
 } from 'lucide-react';
 import { fetchActiveReservations, type ActiveReservation } from '@/lib/erpApi';
 import { Portal } from '@/components/common/Portal';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { ReservationMetricsBar } from './reservations/ReservationMetricsBar';
-import { ReservationCard } from './reservations/ReservationCard';
+import { ReservationCard, clean1CName } from './reservations/ReservationCard';
 
 interface StockReservationsModalProps {
   isOpen: boolean;
@@ -31,7 +33,7 @@ function formatHoldTtl(
   holdExpiresAt?: string,
   createdAt?: string,
   t?: (key: string, fallback?: string) => string
-): { label: string; isExpiringSoon: boolean } {
+): { label: string; isExpiringSoon: boolean; isExpired: boolean } {
   const expiryDate = holdExpiresAt
     ? new Date(holdExpiresAt)
     : createdAt
@@ -39,7 +41,11 @@ function formatHoldTtl(
     : null;
 
   if (!expiryDate) {
-    return { label: t ? t('reservations.ttl_24h', 'Hold TTL 24ч') : 'Hold TTL 24ч', isExpiringSoon: false };
+    return {
+      label: t ? t('reservations.ttl_24h', 'Hold TTL 24ч') : 'Hold TTL 24ч',
+      isExpiringSoon: false,
+      isExpired: false,
+    };
   }
 
   const now = new Date();
@@ -47,8 +53,11 @@ function formatHoldTtl(
 
   if (diffMs <= 0) {
     return {
-      label: t ? t('reservations.ttl_expired', 'Срок брони истек (ожидает расформирования)') : 'Срок брони истек (ожидает расформирования)',
+      label: t
+        ? t('reservations.ttl_expired', 'Срок брони истек (ожидает расформирования)')
+        : 'Срок брони истек (ожидает расформирования)',
       isExpiringSoon: true,
+      isExpired: true,
     };
   }
 
@@ -65,6 +74,7 @@ function formatHoldTtl(
   return {
     label: `${left} ${hours}${hStr} ${minutes}${mStr} (${until} ${timeStr})`,
     isExpiringSoon,
+    isExpired: false,
   };
 }
 
@@ -79,8 +89,8 @@ export function StockReservationsModal({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'processing'>('all');
   const [scopeFilter, setScopeFilter] = useState<'catalog' | 'all'>('catalog');
+  const [holdTypeFilter, setHoldTypeFilter] = useState<'active' | 'expired' | 'all'>('active');
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
 
   const hasCatalogContext = Boolean(catalogSkus && catalogSkus.length > 0);
@@ -111,6 +121,7 @@ export function StockReservationsModal({
       } else {
         setScopeFilter('all');
       }
+      setHoldTypeFilter('active');
     }
   }, [isOpen, filterSku, hasCatalogContext]);
 
@@ -123,31 +134,54 @@ export function StockReservationsModal({
     });
   };
 
-  const isOrderMatchingCatalog = useCallback((r: ActiveReservation) => {
-    if (!catalogSkus || catalogSkus.length === 0) return true;
-    const lowerSkus = catalogSkus.map(s => s.toLowerCase().trim());
-    return r.items.some(it => {
-      const itSku = (it.sku || '').toLowerCase().trim();
-      const itName = (it.product_name || '').toLowerCase().trim();
-      const itCol = (it.collection || '').toLowerCase().trim();
-      return lowerSkus.some(cs => itSku.includes(cs) || cs.includes(itSku) || itName.includes(cs) || itCol.includes(cs));
-    });
-  }, [catalogSkus]);
+  const isOrderMatchingCatalog = useCallback(
+    (r: ActiveReservation) => {
+      if (!catalogSkus || catalogSkus.length === 0) return true;
+      const lowerSkus = catalogSkus.map(s => s.toLowerCase().trim());
+      return r.items.some(it => {
+        const itSku = (it.sku || '').toLowerCase().trim();
+        const cleaned = clean1CName(it.product_name);
+        const itName = cleaned.name.toLowerCase().trim();
+        const itRaw = (it.product_name || '').toLowerCase().trim();
+        const itCol = (it.collection || '').toLowerCase().trim();
+        return lowerSkus.some(
+          cs =>
+            itSku.includes(cs) ||
+            cs.includes(itSku) ||
+            itName.includes(cs) ||
+            itRaw.includes(cs) ||
+            itCol.includes(cs)
+        );
+      });
+    },
+    [catalogSkus]
+  );
 
   const catalogMatchedReservations = useMemo(() => {
     return reservations.filter(isOrderMatchingCatalog);
   }, [reservations, isOrderMatchingCatalog]);
 
-  const filteredReservations = useMemo(() => {
-    let list = reservations;
+  const baseScopedReservations = useMemo(() => {
     if (hasCatalogContext && scopeFilter === 'catalog') {
-      list = catalogMatchedReservations;
+      return catalogMatchedReservations;
     }
+    return reservations;
+  }, [reservations, hasCatalogContext, scopeFilter, catalogMatchedReservations]);
 
-    return list.filter(r => {
-      if (statusFilter !== 'all' && r.status !== statusFilter) {
-        return false;
-      }
+  const activeHoldCount = useMemo(() => {
+    return baseScopedReservations.filter(r => !formatHoldTtl(r.hold_expires_at, r.created_at).isExpired).length;
+  }, [baseScopedReservations]);
+
+  const expiredHoldCount = useMemo(() => {
+    return baseScopedReservations.filter(r => formatHoldTtl(r.hold_expires_at, r.created_at).isExpired).length;
+  }, [baseScopedReservations]);
+
+  const filteredReservations = useMemo(() => {
+    return baseScopedReservations.filter(r => {
+      const isExpired = formatHoldTtl(r.hold_expires_at, r.created_at).isExpired;
+      if (holdTypeFilter === 'active' && isExpired) return false;
+      if (holdTypeFilter === 'expired' && !isExpired) return false;
+
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const matchCompany = (r.client_company || '').toLowerCase().includes(q);
@@ -157,6 +191,7 @@ export function StockReservationsModal({
         const matchItems = r.items.some(
           it =>
             (it.product_name || '').toLowerCase().includes(q) ||
+            clean1CName(it.product_name).name.toLowerCase().includes(q) ||
             (it.collection || '').toLowerCase().includes(q) ||
             (it.sku || '').toLowerCase().includes(q)
         );
@@ -164,7 +199,7 @@ export function StockReservationsModal({
       }
       return true;
     });
-  }, [reservations, hasCatalogContext, scopeFilter, catalogMatchedReservations, statusFilter, searchQuery]);
+  }, [baseScopedReservations, holdTypeFilter, searchQuery]);
 
   const totalFilteredPcs = useMemo(
     () => filteredReservations.reduce((sum, r) => sum + r.total_items, 0),
@@ -238,90 +273,94 @@ export function StockReservationsModal({
             fmtNum={fmtNum}
           />
 
-          {/* Scope Switcher: Catalog Selection vs All Warehouse */}
-          {hasCatalogContext && (
-            <div className="flex items-center gap-2 px-3 sm:px-5 py-2 bg-amber-50/40 border-b border-amber-100 text-xs overflow-x-auto no-scrollbar select-none">
+          {/* Scope & Hold State Controls */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 px-3 sm:px-5 py-2.5 bg-slate-50/60 border-b border-slate-100 text-xs select-none">
+            {/* Scope Switcher: Catalog vs All Warehouse */}
+            {hasCatalogContext ? (
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+                <button
+                  type="button"
+                  onClick={() => setScopeFilter('catalog')}
+                  className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all shrink-0 cursor-pointer ${
+                    scopeFilter === 'catalog'
+                      ? 'bg-amber-600 text-white shadow-2xs'
+                      : 'bg-white border border-amber-200 text-amber-900 hover:bg-amber-50'
+                  }`}
+                >
+                  {t('reservations.scope_catalog')} ({catalogMatchedReservations.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setScopeFilter('all')}
+                  className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all shrink-0 cursor-pointer ${
+                    scopeFilter === 'all'
+                      ? 'bg-slate-800 text-white shadow-2xs'
+                      : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  {t('reservations.scope_all')} ({reservations.length})
+                </button>
+              </div>
+            ) : <div />}
+
+            {/* Active vs Expired Hold Switcher */}
+            <div className="flex items-center gap-1.5 self-start sm:self-auto overflow-x-auto no-scrollbar">
               <button
                 type="button"
-                onClick={() => setScopeFilter('catalog')}
+                onClick={() => setHoldTypeFilter('active')}
                 className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all shrink-0 cursor-pointer ${
-                  scopeFilter === 'catalog'
-                    ? 'bg-amber-600 text-white shadow-2xs'
-                    : 'bg-white border border-amber-200 text-amber-900 hover:bg-amber-50'
+                  holdTypeFilter === 'active'
+                    ? 'bg-emerald-600 text-white shadow-2xs'
+                    : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
                 }`}
               >
-                🎯 {t('reservations.scope_catalog')} ({catalogMatchedReservations.length})
+                {t('reservations.tab_active')} ({activeHoldCount})
               </button>
               <button
                 type="button"
-                onClick={() => setScopeFilter('all')}
+                onClick={() => setHoldTypeFilter('expired')}
                 className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all shrink-0 cursor-pointer ${
-                  scopeFilter === 'all'
-                    ? 'bg-slate-800 text-white shadow-2xs'
+                  holdTypeFilter === 'expired'
+                    ? 'bg-rose-600 text-white shadow-2xs'
+                    : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                {t('reservations.tab_expired')} ({expiredHoldCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setHoldTypeFilter('all')}
+                className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all shrink-0 cursor-pointer ${
+                  holdTypeFilter === 'all'
+                    ? 'bg-brand-700 text-white shadow-2xs'
                     : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
                 }`}
               >
-                {t('reservations.scope_all')} ({reservations.length})
+                {t('reservations.tab_all')} ({baseScopedReservations.length})
               </button>
             </div>
-          )}
+          </div>
 
-          {/* Search & Filter Controls */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 px-3 sm:px-5 py-2.5 border-b border-slate-100 bg-slate-50/30">
-            <div className="relative flex-1 max-w-md">
+          {/* Search Box */}
+          <div className="px-3 sm:px-5 py-2 border-b border-slate-100 bg-white">
+            <div className="relative w-full">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder={t('reservations.search_placeholder')}
-                className="input-field pl-9 py-1.5 text-xs w-full bg-white"
+                className="input-field pl-9 py-1.5 text-xs w-full bg-slate-50/50 focus:bg-white"
               />
               {searchQuery && (
                 <button
                   type="button"
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
                 >
                   <X className="h-3 w-3" />
                 </button>
               )}
-            </div>
-
-            <div className="flex items-center gap-1.5 self-start sm:self-auto text-xs overflow-x-auto no-scrollbar">
-              <button
-                type="button"
-                onClick={() => setStatusFilter('all')}
-                className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all shrink-0 cursor-pointer ${
-                  statusFilter === 'all'
-                    ? 'bg-brand-700 text-white shadow-2xs'
-                    : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                {t('reservations.tab_all')} ({filteredReservations.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setStatusFilter('pending')}
-                className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all shrink-0 cursor-pointer ${
-                  statusFilter === 'pending'
-                    ? 'bg-amber-600 text-white shadow-2xs'
-                    : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                {t('reservations.tab_auto')} ({filteredReservations.filter(r => r.status === 'pending').length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setStatusFilter('processing')}
-                className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all shrink-0 cursor-pointer ${
-                  statusFilter === 'processing'
-                    ? 'bg-indigo-600 text-white shadow-2xs'
-                    : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-                }`}
-              >
-                {t('reservations.tab_assembly')} ({filteredReservations.filter(r => r.status === 'processing').length})
-              </button>
             </div>
           </div>
 
@@ -362,11 +401,14 @@ export function StockReservationsModal({
             )}
           </div>
 
-          {/* Footer */}
-          <div className="border-t border-slate-100 px-4 sm:px-5 py-3 bg-slate-50 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 text-xs text-slate-500">
-            <span className="text-[11px] leading-tight">
-              {t('reservations.footer_warning')}
-            </span>
+          {/* Footer (Zero emojis, clean SVG icon) */}
+          <div className="border-t border-slate-100 px-4 sm:px-5 py-3 bg-slate-50 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 text-xs text-slate-600">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+              <span className="text-[11px] leading-tight">
+                {t('reservations.footer_warning')}
+              </span>
+            </div>
             <button
               type="button"
               onClick={onClose}
