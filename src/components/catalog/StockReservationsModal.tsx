@@ -406,14 +406,14 @@ export function StockReservationsModal({
                 <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
                   {searchQuery ? t('reservations.empty_search') : t('reservations.empty_desc')}
                 </p>
-                {holdTypeFilter === 'active' && expiredHoldCount > 0 && !searchQuery && (
+                {statusFilter !== 'all' && countAll > 0 && !searchQuery && (
                   <div className="mt-4">
                     <button
                       type="button"
-                      onClick={() => setHoldTypeFilter('expired')}
+                      onClick={() => setStatusFilter('all')}
                       className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300/80 text-xs font-semibold transition-all cursor-pointer shadow-2xs"
                     >
-                      <span>Показать истекшие резервы ({expiredHoldCount})</span>
+                      <span>Показать все резервы ({countAll})</span>
                     </button>
                   </div>
                 )}
