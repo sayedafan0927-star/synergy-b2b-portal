@@ -102,6 +102,14 @@ export function StockReservationsModal({
       const data = await fetchActiveReservations({ sku: filterSku });
       if (data?.success && Array.isArray(data.reservations)) {
         setReservations(data.reservations);
+
+        // Smart auto-select: если активных броней нет, но есть истекшие — сразу открываем 'all'
+        const hasActive = data.reservations.some(r => !formatHoldTtl(r.hold_expires_at, r.created_at).isExpired);
+        if (!hasActive && data.reservations.length > 0) {
+          setHoldTypeFilter('all');
+        } else {
+          setHoldTypeFilter('active');
+        }
       } else {
         throw new Error(data?.error || 'Не удалось получить данные резервов');
       }
@@ -121,7 +129,6 @@ export function StockReservationsModal({
       } else {
         setScopeFilter('all');
       }
-      setHoldTypeFilter('active');
     }
   }, [isOpen, filterSku, hasCatalogContext]);
 
@@ -383,9 +390,20 @@ export function StockReservationsModal({
               <div className="py-16 text-center text-slate-400">
                 <Clock className="h-10 w-10 mx-auto text-slate-300 mb-2.5" />
                 <p className="text-sm font-semibold text-slate-700">{t('reservations.empty_title')}</p>
-                <p className="text-xs text-slate-400 mt-1">
+                <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
                   {searchQuery ? t('reservations.empty_search') : t('reservations.empty_desc')}
                 </p>
+                {holdTypeFilter === 'active' && expiredHoldCount > 0 && !searchQuery && (
+                  <div className="mt-4">
+                    <button
+                      type="button"
+                      onClick={() => setHoldTypeFilter('expired')}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300/80 text-xs font-semibold transition-all cursor-pointer shadow-2xs"
+                    >
+                      <span>Показать истекшие резервы ({expiredHoldCount})</span>
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               filteredReservations.map(res => (
