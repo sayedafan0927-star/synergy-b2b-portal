@@ -139,40 +139,6 @@ export function ReservationCard({
                 </span>
               )}
             </div>
-
-            {/* Direct Product Preview: clean nomenclature row with no emojis */}
-            {res.items && res.items.length > 0 && (
-              <div className="mt-2.5 space-y-1.5">
-                {res.items.map((it, idx) => {
-                  const cleaned = clean1CName(it.product_name);
-                  return (
-                    <div
-                      key={idx}
-                      className={`rounded-lg px-2.5 py-1.5 flex items-center justify-between gap-2 border text-xs ${
-                        isCatalogMatch
-                          ? 'bg-amber-50/70 border-amber-200 text-amber-950'
-                          : 'bg-slate-50 border-slate-200/80 text-slate-800'
-                      }`}
-                    >
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <Package className="h-3.5 w-3.5 text-amber-700 shrink-0" />
-                        <span className="font-semibold truncate">
-                          {cleaned.name}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0 text-[11px] font-mono">
-                        <span className="bg-white border border-slate-200 px-1.5 py-0.5 rounded text-slate-700 whitespace-nowrap">
-                          {it.size}
-                        </span>
-                        <span className="bg-amber-100 border border-amber-300 font-extrabold text-amber-900 px-1.5 py-0.5 rounded whitespace-nowrap">
-                          {it.quantity} {t('common.pcs')}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
           </div>
         </div>
 

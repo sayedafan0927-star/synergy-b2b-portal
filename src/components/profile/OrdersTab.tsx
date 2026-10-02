@@ -41,7 +41,16 @@ export function OrdersTab({
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = { all: orders.length };
     for (const o of orders) {
-      counts[o.statusRaw] = (counts[o.statusRaw] || 0) + 1;
+      const s = o.statusRaw;
+      if (['pending', 'reserved', 'confirmed'].includes(s)) {
+        counts.pending = (counts.pending || 0) + 1;
+      } else if (['processing', 'picking'].includes(s)) {
+        counts.processing = (counts.processing || 0) + 1;
+      } else if (['assembled', 'ready'].includes(s)) {
+        counts.assembled = (counts.assembled || 0) + 1;
+      } else {
+        counts[s] = (counts[s] || 0) + 1;
+      }
     }
     return counts;
   }, [orders]);
