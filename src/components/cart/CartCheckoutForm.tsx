@@ -1,5 +1,6 @@
 import { Loader2, Send, AlertTriangle, AlertCircle, Boxes, CheckCircle2 } from 'lucide-react';
 import { useCurrency } from '@/contexts/CurrencyContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { fmt2, CITIES } from './types';
 
 interface CartCheckoutFormProps {
@@ -74,6 +75,7 @@ export function CartCheckoutForm({
   isAccountant = false,
 }: CartCheckoutFormProps) {
   const { formatPrice: fmtPrice } = useCurrency();
+  const { t } = useLanguage();
 
   const isCheckoutDisabled = submitting || hasDepletedItems || hasZeroPriceItems || !isAuthenticated || Boolean(hasOverStockItems) || isAccountant;
 
@@ -82,13 +84,13 @@ export function CartCheckoutForm({
       {/* ─── 1. Заголовок и индикатор мультисклада ─── */}
       <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
         <div>
-          <h2 className="text-base font-bold text-slate-900">Оформление заказа</h2>
-          <p className="text-[11px] text-slate-500">Прямое резервирование на складах Synergy</p>
+          <h2 className="text-base font-bold text-slate-900">{t('cart.checkout_title')}</h2>
+          <p className="text-[11px] text-slate-500">{t('cart.direct_reserving')}</p>
         </div>
         {hasMultipleWarehouses && (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
             <Boxes className="h-3 w-3 text-indigo-600" />
-            <span>Складов: {warehousesInCart.size}</span>
+            <span>{t('cart.warehouses_count')} {warehousesInCart.size}</span>
           </span>
         )}
       </div>
@@ -97,7 +99,7 @@ export function CartCheckoutForm({
       <div className="rounded-xl bg-slate-50 border border-slate-200/90 p-3 space-y-2.5">
         <div className="flex items-baseline justify-between">
           <span className="text-xs font-semibold text-slate-600">
-            Итого к оплате ({totalItems} шт / {fmt2(totalSqm)} м²):
+            {t('cart.total_amount')} ({totalItems} {t('common.pcs')} / {fmt2(totalSqm)} {t('common.sqm')}):
           </span>
           <span className="text-lg font-black text-brand-700">{fmtPrice(totalPrice)}</span>
         </div>
@@ -106,7 +108,7 @@ export function CartCheckoutForm({
           <div className="rounded-lg border border-blue-200 bg-blue-50/90 p-2.5 flex items-start gap-2 text-left">
             <AlertCircle className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
             <p className="text-[11px] text-blue-900 leading-tight">
-              <strong>Режим бухгалтера:</strong> доступ к просмотру и сверкам. Оформление заказов доступно закупщику или руководителю.
+              {t('cart.accountant_mode', 'Режим бухгалтера: формирование заказов отключено. Доступен только просмотр и экспорт.')}
             </p>
           </div>
         )}
@@ -124,22 +126,22 @@ export function CartCheckoutForm({
           {submitting ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              <span>Оформление заказа...</span>
+              <span>{t('cart.submitting')}</span>
             </>
           ) : isAccountant ? (
-            <span>Только просмотр (Бухгалтер)</span>
+            <span>{t('cart.accountant_view_only')}</span>
           ) : !isAuthenticated ? (
-            <span>Войдите для оформления заказа</span>
+            <span>{t('cart.login_to_checkout')}</span>
           ) : hasDepletedItems ? (
-            <span>Удалите закончившиеся товары</span>
+            <span>{t('cart.remove_depleted')}</span>
           ) : hasZeroPriceItems ? (
-            <span>Удалите позиции без цены</span>
+            <span>{t('cart.remove_zero_price')}</span>
           ) : hasOverStockItems ? (
-            <span>Скорректируйте количество до остатка</span>
+            <span>{t('cart.adjust_qty_to_stock')}</span>
           ) : (
             <>
               <Send className="h-4 w-4" />
-              <span>Подтвердить и отправить заказ</span>
+              <span>{t('cart.submit_order')}</span>
             </>
           )}
         </button>
@@ -150,10 +152,10 @@ export function CartCheckoutForm({
         <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900 space-y-1.5">
           <div className="flex items-center gap-1.5 font-bold text-blue-950">
             <AlertCircle className="h-3.5 w-3.5 text-blue-700 shrink-0" />
-            <span>Требуется авторизация дилера</span>
+            <span>{t('cart.dealer_auth_required', 'Требуется авторизация дилера')}</span>
           </div>
           <p className="text-[11px] text-blue-800 leading-tight">
-            Оптовые заказы и резервирование ковров на складах Synergy доступны только авторизованным партнерам.
+            {t('cart.dealer_auth_desc')}
           </p>
           {onLoginRedirect && (
             <button
@@ -161,7 +163,7 @@ export function CartCheckoutForm({
               onClick={onLoginRedirect}
               className="w-full py-1.5 px-3 rounded-md bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs transition-colors cursor-pointer"
             >
-              Войти в личный кабинет
+              {t('cart.login_btn', 'Войти в личный кабинет')}
             </button>
           )}
         </div>
@@ -171,7 +173,7 @@ export function CartCheckoutForm({
         <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-900 space-y-1.5">
           <div className="flex items-center gap-1.5 font-bold text-rose-950">
             <AlertCircle className="h-3.5 w-3.5 text-rose-600 shrink-0" />
-            <span>Некоторые товары закончились</span>
+            <span>{t('cart.some_items_depleted')}</span>
           </div>
           {onRemoveUnavailableItems && (
             <button
@@ -179,7 +181,7 @@ export function CartCheckoutForm({
               onClick={onRemoveUnavailableItems}
               className="w-full py-1 px-2.5 rounded-md bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition-colors cursor-pointer"
             >
-              Удалить отсутствующие позиции
+              {t('cart.remove_unavailable_btn')}
             </button>
           )}
         </div>
@@ -190,9 +192,9 @@ export function CartCheckoutForm({
           <div className="flex items-start gap-1.5">
             <AlertTriangle className="h-3.5 w-3.5 text-amber-700 shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
-              <p className="font-bold text-[11px]">В корзине есть позиции с неустановленной ценой</p>
+              <p className="font-bold text-[11px]">{t('cart.zero_price_items_title', 'В корзине есть позиции с неустановленной ценой')}</p>
               <p className="text-[10.5px] mt-0.5 text-amber-800 leading-tight">
-                Оформление невозможно до подтверждения стоимости в 1С.
+                {t('cart.zero_price_items_desc')}
               </p>
             </div>
           </div>
@@ -202,7 +204,7 @@ export function CartCheckoutForm({
               onClick={onRemoveUnavailableItems}
               className="w-full py-1 px-2.5 rounded-md bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition-colors cursor-pointer"
             >
-              Удалить позиции без цены
+              {t('cart.remove_zero_price_btn', 'Удалить позиции без цены')}
             </button>
           )}
         </div>
@@ -233,9 +235,9 @@ export function CartCheckoutForm({
           <div className="flex items-start gap-1.5">
             <AlertTriangle className="h-3.5 w-3.5 text-amber-700 shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
-              <p className="font-bold text-[11px]">Количество позиций превышает доступный остаток</p>
+              <p className="font-bold text-[11px]">{t('cart.adjust_qty_to_stock')}</p>
               <p className="text-[10.5px] mt-0.5 text-amber-800 leading-tight">
-                Для беспрепятственного оформления выровняйте количество до фактического остатка на складах Synergy.
+                {t('cart.depleted_banner_desc')}
               </p>
             </div>
           </div>
@@ -245,7 +247,7 @@ export function CartCheckoutForm({
             className="w-full py-1 px-2.5 rounded-md bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs"
           >
             <CheckCircle2 className="h-3.5 w-3.5" />
-            <span>Скорректировать до остатка в 1 клик</span>
+            <span>{t('cart.adjust_1click')}</span>
           </button>
         </div>
       )}
@@ -258,8 +260,8 @@ export function CartCheckoutForm({
               <p className="font-semibold text-[11px]">{submitError}</p>
               {stockConflictDetails && (
                 <p className="text-[10.5px] mt-0.5 text-red-700">
-                  Доступно на складе: <strong>{stockConflictDetails.available_qty ?? 0} шт</strong>
-                  {stockConflictDetails.requested_qty ? ` (запрошено: ${stockConflictDetails.requested_qty} шт)` : ''}.
+                  {t('cart.free_qty')} <strong>{stockConflictDetails.available_qty ?? 0} {t('common.pcs')}</strong>
+                  {stockConflictDetails.requested_qty ? ` (${stockConflictDetails.requested_qty} ${t('common.pcs')})` : ''}.
                 </p>
               )}
             </div>
@@ -271,13 +273,7 @@ export function CartCheckoutForm({
               className="w-full py-1.5 px-3 rounded-md bg-red-600 hover:bg-red-700 text-white font-bold text-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs"
             >
               <CheckCircle2 className="h-3.5 w-3.5" />
-              <span>
-                {stockConflictDetails && typeof stockConflictDetails.available_qty === 'number'
-                  ? stockConflictDetails.available_qty === 0
-                    ? 'Удалить отсутствующий товар из заказа в 1 клик'
-                    : `Скорректировать до остатка (${stockConflictDetails.available_qty} шт) в 1 клик`
-                  : 'Скорректировать заказ до доступного остатка в 1 клик'}
-              </span>
+              <span>{t('cart.adjust_1click')}</span>
             </button>
           )}
         </div>
@@ -285,23 +281,23 @@ export function CartCheckoutForm({
 
       {/* ─── 4. Реквизиты и адрес доставки ─── */}
       <div className="space-y-2.5 pt-1 border-t border-slate-100">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600">Параметры доставки</h3>
+        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600">{t('cart.delivery_params')}</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
           <div>
             <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">
-              Контактное лицо <span className="text-red-500">*</span>
+              {t('cart.client_name')}
             </label>
             <input
               type="text"
               value={clientName}
               onChange={e => setClientName(e.target.value)}
-              placeholder="ФИО покупателя"
+              placeholder={t('cart.client_name_ph')}
               className="input-field text-xs h-9 py-1 px-2.5"
             />
           </div>
           <div>
             <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">
-              Телефон <span className="text-red-500">*</span>
+              {t('cart.client_phone')}
             </label>
             <input
               type="tel"
@@ -313,17 +309,17 @@ export function CartCheckoutForm({
             />
           </div>
           <div>
-            <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">Компания / Салон</label>
+            <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">{t('cart.client_company')}</label>
             <input
               type="text"
               value={clientCompany}
               onChange={e => setClientCompany(e.target.value)}
-              placeholder="Название организации"
+              placeholder={t('cart.client_company_ph')}
               className="input-field text-xs h-9 py-1 px-2.5"
             />
           </div>
           <div>
-            <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">Город доставки</label>
+            <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">{t('cart.delivery_city')}</label>
             <select
               value={selectedCity}
               onChange={e => setSelectedCity(e.target.value)}
@@ -337,12 +333,12 @@ export function CartCheckoutForm({
             </select>
           </div>
           <div className="sm:col-span-2">
-            <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">Комментарий к заказу</label>
+            <label className="block text-[11px] font-semibold text-slate-700 mb-0.5">{t('cart.comment')}</label>
             <input
               type="text"
               value={orderComment}
               onChange={e => setOrderComment(e.target.value)}
-              placeholder="Пожелания по ТК, упаковке, маркировке..."
+              placeholder={t('cart.comment_ph')}
               className="input-field text-xs h-9 py-1 px-2.5"
             />
           </div>

@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { LogIn, Eye, EyeOff, ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
 import type { PageId } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 export default function LoginPage({ onNavigate }: { onNavigate: (page: PageId) => void }) {
   const { signIn, signInWithPortal, signUp, deactivationNotice, clearDeactivationNotice } = useAuth();
+  const { t } = useLanguage();
   const [isLogin, setIsLogin] = useState(true);
   const [showPass, setShowPass] = useState(false);
   const [form, setForm] = useState({ email: '', password: '', name: '', company: '' });
@@ -82,7 +84,7 @@ export default function LoginPage({ onNavigate }: { onNavigate: (page: PageId) =
           className="mb-8 flex items-center gap-2 text-sm text-slate-400 transition-colors hover:text-slate-600"
         >
           <ArrowLeft className="h-4 w-4" />
-          На главную
+          {t('auth.back_home')}
         </button>
 
         <div className="card p-6 sm:p-8">
@@ -91,10 +93,10 @@ export default function LoginPage({ onNavigate }: { onNavigate: (page: PageId) =
           </div>
 
           <h1 className="text-xl font-bold text-slate-900 mb-1">
-            {isLogin ? 'Вход в кабинет' : 'Регистрация'}
+            {isLogin ? t('auth.login_title') : t('auth.register_title')}
           </h1>
           <p className="text-sm text-slate-500 mb-6">
-            {isLogin ? 'Войдите для доступа к оптовым ценам и истории заказов' : 'Создайте аккаунт для доступа к оптовым условиям'}
+            {isLogin ? t('auth.login_subtitle') : t('auth.register_subtitle')}
           </p>
 
           {deactivationNotice && (
@@ -124,22 +126,22 @@ export default function LoginPage({ onNavigate }: { onNavigate: (page: PageId) =
             {!isLogin && (
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Имя</label>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">{t('auth.full_name')}</label>
                   <input
                     type="text"
                     value={form.name}
                     onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                    placeholder="Ваше имя"
+                    placeholder={t('auth.full_name')}
                     className="input-field"
                   />
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-slate-700">Компания</label>
+                  <label className="mb-1.5 block text-sm font-medium text-slate-700">{t('auth.company')}</label>
                   <input
                     type="text"
                     value={form.company}
                     onChange={e => setForm(f => ({ ...f, company: e.target.value }))}
-                    placeholder="ООО / ИП"
+                    placeholder={t('auth.company_ph')}
                     className="input-field"
                   />
                 </div>
@@ -148,28 +150,28 @@ export default function LoginPage({ onNavigate }: { onNavigate: (page: PageId) =
 
             <div>
               <label className="mb-1.5 block text-sm font-medium text-slate-700">
-                {isLogin ? 'Номер телефона или логин' : 'Email'}
+                {isLogin ? t('auth.login_field') : t('auth.email_field')}
               </label>
               <input
                 type={isLogin ? 'text' : 'email'}
                 required
                 value={form.email}
                 onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
-                placeholder={isLogin ? '+7 (708) 698-45-43 или логин' : 'email@company.kz'}
+                placeholder={isLogin ? t('auth.login_field_ph') : t('auth.email_field_ph')}
                 className="input-field"
                 disabled={busy}
               />
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700">Пароль</label>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">{t('auth.password')}</label>
               <div className="relative">
                 <input
                   type={showPass ? 'text' : 'password'}
                   required
                   value={form.password}
                   onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
-                  placeholder="Введите пароль"
+                  placeholder={t('auth.password_ph')}
                   className="input-field pr-10"
                   disabled={busy}
                 />
@@ -189,7 +191,7 @@ export default function LoginPage({ onNavigate }: { onNavigate: (page: PageId) =
               ) : (
                 <LogIn className="h-4 w-4" />
               )}
-              {isLogin ? 'Войти' : 'Зарегистрироваться'}
+              {isLogin ? t('auth.submit_login') : t('auth.submit_register')}
             </button>
           </form>
 
@@ -198,15 +200,14 @@ export default function LoginPage({ onNavigate }: { onNavigate: (page: PageId) =
               onClick={() => { setIsLogin(!isLogin); setError(null); }}
               className="text-sm text-brand-700 hover:text-brand-800 transition-colors"
             >
-              {isLogin ? 'Нет аккаунта? Зарегистрируйтесь' : 'Уже есть аккаунт? Войти'}
+              {isLogin ? t('auth.to_register') : t('auth.to_login')}
             </button>
           </div>
 
           {/* Единый защищенный вход ERP */}
           <div className="mt-8 pt-5 border-t border-slate-100 text-center">
             <p className="text-xs text-slate-400 leading-relaxed">
-              🔒 Единый защищенный вход для сотрудников ERP и оптовых клиентов.<br />
-              Используйте ваш номер телефона и пароль учетной записи.
+              🔒 {t('auth.single_erp_login')}
             </p>
           </div>
         </div>

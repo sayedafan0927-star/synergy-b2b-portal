@@ -20,6 +20,7 @@ import {
   fetchReconciliationReportFromErp,
 } from '@/lib/erpApi';
 import { useShowroomMode } from '@/contexts/ShowroomModeContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import SupplierCabinet from '@/components/SupplierCabinet';
 import LoginPage from './LoginPage';
 import { AdminDisplaySettingsTab, AdminUsersTab, AdminErpSyncTab } from '@/components/admin';
@@ -41,6 +42,7 @@ type TabId = 'orders' | 'supplier-portal' | 'admin-erp' | 'admin-users' | 'admin
 
 export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId) => void }) {
   const { user, profile, loading, signOut, isAdmin, realIsAdmin, isManager, isSupplier } = useAuth();
+  const { t } = useLanguage();
   const adminAccess = realIsAdmin;
   const clientsAccess = realIsAdmin || isManager;
   const [activeTab, setActiveTab] = useState<TabId>(isSupplier ? 'supplier-portal' : 'orders');
@@ -163,12 +165,12 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
   }
 
   const tabs: Array<{ id: TabId; label: string; icon: any; show: boolean }> = [
-    { id: 'orders', label: adminAccess ? 'Все заказы' : isManager ? 'Заказы клиентов' : 'Мои заказы', icon: Package, show: !isSupplier },
-    { id: 'supplier-portal', label: 'Кабинет поставщика', icon: Package, show: isSupplier || adminAccess },
-    { id: 'admin-erp', label: 'Синхронизация ERP', icon: Server, show: adminAccess },
-    { id: 'admin-users', label: 'Пользователи и роли', icon: Users, show: clientsAccess },
-    { id: 'admin-display', label: 'Настройки витрины', icon: Eye, show: adminAccess },
-    { id: 'settings', label: 'Настройки', icon: Settings, show: true },
+    { id: 'orders', label: adminAccess ? t('profile.tab_all_orders') : isManager ? t('profile.tab_client_orders') : t('profile.tab_my_orders'), icon: Package, show: !isSupplier },
+    { id: 'supplier-portal', label: t('profile.tab_supplier'), icon: Package, show: isSupplier || adminAccess },
+    { id: 'admin-erp', label: t('profile.tab_admin_erp'), icon: Server, show: adminAccess },
+    { id: 'admin-users', label: t('profile.tab_admin_users'), icon: Users, show: clientsAccess },
+    { id: 'admin-display', label: t('profile.tab_admin_display'), icon: Eye, show: adminAccess },
+    { id: 'settings', label: t('profile.tab_settings'), icon: Settings, show: true },
   ];
 
   return (
@@ -177,15 +179,15 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
         {/* Page header */}
         <div className="flex items-center justify-between gap-3 border-b border-slate-200/80 pb-4">
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900">Личный кабинет</h1>
-            <p className="text-xs sm:text-sm text-slate-500">Управление заказами, взаиморасчетами и профилем</p>
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900">{t('profile.title')}</h1>
+            <p className="text-xs sm:text-sm text-slate-500">{t('profile.subtitle')}</p>
           </div>
           <button
             onClick={handleSignOut}
             className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium text-red-600 hover:bg-red-50 transition-colors cursor-pointer shrink-0"
           >
             <LogOut className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            Выйти
+            {t('nav.logout')}
           </button>
         </div>
 
@@ -221,7 +223,7 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
               {profile.price_type && profile.role === 'client' && !isShowroomMode && (
                 <div className="flex items-center gap-2">
                   <DollarSign className="h-3.5 w-3.5 text-slate-400" />
-                  <span>Тип цены: <strong className="text-slate-700">{profile.price_type === 'optom_1' ? 'Опт 1' : profile.price_type === 'optom_2' ? 'Опт 2' : profile.price_type === 'optom_3' ? 'Опт 3' : profile.price_type === 'wholesale' ? 'Базовый опт' : profile.price_type}</strong></span>
+                  <span>{t('profile.price_type_label')} <strong className="text-slate-700">{profile.price_type === 'optom_1' ? 'Опт 1' : profile.price_type === 'optom_2' ? 'Опт 2' : profile.price_type === 'optom_3' ? 'Опт 3' : profile.price_type === 'wholesale' ? 'Базовый опт' : profile.price_type}</strong></span>
                 </div>
               )}
             </div>
@@ -251,17 +253,17 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
           {profile.role === 'client' && !isShowroomMode && (
             <div className="card p-4 space-y-3">
               <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Взаиморасчеты (ERP)</span>
+                <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">{t('profile.financial_title')}</span>
                 <span className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
                   (clientDebt?.financials?.total_debt_usd ?? 0) > 0 ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'
                 }`}>
-                  {(clientDebt?.financials?.total_debt_usd ?? 0) > 0 ? 'Задолженность' : 'Нет долга'}
+                  {(clientDebt?.financials?.total_debt_usd ?? 0) > 0 ? t('profile.has_debt') : t('profile.no_debt')}
                 </span>
               </div>
 
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between items-center">
-                  <span className="text-slate-500">Текущий долг:</span>
+                  <span className="text-slate-500">{t('profile.current_debt')}</span>
                   <span className={`font-bold ${
                     (clientDebt?.financials?.total_debt_usd ?? 0) > 0 ? 'text-red-600' : 'text-slate-900'
                   }`}>
@@ -270,7 +272,7 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
                 </div>
 
                 <div className="flex justify-between items-center">
-                  <span className="text-slate-500">Кредитный лимит:</span>
+                  <span className="text-slate-500">{t('profile.credit_limit')}</span>
                   <span className="font-semibold text-slate-700">
                     {fmtPrice(clientDebt?.client?.credit_limit_usd ?? profile.credit_limit_usd ?? 0)}
                   </span>
@@ -289,7 +291,7 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
                   />
                 </div>
                 <p className="text-[10px] text-slate-400 text-center">
-                  {loadingDebt ? 'Загрузка данных из ERP...' : clientDebt?.found ? `Синхронизировано: ${clientDebt.client?.name}` : 'Данные из ERP подключены'}
+                  {loadingDebt ? '...' : clientDebt?.found ? `${clientDebt.client?.name}` : ''}
                 </p>
 
                 <button
@@ -298,7 +300,7 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
                   className="w-full mt-2 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 transition-colors shadow-2xs cursor-pointer"
                 >
                   <FileText className="h-3.5 w-3.5 text-brand-600" />
-                  Акт сверки взаиморасчетов
+                  {t('profile.reconciliation_act')}
                 </button>
               </div>
             </div>
@@ -310,9 +312,9 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
               <div className="flex items-center justify-between mb-3 border-b border-slate-100 pb-2">
                 <div className="flex items-center gap-2">
                   <FileText className="h-4 w-4 text-brand-700" />
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">Договоры и лимиты</h4>
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">{t('profile.contracts_limits')}</h4>
                 </div>
-                {loadingContracts && <span className="text-[10px] text-slate-400 animate-pulse">Загрузка...</span>}
+                {loadingContracts && <span className="text-[10px] text-slate-400 animate-pulse">{t('common.loading')}</span>}
               </div>
 
               {clientContracts.length > 0 ? (
@@ -324,34 +326,24 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
                         <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold ${
                           c.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
                         }`}>
-                          {c.status === 'active' ? 'Активен' : c.status}
+                          {c.status === 'active' ? t('profile.contract_active') : c.status}
                         </span>
                       </div>
                       <div className="text-[11px] text-slate-500">
-                        Тип: <span className="font-medium text-slate-700">{
-                          c.contract_type === 'prepayment' ? 'Предоплата' :
-                          c.contract_type === 'deferred_14' ? 'Отсрочка 14 дней' :
-                          c.contract_type === 'deferred_30' ? 'Отсрочка 30 дней' :
-                          c.contract_type === 'deferred_60' ? 'Отсрочка 60 дней' : c.contract_type
-                        }</span>
+                        {c.contract_type === 'prepayment' ? t('profile.contract_prepayment') : c.contract_type}
                       </div>
                       <div className="flex items-center justify-between text-[11px] text-slate-600 pt-1 border-t border-slate-200/60">
-                        <span>Кредитный лимит:</span>
+                        <span>{t('profile.credit_limit')}</span>
                         <span className="font-bold text-slate-900">${Number(c.credit_limit_usd).toLocaleString('en-US')}</span>
                       </div>
-                      {c.valid_from && (
-                        <div className="text-[10px] text-slate-400">
-                          Действует с {new Date(c.valid_from).toLocaleDateString('ru-RU')} {c.valid_to ? `по ${new Date(c.valid_to).toLocaleDateString('ru-RU')}` : ''}
-                        </div>
-                      )}
                     </div>
                   ))}
                 </div>
               ) : (
                 <div className="rounded-lg bg-slate-50 border border-dashed border-slate-200 p-3 text-center text-xs text-slate-400">
-                  <p>Индивидуальные условия зафиксированы в договоре 1С:ERP</p>
+                  <p>{t('profile.contract_erp_note')}</p>
                   {profile.credit_limit_usd ? (
-                    <p className="font-semibold text-slate-600 mt-1">Лимит: ${Number(profile.credit_limit_usd).toLocaleString('en-US')}</p>
+                    <p className="font-semibold text-slate-600 mt-1">{t('profile.credit_limit')} ${Number(profile.credit_limit_usd).toLocaleString('en-US')}</p>
                   ) : null}
                 </div>
               )}

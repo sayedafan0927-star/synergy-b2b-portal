@@ -7,12 +7,10 @@ export const WHATSAPP_INTL = '77785806866';
 export const WHATSAPP_DISPLAY = '+7 (778) 580-68-66';
 
 export default function WhatsAppWidget() {
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
   const [tooltipDismissed, setTooltipDismissed] = useState(false);
 
-  const defaultMsg = language === 'kz'
-    ? 'Сәлеметсіз бе! Synergy-Group кілемдерін көтерме сатып алу бойынша сұрағым бар еді.'
-    : 'Здравствуйте! Интересуют оптовые поставки ковров Synergy-Group.';
+  const defaultMsg = t('whatsapp.default_msg');
 
   const waUrl = `https://wa.me/${WHATSAPP_INTL}?text=${encodeURIComponent(defaultMsg)}`;
 
@@ -32,7 +30,7 @@ export default function WhatsAppWidget() {
               setTooltipDismissed(true);
             }}
             className="text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-100"
-            title="Закрыть"
+            title={t('common.close')}
           >
             <X className="h-3 w-3" />
           </button>
@@ -44,7 +42,7 @@ export default function WhatsAppWidget() {
         href={waUrl}
         target="_blank"
         rel="noopener noreferrer"
-        aria-label="Написать в WhatsApp"
+        aria-label={t('whatsapp.chat')}
         className="group relative flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg shadow-emerald-500/30 transition-all duration-300 hover:scale-110 hover:bg-[#20bd5a] hover:shadow-xl hover:shadow-emerald-500/40 active:scale-95"
       >
         {/* Radar ping effect */}

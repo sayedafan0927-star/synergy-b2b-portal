@@ -1,6 +1,7 @@
 import { CheckCircle2, WifiOff, AlertTriangle, Boxes } from 'lucide-react';
 import type { SplitSubOrder } from '@/lib/erpApi';
 import { useCurrency } from '@/contexts/CurrencyContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface CartSuccessModalProps {
   orderDocNumber: string;
@@ -22,6 +23,7 @@ export function CartSuccessModal({
   onContinueShopping,
 }: CartSuccessModalProps) {
   const { formatPrice: fmtPrice } = useCurrency();
+  const { t } = useLanguage();
 
   return (
     <div className="min-h-screen pt-20 pb-24 lg:pb-8 flex items-center justify-center">
@@ -60,11 +62,11 @@ export function CartSuccessModal({
             ? 'Заказ зарезервирован и отправлен в буфер'
             : isWaitingApproval
             ? 'Заказ отправлен на согласование'
-            : 'Заказ успешно оформлен!'}
+            : t('cart.order_success_title')}
         </h1>
         <div className="mt-4 rounded-xl border border-slate-200 bg-white px-6 py-4 shadow-sm">
           <p className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">
-            {isOfflineQueued ? 'Номер в локальной очереди' : isServerBuffered ? 'Номер брони в буфере' : 'Номер заказа'}
+            {isOfflineQueued ? 'Номер в локальной очереди' : isServerBuffered ? 'Номер брони в буфере' : t('cart.order_number')}
           </p>
           <p
             className={`text-2xl font-bold font-mono ${
@@ -137,7 +139,7 @@ export function CartSuccessModal({
             : 'Наш менеджер свяжется с вами для подтверждения заказа.'}
         </p>
         <button type="button" onClick={onContinueShopping} className="btn-primary mt-8 cursor-pointer">
-          Продолжить покупки
+          {t('cart.continue_shopping')}
         </button>
       </div>
     </div>

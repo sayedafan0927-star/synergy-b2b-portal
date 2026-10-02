@@ -51,7 +51,7 @@ export const CHECKOUT_PHONE_STORAGE_KEY = 'synergy:last_checkout_phone';
 /**
  * Валидация телефонного номера: содержит не менее 10 значащих цифр
  */
-export function isValidPhone(value: string | null | undefined): boolean {
+export function isValidPhone(value: string | null | undefined): value is string {
   if (!value) return false;
   const digits = value.replace(/\D/g, '');
   return digits.length >= 10;

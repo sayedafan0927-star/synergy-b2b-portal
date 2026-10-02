@@ -6,6 +6,7 @@ import type { PageId } from '@/types';
 import { submitOrderToErp, fetchClientDebtFromErp, type SplitSubOrder } from '@/lib/erpApi';
 import { enqueueOfflineOrder } from '@/lib/offlineOrderQueue';
 import { useCurrency } from '@/contexts/CurrencyContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { useProducts } from '@/hooks/useProductData';
 import { useUserPricing } from '@/hooks/usePricing';
 import { useToast } from '@/contexts/ToastContext';
@@ -23,6 +24,7 @@ import {
 
 export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, productId?: string) => void }) {
   const { currency } = useCurrency();
+  const { t } = useLanguage();
   const { items, removeItem, updateQuantity, syncItemPrices, clearCart, totalItems, totalPrice, totalSqm } = useCart();
   const { user, profile, isImpersonating, impersonatedProfile, isAccountant } = useAuth();
   const { products } = useProducts();
@@ -49,7 +51,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
   const [clientName, setClientName] = useState(() => effectiveProfile?.full_name ?? '');
   const [clientPhone, setClientPhone] = useState(() => {
     // 1. Профиль авторизованного клиента / сотрудника
-    if (isValidPhone(effectiveProfile?.phone)) {
+    if (effectiveProfile?.phone && isValidPhone(effectiveProfile.phone)) {
       return formatPhone(effectiveProfile.phone);
     }
     // 2. Ранее сохраненный на данном устройстве номер (из предыдущих заказов)
@@ -60,7 +62,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
       } catch {}
     }
     // 3. Номер из Supabase Auth
-    if (isValidPhone(user?.phone)) {
+    if (user?.phone && isValidPhone(user.phone)) {
       return formatPhone(user.phone);
     }
     // 4. Корпоративный номер Synergy по умолчанию для моментального заказа
@@ -263,11 +265,11 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
           <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-slate-50">
             <PackageOpen className="h-8 w-8 text-slate-400" />
           </div>
-          <h1 className="font-display text-2xl font-bold text-slate-900">Корзина пуста</h1>
-          <p className="mt-2 text-slate-500">Добавьте товары из каталога или загрузите смету из файла</p>
+          <h1 className="font-display text-2xl font-bold text-slate-900">{t('cart.empty_title')}</h1>
+          <p className="mt-2 text-slate-500">{t('cart.empty_desc')}</p>
           <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
             <button type="button" onClick={() => onNavigate('catalog')} className="btn-primary cursor-pointer">
-              Перейти в каталог
+              {t('cart.back_to_catalog')}
             </button>
             <button
               type="button"
@@ -275,7 +277,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 text-xs font-semibold shadow-2xs transition-all cursor-pointer"
             >
               <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
-              <span>Загрузить из Excel / CSV</span>
+              <span>{t('cart.excel_order')}</span>
             </button>
           </div>
         </div>
@@ -472,11 +474,11 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
               className="inline-flex items-center gap-1 text-xs font-semibold text-brand-700 hover:text-brand-800 mb-2 cursor-pointer"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
-              Вернуться в каталог
+              {t('cart.back_to_catalog')}
             </button>
             <h1 className="font-display text-2xl font-bold text-slate-900 flex items-center gap-2">
               <ShoppingCart className="h-6 w-6 text-brand-700" />
-              Корзина заказов
+              {t('cart.title')}
             </h1>
           </div>
 
@@ -486,7 +488,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
             className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 text-xs font-semibold shadow-2xs transition-all cursor-pointer self-start sm:self-auto"
           >
             <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
-            <span>Загрузить из Excel / CSV</span>
+            <span>{t('cart.excel_order')}</span>
           </button>
         </div>
 
@@ -495,8 +497,8 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
             <div className="flex items-center gap-2.5">
               <AlertCircle className="h-4 w-4 text-rose-600 shrink-0" />
               <div>
-                <span className="font-bold text-rose-900">Внимание: некоторые товары закончились на складе. </span>
-                <span className="text-rose-700 text-[11px]">Удалите их, чтобы продолжить оформление.</span>
+                <span className="font-bold text-rose-900">{t('cart.some_items_depleted')} </span>
+                <span className="text-rose-700 text-[11px]">{t('cart.depleted_banner_desc')}</span>
               </div>
             </div>
             <button
@@ -505,7 +507,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
               className="shrink-0 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition-colors cursor-pointer shadow-xs"
             >
               <Trash2 className="h-3.5 w-3.5" />
-              <span>Удалить недоступные</span>
+              <span>{t('cart.remove_unavailable_btn', 'Удалить недоступные')}</span>
             </button>
           </div>
         )}
@@ -515,8 +517,8 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
             <div className="flex items-center gap-2.5">
               <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
               <div>
-                <span className="font-bold text-amber-900">В корзине есть позиции с неустановленной ценой. </span>
-                <span className="text-amber-800 text-[11px]">Оформление невозможно для товаров с нулевой стоимостью.</span>
+                <span className="font-bold text-amber-900">{t('cart.zero_price_items_title')} </span>
+                <span className="text-amber-800 text-[11px]">{t('cart.zero_price_items_desc')}</span>
               </div>
             </div>
             <button
@@ -525,7 +527,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
               className="shrink-0 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition-colors cursor-pointer shadow-xs"
             >
               <Trash2 className="h-3.5 w-3.5" />
-              <span>Удалить позиции без цены</span>
+              <span>{t('cart.remove_zero_price_btn', 'Удалить позиции без цены')}</span>
             </button>
           </div>
         )}

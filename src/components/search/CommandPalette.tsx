@@ -11,6 +11,7 @@ import { useProducts } from '@/hooks/useProductData';
 import { useShowroomMode } from '@/contexts/ShowroomModeContext';
 import { useUserPricing } from '@/hooks/usePricing';
 import { useCurrency } from '@/contexts/CurrencyContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { useCart } from '@/contexts/CartContext';
 import { useToast } from '@/contexts/ToastContext';
 import { tokenizeSearchQuery, matchesSearchTokens } from '@/lib/searchNormalization';
@@ -29,7 +30,6 @@ const POPULAR_SEARCH_SUGGESTIONS = [
   'SILK ROAD',
   'VINTAGE',
   'SHAGGY',
-  'Дорожки',
   '2x3',
   '1.6x2.3',
 ];
@@ -47,6 +47,7 @@ export function CommandPalette({ isOpen, onClose, onNavigate }: CommandPalettePr
   const { isShowroomMode } = useShowroomMode();
   const { getVariantPrice } = useUserPricing();
   const { formatPrice } = useCurrency();
+  const { t } = useLanguage();
   const { addItem } = useCart();
   const { success: toastSuccess } = useToast();
 
@@ -308,7 +309,7 @@ export function CommandPalette({ isOpen, onClose, onNavigate }: CommandPalettePr
               onChange={e => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
               onBlur={handleBlur}
-              placeholder="Поиск по артикулу, коллекции, размеру..."
+              placeholder={t('search.placeholder')}
               className="flex-1 bg-transparent text-base sm:text-sm md:text-base text-slate-900 placeholder:text-slate-400 focus:outline-hidden min-w-0"
               autoComplete="off"
               spellCheck={false}
@@ -324,7 +325,8 @@ export function CommandPalette({ isOpen, onClose, onNavigate }: CommandPalettePr
                   inputRef.current?.focus();
                 }}
                 className="h-7 w-7 flex items-center justify-center rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 transition-colors cursor-pointer shrink-0"
-                title="Очистить"
+                title={t('common.reset')}
+                aria-label={t('common.reset')}
               >
                 <X className="h-4 w-4" />
               </button>
@@ -336,9 +338,9 @@ export function CommandPalette({ isOpen, onClose, onNavigate }: CommandPalettePr
                   isInternalInteractionRef.current = true;
                 }}
                 className="flex items-center justify-center h-8 px-2.5 sm:px-3 rounded-lg bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white text-xs font-semibold shrink-0 transition-colors shadow-2xs cursor-pointer gap-1"
-                title="Найти"
+                title={t('search.find_btn')}
               >
-                <span className="hidden sm:inline">Найти</span>
+                <span className="hidden sm:inline">{t('search.find_btn')}</span>
                 <ArrowRight className="h-3.5 w-3.5" />
               </button>
             )}
@@ -352,7 +354,7 @@ export function CommandPalette({ isOpen, onClose, onNavigate }: CommandPalettePr
             <div className="p-4 sm:p-5 space-y-3">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">
                 <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-                <span>Популярные запросы</span>
+                <span>{t('search.popular_queries')}</span>
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {POPULAR_SEARCH_SUGGESTIONS.map(term => (
@@ -372,9 +374,6 @@ export function CommandPalette({ isOpen, onClose, onNavigate }: CommandPalettePr
                   </button>
                 ))}
               </div>
-              <p className="text-[11px] text-slate-400 pt-2 border-t border-slate-100">
-                Совет: Вы можете искать ковры сразу по размерам (<code className="bg-slate-100 px-1 py-0.5 rounded text-slate-600">2х3</code>, <code className="bg-slate-100 px-1 py-0.5 rounded text-slate-600">1.6*2.3</code>) или артикулу 1С.
-              </p>
             </div>
           )}
 
@@ -417,10 +416,7 @@ export function CommandPalette({ isOpen, onClose, onNavigate }: CommandPalettePr
               <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-3 text-slate-400">
                 <PackageOpen className="h-6 w-6" />
               </div>
-              <p className="text-sm font-semibold text-slate-800">По запросу «{query}» ничего не найдено</p>
-              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                Проверьте правильность написания артикула или воспользуйтесь каталогом со всеми коллекциями.
-              </p>
+              <p className="text-sm font-semibold text-slate-800">{t('search.empty')}</p>
             </div>
           )}
 
@@ -429,11 +425,11 @@ export function CommandPalette({ isOpen, onClose, onNavigate }: CommandPalettePr
             <div className="flex items-center gap-3">
               <span className="hidden sm:inline-flex items-center gap-1">
                 <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded font-mono text-[10px]">↑↓</kbd>
-                навигация
+                {t('search.nav_hint')}
               </span>
               <span className="inline-flex items-center gap-1">
                 <kbd className="px-1.5 py-0.5 bg-white border border-slate-200 rounded font-mono text-[10px]">↵</kbd>
-                открыть
+                {t('search.open_hint')}
               </span>
             </div>
             <button
@@ -447,7 +443,7 @@ export function CommandPalette({ isOpen, onClose, onNavigate }: CommandPalettePr
               }}
               className="text-brand-600 hover:text-brand-700 font-semibold flex items-center gap-1 cursor-pointer"
             >
-              <span>Все товары в каталоге</span>
+              <span>{t('search.all_in_catalog')}</span>
               <ArrowRight className="h-3 w-3" />
             </button>
           </div>

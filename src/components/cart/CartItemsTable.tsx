@@ -3,6 +3,7 @@ import { Trash2, Plus, Minus, ArrowUpDown, Filter, AlertTriangle, AlertCircle, L
 import type { CartItem } from '@/types';
 import { calcSqm } from '@/types';
 import { useCurrency } from '@/contexts/CurrencyContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import ProductImage from '@/components/ProductImage';
 import { fmt2, calcSizeSubtotals, type SizeSubtotal } from './types';
 
@@ -28,6 +29,7 @@ export function CartItemsTable({
   onClearCart,
 }: CartItemsTableProps) {
   const { formatPrice: fmtPrice } = useCurrency();
+  const { t } = useLanguage();
 
   const collections = Array.from(new Set(items.map(it => it.collection))).filter(Boolean);
   const displayedItems = activeCollection ? items.filter(it => it.collection === activeCollection) : items;
@@ -50,7 +52,7 @@ export function CartItemsTable({
           {collections.length > 1 && (
             <>
               <span className="text-xs text-slate-500 mr-1 flex items-center gap-1 font-medium">
-                <Filter className="h-3 w-3" /> Коллекция:
+                <Filter className="h-3 w-3" /> {t('catalog.filter_collection')}:
               </span>
               <button
                 type="button"
@@ -61,7 +63,7 @@ export function CartItemsTable({
                     : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
                 }`}
               >
-                Все ({items.length})
+                {t('common.all')} ({items.length})
               </button>
               {collections.map(col => (
                 <button
@@ -88,7 +90,7 @@ export function CartItemsTable({
             className="text-xs text-slate-500 hover:text-red-600 transition-colors flex items-center gap-1 font-medium cursor-pointer"
           >
             <Trash2 className="h-3.5 w-3.5" />
-            <span>Очистить корзину</span>
+            <span>{t('cart.clear_cart')}</span>
           </button>
         </div>
       </div>
@@ -99,12 +101,12 @@ export function CartItemsTable({
           <table className="w-full text-left text-xs border-collapse">
             <thead className="sticky top-0 bg-slate-50/95 backdrop-blur-xs border-b border-slate-200 z-10 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
               <tr>
-                <th className="py-2.5 px-3 min-w-[200px]">Товар / Артикул</th>
-                <th className="py-2.5 px-2 text-center min-w-[90px]">Размер</th>
-                <th className="py-2.5 px-2.5 min-w-[130px]">Склад</th>
-                <th className="py-2.5 px-2 text-right min-w-[95px]">Цена</th>
-                <th className="py-2.5 px-2 text-center min-w-[130px]">Кол-во (шт)</th>
-                <th className="py-2.5 px-3 text-right min-w-[110px]">Сумма</th>
+                <th className="py-2.5 px-3 min-w-[200px]">{t('cart.table_product')}</th>
+                <th className="py-2.5 px-2 text-center min-w-[90px]">{t('cart.table_size')}</th>
+                <th className="py-2.5 px-2.5 min-w-[130px]">{t('cart.table_warehouse')}</th>
+                <th className="py-2.5 px-2 text-right min-w-[95px]">{t('cart.table_price')}</th>
+                <th className="py-2.5 px-2 text-center min-w-[130px]">{t('cart.table_qty')}</th>
+                <th className="py-2.5 px-3 text-right min-w-[110px]">{t('cart.table_sum')}</th>
                 <th className="py-2.5 px-2 text-center w-10"></th>
               </tr>
             </thead>
@@ -148,12 +150,12 @@ export function CartItemsTable({
                             </span>
                             {isDepleted && (
                               <span className="inline-flex items-center text-rose-600 font-semibold gap-0.5">
-                                <AlertCircle className="h-3 w-3" /> Закончился на складе
+                                <AlertCircle className="h-3 w-3" /> {t('cart.out_of_stock', 'Закончился на складе')}
                               </span>
                             )}
                             {isZeroPrice && !isDepleted && (
                               <span className="inline-flex items-center text-amber-700 font-semibold gap-0.5">
-                                <AlertTriangle className="h-3 w-3" /> Цена не установлена
+                                <AlertTriangle className="h-3 w-3" /> {t('cart.price_pending', 'Цена не установлена')}
                               </span>
                             )}
                           </div>
@@ -166,7 +168,7 @@ export function CartItemsTable({
                       <span className="inline-block px-2 py-0.5 rounded-md font-bold text-slate-800 bg-slate-100 border border-slate-200/80 text-[11px]">
                         {item.size}
                       </span>
-                      <p className="text-[10px] text-slate-500 mt-0.5 font-medium">{fmt2(sqm)} м²</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5 font-medium">{fmt2(sqm)} {t('common.sqm')}</p>
                     </td>
 
                     {/* Склад */}
@@ -176,7 +178,7 @@ export function CartItemsTable({
                       </p>
                       {item.maxStock !== undefined && (
                         <p className="text-[10px] text-slate-500 font-medium">
-                          Свободно: <strong className="text-slate-700">{item.maxStock} шт</strong>
+                          {t('cart.free_qty')} <strong className="text-slate-700">{item.maxStock} {t('common.pcs')}</strong>
                         </p>
                       )}
                     </td>
@@ -184,12 +186,12 @@ export function CartItemsTable({
                     {/* Цена за ед. */}
                     <td className="py-2 px-2 text-right whitespace-nowrap">
                       {isZeroPrice ? (
-                        <span className="text-xs font-semibold text-amber-700">Уточняется</span>
+                        <span className="text-xs font-semibold text-amber-700">{t('cart.price_pending')}</span>
                       ) : (
                         <div>
                           <p className="font-bold text-slate-900 text-xs">{fmtPrice(item.price)}</p>
                           {item.price_per_sqm ? (
-                            <p className="text-[10px] text-slate-500">{fmtPrice(item.price_per_sqm)}/м²</p>
+                            <p className="text-[10px] text-slate-500">{fmtPrice(item.price_per_sqm)}/{t('common.sqm')}</p>
                           ) : null}
                         </div>
                       )}
@@ -203,7 +205,7 @@ export function CartItemsTable({
                           onClick={() => onUpdateQuantity(item.productId, item.size, item.warehouse, item.quantity - 1)}
                           disabled={item.quantity <= 1 || isDepleted}
                           className="h-7 w-7 flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer rounded-l-md"
-                          title="Уменьшить"
+                          title="-"
                         >
                           <Minus className="h-3 w-3" />
                         </button>
@@ -221,7 +223,7 @@ export function CartItemsTable({
                           onClick={() => onUpdateQuantity(item.productId, item.size, item.warehouse, item.quantity + 1)}
                           disabled={isDepleted || (item.maxStock !== undefined && item.quantity >= item.maxStock)}
                           className="h-7 w-7 flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer rounded-r-md"
-                          title="Увеличить"
+                          title="+"
                         >
                           <Plus className="h-3 w-3" />
                         </button>
@@ -231,7 +233,7 @@ export function CartItemsTable({
                     {/* Сумма по строке */}
                     <td className="py-2 px-3 text-right whitespace-nowrap">
                       {isZeroPrice ? (
-                        <span className="text-xs font-semibold text-amber-700">Уточняется</span>
+                        <span className="text-xs font-semibold text-amber-700">{t('cart.price_pending')}</span>
                       ) : (
                         <span className="text-xs font-extrabold text-brand-700">{fmtPrice(lineTotal)}</span>
                       )}
@@ -285,13 +287,13 @@ export function CartItemsTable({
                   <p className="text-xs sm:text-sm font-bold text-slate-900 leading-snug line-clamp-2">{item.productName}</p>
                   <p className="text-[11px] text-slate-500 font-mono mt-0.5">{item.sku}</p>
                   <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                    <span className="badge text-[10px] font-bold py-0.5 px-2 bg-slate-100 text-slate-800">{item.size} ({fmt2(sqm)} м²)</span>
+                    <span className="badge text-[10px] font-bold py-0.5 px-2 bg-slate-100 text-slate-800">{item.size} ({fmt2(sqm)} {t('common.sqm')})</span>
                     <span className="text-[10.5px] px-1.5 py-0.5 rounded bg-brand-50 text-brand-800 font-medium">
                       {item.warehouse}
                     </span>
                     {typeof item.maxStock === 'number' && (
                       <span className="text-[10px] text-slate-500">
-                        {item.maxStock === 0 ? '❌ Нет в наличии' : `Доступно: ${item.maxStock} шт`}
+                        {item.maxStock === 0 ? `❌ ${t('cart.out_of_stock')}` : `${t('cart.free_qty')} ${item.maxStock} ${t('common.pcs')}`}
                       </span>
                     )}
                   </div>
@@ -300,8 +302,8 @@ export function CartItemsTable({
                   type="button"
                   onClick={() => onRemoveItem(item.productId, item.size, item.warehouse)}
                   className="h-8 w-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer shrink-0"
-                  title="Удалить"
-                  aria-label="Удалить товар"
+                  title="Remove"
+                  aria-label="Remove"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
@@ -314,8 +316,8 @@ export function CartItemsTable({
                     onClick={() => onUpdateQuantity(item.productId, item.size, item.warehouse, item.quantity - 1)}
                     disabled={item.quantity <= 1 || isDepleted}
                     className="h-8 w-8 flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-colors rounded-l-lg"
-                    title="Уменьшить"
-                    aria-label="Уменьшить количество"
+                    title="-"
+                    aria-label="-"
                   >
                     <Minus className="h-3.5 w-3.5" />
                   </button>
@@ -325,18 +327,18 @@ export function CartItemsTable({
                     onClick={() => onUpdateQuantity(item.productId, item.size, item.warehouse, item.quantity + 1)}
                     disabled={isDepleted || (item.maxStock !== undefined && item.quantity >= item.maxStock)}
                     className="h-8 w-8 flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-colors rounded-r-lg"
-                    title="Увеличить"
-                    aria-label="Увеличить количество"
+                    title="+"
+                    aria-label="+"
                   >
                     <Plus className="h-3.5 w-3.5" />
                   </button>
                 </div>
                 <div className="text-right">
                   <div className="text-[11px] text-slate-500">
-                    {fmtPrice(item.price)} / шт
+                    {fmtPrice(item.price)} / {t('common.pcs')}
                   </div>
                   <div className="font-extrabold text-brand-700 text-sm sm:text-base">
-                    {isZeroPrice ? 'Уточняется' : fmtPrice(lineTotal)}
+                    {isZeroPrice ? t('cart.price_pending') : fmtPrice(lineTotal)}
                   </div>
                 </div>
               </div>
@@ -349,14 +351,14 @@ export function CartItemsTable({
       {sizeSubtotals.length > 1 && (
         <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs">
           <div className="flex items-center justify-between mb-2">
-            <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-600">Итого по размерам партии</h4>
+            <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-600">{t('cart.size_subtotals_title')}</h4>
             <button
               type="button"
               onClick={onToggleSizeSort}
               className="text-xs text-brand-700 hover:text-brand-800 font-semibold inline-flex items-center gap-1 cursor-pointer"
             >
               <ArrowUpDown className="h-3 w-3" />
-              <span>{sizeAsc ? 'По возрастанию' : 'По убыванию'}</span>
+              <span>{sizeAsc ? t('cart.sort_asc') : t('cart.sort_desc')}</span>
             </button>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-xs">
@@ -364,7 +366,7 @@ export function CartItemsTable({
               <div key={st.size} className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100">
                 <span className="font-bold text-slate-800">{st.size}</span>
                 <div className="flex items-center gap-2.5 text-slate-600">
-                  <span className="font-medium">{st.qty} шт</span>
+                  <span className="font-medium">{st.qty} {t('common.pcs')}</span>
                   <span className="font-bold text-slate-900">{fmtPrice(st.sum)}</span>
                 </div>
               </div>

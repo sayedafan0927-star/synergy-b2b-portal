@@ -11,6 +11,7 @@ import { Portal } from '@/components/common/Portal';
 import { useProducts } from '@/hooks/useProductData';
 import { useUserPricing } from '@/hooks/usePricing';
 import { useCurrency } from '@/contexts/CurrencyContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { useCart } from '@/contexts/CartContext';
 import { useToast } from '@/contexts/ToastContext';
 import { normalizeDimensions } from '@/lib/searchNormalization';
@@ -31,6 +32,7 @@ export function ExcelBulkOrderModal({ isOpen, onClose }: ExcelBulkOrderModalProp
   const { products } = useProducts();
   const { getVariantPrice } = useUserPricing();
   const { formatPrice } = useCurrency();
+  const { t } = useLanguage();
   const { addItem } = useCart();
   const { success: toastSuccess, error: toastError } = useToast();
 
@@ -275,11 +277,11 @@ function sanitizeSpreadsheetCell(value: string): string {
                 <FileSpreadsheet className="h-5 w-5" />
               </div>
               <div>
-                <h3 className="font-bold text-slate-900 text-base">Массовый заказ (Excel / CSV)</h3>
-                <p className="text-xs text-slate-500">Загрузка файла со сметой или вставка списка артикулов</p>
+                <h3 className="font-bold text-slate-900 text-base">{t('cart.excel_modal_title')}</h3>
+                <p className="text-xs text-slate-500">{t('cart.excel_modal_desc')}</p>
               </div>
             </div>
-            <button onClick={onClose} className="h-8 w-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer">
+            <button onClick={onClose} className="h-8 w-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer" aria-label={t('common.close')}>
               <X className="h-5 w-5" />
             </button>
           </div>
@@ -295,7 +297,7 @@ function sanitizeSpreadsheetCell(value: string): string {
                 }`}
               >
                 <Upload className="h-3.5 w-3.5" />
-                <span>Загрузка файла</span>
+                <span>{t('cart.excel_tab_upload')}</span>
               </button>
               <button
                 type="button"
@@ -305,7 +307,7 @@ function sanitizeSpreadsheetCell(value: string): string {
                 }`}
               >
                 <ClipboardPaste className="h-3.5 w-3.5" />
-                <span>Вставка текста</span>
+                <span>{t('cart.excel_tab_paste')}</span>
               </button>
             </div>
 
@@ -315,7 +317,7 @@ function sanitizeSpreadsheetCell(value: string): string {
               className="flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700 font-medium cursor-pointer"
             >
               <Download className="h-3.5 w-3.5" />
-              <span>Шаблон CSV</span>
+              <span>{t('cart.excel_download_tpl')}</span>
             </button>
           </div>
 
@@ -340,8 +342,8 @@ function sanitizeSpreadsheetCell(value: string): string {
                   <div className="w-12 h-12 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center mx-auto mb-3">
                     <Upload className="h-6 w-6" />
                   </div>
-                  <p className="font-semibold text-slate-800 text-sm">Перетащите файл сюда или нажмите для выбора</p>
-                  <p className="text-xs text-slate-400 mt-1">Поддерживаются форматы .csv и .txt с разделителями (точка с запятой или табуляция)</p>
+                  <p className="font-semibold text-slate-800 text-sm">{t('cart.excel_dropzone')}</p>
+                  <p className="text-xs text-slate-400 mt-1">{t('cart.excel_formats_hint')}</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -349,7 +351,7 @@ function sanitizeSpreadsheetCell(value: string): string {
                     rows={6}
                     value={pastedText}
                     onChange={e => setPastedText(e.target.value)}
-                    placeholder="Вставьте строки из Excel скопировав ячейки (Артикул [Tab] Размер [Tab] Количество):&#10;FLORA 9568B&#9;2x3&#9;5&#10;SILK ROAD&#9;1.6x2.3&#9;2"
+                    placeholder={t('cart.excel_paste_ph')}
                     className="w-full rounded-xl border border-slate-200 p-3 text-xs font-mono text-slate-800 focus:outline-hidden focus:border-brand-500 bg-slate-50"
                   />
                   <button
@@ -358,7 +360,7 @@ function sanitizeSpreadsheetCell(value: string): string {
                     disabled={!pastedText.trim()}
                     className="btn-primary w-full py-2.5 text-xs font-semibold cursor-pointer disabled:opacity-50"
                   >
-                    Распознать позиции
+                    {t('common.apply')}
                   </button>
                 </div>
               )
