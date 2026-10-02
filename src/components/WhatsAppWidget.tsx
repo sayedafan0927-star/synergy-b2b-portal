@@ -45,8 +45,8 @@ export default function WhatsAppWidget() {
         aria-label={t('whatsapp.chat')}
         className="group relative flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg shadow-emerald-500/30 transition-all duration-300 hover:scale-110 hover:bg-[#20bd5a] hover:shadow-xl hover:shadow-emerald-500/40 active:scale-95"
       >
-        {/* Radar ping effect */}
-        <span className="absolute -inset-1 rounded-full bg-[#25D366]/40 animate-ping opacity-60 pointer-events-none" />
+        {/* Radar ping effect: enabled on desktop, disabled on mobile to prevent continuous GPU composite layer redraw */}
+        <span className="hidden sm:block absolute -inset-1 rounded-full bg-[#25D366]/40 animate-ping opacity-60 pointer-events-none" />
         
         {/* WhatsApp Icon */}
         <svg
