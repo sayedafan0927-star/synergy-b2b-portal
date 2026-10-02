@@ -248,9 +248,6 @@ export function StockReservationsModal({
                     {filteredReservations.length} {t('reservations.orders_badge')}
                   </span>
                 </h3>
-                <p className="text-[11px] sm:text-xs text-slate-500 truncate">
-                  {t('reservations.subtitle')}
-                </p>
               </div>
             </div>
             <div className="flex items-center gap-1 shrink-0">
@@ -313,11 +310,11 @@ export function StockReservationsModal({
             ) : <div />}
 
             {/* Status Switcher: All, Assembly, Auto-reserve, Expired */}
-            <div className="flex items-center gap-1.5 self-start sm:self-auto overflow-x-auto no-scrollbar">
+            <div className="flex flex-wrap items-center gap-1 sm:gap-1.5 self-stretch sm:self-auto">
               <button
                 type="button"
                 onClick={() => setStatusFilter('all')}
-                className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all shrink-0 cursor-pointer ${
+                className={`rounded-lg px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-semibold transition-all shrink-0 cursor-pointer ${
                   statusFilter === 'all'
                     ? 'bg-brand-700 text-white shadow-2xs'
                     : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
@@ -328,7 +325,7 @@ export function StockReservationsModal({
               <button
                 type="button"
                 onClick={() => setStatusFilter('processing')}
-                className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all shrink-0 cursor-pointer ${
+                className={`rounded-lg px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-semibold transition-all shrink-0 cursor-pointer ${
                   statusFilter === 'processing'
                     ? 'bg-indigo-600 text-white shadow-2xs'
                     : 'bg-white border border-slate-200 text-indigo-700 hover:bg-indigo-50'
@@ -339,7 +336,7 @@ export function StockReservationsModal({
               <button
                 type="button"
                 onClick={() => setStatusFilter('pending')}
-                className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all shrink-0 cursor-pointer ${
+                className={`rounded-lg px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-semibold transition-all shrink-0 cursor-pointer ${
                   statusFilter === 'pending'
                     ? 'bg-amber-600 text-white shadow-2xs'
                     : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
@@ -350,7 +347,7 @@ export function StockReservationsModal({
               <button
                 type="button"
                 onClick={() => setStatusFilter('expired')}
-                className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all shrink-0 cursor-pointer ${
+                className={`rounded-lg px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-semibold transition-all shrink-0 cursor-pointer ${
                   statusFilter === 'expired'
                     ? 'bg-rose-600 text-white shadow-2xs'
                     : 'bg-white border border-slate-200 text-rose-700 hover:bg-rose-50'

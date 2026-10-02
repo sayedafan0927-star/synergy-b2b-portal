@@ -217,13 +217,62 @@ export function ReservationCard({
         </div>
       </div>
 
-      {/* Expandable Reserved Items Table */}
+      {/* Expandable Reserved Items Breakdown */}
       {isExpanded && (
         <div className="border-t border-slate-100 bg-slate-50/70 p-3 sm:p-4 animate-in slide-in-from-top-1 duration-150">
           <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
             {t('reservations.items_composition')}
           </p>
-          <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-2xs">
+
+          {/* Mobile view: readable stacked cards */}
+          <div className="block sm:hidden space-y-2">
+            {res.items.map((item, idx) => {
+              const cleaned = clean1CName(item.product_name);
+              return (
+                <div
+                  key={idx}
+                  className="rounded-xl border border-slate-200 bg-white p-3 shadow-2xs space-y-2"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <Package className="h-3.5 w-3.5 text-amber-700 shrink-0 mt-0.5" />
+                        <span className="font-bold text-slate-900 text-xs leading-snug">
+                          {cleaned.name}
+                        </span>
+                      </div>
+                      {item.sku && (
+                        <span className="font-mono text-[10px] text-slate-400 pl-5 block mt-0.5">
+                          {t('reservations.art_label')} {item.sku}
+                        </span>
+                      )}
+                    </div>
+                    <span className="badge text-[11px] font-mono font-extrabold bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-lg shrink-0">
+                      {item.quantity} {t('common.pcs')}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100 text-[11px]">
+                    <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                      <span className="bg-slate-100 border border-slate-200 font-mono font-semibold text-slate-700 px-1.5 py-0.5 rounded text-[10px] shrink-0">
+                        {item.size}
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-slate-500 text-[10px] truncate">
+                        <Building2 className="h-3 w-3 text-slate-400 shrink-0" />
+                        <span className="truncate">{item.warehouse}</span>
+                      </span>
+                    </div>
+                    <span className="font-mono font-bold text-emerald-800 text-[11px] shrink-0">
+                      {item.total_sqm} {t('common.sqm')}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop view: structured table */}
+          <div className="hidden sm:block rounded-xl border border-slate-200 bg-white overflow-hidden shadow-2xs">
             <table className="w-full text-xs text-left">
               <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-100">
                 <tr>
