@@ -169,6 +169,10 @@ export function useRepeatOrder(partnerId?: string | number | null, profileId?: s
             size: item.size,
             requestedQty: item.quantity,
             reason: 'Товар отсутствует в текущем каталоге',
+            sku: item.sku,
+            collection: item.collection,
+            warehouse: item.warehouse,
+            price: item.price,
           });
           continue;
         }
@@ -193,21 +197,28 @@ export function useRepeatOrder(partnerId?: string | number | null, profileId?: s
           ? Number(wh.free_stock ?? wh.stock ?? 0)
           : (foundVariant.warehouses?.reduce((s: number, w: any) => s + Number(w.free_stock ?? w.stock ?? 0), 0) ?? Number(foundVariant.free_stock ?? foundVariant.stock ?? 0));
 
+        const prodImg = (foundProd.images && foundProd.images.length > 0) ? foundProd.images[0] : (foundProd.image_thumb || '');
+        const currentPrice = Number(foundVariant.price || foundVariant.base_price || item.price || 0);
+        const resolvedSku = foundVariant.sku || foundVariant.article || item.sku || '';
+
         if (stock <= 0) {
           missing.push({
             name: foundProd.name || item.productName,
             size: foundVariant.size || item.size,
             requestedQty: item.quantity,
             reason: 'Нет в наличии на складах',
+            image: prodImg,
+            sku: resolvedSku,
+            collection: foundProd.collection || item.collection,
+            warehouse: item.warehouse,
+            price: currentPrice,
           });
           continue;
         }
 
         const qtyToAdd = Math.min(item.quantity, stock);
-        const prodImg = (foundProd.images && foundProd.images.length > 0) ? foundProd.images[0] : (foundProd.image_thumb || '');
         const resolvedWhName = wh?.warehouse_name || wh?.city || item.warehouse || 'Основной Склад Астана';
         const resolvedWhId = wh?.warehouse_id || itemWhId || 81;
-        const currentPrice = Number(foundVariant.price || foundVariant.base_price || item.price || 0);
 
         // Детекция автоматической подмены склада при отсутствии на исходном складе
         const isWarehouseSubstituted = Boolean(
@@ -225,7 +236,7 @@ export function useRepeatOrder(partnerId?: string | number | null, profileId?: s
           collection: foundProd.collection,
           image: prodImg,
           size: foundVariant.size,
-          sku: foundVariant.sku || foundVariant.article || item.sku || '',
+          sku: resolvedSku,
           warehouse: resolvedWhName,
           warehouse_id: resolvedWhId,
           price: currentPrice,
@@ -242,6 +253,11 @@ export function useRepeatOrder(partnerId?: string | number | null, profileId?: s
           originalWarehouse: item.warehouse,
           warehouse: resolvedWhName,
           isWarehouseSubstituted,
+          image: prodImg,
+          sku: resolvedSku,
+          collection: foundProd.collection,
+          price: currentPrice,
+          area_sqm: foundVariant.area_sqm,
         });
       }
 

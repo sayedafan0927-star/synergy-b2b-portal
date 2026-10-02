@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Loader2, Send, AlertTriangle, AlertCircle, Boxes, CheckCircle2 } from 'lucide-react';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -77,6 +78,21 @@ export function CartCheckoutForm({
   const { formatPrice: fmtPrice } = useCurrency();
   const { t } = useLanguage();
 
+  const [submitPhase, setSubmitPhase] = useState<number>(0);
+
+  useEffect(() => {
+    if (!submitting) {
+      setSubmitPhase(0);
+      return;
+    }
+    const t1 = setTimeout(() => setSubmitPhase(1), 800);
+    const t2 = setTimeout(() => setSubmitPhase(2), 2000);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [submitting]);
+
   const isCheckoutDisabled = submitting || hasDepletedItems || hasZeroPriceItems || !isAuthenticated || Boolean(hasOverStockItems) || isAccountant;
 
   return (
@@ -118,15 +134,23 @@ export function CartCheckoutForm({
           onClick={onSubmit}
           disabled={isCheckoutDisabled}
           className={`w-full h-11 text-sm font-bold flex items-center justify-center gap-2 rounded-xl transition-all shadow-md ${
-            isCheckoutDisabled
+            submitting
+              ? 'bg-brand-700 text-white cursor-wait opacity-95 shadow-inner'
+              : isCheckoutDisabled
               ? 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-85'
               : 'btn-primary cursor-pointer hover:shadow-lg'
           }`}
         >
           {submitting ? (
             <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span>{t('cart.submitting')}</span>
+              <Loader2 className="h-4 w-4 animate-spin text-white shrink-0" />
+              <span className="truncate">
+                {submitPhase === 0
+                  ? t('cart.submitting_step1', 'Проверка цен и остатков...')
+                  : submitPhase === 1
+                  ? t('cart.submitting_step2', 'Резервирование в 1С:ERP...')
+                  : t('cart.submitting_step3', 'Оформление наряда в 1С...')}
+              </span>
             </>
           ) : isAccountant ? (
             <span>{t('cart.accountant_view_only')}</span>
@@ -145,6 +169,13 @@ export function CartCheckoutForm({
             </>
           )}
         </button>
+
+        {submitting && (
+          <div className="flex items-center justify-center gap-1.5 pt-0.5 text-[11px] text-brand-800 animate-pulse font-medium">
+            <span className="h-1.5 w-1.5 rounded-full bg-brand-600 animate-ping shrink-0" />
+            <span>Прямое резервирование на складах в 1С:ERP...</span>
+          </div>
+        )}
       </div>
 
       {/* ─── 3. Компактные предупреждения и статусы ─── */}
