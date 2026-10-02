@@ -308,6 +308,21 @@ export default function CatalogPage({
     selectedCountries.size,
   ]);
 
+  const catalogReservedSkus = useMemo(() => {
+    const list: string[] = [];
+    for (const p of filteredProducts) {
+      for (const v of p.variants) {
+        if ((v.reserved_stock || 0) > 0) {
+          if (v.sku) list.push(v.sku);
+          if (v.article) list.push(v.article);
+          if (p.article) list.push(p.article);
+          if (p.collection) list.push(p.collection);
+        }
+      }
+    }
+    return Array.from(new Set(list));
+  }, [filteredProducts]);
+
   useEffect(() => {
     if (!hasSavedState) {
       window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
@@ -626,6 +641,7 @@ export default function CatalogPage({
         <StockReservationsModal
           isOpen={reservationsModalOpen}
           onClose={() => setReservationsModalOpen(false)}
+          catalogSkus={catalogReservedSkus}
         />
       )}
     </DecklePaperWrapper>
