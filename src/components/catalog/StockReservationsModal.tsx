@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { fetchActiveReservations, type ActiveReservation } from '@/lib/erpApi';
 import { Portal } from '@/components/common/Portal';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface StockReservationsModalProps {
   isOpen: boolean;
@@ -30,7 +31,11 @@ function fmtNum(n: number, decimals = 0): string {
   });
 }
 
-function formatHoldTtl(holdExpiresAt?: string, createdAt?: string): { label: string; isExpiringSoon: boolean } {
+function formatHoldTtl(
+  holdExpiresAt?: string,
+  createdAt?: string,
+  t?: (key: string, fallback?: string) => string
+): { label: string; isExpiringSoon: boolean } {
   const expiryDate = holdExpiresAt
     ? new Date(holdExpiresAt)
     : createdAt
@@ -38,27 +43,37 @@ function formatHoldTtl(holdExpiresAt?: string, createdAt?: string): { label: str
     : null;
 
   if (!expiryDate) {
-    return { label: 'Hold TTL 24ч', isExpiringSoon: false };
+    return { label: t ? t('reservations.ttl_24h', 'Hold TTL 24ч') : 'Hold TTL 24ч', isExpiringSoon: false };
   }
 
   const now = new Date();
   const diffMs = expiryDate.getTime() - now.getTime();
 
   if (diffMs <= 0) {
-    return { label: 'Срок брони истек (ожидает расформирования)', isExpiringSoon: true };
+    return {
+      label: t ? t('reservations.ttl_expired', 'Срок брони истек (ожидает расформирования)') : 'Срок брони истек (ожидает расформирования)',
+      isExpiringSoon: true,
+    };
   }
 
   const hours = Math.floor(diffMs / (1000 * 60 * 60));
   const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
 
   const isExpiringSoon = hours < 3;
+  const timeStr = expiryDate.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  const left = t ? t('reservations.ttl_left', 'Осталось') : 'Осталось';
+  const hStr = t ? t('reservations.ttl_h', 'ч') : 'ч';
+  const mStr = t ? t('reservations.ttl_m', 'мин') : 'мин';
+  const until = t ? t('reservations.ttl_until', 'до') : 'до';
+
   return {
-    label: `Осталось ${hours}ч ${minutes}мин (до ${expiryDate.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })})`,
+    label: `${left} ${hours}${hStr} ${minutes}${mStr} (${until} ${timeStr})`,
     isExpiringSoon,
   };
 }
 
 export function StockReservationsModal({ isOpen, onClose, filterSku }: StockReservationsModalProps) {
+  const { t } = useLanguage();
   const [reservations, setReservations] = useState<ActiveReservation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -152,13 +167,13 @@ export function StockReservationsModal({ isOpen, onClose, filterSku }: StockRese
               </div>
               <div>
                 <h3 className="text-base sm:text-lg font-bold text-slate-900 flex items-center gap-2">
-                  <span>Активные резервы ковров</span>
+                  <span>{t('reservations.title')}</span>
                   <span className="badge bg-amber-100 text-amber-800 text-[11px] font-mono">
-                    {reservations.length} {reservations.length === 1 ? 'заказ' : 'заказов'}
+                    {reservations.length} {t('reservations.orders_badge')}
                   </span>
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Клиенты, зарезервировавшие складские остатки (WMS Hold TTL 24ч)
+                  {t('reservations.subtitle')}
                 </p>
               </div>
             </div>
@@ -168,7 +183,7 @@ export function StockReservationsModal({ isOpen, onClose, filterSku }: StockRese
                 onClick={loadData}
                 disabled={loading}
                 className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-200/60 transition-colors cursor-pointer disabled:opacity-50"
-                title="Обновить список резервов"
+                title={t('reservations.refresh')}
               >
                 <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin text-brand-600' : ''}`} />
               </button>
@@ -176,7 +191,7 @@ export function StockReservationsModal({ isOpen, onClose, filterSku }: StockRese
                 type="button"
                 onClick={onClose}
                 className="flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-200/60 hover:text-slate-700 transition-colors cursor-pointer"
-                title="Закрыть"
+                title={t('common.close')}
               >
                 <X className="h-5 w-5" />
               </button>
@@ -190,9 +205,9 @@ export function StockReservationsModal({ isOpen, onClose, filterSku }: StockRese
                 <Package className="h-4 w-4" />
               </div>
               <div className="min-w-0">
-                <p className="text-[10px] uppercase font-bold text-amber-800">Всего в брони</p>
+                <p className="text-[10px] uppercase font-bold text-amber-800">{t('reservations.total_in_reserve')}</p>
                 <p className="text-sm sm:text-base font-extrabold text-slate-900 font-mono">
-                  {fmtNum(totalFilteredPcs)} <span className="text-xs font-medium text-slate-500">шт</span>
+                  {fmtNum(totalFilteredPcs)} <span className="text-xs font-medium text-slate-500">{t('common.pcs')}</span>
                 </p>
               </div>
             </div>
@@ -202,9 +217,9 @@ export function StockReservationsModal({ isOpen, onClose, filterSku }: StockRese
                 <Layers className="h-4 w-4" />
               </div>
               <div className="min-w-0">
-                <p className="text-[10px] uppercase font-bold text-emerald-800">Общая площадь</p>
+                <p className="text-[10px] uppercase font-bold text-emerald-800">{t('reservations.total_area')}</p>
                 <p className="text-sm sm:text-base font-extrabold text-emerald-950 font-mono">
-                  {fmtNum(totalFilteredSqm, 2)} <span className="text-xs font-medium text-emerald-700">м²</span>
+                  {fmtNum(totalFilteredSqm, 2)} <span className="text-xs font-medium text-emerald-700">{t('common.sqm')}</span>
                 </p>
               </div>
             </div>
@@ -214,9 +229,9 @@ export function StockReservationsModal({ isOpen, onClose, filterSku }: StockRese
                 <Building2 className="h-4 w-4" />
               </div>
               <div className="min-w-0">
-                <p className="text-[10px] uppercase font-bold text-indigo-800">Клиентов</p>
+                <p className="text-[10px] uppercase font-bold text-indigo-800">{t('reservations.clients')}</p>
                 <p className="text-sm sm:text-base font-extrabold text-slate-900 font-mono">
-                  {uniqueClientsCount} <span className="text-xs font-medium text-slate-500">контрагентов</span>
+                  {uniqueClientsCount} <span className="text-xs font-medium text-slate-500">{t('reservations.counterparties')}</span>
                 </p>
               </div>
             </div>
@@ -230,7 +245,7 @@ export function StockReservationsModal({ isOpen, onClose, filterSku }: StockRese
                 type="text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Поиск по клиенту, телефону, заказу, коллекции..."
+                placeholder={t('reservations.search_placeholder')}
                 className="input-field pl-9 py-1.5 text-xs w-full bg-white"
               />
               {searchQuery && (
@@ -254,7 +269,7 @@ export function StockReservationsModal({ isOpen, onClose, filterSku }: StockRese
                     : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
                 }`}
               >
-                Все ({reservations.length})
+                {t('reservations.tab_all')} ({reservations.length})
               </button>
               <button
                 type="button"
@@ -265,7 +280,7 @@ export function StockReservationsModal({ isOpen, onClose, filterSku }: StockRese
                     : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
                 }`}
               >
-                Авторезерв ({reservations.filter(r => r.status === 'pending').length})
+                {t('reservations.tab_auto')} ({reservations.filter(r => r.status === 'pending').length})
               </button>
               <button
                 type="button"
@@ -276,7 +291,7 @@ export function StockReservationsModal({ isOpen, onClose, filterSku }: StockRese
                     : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
                 }`}
               >
-                На сборке ({reservations.filter(r => r.status === 'processing').length})
+                {t('reservations.tab_assembly')} ({reservations.filter(r => r.status === 'processing').length})
               </button>
             </div>
           </div>
@@ -286,28 +301,28 @@ export function StockReservationsModal({ isOpen, onClose, filterSku }: StockRese
             {loading ? (
               <div className="py-16 flex flex-col items-center justify-center text-slate-400 gap-3">
                 <RefreshCw className="h-7 w-7 animate-spin text-amber-500" />
-                <p className="text-xs font-medium">Загрузка данных резерва...</p>
+                <p className="text-xs font-medium">{t('reservations.loading')}</p>
               </div>
             ) : error ? (
               <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-4 text-xs text-rose-800 flex items-start gap-3">
                 <ShieldAlert className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
                 <div>
-                  <p className="font-bold">Ошибка загрузки</p>
+                  <p className="font-bold">{t('common.error')}</p>
                   <p className="mt-0.5">{error}</p>
                 </div>
               </div>
             ) : filteredReservations.length === 0 ? (
               <div className="py-16 text-center text-slate-400">
                 <Clock className="h-10 w-10 mx-auto text-slate-300 mb-2.5" />
-                <p className="text-sm font-semibold text-slate-700">Активных резервов не найдено</p>
+                <p className="text-sm font-semibold text-slate-700">{t('reservations.empty_title')}</p>
                 <p className="text-xs text-slate-400 mt-1">
-                  {searchQuery ? 'Попробуйте изменить поисковый запрос' : 'В данный момент нет удерживаемых броней склада'}
+                  {searchQuery ? t('reservations.empty_search') : t('reservations.empty_desc')}
                 </p>
               </div>
             ) : (
               filteredReservations.map(res => {
                 const isExpanded = expandedOrders.has(res.id);
-                const ttl = formatHoldTtl(res.hold_expires_at, res.created_at);
+                const ttl = formatHoldTtl(res.hold_expires_at, res.created_at, t);
 
                 return (
                   <div
@@ -340,7 +355,7 @@ export function StockReservationsModal({ isOpen, onClose, filterSku }: StockRese
                                   : 'bg-amber-50 text-amber-800 border border-amber-200'
                               }`}
                             >
-                              {res.status === 'processing' ? 'На сборке (ТСД)' : 'Авторезерв (WMS)'}
+                              {res.status === 'processing' ? t('reservations.status_assembly') : t('reservations.status_auto')}
                             </span>
                           </div>
 
@@ -369,7 +384,7 @@ export function StockReservationsModal({ isOpen, onClose, filterSku }: StockRese
                       <div className="flex items-center justify-between sm:justify-end gap-4 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
                         <div className="text-left sm:text-right">
                           <p className="text-xs font-extrabold text-slate-900 font-mono">
-                            {res.total_items} шт <span className="text-amber-700 font-semibold font-mono">({res.total_sqm} м²)</span>
+                            {res.total_items} {t('common.pcs')} <span className="text-amber-700 font-semibold font-mono">({res.total_sqm} {t('common.sqm')})</span>
                           </p>
                           <div className={`text-[11px] font-medium flex items-center gap-1 sm:justify-end ${ttl.isExpiringSoon ? 'text-rose-600 font-semibold' : 'text-slate-500'}`}>
                             <Clock className="h-3 w-3 shrink-0" />
@@ -380,7 +395,7 @@ export function StockReservationsModal({ isOpen, onClose, filterSku }: StockRese
                         <button
                           type="button"
                           className="flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 transition-colors"
-                          aria-label="Показать состав резерва"
+                          aria-label={t('reservations.show_composition')}
                         >
                           <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
                         </button>
@@ -391,17 +406,17 @@ export function StockReservationsModal({ isOpen, onClose, filterSku }: StockRese
                     {isExpanded && (
                       <div className="border-t border-slate-100 bg-slate-50/70 p-3 sm:p-4 animate-in slide-in-from-top-1 duration-150">
                         <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
-                          Состав удерживаемых позиций:
+                          {t('reservations.items_composition')}
                         </p>
                         <div className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-2xs">
                           <table className="w-full text-xs text-left">
                             <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-100">
                               <tr>
-                                <th className="py-2.5 px-3">Товар / Коллекция</th>
-                                <th className="py-2.5 px-2">Размер</th>
-                                <th className="py-2.5 px-2">Склад</th>
-                                <th className="py-2.5 px-2 text-right">Кол-во</th>
-                                <th className="py-2.5 px-3 text-right">Площадь</th>
+                                <th className="py-2.5 px-3">{t('reservations.col_product')}</th>
+                                <th className="py-2.5 px-2">{t('reservations.col_size')}</th>
+                                <th className="py-2.5 px-2">{t('reservations.col_warehouse')}</th>
+                                <th className="py-2.5 px-2 text-right">{t('reservations.col_qty')}</th>
+                                <th className="py-2.5 px-3 text-right">{t('reservations.col_area')}</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -411,7 +426,7 @@ export function StockReservationsModal({ isOpen, onClose, filterSku }: StockRese
                                     <span className="font-semibold text-slate-900 block truncate max-w-[200px] sm:max-w-xs">
                                       {item.product_name}
                                     </span>
-                                    {item.sku && <span className="font-mono text-[10px] text-slate-400">Арт: {item.sku}</span>}
+                                    {item.sku && <span className="font-mono text-[10px] text-slate-400">{t('reservations.art_label')} {item.sku}</span>}
                                   </td>
                                   <td className="py-2 px-2 font-mono font-medium text-slate-800 whitespace-nowrap">
                                     {item.size}
@@ -420,10 +435,10 @@ export function StockReservationsModal({ isOpen, onClose, filterSku }: StockRese
                                     {item.warehouse}
                                   </td>
                                   <td className="py-2 px-2 text-right font-bold text-slate-900 whitespace-nowrap">
-                                    {item.quantity} шт.
+                                    {item.quantity} {t('common.pcs')}
                                   </td>
                                   <td className="py-2 px-3 text-right font-semibold text-emerald-800 whitespace-nowrap font-mono">
-                                    {item.total_sqm} м²
+                                    {item.total_sqm} {t('common.sqm')}
                                   </td>
                                 </tr>
                               ))}
@@ -441,14 +456,14 @@ export function StockReservationsModal({ isOpen, onClose, filterSku }: StockRese
           {/* Footer */}
           <div className="border-t border-slate-100 px-5 py-3.5 bg-slate-50 flex items-center justify-between text-xs text-slate-500">
             <span className="text-[11px]">
-              ⚠️ Брони автоматически расформировываются кроном по истечении 24 часов
+              {t('reservations.footer_warning')}
             </span>
             <button
               type="button"
               onClick={onClose}
               className="btn-secondary !py-1.5 !px-4 text-xs font-semibold cursor-pointer"
             >
-              Закрыть
+              {t('common.close')}
             </button>
           </div>
         </div>

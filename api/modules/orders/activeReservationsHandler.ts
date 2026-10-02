@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { getTargetErpUrl, getErpApiKey } from '../../lib/erpKey';
 
 export async function handleActiveReservations(
   req: VercelRequest,
@@ -180,9 +181,76 @@ function parseSizeArea(sizeStr?: string): number {
       };
     });
 
+    // 2. Интеграция с ERP: если в локальной БД Supabase нет активных заказов, получаем актуальные брони из ERP
+    if (mapped.length === 0) {
+      try {
+        const erpUrl = `${getTargetErpUrl()}?action=orders`;
+        const erpKey = getErpApiKey();
+        const erpRes = await fetch(erpUrl, {
+          headers: {
+            'x-portal-key': erpKey,
+          },
+        });
+        if (erpRes.ok) {
+          const erpData = await erpRes.json();
+          if (erpData?.success && Array.isArray(erpData.orders)) {
+            const activeErp = erpData.orders.filter((o: any) =>
+              ['pending', 'reserved', 'processing', 'confirmed'].includes(o.status_code) ||
+              ['Новый', 'В резерве', 'На сборке'].includes(o.status)
+            );
+            mapped = activeErp.map((o: any) => {
+              const rawItems = Array.isArray(o.items) ? o.items : [];
+              const items = rawItems.map((it: any) => {
+                const qty = Number(it.quantity) || 1;
+                const area = Number(it.area_sqm) || parseSizeArea(it.size);
+                return {
+                  sku: it.sku || '',
+                  product_name: it.name || 'Ковер',
+                  collection: it.name?.split(' ')[0] || '',
+                  size: it.size || (it.width && it.length ? `${it.width} × ${it.length}` : 'Стандарт'),
+                  warehouse: o.warehouse_name || 'Основной Склад Астана',
+                  quantity: qty,
+                  area_sqm: area,
+                  total_sqm: Number(it.total_sqm) || Math.round(qty * area * 100) / 100,
+                };
+              });
+              const calculatedQty = items.reduce((sum: number, it: any) => sum + it.quantity, 0);
+              const calculatedSqm = Math.round(items.reduce((sum: number, it: any) => sum + it.total_sqm, 0) * 100) / 100;
+              return {
+                id: String(o.id),
+                order_number: o.doc_number || `ORD-${o.id}`,
+                client_name: o.client_name || 'Клиент B2B',
+                client_company: o.client_name || '',
+                client_phone: o.client_phone || '',
+                status: o.status_code === 'processing' ? 'processing' : 'pending',
+                warehouse: o.warehouse_name || 'Основной Склад Астана',
+                created_at: o.date,
+                hold_expires_at: o.hold_expires_at || (o.date ? new Date(new Date(o.date).getTime() + 24 * 3600 * 1000).toISOString() : undefined),
+                total_items: calculatedQty || Number(o.items_count) || 1,
+                total_sqm: calculatedSqm || Number(o.total_sqm) || 0,
+                total_amount: Number(o.total_amount) || 0,
+                items,
+              };
+            });
+          }
+        }
+      } catch (erpErr) {
+        console.warn('[Active Reservations API] ERP fallback warning:', erpErr);
+      }
+    }
+
     // Фильтрация по SKU если запрошено
     if (skuFilter) {
-      mapped = mapped.filter((o: any) => o.items.some((it: any) => it.sku.toLowerCase() === skuFilter.toLowerCase()));
+      const qSku = skuFilter.toLowerCase();
+      mapped = mapped.filter((o: any) =>
+        o.items.some(
+          (it: any) =>
+            it.sku.toLowerCase() === qSku ||
+            it.sku.toLowerCase().includes(qSku) ||
+            qSku.includes(it.sku.toLowerCase()) ||
+            it.product_name.toLowerCase().includes(qSku)
+        )
+      );
     }
 
     // Текстовый поиск (по клиенту, компании, телефону, номеру заказа)
