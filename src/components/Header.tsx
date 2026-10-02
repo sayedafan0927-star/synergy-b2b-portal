@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
-import { Menu, ShoppingCart, User, Shield, CloudOff, RefreshCw, Eye, EyeOff, Search, Globe } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Menu, ShoppingCart, User, Shield, CloudOff, RefreshCw, Eye, EyeOff, Search } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { useLanguage, SUPPORTED_LANGUAGES } from '@/contexts/LanguageContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { useShowroomMode } from '@/contexts/ShowroomModeContext';
 import { checkSystemHealth } from '@/lib/erpApi';
 import { getQueuedOfflineOrders, processOfflineOrderQueue, onOfflineQueueChange } from '@/lib/offlineOrderQueue';
@@ -24,24 +24,9 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
   const { totalItems } = useCart();
   const { user, profile, isAdmin, realIsAdmin, isImpersonating, stopImpersonation } = useAuth();
   const isEffectiveAdmin = Boolean(isAdmin && !isImpersonating);
-  const { language, setLanguage, currentLanguageOption, t } = useLanguage();
+  const { language, setLanguage, t } = useLanguage();
   const { isShowroomMode, toggleShowroomMode } = useShowroomMode();
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
-  const [langMenuOpen, setLangMenuOpen] = useState(false);
-  const langMenuRef = useRef<HTMLDivElement>(null);
-
-  // Close language menu on outside click
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (langMenuRef.current && !langMenuRef.current.contains(e.target as Node)) {
-        setLangMenuOpen(false);
-      }
-    };
-    if (langMenuOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [langMenuOpen]);
 
   // Global ⌘K / Ctrl+K keyboard shortcut to open Command Palette from anywhere
   useEffect(() => {
@@ -329,44 +314,6 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
               {totalItems > 0 && <span className="text-xs font-bold">{totalItems}</span>}
             </button>
 
-            {/* Language Selector Dropdown */}
-            <div className="relative" ref={langMenuRef}>
-              <button
-                type="button"
-                onClick={() => setLangMenuOpen(prev => !prev)}
-                className="flex h-9 items-center gap-1 px-2 sm:px-2.5 rounded-lg border border-slate-200 bg-slate-100 hover:bg-slate-200/80 text-slate-800 text-xs font-bold font-mono transition-colors cursor-pointer shadow-2xs shrink-0"
-                title={currentLanguageOption.label}
-                aria-label="Сменить язык"
-              >
-                <Globe className="h-3.5 w-3.5 text-slate-600" />
-                <span className="text-[11px] sm:text-xs font-bold">{currentLanguageOption.shortLabel}</span>
-              </button>
-              {langMenuOpen && (
-                <div className="absolute right-0 top-full mt-1.5 w-36 rounded-xl bg-white border border-slate-200 shadow-xl py-1 z-50 animate-in fade-in zoom-in-95 duration-150">
-                  {SUPPORTED_LANGUAGES.map(opt => (
-                    <button
-                      key={opt.code}
-                      type="button"
-                      onClick={() => {
-                        setLanguage(opt.code);
-                        setLangMenuOpen(false);
-                      }}
-                      className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left cursor-pointer transition-colors ${
-                        language === opt.code
-                          ? 'bg-brand-50 text-brand-800 font-bold'
-                          : 'text-slate-700 hover:bg-slate-50'
-                      }`}
-                    >
-                      <span className="flex items-center gap-2">
-                        <span className="text-sm">{opt.flag}</span>
-                        <span>{opt.label}</span>
-                      </span>
-                      {language === opt.code && <span className="h-1.5 w-1.5 rounded-full bg-brand-700" />}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
 
             {/* Menu Button: 36x36px on mobile, full button on desktop */}
             <button

@@ -1,8 +1,12 @@
+import { useLanguage } from '@/contexts/LanguageContext';
+
 export interface AdminCatalogSubTabProps {
   products: any[];
 }
 
 export function AdminCatalogSubTab({ products }: AdminCatalogSubTabProps) {
+  const { t } = useLanguage();
+
   return (
     <div className="space-y-3">
       {products.map((p: any) => {
@@ -20,7 +24,7 @@ export function AdminCatalogSubTab({ products }: AdminCatalogSubTabProps) {
                 <span className="text-xs text-slate-400">({p.manufacturer})</span>
               </div>
               <span className={`badge ${totalStock > 0 ? 'bg-emerald-50 text-emerald-700 font-semibold' : 'bg-slate-100 text-slate-400'}`}>
-                Остаток: {totalStock} шт.
+                {t('admin.erp_stock_pcs', { count: totalStock }, `Остаток: ${totalStock} шт.`)}
               </span>
             </div>
 
@@ -28,13 +32,13 @@ export function AdminCatalogSubTab({ products }: AdminCatalogSubTabProps) {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="bg-slate-50 text-slate-500 font-semibold">
-                    <th className="py-1.5 px-3 text-left">Размер</th>
+                    <th className="py-1.5 px-3 text-left">{t('catalog.size', 'Размер')}</th>
                     <th className="py-1.5 px-3 text-left">SKU</th>
-                    <th className="py-1.5 px-3 text-left">Базовая цена</th>
-                    <th className="py-1.5 px-3 text-left">Склады с наличием</th>
+                    <th className="py-1.5 px-3 text-left">{t('admin.erp_base_price', 'Базовая цена')}</th>
+                    <th className="py-1.5 px-3 text-left">{t('admin.erp_stock_warehouses', 'Склады с наличием')}</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y border-slate-100">
                   {(p.variants || []).map((v: any) => {
                     const inStockWh = (v.warehouses || []).filter((w: any) => (w.stock || 0) > 0);
                     const vStock = inStockWh.reduce((s: number, w: any) => s + w.stock, 0);
@@ -49,12 +53,12 @@ export function AdminCatalogSubTab({ products }: AdminCatalogSubTabProps) {
                             <div className="flex flex-wrap gap-1.5">
                               {inStockWh.map((w: any) => (
                                 <span key={w.city} className="badge bg-emerald-50 text-emerald-700 text-[10px]">
-                                  {w.city}: {w.stock} шт.
+                                  {w.city}: {w.stock} {t('common.pcs', 'шт.')}
                                 </span>
                               ))}
                             </div>
                           ) : (
-                            <span className="text-slate-300">Нет на складах</span>
+                            <span className="text-slate-300">{t('admin.erp_no_stock_wh', 'Нет на складах')}</span>
                           )}
                         </td>
                       </tr>
@@ -67,7 +71,7 @@ export function AdminCatalogSubTab({ products }: AdminCatalogSubTabProps) {
         );
       })}
       {products.length === 0 && (
-        <p className="py-8 text-center text-xs text-slate-400">Товары в ERP не найдены</p>
+        <p className="py-8 text-center text-xs text-slate-400">{t('admin.erp_no_products', 'Товары в ERP не найдены')}</p>
       )}
     </div>
   );

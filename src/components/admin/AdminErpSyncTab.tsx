@@ -21,6 +21,7 @@ import {
   getAuthHeaders,
 } from '@/lib/erpApi';
 import { triggerCatalogReload } from '@/hooks/useProductData';
+import { useLanguage } from '@/contexts/LanguageContext';
 import {
   AdminCatalogSubTab,
   AdminCounterpartiesSubTab,
@@ -177,6 +178,7 @@ export function AdminErpSyncTab({ isAdmin = true }: AdminErpSyncTabProps) {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const { t } = useLanguage();
   const products = report?.catalog?.products || [];
   const counterparties: any[] = report?.counterparties?.counterparties || [];
   const managers = report?.regionalManagers?.managers || [];
@@ -186,8 +188,8 @@ export function AdminErpSyncTab({ isAdmin = true }: AdminErpSyncTabProps) {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-4">
         <div>
-          <h2 className="text-xl font-bold text-slate-900">Синхронизация с ERP</h2>
-          <p className="text-xs text-slate-500">Управление интеграцией, очередью Outbox и телеметрией</p>
+          <h2 className="text-xl font-bold text-slate-900">{t('admin.erp_sync_title', 'Синхронизация с ERP')}</h2>
+          <p className="text-xs text-slate-500">{t('admin.erp_sync_subtitle', 'Управление интеграцией, очередью Outbox и телеметрией')}</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -196,7 +198,7 @@ export function AdminErpSyncTab({ isAdmin = true }: AdminErpSyncTabProps) {
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 transition-colors shadow-2xs cursor-pointer"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${outboxLoading ? 'animate-spin text-brand-600' : ''}`} />
-            Сброс буфера Outbox
+            {t('admin.erp_reset_outbox', 'Сброс буфера Outbox')}
           </button>
           <button
             onClick={runSync}
@@ -204,7 +206,7 @@ export function AdminErpSyncTab({ isAdmin = true }: AdminErpSyncTabProps) {
             className="btn-primary flex items-center gap-1.5 text-xs py-1.5 px-3 cursor-pointer"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
-            {loading ? 'Синхронизация...' : 'Синхронизировать всё'}
+            {loading ? t('admin.erp_syncing', 'Синхронизация...') : t('admin.erp_sync_all', 'Синхронизировать всё')}
           </button>
         </div>
       </div>
@@ -223,7 +225,7 @@ export function AdminErpSyncTab({ isAdmin = true }: AdminErpSyncTabProps) {
             <Boxes className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-xs text-slate-400">Товаров в каталоге</p>
+            <p className="text-xs text-slate-400">{t('admin.erp_catalog_products', 'Товаров в каталоге')}</p>
             <p className="text-lg font-bold text-slate-900">{products.length}</p>
           </div>
         </div>
@@ -233,7 +235,7 @@ export function AdminErpSyncTab({ isAdmin = true }: AdminErpSyncTabProps) {
             <Users className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-xs text-slate-400">Контрагентов</p>
+            <p className="text-xs text-slate-400">{t('admin.erp_counterparties', 'Контрагентов')}</p>
             <p className="text-lg font-bold text-slate-900">{counterparties.length}</p>
           </div>
         </div>
@@ -243,7 +245,7 @@ export function AdminErpSyncTab({ isAdmin = true }: AdminErpSyncTabProps) {
             <Building2 className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-xs text-slate-400">Рег. менеджеров</p>
+            <p className="text-xs text-slate-400">{t('admin.erp_reg_managers', 'Рег. менеджеров')}</p>
             <p className="text-lg font-bold text-slate-900">{managers.length}</p>
           </div>
         </div>
@@ -253,7 +255,7 @@ export function AdminErpSyncTab({ isAdmin = true }: AdminErpSyncTabProps) {
             <Server className="h-5 w-5" />
           </div>
           <div>
-            <p className="text-xs text-slate-400">Шлюз ERP</p>
+            <p className="text-xs text-slate-400">{t('admin.erp_gateway', 'Шлюз ERP')}</p>
             <p className="text-xs font-mono font-semibold text-slate-700 truncate max-w-[140px]" title={ERP_API_URL}>
               {ERP_API_URL.replace('https://', '')}
             </p>
@@ -279,7 +281,7 @@ export function AdminErpSyncTab({ isAdmin = true }: AdminErpSyncTabProps) {
           }`}
         >
           <Boxes className="h-3.5 w-3.5" />
-          Товары ({products.length})
+          {t('admin.erp_tab_products', 'Товары')} ({products.length})
         </button>
 
         <button
@@ -291,7 +293,7 @@ export function AdminErpSyncTab({ isAdmin = true }: AdminErpSyncTabProps) {
           }`}
         >
           <Users className="h-3.5 w-3.5" />
-          Контрагенты ({counterparties.length})
+          {t('admin.erp_tab_counterparties', 'Контрагенты')} ({counterparties.length})
         </button>
 
         <button
@@ -303,7 +305,7 @@ export function AdminErpSyncTab({ isAdmin = true }: AdminErpSyncTabProps) {
           }`}
         >
           <Building2 className="h-3.5 w-3.5" />
-          Менеджеры ({managers.length})
+          {t('admin.erp_tab_managers', 'Менеджеры')} ({managers.length})
         </button>
 
         <button
@@ -318,7 +320,7 @@ export function AdminErpSyncTab({ isAdmin = true }: AdminErpSyncTabProps) {
           }`}
         >
           <Activity className="h-3.5 w-3.5" />
-          Журнал аудита {auditLogs.length > 0 ? `(${auditLogs.length})` : ''}
+          {t('admin.erp_tab_audit', 'Журнал аудита')} {auditLogs.length > 0 ? `(${auditLogs.length})` : ''}
         </button>
 
         <button
@@ -333,7 +335,7 @@ export function AdminErpSyncTab({ isAdmin = true }: AdminErpSyncTabProps) {
           }`}
         >
           <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
-          Очередь DLQ {dlqOrders.length > 0 ? `(${dlqOrders.length})` : ''}
+          DLQ {dlqOrders.length > 0 ? `(${dlqOrders.length})` : ''}
         </button>
 
         <button

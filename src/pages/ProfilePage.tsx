@@ -208,7 +208,7 @@ export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId)
                   <p className="text-xs text-slate-500 truncate">{profile.company_name}</p>
                 )}
                 <span className={`inline-block rounded px-2 py-0.5 text-[10px] font-semibold mt-1 ${roleColor(profile.role)}`}>
-                  {roleName(profile.role)}
+                  {t(`profile.role_${profile.role}`, roleName(profile.role))}
                 </span>
               </div>
             </div>
