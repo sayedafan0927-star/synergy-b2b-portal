@@ -14,6 +14,7 @@ import {
   SupplierDistribution,
 } from '@/types';
 import { SupplierStockMobileCard } from './stock/SupplierStockMobileCard';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 export interface SupplierStockTabProps {
   selectedSupplierId: number;
@@ -21,6 +22,7 @@ export interface SupplierStockTabProps {
 }
 
 export function SupplierStockTab({ selectedSupplierId, reloadCounter }: SupplierStockTabProps) {
+  const { t } = useLanguage();
   const [stockData, setStockData] = useState<SupplierNetworkStockResponse | null>(null);
   const [loadingStock, setLoadingStock] = useState<boolean>(true);
   const [stockError, setStockError] = useState<string | null>(null);
@@ -164,55 +166,55 @@ export function SupplierStockTab({ selectedSupplierId, reloadCounter }: Supplier
         <div className="card p-3 sm:p-4 bg-white border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 mb-1">
             <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider truncate">
-              {cityFilter === 'all' && typeFilter === 'all' ? 'Всего в сети РК' : 'По фильтру'}
+              {cityFilter === 'all' && typeFilter === 'all' ? t('supplier.total_in_network', 'Всего в сети РК') : t('supplier.by_filter', 'По фильтру')}
             </span>
             <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-brand-600 shrink-0" />
           </div>
           <p className="text-xl sm:text-2xl font-bold text-slate-900">
             {totalFilteredQty}{' '}
-            <span className="text-xs sm:text-sm font-normal text-slate-500">шт.</span>
+            <span className="text-xs sm:text-sm font-normal text-slate-500">{t('common.pcs', 'шт.')}</span>
           </p>
           <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5 truncate">
-            {totalFilteredSqm.toFixed(1)} м² продукции
+            {t('supplier.production_sqm', { sqm: totalFilteredSqm.toFixed(1) }, `${totalFilteredSqm.toFixed(1)} м² продукции`)}
           </p>
         </div>
 
         <div className="card p-3 sm:p-4 bg-white border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 mb-1">
-            <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider truncate">Центральный хаб</span>
+            <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider truncate">{t('supplier.central_hub', 'Центральный хаб')}</span>
             <WarehouseIcon className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-emerald-600 shrink-0" />
           </div>
           <p className="text-xl sm:text-2xl font-bold text-emerald-950">
-            {hubQty} <span className="text-xs sm:text-sm font-normal text-emerald-700">шт.</span>
+            {hubQty} <span className="text-xs sm:text-sm font-normal text-emerald-700">{t('common.pcs', 'шт.')}</span>
           </p>
           <p className="text-[11px] sm:text-xs text-emerald-600 mt-0.5 truncate">
-            Астана ({hubSqm.toFixed(1)} м²)
+            {t('supplier.astana_hub_sqm', { sqm: hubSqm.toFixed(1) }, `Астана (${hubSqm.toFixed(1)} м²)`)}
           </p>
         </div>
 
         <div className="card p-3 sm:p-4 bg-white border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 mb-1">
-            <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider truncate">Консигнация</span>
+            <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider truncate">{t('supplier.consignation', 'Консигнация')}</span>
             <Store className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-indigo-600 shrink-0" />
           </div>
           <p className="text-xl sm:text-2xl font-bold text-indigo-950">
-            {consignmentQty} <span className="text-xs sm:text-sm font-normal text-indigo-700">шт.</span>
+            {consignmentQty} <span className="text-xs sm:text-sm font-normal text-indigo-700">{t('common.pcs', 'шт.')}</span>
           </p>
           <p className="text-[11px] sm:text-xs text-indigo-600 mt-0.5 truncate">
-            В шоурумах ({consignmentSqm.toFixed(1)} м²)
+            {t('supplier.in_showrooms', { sqm: consignmentSqm.toFixed(1) }, `В шоурумах (${consignmentSqm.toFixed(1)} м²)`)}
           </p>
         </div>
 
         <div className="card p-3 sm:p-4 bg-white border border-slate-200 shadow-xs">
           <div className="flex items-center justify-between text-slate-500 mb-1">
-            <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider truncate">Номенклатур</span>
+            <span className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider truncate">{t('supplier.skus_count', 'Номенклатур')}</span>
             <TrendingUp className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-brand-600 shrink-0" />
           </div>
           <p className="text-xl sm:text-2xl font-bold text-slate-900">
             {filteredItems.length}
           </p>
           <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5 truncate">
-            {availableCities.length > 0 ? `${availableCities.length} городов` : '1 город'}
+            {availableCities.length > 0 ? t('supplier.cities_count', { count: availableCities.length }, `${availableCities.length} городов`) : t('supplier.single_city', '1 город')}
           </p>
         </div>
       </div>
@@ -224,7 +226,7 @@ export function SupplierStockTab({ selectedSupplierId, reloadCounter }: Supplier
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <input
               type="text"
-              placeholder="Поиск по артикулу, коллекции..."
+              placeholder={t('supplier.search_placeholder', 'Поиск по артикулу, коллекции...')}
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className="w-full rounded-lg border border-slate-200 pl-9 pr-3 py-2 text-xs sm:text-sm focus:border-brand-500 focus:outline-none"
@@ -237,7 +239,7 @@ export function SupplierStockTab({ selectedSupplierId, reloadCounter }: Supplier
               onChange={e => setCityFilter(e.target.value)}
               className="w-full md:w-auto rounded-lg border border-slate-200 px-2.5 sm:px-3 py-2 text-xs font-medium text-slate-700 focus:outline-none bg-white truncate cursor-pointer"
             >
-              <option value="all">Все города</option>
+              <option value="all">{t('supplier.all_cities', 'Все города')}</option>
               {availableCities.map(city => (
                 <option key={city} value={city}>
                   {city}
@@ -250,9 +252,9 @@ export function SupplierStockTab({ selectedSupplierId, reloadCounter }: Supplier
               onChange={e => setTypeFilter(e.target.value)}
               className="w-full md:w-auto rounded-lg border border-slate-200 px-2.5 sm:px-3 py-2 text-xs font-medium text-slate-700 focus:outline-none bg-white truncate cursor-pointer"
             >
-              <option value="all">Все типы</option>
-              <option value="hub">Основной хаб Астана</option>
-              <option value="consignment">Консигнация у партнеров</option>
+              <option value="all">{t('supplier.all_types', 'Все типы')}</option>
+              <option value="hub">{t('supplier.hub_astana', 'Основной хаб Астана')}</option>
+              <option value="consignment">{t('supplier.consignment_partners', 'Консигнация у партнеров')}</option>
             </select>
           </div>
         </div>
@@ -262,22 +264,22 @@ export function SupplierStockTab({ selectedSupplierId, reloadCounter }: Supplier
       {loadingStock ? (
         <div className="card p-12 text-center">
           <div className="inline-block h-8 w-8 animate-spin rounded-full border-2 border-brand-600 border-t-transparent mb-2" />
-          <p className="text-sm text-slate-500">Загрузка остатков сети из ERP...</p>
+          <p className="text-sm text-slate-500">{t('supplier.loading_stock', 'Загрузка остатков сети из ERP...')}</p>
         </div>
       ) : stockError ? (
         <div className="card p-6 border-red-200 bg-red-50 text-red-800 text-sm">
           <div className="flex items-center gap-2 mb-1">
             <AlertCircle className="h-4 w-4 text-red-600 shrink-0" />
-            <p className="font-semibold">Ошибка загрузки:</p>
+            <p className="font-semibold">{t('common.error', 'Ошибка загрузки')}:</p>
           </div>
           <p>{stockError}</p>
         </div>
       ) : filteredItems.length === 0 ? (
         <div className="card p-12 text-center text-slate-500">
           <Store className="h-10 w-10 text-slate-300 mx-auto mb-2" />
-          <p className="font-semibold text-slate-700">Остатков не найдено</p>
+          <p className="font-semibold text-slate-700">{t('supplier.no_stock_found', 'Остатков не найдено')}</p>
           <p className="text-xs text-slate-400 mt-1">
-            Для выбранной фабрики или фильтра нет активных остатков на складах сети
+            {t('supplier.no_stock_desc', 'Для выбранной фабрики или фильтра нет активных остатков на складах сети')}
           </p>
         </div>
       ) : (
@@ -295,10 +297,10 @@ export function SupplierStockTab({ selectedSupplierId, reloadCounter }: Supplier
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase text-slate-500">
-                    <th className="py-3 px-4">Ковер / Артикул</th>
-                    <th className="py-3 px-4">Размер / Площадь</th>
-                    <th className="py-3 px-4">В наличии</th>
-                    <th className="py-3 px-4">Распределение по сети (Хаб и Партнеры)</th>
+                    <th className="py-3 px-4">{t('supplier.carpet_article', 'Ковер / Артикул')}</th>
+                    <th className="py-3 px-4">{t('supplier.size_area', 'Размер / Площадь')}</th>
+                    <th className="py-3 px-4">{t('supplier.in_stock', 'В наличии')}</th>
+                    <th className="py-3 px-4">{t('supplier.network_distribution', 'Распределение по сети (Хаб и Партнеры)')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">

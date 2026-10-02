@@ -1,12 +1,14 @@
 import React from 'react';
 import { Warehouse as WarehouseIcon, Store } from 'lucide-react';
 import type { SupplierStockItem, SupplierDistribution } from '@/types';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 export interface SupplierStockMobileCardProps {
   item: SupplierStockItem;
 }
 
 export function SupplierStockMobileCard({ item }: SupplierStockMobileCardProps) {
+  const { t } = useLanguage();
   const totalQty = item.total_network_qty ?? item.total_qty ?? 0;
   const totalSqm = item.total_network_sqm ?? item.total_sqm ?? 0;
   const sizeLabel =
@@ -31,7 +33,7 @@ export function SupplierStockMobileCard({ item }: SupplierStockMobileCardProps) 
         </div>
         <div className="text-right shrink-0">
           <span className="inline-flex items-center gap-1 rounded-full bg-slate-900 px-2.5 py-0.5 text-xs font-bold text-white shadow-xs">
-            {totalQty} шт
+            {totalQty} {t('common.pcs', 'шт.')}
           </span>
           <p className="text-[11px] text-slate-500 font-medium mt-0.5">{totalSqm.toFixed(1)} м²</p>
         </div>
@@ -39,7 +41,7 @@ export function SupplierStockMobileCard({ item }: SupplierStockMobileCardProps) 
 
       {/* Размер и площадь */}
       <div className="flex items-center justify-between text-xs py-1.5 px-2.5 rounded-lg bg-slate-50 border border-slate-100 text-slate-700">
-        <span className="text-slate-500">Размер полотна:</span>
+        <span className="text-slate-500">{t('supplier.sheet_size', 'Размер полотна:')}</span>
         <span className="font-semibold text-slate-800">
           {sizeLabel} {item.area_sqm ? `(${item.area_sqm} м²)` : ''}
         </span>
@@ -48,7 +50,7 @@ export function SupplierStockMobileCard({ item }: SupplierStockMobileCardProps) 
       {/* Распределение по сети */}
       <div className="space-y-1.5 pt-1 border-t border-slate-100">
         <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-          Размещение в сети ({item.distribution?.length || 0}):
+          {t('supplier.network_placement', { count: item.distribution?.length || 0 }, `Размещение в сети (${item.distribution?.length || 0}):`)}
         </p>
         <div className="space-y-1.5">
           {(item.distribution || []).map((dist: SupplierDistribution, dIdx: number) => {
@@ -76,7 +78,7 @@ export function SupplierStockMobileCard({ item }: SupplierStockMobileCardProps) 
                     <p className="font-bold truncate text-[11px] sm:text-xs">
                       {isHub
                         ? (dist.warehouse_name || 'Основной Склад Астана')
-                        : dist.partner_name || dist.location_name || 'Партнерский магазин'}
+                        : dist.partner_name || dist.location_name || t('supplier.partner_store', 'Партнерский магазин')}
                     </p>
                     <p className="text-[10px] opacity-75">
                       {dist.city === 'Алматы' ? 'Астана' : (dist.city || 'Астана')}
