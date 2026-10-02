@@ -44,3 +44,44 @@ export function calcSizeSubtotals(list: CartItem[]): SizeSubtotal[] {
 }
 
 export const CITIES = ['Астана', 'Алматы', 'Шымкент'];
+
+export const DEFAULT_CHECKOUT_PHONE = '+7 (778) 580-68-66';
+export const CHECKOUT_PHONE_STORAGE_KEY = 'synergy:last_checkout_phone';
+
+/**
+ * Валидация телефонного номера: содержит не менее 10 значащих цифр
+ */
+export function isValidPhone(value: string | null | undefined): boolean {
+  if (!value) return false;
+  const digits = value.replace(/\D/g, '');
+  return digits.length >= 10;
+}
+
+/**
+ * Graceful форматирование телефонного номера по стандарту Казахстана/СНГ (+7 (XXX) XXX-XX-XX)
+ */
+export function formatPhone(value: string): string {
+  const digits = value.replace(/\D/g, '');
+  if (!digits || (digits === '7' && value.trim().length <= 2)) return '';
+
+  let rest = digits;
+  if (rest.startsWith('7') || rest.startsWith('8')) {
+    rest = rest.substring(1);
+  }
+  if (!rest) return '+7';
+
+  let res = '+7';
+  if (rest.length > 0) {
+    res += ` (${rest.substring(0, 3)}`;
+  }
+  if (rest.length >= 4) {
+    res += `) ${rest.substring(3, 6)}`;
+  }
+  if (rest.length >= 7) {
+    res += `-${rest.substring(6, 8)}`;
+  }
+  if (rest.length >= 9) {
+    res += `-${rest.substring(8, 10)}`;
+  }
+  return res;
+}

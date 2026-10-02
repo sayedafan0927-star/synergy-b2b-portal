@@ -33,13 +33,15 @@ export function createDemoUserAndProfile(demoRole: UserRole = 'admin'): { profil
 }
 
 export function createClientUserAndProfile(client: ClientSignInInput): { profile: Profile; user: User } {
+  const fallbackPhone = typeof window !== 'undefined' ? localStorage.getItem('synergy:last_checkout_phone') || '' : '';
+  const resolvedClientPhone = client.phone && client.phone.replace(/\D/g, '').length >= 7 ? client.phone : fallbackPhone;
   const clientProfile: Profile = {
     id: `erp-client-${client.id}`,
     role: 'client',
     partner_id: String(client.id),
     full_name: client.name,
     company_name: client.name,
-    phone: client.phone || '',
+    phone: resolvedClientPhone,
     manager_id: '1',
     price_type: client.price_type || 'wholesale',
     impersonation_enabled: true,
@@ -58,13 +60,15 @@ export function createClientUserAndProfile(client: ClientSignInInput): { profile
 }
 
 export function createEmployeeUserAndProfile(employee: EmployeeSignInInput): { profile: Profile; user: User } {
+  const fallbackPhone = typeof window !== 'undefined' ? localStorage.getItem('synergy:last_checkout_phone') || '+7 (778) 580-68-66' : '+7 (778) 580-68-66';
+  const resolvedPhone = employee.phone && employee.phone.replace(/\D/g, '').length >= 7 ? employee.phone : fallbackPhone;
   const employeeProfile: Profile = {
     id: getDeterministicEmployeeUuid(employee.id),
     role: employee.role,
     partner_id: null,
     full_name: employee.name,
     company_name: 'Synergy Group (ERP)',
-    phone: employee.phone || '',
+    phone: resolvedPhone,
     manager_id: String(employee.id),
     price_type: 'wholesale',
     impersonation_enabled: true,

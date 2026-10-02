@@ -316,7 +316,7 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
                   🏪 {myShowroomName}:
                 </span>
                 <span className="font-bold text-emerald-800 shrink-0">
-                  {totalShowroomQty} шт <span className="font-normal text-emerald-600 hidden sm:inline">({totalShowroomSqm} м²)</span>
+                  {totalShowroomQty} {t('common.pcs')} <span className="font-normal text-emerald-600 hidden sm:inline">({totalShowroomSqm} {t('common.sqm')})</span>
                 </span>
               </div>
             )}
@@ -326,17 +326,17 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
                   🚚 {t('product.in_transit')}:
                 </span>
                 <span className="font-semibold text-indigo-800 shrink-0">
-                  {totalInTransitQty} шт <span className="font-normal text-indigo-500 hidden sm:inline">({totalInTransitSqm} м²)</span>
+                  {totalInTransitQty} {t('common.pcs')} <span className="font-normal text-indigo-500 hidden sm:inline">({totalInTransitSqm} {t('common.sqm')})</span>
                 </span>
               </div>
             )}
             {showHub && (
               <div className="flex items-center justify-between text-xs gap-1">
                 <span className="inline-flex items-center gap-1 text-slate-500 truncate max-w-[105px] sm:max-w-[130px]" title="Основной Склад Астана">
-                  🏢 {language === 'kz' ? 'Астана қоймасы' : 'Склад Астана'}:
+                  🏢 {language === 'kz' ? 'Астана қоймасы' : language === 'tr' ? 'Astana Deposu' : language === 'en' ? 'Astana Hub' : 'Склад Астана'}:
                 </span>
                 <span className={`font-semibold shrink-0 ${totalHubQty > 0 ? 'text-slate-800' : 'text-slate-400'}`}>
-                  {totalHubQty > 0 ? `${totalHubQty} шт` : 'под заказ'}
+                  {totalHubQty > 0 ? `${totalHubQty} ${t('common.pcs')}` : t('product.in_transit')}
                 </span>
               </div>
             )}
@@ -349,7 +349,7 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
             {isShowroomMode ? (
               <div className="flex items-center gap-1.5 leading-tight">
                 <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/80 px-2 py-0.5 text-xs font-bold shadow-2xs">
-                  В наличии
+                  {t('product.in_stock')}
                 </span>
               </div>
             ) : user ? (
@@ -362,10 +362,10 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
                     {formatPrice(oldPricePerSqm)}
                   </span>
                 )}
-                <span className="text-[10px] sm:text-[11px] font-normal text-slate-400">/ м²</span>
+                <span className="text-[10px] sm:text-[11px] font-normal text-slate-400">/ {t('common.sqm')}</span>
                 {isOnSale && (
                   <span className="badge text-[9px] font-bold bg-red-50 text-red-700 border border-red-200/50 py-0 px-1 ml-0.5">
-                    Скидка
+                    SALE
                   </span>
                 )}
               </div>
@@ -384,12 +384,16 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
               setSizesOpen(open => !open);
             }}
             className="flex items-center gap-1 rounded-full bg-slate-100 hover:bg-slate-200 px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs font-semibold text-slate-700 transition-colors cursor-pointer shrink-0"
-            title="Показать все размеры"
+            title={t('product.sizes')}
           >
             <span>
               {sizeCount}{' '}
               {language === 'kz'
                 ? 'өлшем'
+                : language === 'en'
+                ? (sizeCount === 1 ? 'size' : 'sizes')
+                : language === 'tr'
+                ? 'ebat'
                 : sizeCount === 1
                 ? 'размер'
                 : sizeCount > 1 && sizeCount < 5

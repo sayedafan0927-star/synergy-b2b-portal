@@ -15,6 +15,10 @@ import {
   CartCheckoutForm,
   ExcelBulkOrderModal,
   CITIES,
+  DEFAULT_CHECKOUT_PHONE,
+  CHECKOUT_PHONE_STORAGE_KEY,
+  isValidPhone,
+  formatPhone,
 } from '@/components/cart';
 
 export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, productId?: string) => void }) {

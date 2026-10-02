@@ -4,6 +4,7 @@ import type { PageId, Product, ProductVariant, Warehouse } from '@/types';
 import { parseSizeDimensions } from '@/types';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useUserPricing } from '@/hooks/usePricing';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
@@ -21,6 +22,7 @@ export function CatalogStockTable({
   selectedWarehouse,
   onNavigate,
 }: CatalogStockTableProps) {
+  const { t } = useLanguage();
   const { addItem, items } = useCart();
   const { user } = useAuth();
   const { currency, formatPrice } = useCurrency();
@@ -179,7 +181,7 @@ export function CatalogStockTable({
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-25">
                     <th className="sticky left-0 z-10 bg-white py-2.5 pl-4 pr-3 text-left font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap min-w-[200px]">
-                      Товар
+                      {t('cart.table_product')}
                     </th>
                     {settings.show_price && (
                       <th className="py-2.5 px-2 text-center font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
@@ -233,8 +235,8 @@ export function CatalogStockTable({
                                         }
                                       });
                                       const parts = [];
-                                      if (settings.show_total_pcs) parts.push(`${pcs} шт.`);
-                                      if (settings.show_sqm) parts.push(`${sqm.toFixed(1)} м²`);
+                                      if (settings.show_total_pcs) parts.push(`${pcs} ${t('common.pcs')}`);
+                                      if (settings.show_sqm) parts.push(`${sqm.toFixed(1)} ${t('common.sqm')}`);
                                       return parts.join(' / ');
                                     })()}
                                   </p>

@@ -51,12 +51,23 @@ export function ProductVariantSelector({
 }: ProductVariantSelectorProps) {
   const { isShowroomMode } = useShowroomMode();
   const getShapeDisplay = (shape: string) => {
-    if (language !== 'kz') return shape;
     const lower = shape.toLowerCase();
-    if (lower.includes('дорожк')) return 'Жол кілем';
-    if (lower.includes('прямоуг')) return 'Тікбұрышты';
-    if (lower.includes('овал')) return 'Сопақша';
-    if (lower.includes('круг')) return 'Дөңгелек';
+    if (language === 'kz') {
+      if (lower.includes('дорожк')) return 'Жол кілем';
+      if (lower.includes('прямоуг')) return 'Тікбұрышты';
+      if (lower.includes('овал')) return 'Сопақша';
+      if (lower.includes('круг')) return 'Дөңгелек';
+    } else if (language === 'en') {
+      if (lower.includes('дорожк')) return 'Runner';
+      if (lower.includes('прямоуг')) return 'Rectangle';
+      if (lower.includes('овал')) return 'Oval';
+      if (lower.includes('круг')) return 'Round';
+    } else if (language === 'tr') {
+      if (lower.includes('дорожк')) return 'Yolluk';
+      if (lower.includes('прямоуг')) return 'Dikdörtgen';
+      if (lower.includes('овал')) return 'Oval';
+      if (lower.includes('круг')) return 'Yuvarlak';
+    }
     return shape;
   };
 
