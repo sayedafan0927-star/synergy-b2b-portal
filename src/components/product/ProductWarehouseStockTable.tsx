@@ -217,20 +217,20 @@ export function ProductWarehouseStockTable({
     <div id="variant-table" className="hidden lg:block mb-10 border-t border-slate-200 pt-8">
       <h2 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
         <Ruler className="h-5 w-5 text-slate-400" />
-        Размеры и наличие
+        {t('product.stock_table')}
       </h2>
       <div className="card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-400">
-                <th className="py-3 pl-5 pr-3 font-semibold">Размер</th>
-                <th className="py-3 pr-3 font-semibold">Склад</th>
-                <th className="py-3 pr-3 font-semibold">Наличие</th>
+                <th className="py-3 pl-5 pr-3 font-semibold">{t('product.sizes')}</th>
+                <th className="py-3 pr-3 font-semibold">{t('cart.table_warehouse')}</th>
+                <th className="py-3 pr-3 font-semibold">{t('product.in_stock')}</th>
                 {user && <th className="py-3 pr-3 font-semibold">{currency === 'KZT' ? '₸/м²' : '$/м²'}</th>}
-                {user && <th className="py-3 pr-3 font-semibold">Цена</th>}
-                <th className="py-3 pr-3 font-semibold">Кол-во</th>
-                <th className="py-3 pr-5 font-semibold sr-only">Действие</th>
+                {user && <th className="py-3 pr-3 font-semibold">{t('cart.table_price')}</th>}
+                <th className="py-3 pr-3 font-semibold">{t('cart.table_qty')}</th>
+                <th className="py-3 pr-5 font-semibold sr-only">{t('cart.table_actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">

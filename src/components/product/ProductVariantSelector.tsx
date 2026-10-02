@@ -117,7 +117,7 @@ export function ProductVariantSelector({
           {isShowroomMode ? (
             <div className="flex items-center gap-2 mt-1">
               <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200/90 px-3 py-1 text-sm font-bold shadow-2xs">
-                В наличии в каталоге
+                {t('product.in_stock') || 'В наличии в каталоге'}
               </span>
             </div>
           ) : user ? (
@@ -130,7 +130,7 @@ export function ProductVariantSelector({
                   {fmtPrice(activeVariant.old_price_per_sqm)}
                 </span>
               )}
-              <span className="text-sm font-semibold text-slate-400">/ м²</span>
+              <span className="text-sm font-semibold text-slate-400">/ {t('common.sqm')}</span>
             </div>
           ) : (
             <button
@@ -160,7 +160,7 @@ export function ProductVariantSelector({
               )}
               {activeVariant.area_sqm && (
                 <span className="text-xs text-slate-400 ml-1 font-normal">
-                  ({activeVariant.area_sqm} м²)
+                  ({activeVariant.area_sqm} {t('common.sqm')})
                 </span>
               )}
             </div>
@@ -209,7 +209,7 @@ export function ProductVariantSelector({
           </p>
           {activeVariant?.area_sqm && (
             <span className="text-xs font-medium text-slate-500">
-              {language === 'kz' ? 'Ауданы' : 'Площадь'}: {activeVariant.area_sqm} м²
+              {language === 'kz' ? 'Ауданы' : language === 'tr' ? 'Alan' : language === 'en' ? 'Area' : 'Площадь'}: {activeVariant.area_sqm} {t('common.sqm')}
             </span>
           )}
         </div>
@@ -237,7 +237,7 @@ export function ProductVariantSelector({
                       isSelected ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800'
                     }`}
                   >
-                    {vStock} шт
+                    {vStock} {t('common.pcs')}
                   </span>
                 )}
               </button>

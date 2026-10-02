@@ -308,6 +308,7 @@ export function CartCheckoutForm({
               value={clientPhone}
               onChange={e => setClientPhone(e.target.value)}
               placeholder="+7 (___) ___-__-__"
+              autoComplete="tel"
               className="input-field text-xs h-9 py-1 px-2.5"
             />
           </div>

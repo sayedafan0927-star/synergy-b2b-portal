@@ -44,15 +44,59 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
   const [stockConflictDetails, setStockConflictDetails] = useState<{ available_qty?: number; requested_qty?: number; sku?: string } | null>(null);
   const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
 
-  const [clientName, setClientName] = useState(profile?.full_name ?? '');
-  const [clientPhone, setClientPhone] = useState(profile?.phone ?? '');
-  const [clientCompany, setClientCompany] = useState(profile?.company_name ?? '');
+  const effectiveProfile = isImpersonating && impersonatedProfile ? impersonatedProfile : profile;
+
+  const [clientName, setClientName] = useState(() => effectiveProfile?.full_name ?? '');
+  const [clientPhone, setClientPhone] = useState(() => {
+    // 1. Профиль авторизованного клиента / сотрудника
+    if (isValidPhone(effectiveProfile?.phone)) {
+      return formatPhone(effectiveProfile.phone);
+    }
+    // 2. Ранее сохраненный на данном устройстве номер (из предыдущих заказов)
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem(CHECKOUT_PHONE_STORAGE_KEY);
+        if (isValidPhone(stored)) return formatPhone(stored);
+      } catch {}
+    }
+    // 3. Номер из Supabase Auth
+    if (isValidPhone(user?.phone)) {
+      return formatPhone(user.phone);
+    }
+    // 4. Корпоративный номер Synergy по умолчанию для моментального заказа
+    return DEFAULT_CHECKOUT_PHONE;
+  });
+  const [clientCompany, setClientCompany] = useState(() => effectiveProfile?.company_name ?? '');
   const [selectedCity, setSelectedCity] = useState(CITIES[0]);
   const [orderComment, setOrderComment] = useState('');
 
+  // Автоматическая подстановка и актуализация контактных данных при загрузке профиля
+  useEffect(() => {
+    if (effectiveProfile) {
+      if (effectiveProfile.full_name && !clientName) {
+        setClientName(effectiveProfile.full_name);
+      }
+      if (effectiveProfile.company_name && !clientCompany) {
+        setClientCompany(effectiveProfile.company_name);
+      }
+      if (isValidPhone(effectiveProfile.phone)) {
+        setClientPhone(formatPhone(effectiveProfile.phone));
+      }
+    }
+  }, [effectiveProfile]);
+
+  const handleClientPhoneChange = useCallback((value: string) => {
+    const formatted = formatPhone(value);
+    setClientPhone(formatted);
+    if (typeof window !== 'undefined' && isValidPhone(formatted)) {
+      try {
+        localStorage.setItem(CHECKOUT_PHONE_STORAGE_KEY, formatted);
+      } catch {}
+    }
+  }, []);
+
   // Загрузка финансового состояния клиента (кредитный лимит, просрочки)
   useEffect(() => {
-    const effectiveProfile = isImpersonating && impersonatedProfile ? impersonatedProfile : profile;
     if (!effectiveProfile?.partner_id && !effectiveProfile?.phone) return;
     fetchClientDebtFromErp({
       phone: effectiveProfile.phone,
@@ -263,6 +307,12 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
     if (!clientName.trim() || !clientPhone.trim()) {
       setSubmitError('Укажите имя и телефон для оформления заказа');
       return;
+    }
+
+    if (typeof window !== 'undefined' && isValidPhone(clientPhone)) {
+      try {
+        localStorage.setItem(CHECKOUT_PHONE_STORAGE_KEY, clientPhone.trim());
+      } catch {}
     }
 
     setSubmitting(true);
@@ -501,7 +551,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
               clientName={clientName}
               setClientName={setClientName}
               clientPhone={clientPhone}
-              setClientPhone={setClientPhone}
+              setClientPhone={handleClientPhoneChange}
               clientCompany={clientCompany}
               setClientCompany={setClientCompany}
               selectedCity={selectedCity}

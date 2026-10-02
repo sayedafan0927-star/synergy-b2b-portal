@@ -448,17 +448,17 @@ export default function ProductPage({
             <h1 className="font-display text-xl font-bold text-slate-900 leading-tight">{cleanTitle}</h1>
             {isShowroomMode ? (
               <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 text-xs font-bold shrink-0 ml-3">
-                В наличии
+                {t('product.in_stock')}
               </span>
             ) : user ? (
               <div className="flex items-baseline gap-1 shrink-0 ml-3">
                 <span className="text-xl font-bold text-brand-700">{fmtPrice(mainPricePerSqm)}</span>
-                <span className="text-xs text-slate-400">/ м²</span>
+                <span className="text-xs text-slate-400">/ {t('common.sqm')}</span>
               </div>
             ) : (
               <button onClick={() => onNavigate('login')} className="flex items-center gap-1 text-xs text-slate-400 hover:text-brand-600 ml-3 shrink-0 cursor-pointer">
                 <Lock className="h-3 w-3" />
-                Цены
+                {t('product.login_for_prices')}
               </button>
             )}
           </div>
