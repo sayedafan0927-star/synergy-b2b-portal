@@ -4,11 +4,14 @@ import { formatCurrency } from '@/lib/pricingEngine';
 
 export interface OrderItem {
   id?: string;
+  item_id?: string | number;
+  productId?: string;
   productName: string;
   collection: string;
   size: string;
   sku?: string;
   warehouse: string;
+  warehouse_id?: number;
   price: number;
   quantity: number;
 }

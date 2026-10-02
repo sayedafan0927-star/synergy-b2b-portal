@@ -1,6 +1,7 @@
 import { useRef, useState, useEffect } from 'react';
 import { RotateCcw } from 'lucide-react';
 import type { PageId } from '@/types';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 // Lightweight, hardware-optimized 2.7MB stream for buttery-smooth 60fps playback
 const VIDEO_MP4 = '/assets/hero-video-desktop-v4.mp4';
@@ -13,6 +14,7 @@ interface HeroBannerMediaProps {
 }
 
 export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBannerMediaProps) {
+  const { t } = useLanguage();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isEnded, setIsEnded] = useState(false);
 
@@ -289,8 +291,8 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
                   width: '81.33%',
                   height: '14.71%',
                 }}
-                title="Перейти в каталог"
-                aria-label="Перейти в каталог"
+                title={t('home.hero_cta')}
+                aria-label={t('home.hero_cta')}
               >
                 {/* Dynamic light sheen that glides across the metal button on hover */}
                 <span 
@@ -312,8 +314,9 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
         <button
           type="button"
           onClick={handleReplay}
-          className="absolute top-3 right-3 sm:top-auto sm:bottom-16 lg:bottom-20 sm:right-6 lg:right-8 z-30 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-black/50 hover:bg-black/80 text-white/70 hover:text-white border border-white/20 backdrop-blur-md flex items-center justify-center shadow-lg transition-all duration-200 group/btn"
-          title="Повторить видео с начала"
+          className="absolute top-3 right-3 sm:top-auto sm:bottom-16 lg:bottom-20 sm:right-6 lg:right-8 z-30 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-black/50 hover:bg-black/80 text-white/70 hover:text-white border border-white/20 backdrop-blur-md flex items-center justify-center shadow-lg transition-all duration-200 group/btn cursor-pointer"
+          title={t('home.hero_replay')}
+          aria-label={t('home.hero_replay')}
         >
           <RotateCcw className="w-3.5 h-3.5 transition-transform duration-300 group-hover/btn:-rotate-90" />
         </button>

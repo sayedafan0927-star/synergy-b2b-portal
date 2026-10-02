@@ -14,6 +14,7 @@ import { useUserPricing } from '@/hooks/usePricing';
 import ProductCard from '@/components/ProductCard';
 import StockSummaryBar from '@/components/StockSummaryBar';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
 import { filterWarehousesForClient, isProductInStockForUser, getClientWarehouseSettings } from '@/lib/warehouseVisibility';
 import {
@@ -45,6 +46,7 @@ export default function CatalogPage({
   initialCountry?: string;
   initialSearch?: string;
 }) {
+  const { t } = useLanguage();
   const { products, summary: serverSummary, loading, error: loadError } = useProducts();
   const pricing = useUserPricing();
   const { profile, isAdmin, isImpersonating } = useAuth();
@@ -373,10 +375,10 @@ export default function CatalogPage({
 
   return (
     <DecklePaperWrapper>
-      <CatalogPetroglyphHero title="Каталог продукции">
+      <CatalogPetroglyphHero title={t('catalog.title')}>
         {selectedCollections.size === 1 && (
           <div className="mb-3 inline-flex items-center gap-2 rounded-lg bg-[#003365]/10 border border-[#003365]/20 px-3 py-1.5">
-            <span className="text-sm font-medium text-[#003365]">Коллекция: {[...selectedCollections][0]}</span>
+            <span className="text-sm font-medium text-[#003365]">{t('product.collection')}: {[...selectedCollections][0]}</span>
             <button
               type="button"
               onClick={() => setSelectedCollections(new Set())}
@@ -392,7 +394,7 @@ export default function CatalogPage({
             const count = cat === 'all'
               ? baseProducts.length
               : baseProducts.filter(p => cat === 'Ковры' ? (p.category === 'Ковры' || !p.name.toLowerCase().includes('дорожк')) : (p.category === 'Дорожки' || p.name.toLowerCase().includes('дорожк'))).length;
-            const label = cat === 'all' ? 'Все категории' : cat;
+            const label = cat === 'all' ? t('catalog.all') : cat === 'Ковры' ? t('catalog.category_rugs') : t('catalog.category_runners');
             return (
               <button
                 key={cat}
@@ -474,7 +476,7 @@ export default function CatalogPage({
                 type="text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Поиск по названию, артикулу, штрихкоду..."
+                placeholder={t('catalog.search_ph')}
                 className="input-field pl-10 text-sm bg-white"
               />
             </div>
@@ -488,7 +490,7 @@ export default function CatalogPage({
               }`}
             >
               <SlidersHorizontal className="h-4 w-4 text-slate-600" />
-              <span>{drawerOpen ? 'Свернуть фильтры' : 'Фильтр'}</span>
+              <span>{drawerOpen ? t('catalog.collapse_filters') : t('catalog.filters')}</span>
               {activeFilterCount > 0 && (
                 <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-700 px-1 text-[10px] font-bold text-white">
                   {activeFilterCount}
@@ -505,10 +507,10 @@ export default function CatalogPage({
                   onChange={e => setSortBy(e.target.value as SortOption)}
                   className="appearance-none rounded-lg border border-slate-200 bg-white py-2 pl-3 pr-8 text-xs font-semibold text-slate-700 hover:border-slate-300 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 outline-none transition-colors cursor-pointer shadow-2xs"
                 >
-                  <option value="popular">По популярности</option>
-                  <option value="price-asc">Цена: по возрастанию</option>
-                  <option value="price-desc">Цена: по убыванию</option>
-                  <option value="name">По названию</option>
+                  <option value="popular">{t('catalog.sort_popular')}</option>
+                  <option value="price-asc">{t('catalog.sort_price_asc')}</option>
+                  <option value="price-desc">{t('catalog.sort_price_desc')}</option>
+                  <option value="name">{t('catalog.sort_newest')}</option>
                 </select>
                 <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
               </div>
@@ -540,7 +542,7 @@ export default function CatalogPage({
                 }`}
               >
                 <LayoutGrid className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Плитка</span>
+                <span className="hidden sm:inline">{t('catalog.view_grid')}</span>
               </button>
               <button
                 type="button"
@@ -550,7 +552,7 @@ export default function CatalogPage({
                 }`}
               >
                 <Table2 className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Сетка остатков</span>
+                <span className="hidden sm:inline">{t('catalog.view_table')}</span>
               </button>
             </div>
           </div>
@@ -584,7 +586,7 @@ export default function CatalogPage({
                         onClick={() => setVisibleCount(c => c + 12)}
                         className="btn-secondary cursor-pointer"
                       >
-                        Показать ещё ({filteredProducts.length - visibleCount})
+                        {t('common.show_more')} ({filteredProducts.length - visibleCount})
                       </button>
                     </div>
                   )}
@@ -601,10 +603,10 @@ export default function CatalogPage({
                 <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 mb-5">
                   <SlidersHorizontal className="h-7 w-7 text-slate-400" />
                 </div>
-                <h3 className="text-lg font-semibold text-slate-800 mb-2">Товары не найдены</h3>
-                <p className="text-sm text-slate-500 max-w-sm">Попробуйте изменить параметры поиска или сбросить фильтры</p>
+                <h3 className="text-lg font-semibold text-slate-800 mb-2">{t('catalog.not_found')}</h3>
+                <p className="text-sm text-slate-500 max-w-sm">{t('catalog.not_found_desc')}</p>
                 <button type="button" onClick={resetFilters} className="btn-secondary mt-5 cursor-pointer">
-                  Сбросить фильтры
+                  {t('catalog.reset_filters')}
                 </button>
               </div>
             )}

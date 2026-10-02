@@ -47,11 +47,14 @@ export function useOrdersList({ isAdmin, isManager }: UseOrdersListOptions) {
 
             const items: OrderItem[] = (o.items || []).map((it) => ({
               id: String(it.id),
+              item_id: it.item_id ? String(it.item_id) : undefined,
+              productId: it.item_id ? String(it.item_id) : undefined,
               productName: it.name || 'Ковер',
               collection: (it.name || '').split(' ')[0] || 'Коллекция',
               size: it.size || 'Стандарт',
               sku: it.sku || '',
-              warehouse: o.warehouse_name || 'Основной Склад Астана',
+              warehouse: it.warehouse || o.warehouse_name || 'Основной Склад Астана',
+              warehouse_id: it.warehouse_id || o.warehouse_id,
               price: Number(it.price) || 0,
               quantity: Number(it.quantity) || 1,
             }));
@@ -128,11 +131,14 @@ export function useOrdersList({ isAdmin, isManager }: UseOrdersListOptions) {
                 : (Array.isArray(row.items) ? row.items : []);
               const items: OrderItem[] = rawItems.map((it: any, idx: number) => ({
                 id: String(it.id || idx),
+                item_id: it.item_id || it.product_id,
+                productId: it.product_id || (it.item_id ? String(it.item_id) : undefined),
                 productName: it.product_name || it.name || 'Ковер',
                 collection: it.collection || (it.product_name || it.name || '').split(' ')[0] || 'Коллекция',
                 size: it.size || 'Стандарт',
                 sku: it.sku || '',
                 warehouse: it.warehouse || row.warehouse || row.warehouse_name || 'Основной Склад Астана',
+                warehouse_id: it.warehouse_id,
                 price: Number(it.price) || 0,
                 quantity: Number(it.quantity) || 1,
               }));

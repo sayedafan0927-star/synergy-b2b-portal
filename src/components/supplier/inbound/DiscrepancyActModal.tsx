@@ -13,7 +13,11 @@ import {
   RefreshCw,
   SlidersHorizontal,
 } from 'lucide-react';
-import { fetchSupplierDiscrepancyAct } from '@/lib/erpApi';
+import {
+  fetchSupplierDiscrepancyAct,
+  downloadDiscrepancyAct,
+  exportDiscrepancyActToCsv,
+} from '@/lib/erpApi';
 import type { DiscrepancyActResponse } from '@/types';
 import { DiscrepancyActItemsTable } from './DiscrepancyActItemsTable';
 
@@ -35,6 +39,7 @@ export function DiscrepancyActModal({
   const [actData, setActData] = useState<DiscrepancyActResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState<boolean>(false);
   const [filterMode, setFilterMode] = useState<'all' | 'discrepancies'>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
@@ -103,6 +108,21 @@ export function DiscrepancyActModal({
   const actNumber = actData?.act_number || initialActNumber || 'АКТ-РАСХОЖДЕНИЙ';
   const summary = actData?.summary;
 
+  const handleDownload = async () => {
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      await downloadDiscrepancyAct(receiptId, actNumber, actData);
+    } catch (err: any) {
+      console.warn('[DiscrepancyActModal] Download error, using CSV fallback:', err);
+      if (actData) {
+        exportDiscrepancyActToCsv(actData);
+      }
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150"
@@ -141,19 +161,20 @@ export function DiscrepancyActModal({
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
-            {downloadUrl && (
-              <a
-                href={downloadUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                download
-                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
-                title="Скачать Акт о расхождении (.xlsx)"
-              >
+            <button
+              type="button"
+              onClick={handleDownload}
+              disabled={downloading}
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+              title="Скачать Акт о расхождении (.xlsx)"
+            >
+              {downloading ? (
+                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+              ) : (
                 <Download className="h-3.5 w-3.5" />
-                Скачать (.xlsx)
-              </a>
-            )}
+              )}
+              {downloading ? 'Скачивание...' : 'Скачать (.xlsx)'}
+            </button>
             <button
               type="button"
               onClick={onClose}
@@ -180,20 +201,21 @@ export function DiscrepancyActModal({
                 Не удалось сформировать электронный просмотр акта
               </div>
               <p className="text-xs text-red-700">{error}</p>
-              {downloadUrl && (
-                <div className="pt-2">
-                  <a
-                    href={downloadUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    download
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold cursor-pointer"
-                  >
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={handleDownload}
+                  disabled={downloading}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold cursor-pointer disabled:opacity-50"
+                >
+                  {downloading ? (
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                  ) : (
                     <Download className="h-4 w-4" />
-                    Скачать оригинальный файл Excel (.xlsx) напрямую
-                  </a>
-                </div>
-              )}
+                  )}
+                  {downloading ? 'Скачивание...' : 'Скачать оригинальный файл Excel (.xlsx) напрямую'}
+                </button>
+              </div>
             </div>
           ) : (
             <>
@@ -383,18 +405,19 @@ export function DiscrepancyActModal({
               <Printer className="h-3.5 w-3.5" />
               Печать
             </button>
-            {downloadUrl && (
-              <a
-                href={downloadUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                download
-                className="inline-flex items-center justify-center gap-1.5 px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer"
-              >
+            <button
+              type="button"
+              onClick={handleDownload}
+              disabled={downloading}
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+            >
+              {downloading ? (
+                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+              ) : (
                 <Download className="h-3.5 w-3.5" />
-                Скачать Акт о расхождении (.xlsx)
-              </a>
-            )}
+              )}
+              {downloading ? 'Скачивание...' : 'Скачать Акт о расхождении (.xlsx)'}
+            </button>
             <button
               type="button"
               onClick={onClose}

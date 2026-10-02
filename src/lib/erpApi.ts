@@ -68,6 +68,10 @@ export {
   fetchSupplierDefects,
   fetchSuppliersFromErp,
   fetchSupplierDiscrepancyAct,
+  downloadDiscrepancyAct,
+  triggerFileDownload,
+  exportDiscrepancyActToCsv,
+  exportSupplierReleasesToCsv,
 } from './erp/suppliersApi';
 
 export {

@@ -8,8 +8,10 @@ import {
   FileSpreadsheet,
   Download,
   Eye,
+  RefreshCw,
 } from 'lucide-react';
 import type { InboundShipment } from '@/types';
+import { downloadDiscrepancyAct } from '@/lib/erpApi';
 import { DiscrepancyActModal } from './DiscrepancyActModal';
 
 export interface InboundShipmentCardProps {
@@ -24,10 +26,25 @@ export function InboundShipmentCard({
   onToggleExpand,
 }: InboundShipmentCardProps) {
   const [isActModalOpen, setIsActModalOpen] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const hasDiscrepancy = shipment.has_discrepancy || shipment.reconciliation_status === 'discrepancy';
   const docTitle = shipment.incoming_doc_number && shipment.incoming_doc_number !== 'Не указан'
     ? shipment.incoming_doc_number
     : shipment.receipt_doc_number;
+
+  const handleDownloadAct = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      await downloadDiscrepancyAct(shipment.receipt_id, shipment.discrepancy_act_number);
+    } catch (err) {
+      console.warn('[InboundShipmentCard] Direct download failed, opening preview modal:', err);
+      setIsActModalOpen(true);
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   return (
     <div
@@ -95,19 +112,26 @@ export function InboundShipmentCard({
                 <span className="sm:hidden">Акт</span>
               </button>
 
-              {shipment.excel_download_url && (
-                <a
-                  href={shipment.excel_download_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  download
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300/80 px-2.5 py-1 rounded-lg transition-colors cursor-pointer shrink-0"
+              {shipment.has_discrepancy_act && (
+                <button
+                  type="button"
+                  onClick={handleDownloadAct}
+                  disabled={downloading}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300/80 px-2.5 py-1 rounded-lg transition-colors cursor-pointer shrink-0 disabled:opacity-50"
                   title="Скачать Акт о расхождении (.xlsx)"
                 >
-                  <Download className="h-3.5 w-3.5 text-emerald-700" />
-                  <span className="hidden sm:inline">Excel (.xlsx)</span>
-                  <span className="sm:hidden">.xlsx</span>
-                </a>
+                  {downloading ? (
+                    <RefreshCw className="h-3.5 w-3.5 text-emerald-700 animate-spin" />
+                  ) : (
+                    <Download className="h-3.5 w-3.5 text-emerald-700" />
+                  )}
+                  <span className="hidden sm:inline">
+                    {downloading ? 'Загрузка...' : 'Excel (.xlsx)'}
+                  </span>
+                  <span className="sm:hidden">
+                    {downloading ? '...' : '.xlsx'}
+                  </span>
+                </button>
               )}
             </div>
           )}
@@ -218,17 +242,20 @@ export function InboundShipmentCard({
                   <Eye className="h-3.5 w-3.5 text-amber-700" />
                   Смотреть акт
                 </button>
-                {shipment.excel_download_url && (
-                  <a
-                    href={shipment.excel_download_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    download
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-xs font-semibold text-white transition-colors cursor-pointer shadow-2xs"
+                {shipment.has_discrepancy_act && (
+                  <button
+                    type="button"
+                    onClick={handleDownloadAct}
+                    disabled={downloading}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-xs font-semibold text-white transition-colors cursor-pointer shadow-2xs disabled:opacity-50"
                   >
-                    <Download className="h-3.5 w-3.5" />
-                    Скачать Акт о расхождении (.xlsx)
-                  </a>
+                    {downloading ? (
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Download className="h-3.5 w-3.5" />
+                    )}
+                    {downloading ? 'Скачивание...' : 'Скачать Акт о расхождении (.xlsx)'}
+                  </button>
                 )}
               </div>
             </div>

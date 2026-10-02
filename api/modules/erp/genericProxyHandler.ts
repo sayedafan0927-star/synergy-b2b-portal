@@ -54,9 +54,42 @@ export async function handleGenericErpProxy(
       const receiptId = String(req.query.receipt_id || '');
       const callerPortalKey = (req.headers['x-portal-key'] || req.headers['X-Portal-Key']) as string | undefined;
       const keyToSend = SERVER_ERP_KEY || callerPortalKey || '';
-      const downloadUrl = `${TARGET_ERP_URL}?action=download_discrepancy_act&receipt_id=${receiptId}&portal_key=${keyToSend}`;
-      res.redirect(302, downloadUrl);
-      return;
+      const targetUrl = `${TARGET_ERP_URL}?action=download_discrepancy_act&receipt_id=${receiptId}&portal_key=${keyToSend}`;
+
+      try {
+        const erpResp = await fetch(targetUrl, {
+          headers: {
+            'X-Portal-Key': keyToSend,
+          },
+        });
+
+        if (erpResp.ok) {
+          const contentType = erpResp.headers.get('content-type') || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+          const contentDisposition = erpResp.headers.get('content-disposition') || `attachment; filename="Akt_rasxozhdeniya_${receiptId}.xlsx"`;
+
+          res.setHeader('Content-Type', contentType);
+          res.setHeader('Content-Disposition', contentDisposition);
+          res.setHeader('Cache-Control', 'private, no-cache, no-store, must-revalidate');
+
+          const arrayBuffer = await erpResp.arrayBuffer();
+          res.status(200).send(Buffer.from(arrayBuffer));
+          return;
+        } else {
+          console.warn('[Proxy download_discrepancy_act] ERP returned status', erpResp.status);
+          res.status(erpResp.status).json({
+            success: false,
+            error: `Ошибка выгрузки файла акта из 1С:ERP (HTTP ${erpResp.status})`,
+          });
+          return;
+        }
+      } catch (dlErr: any) {
+        console.error('[Proxy download_discrepancy_act] Fetch error:', dlErr);
+        res.status(502).json({
+          success: false,
+          error: 'Не удалось получить файл акта расхождений от шлюза ERP',
+        });
+        return;
+      }
     }
 
     // Собираем Query параметры
@@ -235,6 +268,16 @@ export async function handleGenericErpProxy(
       }
     }
 
+    if (action === 'supplier_defects' && (!erpResponse.ok || erpResponse.status >= 400)) {
+      res.status(200).json({
+        success: true,
+        supplier_id: Number(req.query.supplier_id || 0),
+        total_defects: 0,
+        defects: [],
+      });
+      return;
+    }
+
     res.status(erpResponse.status);
     res.setHeader('Content-Type', contentType);
 
@@ -283,6 +326,13 @@ export async function handleGenericErpProxy(
       if (action === 'supplier_inbound_shipments' && erpResponse.ok && jsonData?.success) {
         filterSupplierShipments(jsonData, req.query.supplier_id);
         lastKnownInboundShipments = jsonData;
+      }
+
+      if (action === 'supplier_discrepancy_act' && erpResponse.ok && jsonData?.success) {
+        const receiptId = req.query.receipt_id || jsonData.receipt_id || jsonData.documents?.receipt_id;
+        if (receiptId) {
+          jsonData.excel_download_url = `/api/erp?action=download_discrepancy_act&receipt_id=${receiptId}`;
+        }
       }
 
       if (action === 'login') {

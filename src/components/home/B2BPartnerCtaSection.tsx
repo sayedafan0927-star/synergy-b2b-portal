@@ -1,20 +1,15 @@
 import React, { useState } from 'react';
 import { ArrowRight } from 'lucide-react';
+import { useLanguage } from '@/contexts/LanguageContext';
 import B2BPartnerModal from './B2BPartnerModal';
 
 interface B2BPartnerCtaSectionProps {
   onNavigate?: (tab: string) => void;
 }
 
-/**
- * B2BPartnerCtaSection (Концепт 2: Pure Macro Glassmorphism — Деликатная прозрачная плашка)
- * - Кристаллическое матовое стекло (Frosted Glass), сквозь которое видна текстура ковра.
- * - Логотип Synergiya Group и премиальный заголовок «Стать партнёром».
- * - Компактный деликатный размер плашки (максимум открытого ворса ковра).
- * - Кнопка «Техно-Люкс» (шлифованная сталь), открывает плавную выплывающую форму заявки в стиле Apple.
- */
 export default function B2BPartnerCtaSection({ onNavigate: _onNavigate }: B2BPartnerCtaSectionProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const { t } = useLanguage();
   return (
     <section className="py-6 sm:py-16 lg:py-20 bg-white select-none">
       <div className="container-w">
@@ -33,13 +28,12 @@ export default function B2BPartnerCtaSection({ onNavigate: _onNavigate }: B2BPar
 
             {/* Main Luxury Heading */}
             <h2 className="font-display text-xl sm:text-4xl lg:text-[42px] font-bold text-white tracking-tight leading-[1.15] drop-shadow-[0_2px_14px_rgba(0,0,0,0.85)]">
-              Стать партнёром
+              {t('home.b2b_title')}
             </h2>
 
             {/* Subheading / Value Proposition */}
             <p className="mt-2 sm:mt-4 text-[11.5px] sm:text-sm lg:text-base text-slate-100/90 font-body leading-relaxed max-w-[260px] sm:max-w-md font-light drop-shadow-[0_1px_8px_rgba(0,0,0,0.9)]">
-              Прямые оптовые поставки ведущих фабрик Турции, Бельгии и Ирана. Персональный B2B-менеджер,
-              экспресс-отгрузка за 24 часа и резервирование складских остатков.
+              {t('home.b2b_desc')}
             </p>
 
             {/* ── Techno-Luxury Button (Illuminates ONLY on Hover) ── */}
@@ -94,7 +88,7 @@ export default function B2BPartnerCtaSection({ onNavigate: _onNavigate }: B2BPar
                           className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out pointer-events-none" 
                         />
 
-                        {/* 4. Engraved Dark Typography: Pure Russian CTA with Arrow */}
+                        {/* 4. Engraved Dark Typography: Localized CTA with Arrow */}
                         <div className="relative z-10 flex items-center justify-center gap-2">
                           <span 
                             className="font-display text-[11px] sm:text-[13px] font-bold uppercase tracking-[0.16em] text-[#0E1726] transition-colors duration-200 group-hover:text-[#060D18]"
@@ -102,7 +96,7 @@ export default function B2BPartnerCtaSection({ onNavigate: _onNavigate }: B2BPar
                               textShadow: '0 1px 0 rgba(255, 255, 255, 0.9), 0 -0.5px 0 rgba(0, 0, 0, 0.25)',
                             }}
                           >
-                            СТАТЬ ПАРТНЁРОМ
+                            {t('home.b2b_cta')}
                           </span>
                           <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#1E2E48] group-hover:text-[#004A7C] stroke-[2.5] inline-block transition-transform duration-200 group-hover:translate-x-1" />
                         </div>

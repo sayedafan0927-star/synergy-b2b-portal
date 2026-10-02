@@ -1,5 +1,5 @@
-import { Phone, Mail, MapPin, MessageCircle } from 'lucide-react';
-import { useLanguage } from '@/contexts/LanguageContext';
+import { Phone, Mail, MapPin, MessageCircle, Globe } from 'lucide-react';
+import { useLanguage, SUPPORTED_LANGUAGES } from '@/contexts/LanguageContext';
 import type { PageId } from '@/types';
 
 interface FooterProps {
@@ -7,11 +7,9 @@ interface FooterProps {
 }
 
 export default function Footer({ onNavigate }: FooterProps) {
-  const { t, language } = useLanguage();
+  const { t, language, setLanguage } = useLanguage();
 
-  const defaultWaMsg = language === 'kz'
-    ? 'Сәлеметсіз бе! Synergy-Group кілемдерін көтерме сатып алу бойынша сұрағым бар еді.'
-    : 'Здравствуйте! Интересуют оптовые поставки ковров Synergy-Group.';
+  const defaultWaMsg = t('whatsapp.default_msg');
 
   return (
     <footer className="border-t border-slate-100 bg-slate-900 text-slate-300">
@@ -25,7 +23,7 @@ export default function Footer({ onNavigate }: FooterProps) {
             <p className="text-sm leading-relaxed text-slate-400">
               {t('footer.tagline')}
             </p>
-            <div className="mt-4">
+            <div className="mt-4 flex items-center gap-3">
               <a
                 href={`https://wa.me/77785806866?text=${encodeURIComponent(defaultWaMsg)}`}
                 target="_blank"
@@ -50,7 +48,7 @@ export default function Footer({ onNavigate }: FooterProps) {
                 <li key={label}>
                   <button
                     onClick={() => onNavigate(page)}
-                    className="text-sm text-slate-400 transition-colors hover:text-white"
+                    className="text-sm text-slate-400 transition-colors hover:text-white cursor-pointer"
                   >
                     {label}
                   </button>
@@ -84,7 +82,7 @@ export default function Footer({ onNavigate }: FooterProps) {
             </ul>
           </div>
 
-          {/* Working hours */}
+          {/* Working hours & Languages */}
           <div>
             <h4 className="text-sm font-semibold text-white mb-4">{t('footer.hours_title')}</h4>
             <ul className="space-y-2 text-sm">
@@ -94,20 +92,44 @@ export default function Footer({ onNavigate }: FooterProps) {
               </li>
               <li className="flex justify-between">
                 <span className="text-slate-400">Сб, Вс</span>
-                <span className="text-slate-500">Выходной</span>
+                <span className="text-slate-500">{t('footer.sunday')}</span>
               </li>
             </ul>
+
+            {/* Language Selector in Footer */}
+            <div className="mt-6 pt-4 border-t border-slate-800">
+              <div className="flex items-center gap-2 mb-2 text-xs text-slate-400">
+                <Globe className="h-3.5 w-3.5" />
+                <span>Язык / Тіл / Language / Dil:</span>
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {SUPPORTED_LANGUAGES.map((opt) => (
+                  <button
+                    key={opt.code}
+                    onClick={() => setLanguage(opt.code)}
+                    className={`px-2.5 py-1 rounded text-xs font-mono font-medium transition-all cursor-pointer flex items-center gap-1.5 ${
+                      language === opt.code
+                        ? 'bg-brand-600 text-white font-bold'
+                        : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
+                    }`}
+                  >
+                    <span>{opt.flag}</span>
+                    <span>{opt.shortLabel}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 
         <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-slate-800 pt-8 sm:flex-row">
           <p className="text-xs text-slate-500">&copy; 2025 Synergy-Group. {t('footer.rights')}</p>
           <div className="flex gap-6">
-            <button onClick={() => onNavigate('contacts')} className="text-xs text-slate-500 hover:text-slate-300 transition-colors">
-              Политика конфиденциальности
+            <button onClick={() => onNavigate('contacts')} className="text-xs text-slate-500 hover:text-slate-300 transition-colors cursor-pointer">
+              {t('footer.privacy_policy')}
             </button>
-            <button onClick={() => onNavigate('contacts')} className="text-xs text-slate-500 hover:text-slate-300 transition-colors">
-              Публичная оферта
+            <button onClick={() => onNavigate('contacts')} className="text-xs text-slate-500 hover:text-slate-300 transition-colors cursor-pointer">
+              {t('footer.public_offer')}
             </button>
           </div>
         </div>

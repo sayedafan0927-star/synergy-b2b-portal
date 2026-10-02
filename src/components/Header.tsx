@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
-import { Menu, ShoppingCart, User, Shield, CloudOff, RefreshCw, EyeOff, Search } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Menu, ShoppingCart, User, Shield, CloudOff, RefreshCw, Eye, EyeOff, Search, Globe } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { useLanguage } from '@/contexts/LanguageContext';
+import { useLanguage, SUPPORTED_LANGUAGES } from '@/contexts/LanguageContext';
 import { useShowroomMode } from '@/contexts/ShowroomModeContext';
 import { checkSystemHealth } from '@/lib/erpApi';
 import { getQueuedOfflineOrders, processOfflineOrderQueue, onOfflineQueueChange } from '@/lib/offlineOrderQueue';
@@ -24,9 +24,24 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
   const { totalItems } = useCart();
   const { user, profile, isAdmin, realIsAdmin, isImpersonating, stopImpersonation } = useAuth();
   const isEffectiveAdmin = Boolean(isAdmin && !isImpersonating);
-  const { language, setLanguage, t } = useLanguage();
+  const { language, setLanguage, currentLanguageOption, t } = useLanguage();
   const { isShowroomMode, toggleShowroomMode } = useShowroomMode();
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [langMenuOpen, setLangMenuOpen] = useState(false);
+  const langMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close language menu on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (langMenuRef.current && !langMenuRef.current.contains(e.target as Node)) {
+        setLangMenuOpen(false);
+      }
+    };
+    if (langMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [langMenuOpen]);
 
   // Global ⌘K / Ctrl+K keyboard shortcut to open Command Palette from anywhere
   useEffect(() => {
@@ -108,15 +123,15 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
           <div className="flex items-center gap-2 min-w-0">
             <span className="flex h-2 w-2 rounded-full bg-white animate-ping shrink-0" />
             <span className="truncate">
-              <span className="hidden sm:inline">Режим просмотра от имени: </span>
-              <span className="sm:hidden font-medium">Просмотр: </span>
+              <span className="hidden sm:inline">{t('nav.impersonation_prefix')} </span>
+              <span className="sm:hidden font-medium">Режим: </span>
               <strong>{profile.full_name || profile.company_name || 'Пользователь'}</strong>
               {profile.company_name && profile.full_name && profile.company_name !== profile.full_name && (
                 <span className="hidden md:inline text-amber-100"> ({profile.company_name})</span>
               )}
               {profile.price_type && (
                 <span className="ml-1.5 bg-amber-600/90 text-amber-100 px-1.5 py-0.5 rounded text-[10px] font-mono shrink-0">
-                  Тип цен: {profile.price_type}
+                  {profile.price_type}
                 </span>
               )}
             </span>
@@ -126,8 +141,8 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
             onClick={stopImpersonation}
             className="rounded bg-white px-2.5 py-1 text-[11px] sm:text-xs font-bold text-amber-900 shadow hover:bg-amber-50 active:scale-95 transition-all shrink-0 whitespace-nowrap cursor-pointer"
           >
-            <span className="hidden sm:inline">Вернуться в свой аккаунт</span>
-            <span className="sm:hidden">Выйти</span>
+            <span className="hidden sm:inline">{t('nav.return_account')}</span>
+            <span className="sm:hidden">{t('nav.logout')}</span>
           </button>
         </div>
       )}
@@ -138,7 +153,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
           <div className="flex items-center gap-2 min-w-0">
             <EyeOff className="h-3.5 w-3.5 shrink-0" />
             <span className="truncate">
-              <strong>Режим витрины активен:</strong> оптовые цены и баланс скрыты для клиента в салоне (Витрина)
+              <strong>Режим витрины:</strong> Режим витрины активен (Витрина / оптовые цены скрыты)
             </span>
           </div>
           <button
@@ -146,7 +161,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
             onClick={toggleShowroomMode}
             className="rounded bg-white/20 hover:bg-white/30 text-white px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer shrink-0"
           >
-            Выйти
+            {t('common.close')}
           </button>
         </div>
       )}
@@ -308,22 +323,61 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
               type="button"
               onClick={() => onNavigate('cart')}
               className="hidden sm:flex relative h-9 items-center gap-1.5 rounded-lg bg-slate-100 px-3 text-brand-700 transition-colors hover:bg-slate-200/80 border border-slate-200 shrink-0 cursor-pointer"
-              title="Корзина"
+              title={t('nav.cart')}
             >
               <ShoppingCart className="h-[18px] w-[18px]" />
               {totalItems > 0 && <span className="text-xs font-bold">{totalItems}</span>}
             </button>
+
+            {/* Language Selector Dropdown */}
+            <div className="relative" ref={langMenuRef}>
+              <button
+                type="button"
+                onClick={() => setLangMenuOpen(prev => !prev)}
+                className="flex h-9 items-center gap-1 px-2 sm:px-2.5 rounded-lg border border-slate-200 bg-slate-100 hover:bg-slate-200/80 text-slate-800 text-xs font-bold font-mono transition-colors cursor-pointer shadow-2xs shrink-0"
+                title={currentLanguageOption.label}
+                aria-label="Сменить язык"
+              >
+                <Globe className="h-3.5 w-3.5 text-slate-600" />
+                <span className="text-[11px] sm:text-xs font-bold">{currentLanguageOption.shortLabel}</span>
+              </button>
+              {langMenuOpen && (
+                <div className="absolute right-0 top-full mt-1.5 w-36 rounded-xl bg-white border border-slate-200 shadow-xl py-1 z-50 animate-in fade-in zoom-in-95 duration-150">
+                  {SUPPORTED_LANGUAGES.map(opt => (
+                    <button
+                      key={opt.code}
+                      type="button"
+                      onClick={() => {
+                        setLanguage(opt.code);
+                        setLangMenuOpen(false);
+                      }}
+                      className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left cursor-pointer transition-colors ${
+                        language === opt.code
+                          ? 'bg-brand-50 text-brand-800 font-bold'
+                          : 'text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span className="text-sm">{opt.flag}</span>
+                        <span>{opt.label}</span>
+                      </span>
+                      {language === opt.code && <span className="h-1.5 w-1.5 rounded-full bg-brand-700" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/* Menu Button: 36x36px on mobile, full button on desktop */}
             <button
               type="button"
               onClick={() => setMobileOpen(!mobileOpen)}
               className="flex h-9 w-9 sm:w-auto items-center justify-center gap-1.5 px-0 sm:px-2.5 rounded-lg text-slate-700 transition-all hover:bg-slate-100 hover:text-brand-700 border border-slate-200 cursor-pointer shrink-0"
-              title="Навигационное меню Synergy"
-              aria-label="Открыть меню"
+              title={t('nav.menu')}
+              aria-label={t('nav.menu')}
             >
               <Menu className="h-4 w-4" />
-              <span className="text-xs font-semibold hidden md:inline">Меню</span>
+              <span className="text-xs font-semibold hidden md:inline">{t('nav.menu')}</span>
             </button>
           </div>
         </div>

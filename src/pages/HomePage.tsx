@@ -4,6 +4,7 @@ import type { PageId } from '@/types';
 import { categories } from '@/data/categories';
 import { useProducts } from '@/hooks/useProductData';
 import { useAuth } from '@/contexts/AuthContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
 import { isProductInStockForUser } from '@/lib/warehouseVisibility';
 import ProductCard from '@/components/ProductCard';
@@ -12,26 +13,26 @@ import TechnoLuxuryButton from '@/components/home/TechnoLuxuryButton';
 import B2BPartnerCtaSection from '@/components/home/B2BPartnerCtaSection';
 import { useSynchronizedCategoryVideos } from '@/hooks/useSynchronizedCategoryVideos';
 
-const advantages = [
+const advantageItems = [
   {
     image: '/images/advantages/advantage_loom.webp',
-    title: 'Прямой доступ к станкам',
-    description: 'Уникальная возможность работать напрямую с производственными мощностями ведущих фабрик.',
+    titleKey: 'home.adv_loom_title',
+    descKey: 'home.adv_loom_desc',
   },
   {
     image: '/images/advantages/advantage_rolls.webp',
-    title: 'Автоматизация остатков',
-    description: 'Точное управление и минимизация тканевых отходов при нарезке и комплектации заказов.',
+    titleKey: 'home.adv_rolls_title',
+    descKey: 'home.adv_rolls_desc',
   },
   {
     image: '/images/advantages/advantage_compass.webp',
-    title: 'Персональная логистика',
-    description: 'Индивидуальные маршруты и гарантированные сроки доставки по всему Казахстану и СНГ.',
+    titleKey: 'home.adv_compass_title',
+    descKey: 'home.adv_compass_desc',
   },
   {
     image: '/images/advantages/advantage_paisley.webp',
-    title: 'Эксклюзивные коллекции',
-    description: 'Доступ к лимитированным дизайнам ковровых коллекций и уникальным премиальным текстурам.',
+    titleKey: 'home.adv_paisley_title',
+    descKey: 'home.adv_paisley_desc',
   },
 ];
 
@@ -42,6 +43,7 @@ export default function HomePage({
   onNavigate: (page: PageId, productId?: string) => void; 
   isReady?: boolean; 
 }) {
+  const { t } = useLanguage();
   const { products } = useProducts();
   const { profile, isAdmin, isImpersonating } = useAuth();
   const isEffectiveAdmin = isAdmin && !isImpersonating;
@@ -114,9 +116,9 @@ export default function HomePage({
             onTouchMove={handleTouchMove}
             onClick={handleCatalogNavigate}
             className="w-full flex items-center justify-center gap-2 h-11 px-5 rounded-full border border-white/40 bg-white/[0.04] backdrop-blur-xs text-white text-xs font-semibold uppercase tracking-[0.16em] transition-all duration-200 active:scale-[0.98] hover:bg-white/[0.08] hover:border-white/60 cursor-pointer shadow-sm shadow-black/60"
-            aria-label="Перейти в каталог ковров"
+            aria-label={t('home.hero_cta')}
           >
-            <span>Перейти в каталог</span>
+            <span>{t('home.hero_cta')}</span>
             <ArrowRight className="h-3.5 w-3.5 text-white/80" />
           </button>
         </div>
@@ -157,20 +159,20 @@ export default function HomePage({
         <div className="container-w relative z-10">
           <div className="text-center max-w-3xl mx-auto mb-12 lg:mb-16">
             <span className="font-mono text-xs sm:text-sm text-brand-700 font-semibold uppercase tracking-[0.25em] block mb-2">
-              SYNERGIYA GROUP
+              {t('home.advantages_pre')}
             </span>
             <h2 className="font-display text-2xl sm:text-4xl lg:text-5xl font-light tracking-wide text-slate-900 uppercase">
-              Ваши преимущества
+              {t('home.advantages_title')}
             </h2>
             <p className="mt-3 text-sm sm:text-base text-slate-600 font-body max-w-xl mx-auto">
-              Прямые оптовые поставки ковровых покрытий от ведущих мировых фабрик с собственными распределительными центрами
+              {t('home.advantages_desc')}
             </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 lg:gap-6">
-            {advantages.map((item) => (
+            {advantageItems.map((item) => (
               <div
-                key={item.title}
+                key={item.titleKey}
                 className="card flex flex-col justify-between p-6 sm:p-7 text-left bg-white border border-slate-200/90 hover:border-brand-600/70 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-300 relative group rounded-2xl cursor-default"
               >
                 <div>
@@ -178,17 +180,17 @@ export default function HomePage({
                   <div className="h-32 sm:h-36 flex items-center justify-center mb-6 overflow-hidden">
                     <img
                       src={item.image}
-                      alt={item.title}
+                      alt={t(item.titleKey)}
                       loading="lazy"
                       decoding="async"
                       className="max-h-full max-w-full object-contain filter drop-shadow-xs group-hover:scale-105 transition-transform duration-500"
                     />
                   </div>
                   <h3 className="font-display text-sm sm:text-base font-bold text-slate-900 uppercase tracking-wide leading-snug group-hover:text-brand-800 transition-colors">
-                    {item.title}
+                    {t(item.titleKey)}
                   </h3>
                   <p className="mt-2.5 text-xs sm:text-sm text-slate-600 font-body leading-relaxed">
-                    {item.description}
+                    {t(item.descKey)}
                   </p>
                 </div>
 
@@ -213,7 +215,7 @@ export default function HomePage({
         <div className="container-w">
           <div className="text-center">
             <h2 className="font-display text-2xl sm:text-3xl lg:text-4xl font-bold text-white tracking-tight drop-shadow-md">
-              Категории ковров
+              {t('home.categories_title')}
             </h2>
           </div>
 
@@ -296,18 +298,18 @@ export default function HomePage({
           <div className="flex items-end justify-between mb-10 lg:mb-14">
             <div>
               <span className="font-mono text-xs text-brand-700/80 uppercase tracking-widest block mb-1">
-                — Выбор оптовых клиентов
+                {t('home.popular_pre')}
               </span>
-              <h2 className="section-heading text-slate-900">Популярные товары</h2>
+              <h2 className="section-heading text-slate-900">{t('home.popular_title')}</h2>
               <p className="section-subheading text-slate-600">
-                Самые востребованные ковры из нашего каталога
+                {t('home.popular_desc')}
               </p>
             </div>
             <button
               onClick={() => onNavigate('catalog')}
-              className="hidden sm:inline-flex items-center gap-1.5 text-sm font-semibold text-brand-700 hover:text-brand-900 transition-colors"
+              className="hidden sm:inline-flex items-center gap-1.5 text-sm font-semibold text-brand-700 hover:text-brand-900 transition-colors cursor-pointer"
             >
-              Смотреть все
+              {t('home.view_all')}
               <ArrowRight className="h-4 w-4" />
             </button>
           </div>
@@ -325,9 +327,9 @@ export default function HomePage({
           <div className="mt-8 text-center sm:hidden">
             <button
               onClick={() => onNavigate('catalog')}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-7 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 active:scale-[0.98] transition-all duration-200 border border-slate-800 group"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-7 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 active:scale-[0.98] transition-all duration-200 border border-slate-800 group cursor-pointer"
             >
-              Смотреть все
+              {t('home.view_all')}
               <ArrowRight className="h-4 w-4 text-amber-400 group-hover:translate-x-0.5 transition-transform" />
             </button>
           </div>

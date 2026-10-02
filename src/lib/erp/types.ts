@@ -270,6 +270,8 @@ export interface ErpOrderItem {
   price_per_sqm: number;
   total: number;
   image: string;
+  warehouse?: string;
+  warehouse_id?: number;
 }
 
 export interface ErpClientOrder {

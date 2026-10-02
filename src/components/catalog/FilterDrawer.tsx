@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ChevronDown, ChevronUp, X, Filter } from 'lucide-react';
+import { useLanguage } from '@/contexts/LanguageContext';
 import type { FilterDrawerProps } from './types';
 import { Portal } from '@/components/common/Portal';
 import { CatalogFilterContent } from './CatalogFilterContent';
@@ -64,6 +65,7 @@ export function CheckItem({
 
 export function FilterDrawer(props: FilterDrawerProps) {
   const { open, onClose, activeFilterCount } = props;
+  const { t } = useLanguage();
 
   useEffect(() => {
     if (!open) return;
@@ -94,7 +96,7 @@ export function FilterDrawer(props: FilterDrawerProps) {
           <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 shrink-0 bg-white">
             <div className="flex items-center gap-2">
               <Filter className="h-5 w-5 text-brand-700" />
-              <h2 className="text-lg font-bold text-slate-900">Фильтр</h2>
+              <h2 className="text-lg font-bold text-slate-900">{t('catalog.filters')}</h2>
               {activeFilterCount > 0 && (
                 <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-700 px-1.5 text-[10px] font-bold text-white">
                   {activeFilterCount}
@@ -105,8 +107,8 @@ export function FilterDrawer(props: FilterDrawerProps) {
               type="button"
               onClick={onClose}
               className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 cursor-pointer"
-              title="Закрыть фильтр"
-              aria-label="Закрыть фильтр"
+              title={t('common.close')}
+              aria-label={t('common.close')}
             >
               <X className="h-5 w-5" />
             </button>

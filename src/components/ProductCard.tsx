@@ -4,7 +4,7 @@ import { parseSizeDimensions } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/contexts/CartContext';
 import { useUserPricing } from '@/hooks/usePricing';
-import { useLanguage } from '@/contexts/LanguageContext';
+import { useLanguage, type Language } from '@/contexts/LanguageContext';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
 import { filterClientWarehouses } from '@/hooks/useProductData';
@@ -38,7 +38,7 @@ function getMainWarehouseStock(variant: ProductVariant) {
   return Math.max(0, variant.stock ?? 0);
 }
 
-export function formatProductTitle(product: { name: string; article?: string; color?: string; category?: string; collection: string }, lang: 'ru' | 'kz' = 'ru'): string {
+export function formatProductTitle(product: { name: string; article?: string; color?: string; category?: string; collection: string }, lang: Language | string = 'ru'): string {
   const isRunner = Boolean(
     (product.category && product.category.toLowerCase().includes('дорожк')) ||
     (product.name && product.name.toLowerCase().includes('дорожк'))

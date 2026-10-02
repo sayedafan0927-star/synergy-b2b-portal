@@ -1,4 +1,5 @@
 import { X, RotateCcw } from 'lucide-react';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 export interface ActiveFilterChipsProps {
   searchQuery: string;
@@ -39,6 +40,7 @@ export function ActiveFilterChips({
   onRemoveCluster,
   onResetAll,
 }: ActiveFilterChipsProps) {
+  const { t } = useLanguage();
   const hasActiveFilters =
     Boolean(searchQuery.trim()) ||
     selectedCategory !== 'all' ||
@@ -55,11 +57,11 @@ export function ActiveFilterChips({
 
   return (
     <div className="flex items-center gap-2 overflow-x-auto py-2 no-scrollbar mb-4 animate-fade-in text-xs">
-      <span className="text-slate-400 shrink-0 font-medium hidden sm:inline">Фильтры:</span>
+      <span className="text-slate-400 shrink-0 font-medium hidden sm:inline">{t('catalog.filters')}:</span>
 
       {searchQuery.trim() && (
         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-100 text-slate-800 font-medium shrink-0">
-          <span>Поиск: «{searchQuery}»</span>
+          <span>{searchQuery}</span>
           <button
             type="button"
             onClick={onClearSearch}
@@ -175,7 +177,7 @@ export function ActiveFilterChips({
         className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-rose-600 hover:bg-rose-50 border border-rose-200 font-semibold shrink-0 transition-colors cursor-pointer"
       >
         <RotateCcw className="h-3 w-3" />
-        <span>Сбросить все</span>
+        <span>{t('catalog.reset_filters')}</span>
       </button>
     </div>
   );

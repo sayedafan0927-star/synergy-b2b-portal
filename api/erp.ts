@@ -23,6 +23,7 @@ import {
 import { handleRequestApproval } from './modules/approvals/approvalHandler';
 import { handleCancelOrder } from './modules/orders/cancelOrderHandler';
 import { handleGenericErpProxy } from './modules/erp/genericProxyHandler';
+import { handleSupplierDefects } from './modules/supplier/supplierHandler';
 import { getErpApiKey, getTargetErpUrl, getErpFallbackUrl } from './lib/erpKey';
 
 // Primary live ERP gateway: https://erp.synergy-tech.kz/api_portal.php
@@ -359,6 +360,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           req.query.supplier_id = callerSuppId;
         }
       }
+    }
+
+    // 2.8. Реестр рекламаций и бракованной продукции фабрик (Supplier Defects)
+    if (action === 'supplier_defects') {
+      return await handleSupplierDefects(req, res, supabase);
     }
 
     // 2.9. Безопасная клиентская и административная отмена заказа (T-24 / P1-1)

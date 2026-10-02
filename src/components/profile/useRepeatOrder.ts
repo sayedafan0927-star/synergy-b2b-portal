@@ -2,7 +2,17 @@ import { useState, useCallback } from 'react';
 import { useCart } from '@/contexts/CartContext';
 import { fetchCatalogFromErp } from '@/lib/erpApi';
 import { mergeProducts } from '@/hooks/useProductData';
+import { parse1CNomenclature } from '@/lib/nomenclatureParser';
 import type { Order, RepeatResult, RepeatItemAdded, RepeatItemMissing } from './types';
+
+function normalizeSize(s?: string): string {
+  if (!s) return '';
+  return s
+    .replace(/,/g, '.')
+    .replace(/[*xXхХ]/g, '×')
+    .replace(/\s+/g, '')
+    .trim();
+}
 
 export function useRepeatOrder(partnerId?: string | number | null, profileId?: string | null) {
   const { addItem } = useCart();
@@ -15,10 +25,11 @@ export function useRepeatOrder(partnerId?: string | number | null, profileId?: s
 
     try {
       const clientId = partnerId
-        ? Number(partnerId)
+        ? (Number(String(partnerId).replace(/\D+/g, '')) || undefined)
         : (profileId && !isNaN(Number(profileId)) ? Number(profileId) : undefined);
 
-      const catalogData = await fetchCatalogFromErp(clientId);
+      // Запрашиваем актуальный каталог из ERP
+      const catalogData = await fetchCatalogFromErp(clientId, undefined, true);
       const rawProducts: any[] = (catalogData && catalogData.success && Array.isArray(catalogData.products))
         ? catalogData.products
         : [];
@@ -31,12 +42,17 @@ export function useRepeatOrder(partnerId?: string | number | null, profileId?: s
         let foundProd: any;
         let foundVariant: any;
 
-        // 1. Match by SKU or item id
-        if (item.sku || item.id) {
+        const parsed = parse1CNomenclature(item.productName || '', item.collection);
+        const targetArticle = (item.sku || parsed.sku || '').toLowerCase().trim();
+        const targetCollection = (item.collection || parsed.collection || '').toLowerCase().trim();
+        const normItemSize = normalizeSize(item.size) || normalizeSize(parsed.size);
+
+        // Стратегия 1: Прямой поиск по item_id номенклатуры ERP (с верификацией размера)
+        if (item.item_id) {
           for (const p of erpProducts) {
             const v = p.variants?.find((vr: any) =>
-              (item.sku && vr.sku === item.sku) ||
-              (item.id && (String(vr.id) === String(item.id) || vr.sku === item.id))
+              (String(vr.item_id) === String(item.item_id) || String(vr.id) === String(item.item_id)) &&
+              (!normItemSize || normalizeSize(vr.size) === normItemSize)
             );
             if (v) {
               foundProd = p;
@@ -44,15 +60,11 @@ export function useRepeatOrder(partnerId?: string | number | null, profileId?: s
               break;
             }
           }
-        }
-
-        // 2. Match by collection and size
-        if (!foundVariant && item.collection && item.size) {
-          const itemCol = item.collection.toLowerCase().trim();
-          const itemSize = item.size.replace(/\s+/g, '');
-          for (const p of erpProducts) {
-            if (p.collection && p.collection.toLowerCase().trim() === itemCol) {
-              const v = p.variants?.find((vr: any) => vr.size.replace(/\s+/g, '') === itemSize);
+          if (!foundVariant) {
+            for (const p of erpProducts) {
+              const v = p.variants?.find((vr: any) =>
+                String(vr.item_id) === String(item.item_id) || String(vr.id) === String(item.item_id)
+              );
               if (v) {
                 foundProd = p;
                 foundVariant = v;
@@ -62,12 +74,86 @@ export function useRepeatOrder(partnerId?: string | number | null, profileId?: s
           }
         }
 
-        // 3. Fallback match by product name and size
-        if (!foundVariant && item.productName) {
-          const itemSize = (item.size || '').replace(/\s+/g, '');
+        // Стратегия 2: Точный поиск по штрихкоду (barcode) или коду 1С
+        if (!foundVariant && item.sku && item.sku.length >= 6) {
+          const targetCode = item.sku.trim();
           for (const p of erpProducts) {
-            if (p.name && p.name.toLowerCase().includes(item.productName.toLowerCase())) {
-              const v = p.variants?.find((vr: any) => !itemSize || vr.size.replace(/\s+/g, '') === itemSize);
+            const v = p.variants?.find((vr: any) =>
+              vr.barcode === targetCode ||
+              vr.code === targetCode ||
+              (vr.sku === targetCode && (!normItemSize || normalizeSize(vr.size) === normItemSize))
+            );
+            if (v) {
+              foundProd = p;
+              foundVariant = v;
+              break;
+            }
+          }
+        }
+
+        // Стратегия 3: Поиск по Артикулу дизайна + Размеру (+ Коллекции)
+        if (!foundVariant && targetArticle && normItemSize) {
+          for (const p of erpProducts) {
+            const pArt = (p.article || '').toLowerCase().trim();
+            const pColl = (p.collection || '').toLowerCase().trim();
+            const artMatches = pArt === targetArticle || p.name?.toLowerCase().includes(targetArticle);
+            const collMatches = !targetCollection ||
+              pColl.includes(targetCollection) ||
+              targetCollection.includes(pColl) ||
+              p.name?.toLowerCase().includes(targetCollection);
+
+            if (artMatches && collMatches) {
+              const v = p.variants?.find((vr: any) => {
+                const vArt = (vr.article || vr.design_article || '').toLowerCase().trim();
+                const vArtMatches = !vArt || vArt === targetArticle || artMatches;
+                return vArtMatches && normalizeSize(vr.size) === normItemSize;
+              });
+              if (v) {
+                foundProd = p;
+                foundVariant = v;
+                break;
+              }
+            }
+          }
+        }
+
+        // Стратегия 4: Поиск по Коллекции и Размеру
+        if (!foundVariant && targetCollection && normItemSize) {
+          for (const p of erpProducts) {
+            const pColl = (p.collection || '').toLowerCase().trim();
+            if (pColl === targetCollection || pColl.includes(targetCollection) || targetCollection.includes(pColl)) {
+              const v = p.variants?.find((vr: any) => normalizeSize(vr.size) === normItemSize);
+              if (v) {
+                foundProd = p;
+                foundVariant = v;
+                break;
+              }
+            }
+          }
+        }
+
+        // Стратегия 5: Поиск по названию товара и размеру
+        if (!foundVariant && item.productName && normItemSize) {
+          const rawName = item.productName.toLowerCase();
+          for (const p of erpProducts) {
+            const pName = (p.name || '').toLowerCase();
+            if (pName && (rawName.includes(pName) || pName.includes(rawName.slice(0, 15)))) {
+              const v = p.variants?.find((vr: any) => normalizeSize(vr.size) === normItemSize);
+              if (v) {
+                foundProd = p;
+                foundVariant = v;
+                break;
+              }
+            }
+          }
+        }
+
+        // Стратегия 6: Поиск по ID родительского товара (productId) и размеру
+        if (!foundVariant && item.productId) {
+          const targetProdId = String(item.productId);
+          for (const p of erpProducts) {
+            if (String(p.id) === targetProdId) {
+              const v = p.variants?.find((vr: any) => !normItemSize || normalizeSize(vr.size) === normItemSize);
               if (v) {
                 foundProd = p;
                 foundVariant = v;
@@ -88,27 +174,29 @@ export function useRepeatOrder(partnerId?: string | number | null, profileId?: s
         }
 
         // Мультискладской подбор остатка: приоритет оригинальному складу заказа, затем хабам
-        const itemWhId = (item as any).warehouse_id;
+        const itemWhId = item.warehouse_id || (item as any).warehouse_id;
         const itemWhName = (item.warehouse || '').toLowerCase().trim();
         let wh = foundVariant.warehouses?.find((w: any) =>
           ((itemWhId && w.warehouse_id === itemWhId) ||
            (itemWhName && (w.warehouse_name?.toLowerCase().includes(itemWhName) || w.city?.toLowerCase().includes(itemWhName)))) &&
-          (w.stock || 0) > 0
+          Number(w.free_stock ?? w.stock ?? 0) > 0
         );
 
         const hadOriginalStock = Boolean(wh);
 
         if (!wh && Array.isArray(foundVariant.warehouses)) {
-          wh = foundVariant.warehouses.find((w: any) => (w.warehouse_id === 81 || w.is_hub) && (w.stock || 0) > 0)
-            || foundVariant.warehouses.find((w: any) => (w.stock || 0) > 0);
+          wh = foundVariant.warehouses.find((w: any) => (w.warehouse_id === 81 || w.is_hub) && Number(w.free_stock ?? w.stock ?? 0) > 0)
+            || foundVariant.warehouses.find((w: any) => Number(w.free_stock ?? w.stock ?? 0) > 0);
         }
 
-        const stock = wh ? (wh.stock ?? 0) : (foundVariant.warehouses?.reduce((s: number, w: any) => s + (w.stock || 0), 0) ?? (foundVariant.stock || 0));
+        const stock = wh
+          ? Number(wh.free_stock ?? wh.stock ?? 0)
+          : (foundVariant.warehouses?.reduce((s: number, w: any) => s + Number(w.free_stock ?? w.stock ?? 0), 0) ?? Number(foundVariant.free_stock ?? foundVariant.stock ?? 0));
 
         if (stock <= 0) {
           missing.push({
             name: foundProd.name || item.productName,
-            size: item.size,
+            size: foundVariant.size || item.size,
             requestedQty: item.quantity,
             reason: 'Нет в наличии на складах',
           });
@@ -118,7 +206,7 @@ export function useRepeatOrder(partnerId?: string | number | null, profileId?: s
         const qtyToAdd = Math.min(item.quantity, stock);
         const prodImg = (foundProd.images && foundProd.images.length > 0) ? foundProd.images[0] : (foundProd.image_thumb || '');
         const resolvedWhName = wh?.warehouse_name || wh?.city || item.warehouse || 'Основной Склад Астана';
-        const resolvedWhId = wh?.warehouse_id || (item as any).warehouse_id || 81;
+        const resolvedWhId = wh?.warehouse_id || itemWhId || 81;
         const currentPrice = Number(foundVariant.price || foundVariant.base_price || item.price || 0);
 
         // Детекция автоматической подмены склада при отсутствии на исходном складе
@@ -131,13 +219,13 @@ export function useRepeatOrder(partnerId?: string | number | null, profileId?: s
         );
 
         addItem({
-          productId: foundProd.id,
+          productId: String(foundProd.id),
           item_id: foundVariant.item_id || (Number(foundVariant.id) > 0 ? Number(foundVariant.id) : undefined),
           productName: foundProd.name,
           collection: foundProd.collection,
           image: prodImg,
           size: foundVariant.size,
-          sku: foundVariant.sku,
+          sku: foundVariant.sku || foundVariant.article || item.sku || '',
           warehouse: resolvedWhName,
           warehouse_id: resolvedWhId,
           price: currentPrice,
