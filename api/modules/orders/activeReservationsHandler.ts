@@ -45,7 +45,7 @@ function parseSizeArea(sizeStr?: string): number {
     const skuFilter = req.query.sku ? String(req.query.sku).trim() : null;
     const searchFilter = req.query.q ? String(req.query.q).toLowerCase().trim() : null;
 
-    const { data: orders, error } = await supabase
+    let { data: orders, error } = await supabase
       .from('orders')
       .select(`
         id,
@@ -80,13 +80,66 @@ function parseSizeArea(sizeStr?: string): number {
       .order('created_at', { ascending: false })
       .limit(200);
 
+    // Resilient fallback if PostgREST schema cache lacks the foreign key relationship between orders and user_id
+    if (error && error.message?.includes('relationship')) {
+      const fallback = await supabase
+        .from('orders')
+        .select(`
+          id,
+          order_number,
+          user_id,
+          placed_by_id,
+          status,
+          warehouse,
+          hold_expires_at,
+          total_amount,
+          total_sqm,
+          total_items,
+          created_at,
+          order_items (
+            id,
+            sku,
+            product_name,
+            collection,
+            size,
+            warehouse,
+            quantity,
+            price
+          )
+        `)
+        .in('status', ['pending', 'reserved', 'confirmed', 'processing'])
+        .is('parent_order_id', null)
+        .order('created_at', { ascending: false })
+        .limit(200);
+
+      orders = fallback.data;
+      error = fallback.error;
+    }
+
     if (error) {
       console.warn('[Active Reservations API] Supabase query error:', error.message);
       return res.status(500).json({ success: false, error: error.message });
     }
 
+    // Resolve profiles independently if embedded join was bypassed by fallback
+    const userIds = [...new Set((orders || []).flatMap((o: any) => [o.user_id, o.placed_by_id]).filter(Boolean))];
+    const profileMap = new Map<string, any>();
+    if (userIds.length > 0) {
+      try {
+        const { data: profs } = await supabase
+          .from('profiles')
+          .select('id, full_name, company_name, phone')
+          .in('id', userIds);
+        (profs || []).forEach((p: any) => {
+          if (p?.id) profileMap.set(String(p.id), p);
+        });
+      } catch (err) {
+        console.warn('[Active Reservations API] Profile resolution error:', err);
+      }
+    }
+
     let mapped = (orders || []).map((o: any) => {
-      const profile = o.profiles || {};
+      const profile = o.profiles || profileMap.get(String(o.user_id)) || profileMap.get(String(o.placed_by_id)) || {};
       const clientName = profile.full_name || profile.company_name || 'Клиент B2B';
       const clientCompany = profile.company_name || '';
       const clientPhone = profile.phone || '';
