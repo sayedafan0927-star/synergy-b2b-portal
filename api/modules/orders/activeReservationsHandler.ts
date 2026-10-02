@@ -206,82 +206,116 @@ function clean1CName(rawName?: string): { name: string; sku: string; collection:
       };
     });
 
-    // 2. Интеграция с ERP: если в локальной БД Supabase нет активных заказов, получаем актуальные брони из ERP
-    if (mapped.length === 0) {
-      try {
-        const erpUrl = `${getTargetErpUrl()}?action=orders`;
-        const erpKey = getErpApiKey();
-        const erpRes = await fetch(erpUrl, {
-          headers: {
-            'x-portal-key': erpKey,
-          },
-        });
-        if (erpRes.ok) {
-          const erpData = await erpRes.json();
-          if (erpData?.success && Array.isArray(erpData.orders)) {
-            const activeErp = erpData.orders.filter((o: any) =>
-              ['pending', 'reserved', 'processing', 'confirmed'].includes(o.status_code) ||
-              ['Новый', 'В резерве', 'На сборке'].includes(o.status)
-            );
-            mapped = activeErp.map((o: any) => {
-              const rawItems = Array.isArray(o.items) ? o.items : [];
-              const items = rawItems.map((it: any) => {
-                const qty = Number(it.quantity) || 1;
-                const area = Number(it.area_sqm) || parseSizeArea(it.size);
-                const cleaned = clean1CName(it.name || it.product_name || '');
-                return {
-                  sku: it.sku || cleaned.sku || '',
-                  product_name: cleaned.name || it.name || 'Ковер',
-                  collection: it.collection || cleaned.collection || it.name?.split(' ')[0] || '',
-                  size: it.size || (it.width && it.length ? `${it.width} × ${it.length}` : 'Стандарт'),
-                  warehouse: o.warehouse_name || 'Основной Склад Астана',
-                  quantity: qty,
-                  area_sqm: area,
-                  total_sqm: Number(it.total_sqm) || Math.round(qty * area * 100) / 100,
-                };
-              });
-              const calculatedQty = items.reduce((sum: number, it: any) => sum + it.quantity, 0);
-              const calculatedSqm = Math.round(items.reduce((sum: number, it: any) => sum + it.total_sqm, 0) * 100) / 100;
+    // 1. Запрос живых броней и статусов из ERP (первичный источник складских WMS-резервов)
+    let erpMapped: any[] = [];
+    try {
+      const erpUrl = `${getTargetErpUrl()}?action=orders`;
+      const erpKey = getErpApiKey();
+      const erpRes = await fetch(erpUrl, {
+        headers: { 'x-portal-key': erpKey },
+        signal: AbortSignal.timeout(6000),
+      });
+      if (erpRes.ok) {
+        const erpData = await erpRes.json();
+        if (erpData?.success && Array.isArray(erpData.orders)) {
+          const isOrderActiveHold = (o: any) => {
+            const sc = String(o.status_code || '').toLowerCase().trim();
+            const st = String(o.status || '').toLowerCase().trim();
+            if (['shipped', 'cancelled', 'completed', 'delivered', 'rejected'].includes(sc)) return false;
+            if (['отгружен', 'отменен', 'выполнен', 'доставлен', 'отклонён', 'отклонен'].some(k => st.includes(k))) return false;
+            if (o.is_posted === true && (sc === 'shipped' || st.includes('отгруз'))) return false;
+            return true;
+          };
+
+          const activeErp = erpData.orders.filter(isOrderActiveHold);
+          erpMapped = activeErp.map((o: any) => {
+            const sc = String(o.status_code || '').toLowerCase().trim();
+            const st = String(o.status || '').toLowerCase().trim();
+            const isAssembly = sc === 'picking' || sc === 'processing' || sc === 'assembly' || st.includes('сборк');
+            const rawItems = Array.isArray(o.items) ? o.items : [];
+            const items = rawItems.map((it: any) => {
+              const qty = Number(it.quantity) || 1;
+              const area = Number(it.area_sqm) || parseSizeArea(it.size);
+              const cleaned = clean1CName(it.name || it.product_name || '');
               return {
-                id: String(o.id),
-                order_number: o.doc_number || `ORD-${o.id}`,
-                client_name: o.client_name || 'Клиент B2B',
-                client_company: o.client_name || '',
-                client_phone: o.client_phone || '',
-                status: o.status_code === 'processing' ? 'processing' : 'pending',
+                sku: it.sku || cleaned.sku || '',
+                product_name: cleaned.name || it.name || 'Ковер',
+                collection: it.collection || cleaned.collection || it.name?.split(' ')[0] || '',
+                size: it.size || (it.width && it.length ? `${it.width} × ${it.length}` : 'Стандарт'),
                 warehouse: o.warehouse_name || 'Основной Склад Астана',
-                created_at: o.date,
-                hold_expires_at: o.hold_expires_at || (o.date ? new Date(new Date(o.date).getTime() + 24 * 3600 * 1000).toISOString() : undefined),
-                total_items: calculatedQty || Number(o.items_count) || 1,
-                total_sqm: calculatedSqm || Number(o.total_sqm) || 0,
-                total_amount: Number(o.total_amount) || 0,
-                items,
+                quantity: qty,
+                area_sqm: area,
+                total_sqm: Number(it.total_sqm) || Math.round(qty * area * 100) / 100,
               };
             });
-          }
+            const calculatedQty = items.reduce((sum: number, it: any) => sum + it.quantity, 0);
+            const calculatedSqm = Math.round(items.reduce((sum: number, it: any) => sum + it.total_sqm, 0) * 100) / 100;
+
+            let clientCompany = o.client_company || '';
+            let clientName = o.client_name || 'Клиент B2B';
+            if (!clientCompany && clientName.includes('(')) {
+              const compMatch = clientName.match(/\((.+)\)$/);
+              if (compMatch) {
+                clientCompany = compMatch[1].trim();
+                clientName = clientName.replace(/\((.+)\)$/, '').trim() || clientName;
+              }
+            }
+
+            const totalItems = calculatedQty || Number(o.items_count) || 1;
+            const pickedItems = Number(o.picked_items ?? o.picked_count ?? 0);
+            const progressPercent = totalItems > 0 ? Math.round((pickedItems / totalItems) * 100) : 0;
+            const assemblyProgress = isAssembly
+              ? (o.assembly_progress || o.picking_progress || `${pickedItems} / ${totalItems} шт. (${progressPercent}%)`)
+              : undefined;
+
+            return {
+              id: String(o.id),
+              order_number: o.doc_number || `ORD-${o.id}`,
+              client_name: clientName,
+              client_company: clientCompany || clientName,
+              client_phone: o.client_phone || '',
+              status: isAssembly ? 'processing' : 'pending',
+              status_label: o.status || (isAssembly ? 'В сборке' : 'Авторезерв'),
+              warehouse: o.warehouse_name || 'Основной Склад Астана',
+              created_at: o.date,
+              hold_expires_at: o.hold_expires_at || (o.date ? new Date(new Date(o.date).getTime() + 24 * 3600 * 1000).toISOString() : undefined),
+              total_items: totalItems,
+              total_sqm: calculatedSqm || Number(o.total_sqm) || 0,
+              total_amount: Number(o.total_amount) || 0,
+              currency: o.currency || 'USD',
+              assembly_progress: assemblyProgress,
+              items,
+            };
+          });
         }
-      } catch (erpErr) {
-        console.warn('[Active Reservations API] ERP fallback warning:', erpErr);
       }
+    } catch (erpErr) {
+      console.warn('[Active Reservations API] ERP live orders warning:', erpErr);
     }
+
+    // 2. Слияние с заказами Supabase (для заказов в пути, еще не отраженных в 1С/ERP)
+    const knownDocNumbers = new Set(erpMapped.map((m: any) => String(m.order_number).trim()));
+    const extraSupabase = (mapped || []).filter((sb: any) => !knownDocNumbers.has(String(sb.order_number).trim()));
+    let combined = [...erpMapped, ...extraSupabase];
 
     // Фильтрация по SKU если запрошено
     if (skuFilter) {
-      const qSku = skuFilter.toLowerCase();
-      mapped = mapped.filter((o: any) =>
+      const qSku = skuFilter.toLowerCase().trim();
+      combined = combined.filter((o: any) =>
         o.items.some(
           (it: any) =>
             it.sku.toLowerCase() === qSku ||
             it.sku.toLowerCase().includes(qSku) ||
             qSku.includes(it.sku.toLowerCase()) ||
-            it.product_name.toLowerCase().includes(qSku)
+            it.product_name.toLowerCase().includes(qSku) ||
+            it.collection.toLowerCase().includes(qSku)
         )
       );
     }
 
-    // Текстовый поиск (по клиенту, компании, телефону, номеру заказа)
+    // Текстовый поиск (по клиенту, компании, телефону, номеру заказа, товарам)
     if (searchFilter) {
-      mapped = mapped.filter((o: any) =>
+      combined = combined.filter((o: any) =>
         o.client_name.toLowerCase().includes(searchFilter) ||
         o.client_company.toLowerCase().includes(searchFilter) ||
         o.client_phone.toLowerCase().includes(searchFilter) ||
@@ -290,15 +324,15 @@ function clean1CName(rawName?: string): { name: string; sku: string; collection:
       );
     }
 
-    const uniqueClients = new Set(mapped.map((o: any) => o.client_company || o.client_name).filter(Boolean));
-    const totalReservedQty = mapped.reduce((sum: number, o: any) => sum + o.total_items, 0);
-    const totalReservedSqm = Math.round(mapped.reduce((sum: number, o: any) => sum + o.total_sqm, 0) * 100) / 100;
+    const uniqueClients = new Set(combined.map((o: any) => o.client_company || o.client_name).filter(Boolean));
+    const totalReservedQty = combined.reduce((sum: number, o: any) => sum + o.total_items, 0);
+    const totalReservedSqm = Math.round(combined.reduce((sum: number, o: any) => sum + o.total_sqm, 0) * 100) / 100;
 
     return res.status(200).json({
       success: true,
-      reservations: mapped,
+      reservations: combined,
       summary: {
-        total_reserved_orders: mapped.length,
+        total_reserved_orders: combined.length,
         total_reserved_pcs: totalReservedQty,
         total_reserved_sqm: totalReservedSqm,
         clients_count: uniqueClients.size,

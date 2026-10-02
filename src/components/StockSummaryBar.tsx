@@ -7,6 +7,7 @@ interface StockSummaryBarProps {
   summary: StockSummary;
   className?: string;
   onReserveClick?: () => void;
+  onAssemblyClick?: () => void;
 }
 
 function fmtNum(n: number, decimals = 0): string {
@@ -17,7 +18,12 @@ function fmtNum(n: number, decimals = 0): string {
   });
 }
 
-export const StockSummaryBar: React.FC<StockSummaryBarProps> = ({ summary, className = '', onReserveClick }) => {
+export const StockSummaryBar: React.FC<StockSummaryBarProps> = ({
+  summary,
+  className = '',
+  onReserveClick,
+  onAssemblyClick,
+}) => {
   const { t } = useLanguage();
 
   const labels = {
@@ -92,7 +98,15 @@ export const StockSummaryBar: React.FC<StockSummaryBarProps> = ({ summary, class
         <div className="h-3.5 w-px bg-slate-200/80 hidden md:block" />
 
         {/* 3. К отгрузке (сборка ТСД) */}
-        <div className="flex items-center gap-2">
+        <div
+          onClick={onAssemblyClick || onReserveClick}
+          className={`flex items-center gap-2 rounded-lg px-2 py-1 -my-1 transition-all ${
+            (onAssemblyClick || onReserveClick)
+              ? 'cursor-pointer hover:bg-indigo-50 active:scale-95 border border-transparent hover:border-indigo-200'
+              : ''
+          }`}
+          title={onAssemblyClick || onReserveClick ? labels.reserveHint : undefined}
+        >
           <div className="flex items-center gap-1.5">
             <span className="h-2 w-2 rounded-full bg-indigo-500 shrink-0" />
             <span className="font-medium text-slate-600">{labels.toShip}:</span>
@@ -103,6 +117,11 @@ export const StockSummaryBar: React.FC<StockSummaryBarProps> = ({ summary, class
           <span className="font-semibold text-indigo-700 font-mono">
             {fmtNum(summary.to_ship_sqm, 2)} {labels.sqm}
           </span>
+          {(onAssemblyClick || onReserveClick) && (
+            <span className="text-[10px] font-medium text-indigo-800 bg-indigo-100/80 px-1.5 py-0.5 rounded-full hover:bg-indigo-200">
+              {labels.clients}
+            </span>
+          )}
         </div>
 
         <div className="h-3.5 w-px bg-slate-200/80 hidden lg:block" />
@@ -173,10 +192,22 @@ export const StockSummaryBar: React.FC<StockSummaryBarProps> = ({ summary, class
           </div>
 
           {/* К отгрузке */}
-          <div className="rounded-lg bg-indigo-50/50 border border-indigo-100 p-2">
-            <div className="flex items-center gap-1.5 text-indigo-800 font-semibold text-[11px] mb-0.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
-              <span>{labels.toShip}</span>
+          <div
+            onClick={onAssemblyClick || onReserveClick}
+            className={`rounded-lg bg-indigo-50/50 border border-indigo-100 p-2 transition-all ${
+              (onAssemblyClick || onReserveClick) ? 'cursor-pointer active:scale-95 hover:bg-indigo-100/60' : ''
+            }`}
+          >
+            <div className="flex items-center justify-between text-indigo-800 font-semibold text-[11px] mb-0.5">
+              <div className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
+                <span>{labels.toShip}</span>
+              </div>
+              {(onAssemblyClick || onReserveClick) && (
+                <span className="text-[9px] font-bold text-indigo-700 bg-indigo-100/90 px-1 py-0.5 rounded">
+                  {labels.clients}
+                </span>
+              )}
             </div>
             <div className="font-bold text-slate-900 text-xs font-mono">
               {fmtNum(summary.to_ship_qty)} {labels.pcs}

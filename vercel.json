@@ -2,7 +2,7 @@
   "version": 2,
   "headers": [
     {
-      "source": "/(catalog|product|cart|contacts|login|profile|admin|sw\\.js|manifest\\.json|index\\.html)",
+      "source": "/(catalog.*|product.*|cart.*|contacts.*|login.*|profile.*|admin.*|sw\\.js|manifest\\.json|index\\.html)",
       "headers": [
         {
           "key": "Cache-Control",
@@ -90,7 +90,7 @@
       "destination": "/api/$1"
     },
     {
-      "source": "/(.*)",
+      "source": "/((?!assets/|.*\\.[a-zA-Z0-9]+$).*)",
       "destination": "/index.html"
     }
   ]

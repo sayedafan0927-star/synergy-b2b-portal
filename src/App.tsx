@@ -29,7 +29,10 @@ function lazyWithRetry<T extends React.ComponentType<any>>(
       if (
         msg.includes('Failed to fetch dynamically imported module') ||
         msg.includes('Importing a module script failed') ||
-        msg.includes('Expected a JavaScript-or-Wasm module script')
+        msg.includes('Expected a JavaScript-or-Wasm module script') ||
+        msg.includes('error loading dynamically imported module') ||
+        msg.includes('MIME type') ||
+        msg.includes('strict MIME')
       ) {
         const retryKey = 'chunk_reload_' + (typeof window !== 'undefined' ? window.location.pathname : '');
         if (typeof window !== 'undefined' && !sessionStorage.getItem(retryKey)) {

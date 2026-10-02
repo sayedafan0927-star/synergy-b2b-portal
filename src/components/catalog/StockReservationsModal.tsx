@@ -19,6 +19,7 @@ interface StockReservationsModalProps {
   onClose: () => void;
   filterSku?: string;
   catalogSkus?: string[];
+  initialTab?: 'all' | 'processing' | 'pending' | 'expired';
 }
 
 function fmtNum(n: number, decimals = 0): string {
@@ -83,6 +84,7 @@ export function StockReservationsModal({
   onClose,
   filterSku,
   catalogSkus,
+  initialTab,
 }: StockReservationsModalProps) {
   const { t } = useLanguage();
   const [reservations, setReservations] = useState<ActiveReservation[]>([]);
@@ -90,7 +92,7 @@ export function StockReservationsModal({
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [scopeFilter, setScopeFilter] = useState<'catalog' | 'all'>('catalog');
-  const [holdTypeFilter, setHoldTypeFilter] = useState<'active' | 'expired' | 'all'>('active');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'processing' | 'pending' | 'expired'>('all');
   const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
 
   const hasCatalogContext = Boolean(catalogSkus && catalogSkus.length > 0);
@@ -102,14 +104,6 @@ export function StockReservationsModal({
       const data = await fetchActiveReservations({ sku: filterSku });
       if (data?.success && Array.isArray(data.reservations)) {
         setReservations(data.reservations);
-
-        // Smart auto-select: если активных броней нет, но есть истекшие — сразу открываем 'all'
-        const hasActive = data.reservations.some(r => !formatHoldTtl(r.hold_expires_at, r.created_at).isExpired);
-        if (!hasActive && data.reservations.length > 0) {
-          setHoldTypeFilter('all');
-        } else {
-          setHoldTypeFilter('active');
-        }
       } else {
         throw new Error(data?.error || 'Не удалось получить данные резервов');
       }
@@ -129,8 +123,9 @@ export function StockReservationsModal({
       } else {
         setScopeFilter('all');
       }
+      setStatusFilter(initialTab || 'all');
     }
-  }, [isOpen, filterSku, hasCatalogContext]);
+  }, [isOpen, filterSku, hasCatalogContext, initialTab]);
 
   const toggleExpand = (id: string) => {
     setExpandedOrders(prev => {
@@ -150,7 +145,7 @@ export function StockReservationsModal({
         const cleaned = clean1CName(it.product_name);
         const itName = cleaned.name.toLowerCase().trim();
         const itRaw = (it.product_name || '').toLowerCase().trim();
-        const itCol = (it.collection || '').toLowerCase().trim();
+        const itCol = (it.collection || cleaned.collection || '').toLowerCase().trim();
         return lowerSkus.some(
           cs =>
             itSku.includes(cs) ||
@@ -175,19 +170,26 @@ export function StockReservationsModal({
     return reservations;
   }, [reservations, hasCatalogContext, scopeFilter, catalogMatchedReservations]);
 
-  const activeHoldCount = useMemo(() => {
-    return baseScopedReservations.filter(r => !formatHoldTtl(r.hold_expires_at, r.created_at).isExpired).length;
-  }, [baseScopedReservations]);
-
-  const expiredHoldCount = useMemo(() => {
-    return baseScopedReservations.filter(r => formatHoldTtl(r.hold_expires_at, r.created_at).isExpired).length;
-  }, [baseScopedReservations]);
+  const countAll = baseScopedReservations.length;
+  const countAssembly = useMemo(
+    () => baseScopedReservations.filter(r => r.status === 'processing').length,
+    [baseScopedReservations]
+  );
+  const countAuto = useMemo(
+    () => baseScopedReservations.filter(r => r.status === 'pending' && !formatHoldTtl(r.hold_expires_at, r.created_at).isExpired).length,
+    [baseScopedReservations]
+  );
+  const countExpired = useMemo(
+    () => baseScopedReservations.filter(r => formatHoldTtl(r.hold_expires_at, r.created_at).isExpired).length,
+    [baseScopedReservations]
+  );
 
   const filteredReservations = useMemo(() => {
     return baseScopedReservations.filter(r => {
       const isExpired = formatHoldTtl(r.hold_expires_at, r.created_at).isExpired;
-      if (holdTypeFilter === 'active' && isExpired) return false;
-      if (holdTypeFilter === 'expired' && !isExpired) return false;
+      if (statusFilter === 'processing' && r.status !== 'processing') return false;
+      if (statusFilter === 'pending' && (r.status !== 'pending' || isExpired)) return false;
+      if (statusFilter === 'expired' && !isExpired) return false;
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
@@ -206,7 +208,7 @@ export function StockReservationsModal({
       }
       return true;
     });
-  }, [baseScopedReservations, holdTypeFilter, searchQuery]);
+  }, [baseScopedReservations, statusFilter, searchQuery]);
 
   const totalFilteredPcs = useMemo(
     () => filteredReservations.reduce((sum, r) => sum + r.total_items, 0),
@@ -310,40 +312,51 @@ export function StockReservationsModal({
               </div>
             ) : <div />}
 
-            {/* Active vs Expired Hold Switcher */}
+            {/* Status Switcher: All, Assembly, Auto-reserve, Expired */}
             <div className="flex items-center gap-1.5 self-start sm:self-auto overflow-x-auto no-scrollbar">
               <button
                 type="button"
-                onClick={() => setHoldTypeFilter('active')}
+                onClick={() => setStatusFilter('all')}
                 className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all shrink-0 cursor-pointer ${
-                  holdTypeFilter === 'active'
-                    ? 'bg-emerald-600 text-white shadow-2xs'
-                    : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-                }`}
-              >
-                {t('reservations.tab_active')} ({activeHoldCount})
-              </button>
-              <button
-                type="button"
-                onClick={() => setHoldTypeFilter('expired')}
-                className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all shrink-0 cursor-pointer ${
-                  holdTypeFilter === 'expired'
-                    ? 'bg-rose-600 text-white shadow-2xs'
-                    : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
-                }`}
-              >
-                {t('reservations.tab_expired')} ({expiredHoldCount})
-              </button>
-              <button
-                type="button"
-                onClick={() => setHoldTypeFilter('all')}
-                className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all shrink-0 cursor-pointer ${
-                  holdTypeFilter === 'all'
+                  statusFilter === 'all'
                     ? 'bg-brand-700 text-white shadow-2xs'
                     : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
                 }`}
               >
-                {t('reservations.tab_all')} ({baseScopedReservations.length})
+                {t('reservations.tab_all')} ({countAll})
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatusFilter('processing')}
+                className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all shrink-0 cursor-pointer ${
+                  statusFilter === 'processing'
+                    ? 'bg-indigo-600 text-white shadow-2xs'
+                    : 'bg-white border border-slate-200 text-indigo-700 hover:bg-indigo-50'
+                }`}
+              >
+                {t('reservations.tab_assembly')} ({countAssembly})
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatusFilter('pending')}
+                className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all shrink-0 cursor-pointer ${
+                  statusFilter === 'pending'
+                    ? 'bg-amber-600 text-white shadow-2xs'
+                    : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                {t('reservations.tab_auto')} ({countAuto})
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatusFilter('expired')}
+                className={`rounded-lg px-2.5 py-1 text-xs font-semibold transition-all shrink-0 cursor-pointer ${
+                  statusFilter === 'expired'
+                    ? 'bg-rose-600 text-white shadow-2xs'
+                    : 'bg-white border border-slate-200 text-rose-700 hover:bg-rose-50'
+                }`}
+              >
+                {t('reservations.tab_expired')} ({countExpired})
               </button>
             </div>
           </div>

@@ -90,6 +90,7 @@ export default function CatalogPage({
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [reservationsModalOpen, setReservationsModalOpen] = useState(false);
+  const [reservationsTab, setReservationsTab] = useState<'all' | 'processing' | 'pending' | 'expired'>('all');
   const [stockWarehouse, setStockWarehouse] = useState('');
   const canViewStockSummary = useMemo(() => {
     if (isEffectiveAdmin) return true;
@@ -309,18 +310,16 @@ export default function CatalogPage({
   ]);
 
   const catalogReservedSkus = useMemo(() => {
-    const list: string[] = [];
+    const set = new Set<string>();
     for (const p of filteredProducts) {
+      if (p.collection) set.add(p.collection);
+      if (p.article) set.add(p.article);
       for (const v of p.variants) {
-        if ((v.reserved_stock || 0) > 0) {
-          if (v.sku) list.push(v.sku);
-          if (v.article) list.push(v.article);
-          if (p.article) list.push(p.article);
-          if (p.collection) list.push(p.collection);
-        }
+        if (v.sku) set.add(v.sku);
+        if (v.article) set.add(v.article);
       }
     }
-    return Array.from(new Set(list));
+    return Array.from(set);
   }, [filteredProducts]);
 
   useEffect(() => {
@@ -459,7 +458,8 @@ export default function CatalogPage({
           <div className="mb-4">
             <StockSummaryBar
               summary={currentSummary}
-              onReserveClick={() => setReservationsModalOpen(true)}
+              onReserveClick={() => { setReservationsTab('all'); setReservationsModalOpen(true); }}
+              onAssemblyClick={() => { setReservationsTab('processing'); setReservationsModalOpen(true); }}
             />
           </div>
         )}
@@ -642,6 +642,7 @@ export default function CatalogPage({
           isOpen={reservationsModalOpen}
           onClose={() => setReservationsModalOpen(false)}
           catalogSkus={catalogReservedSkus}
+          initialTab={reservationsTab}
         />
       )}
     </DecklePaperWrapper>

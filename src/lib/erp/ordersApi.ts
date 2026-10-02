@@ -312,6 +312,9 @@ export interface ActiveReservation {
   total_items: number;
   total_sqm: number;
   total_amount: number;
+  currency?: string;
+  status_label?: string;
+  assembly_progress?: string;
   items: ActiveReservationItem[];
 }
 

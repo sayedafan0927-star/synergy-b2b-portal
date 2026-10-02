@@ -11,8 +11,8 @@ interface ReservationCardProps {
   formatTtl: (holdExpiresAt?: string, createdAt?: string) => { label: string; isExpiringSoon: boolean; isExpired: boolean };
 }
 
-export function clean1CName(rawName?: string): { name: string; sku: string; color: string } {
-  if (!rawName) return { name: 'Ковер', sku: '', color: '' };
+export function clean1CName(rawName?: string): { name: string; sku: string; color: string; collection: string } {
+  if (!rawName) return { name: 'Ковер', sku: '', color: '', collection: '' };
   const m = rawName.match(/^([A-ZА-Я0-9\s-]+?)(?:\s*<[^>]*>)?\s*\(([^)]+)\)/i);
   if (m) {
     const coll = m[1].replace(/^(ковер|дорожка)\s+/i, '').trim();
@@ -27,11 +27,13 @@ export function clean1CName(rawName?: string): { name: string; sku: string; colo
         name: `${coll} ${sku}${color ? ` • ${color}` : ''}`,
         sku,
         color,
+        collection: coll,
       };
     }
   }
   const clean = rawName.replace(/<[^>]+>/g, '').trim();
-  return { name: clean, sku: '', color: '' };
+  const coll = clean.split(' ')[0] || '';
+  return { name: clean, sku: '', color: '', collection: coll };
 }
 
 export function ReservationCard({
@@ -106,6 +108,11 @@ export function ReservationCard({
                   ? t('reservations.status_assembly')
                   : t('reservations.status_auto')}
               </span>
+              {res.status === 'processing' && (
+                <span className="badge text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200 font-mono">
+                  {res.assembly_progress || `0 / ${res.total_items} шт.`}
+                </span>
+              )}
             </div>
 
             <div className="mt-1 flex items-center gap-2.5 text-xs text-slate-500 flex-wrap">
@@ -126,6 +133,11 @@ export function ReservationCard({
                 <Building2 className="h-3 w-3 text-slate-400" />
                 <span>{res.warehouse}</span>
               </span>
+              {res.total_amount > 0 && (
+                <span className="font-mono font-bold text-slate-800 bg-slate-100/90 px-1.5 py-0.5 rounded text-[11px] border border-slate-200">
+                  {res.total_amount.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {res.currency || 'USD'}
+                </span>
+              )}
             </div>
 
             {/* Direct Product Preview: clean nomenclature row with no emojis */}

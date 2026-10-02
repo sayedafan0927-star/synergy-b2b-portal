@@ -1,4 +1,4 @@
-const CACHE_NAME = 'synergy-b2b-v19';
+const CACHE_NAME = 'synergy-b2b-v20';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -6,6 +6,13 @@ const STATIC_ASSETS = [
   '/manifest.json',
   '/Вектор_Синэнергия.png',
 ];
+
+// Allow clients to trigger skipWaiting immediately
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
 
 // Install: pre-cache static assets
 self.addEventListener('install', (event) => {
@@ -121,7 +128,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       (async () => {
         try {
-          const networkResponse = await fetch(request);
+          const networkResponse = await fetch(request, { cache: 'no-cache' });
           if (networkResponse && networkResponse.status === 200) {
             const responseToCache = networkResponse.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', responseToCache));
@@ -149,9 +156,18 @@ self.addEventListener('fetch', (event) => {
       try {
         const response = await fetch(request);
         const contentType = response.headers.get('content-type') || '';
-        // Защита от MIME text/html для .js чанков при 404 rewrite
-        if (url.pathname.endsWith('.js') && contentType.includes('text/html')) {
-          return new Response('Stale module chunk not found', { status: 404, statusText: 'Not Found' });
+        const isStaticAsset =
+          url.pathname.startsWith('/assets/') ||
+          /\.(js|css|mjs|png|jpe?g|webp|svg|ico|woff2?)$/i.test(url.pathname);
+
+        // Anti-Stale Invariant: never return HTML for CSS/JS/static assets (prevents MIME type errors)
+        if (isStaticAsset && contentType.includes('text/html')) {
+          console.warn('[SW] Stale asset returned text/html, serving 404:', url.pathname);
+          return new Response('Stale asset not found', {
+            status: 404,
+            statusText: 'Not Found',
+            headers: { 'Content-Type': 'text/plain' }
+          });
         }
         if (response && response.status === 200 && response.type === 'basic' && !contentType.includes('text/html')) {
           const responseToCache = response.clone();
