@@ -1,12 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   FileText,
   Store,
   AlertTriangle,
   CheckCircle2,
   ChevronRight,
+  FileSpreadsheet,
+  Download,
+  Eye,
 } from 'lucide-react';
 import type { InboundShipment } from '@/types';
+import { DiscrepancyActModal } from './DiscrepancyActModal';
 
 export interface InboundShipmentCardProps {
   shipment: InboundShipment;
@@ -19,6 +23,7 @@ export function InboundShipmentCard({
   isExpanded,
   onToggleExpand,
 }: InboundShipmentCardProps) {
+  const [isActModalOpen, setIsActModalOpen] = useState(false);
   const hasDiscrepancy = shipment.has_discrepancy || shipment.reconciliation_status === 'discrepancy';
   const docTitle = shipment.incoming_doc_number && shipment.incoming_doc_number !== 'Не указан'
     ? shipment.incoming_doc_number
@@ -64,7 +69,7 @@ export function InboundShipmentCard({
           </p>
         </div>
 
-        <div className="flex items-center justify-between lg:justify-end gap-2 sm:gap-3 w-full lg:w-auto pt-2 lg:pt-0 border-t border-slate-100 lg:border-t-0">
+        <div className="flex flex-wrap items-center justify-between lg:justify-end gap-2 sm:gap-2.5 w-full lg:w-auto pt-2 lg:pt-0 border-t border-slate-100 lg:border-t-0">
           {hasDiscrepancy ? (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 border border-amber-300 px-2.5 sm:px-3 py-1 text-xs font-bold text-amber-900">
               <AlertTriangle className="h-3.5 w-3.5 text-amber-700 shrink-0" />
@@ -75,6 +80,36 @@ export function InboundShipmentCard({
               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-700 shrink-0" />
               Принято полностью
             </span>
+          )}
+
+          {shipment.has_discrepancy_act && (
+            <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                onClick={() => setIsActModalOpen(true)}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-300/80 px-2.5 py-1 rounded-lg transition-colors cursor-pointer shrink-0"
+                title="Просмотреть электронный Акт о расхождении"
+              >
+                <Eye className="h-3.5 w-3.5 text-amber-700" />
+                <span className="hidden sm:inline">Акт расхождений</span>
+                <span className="sm:hidden">Акт</span>
+              </button>
+
+              {shipment.excel_download_url && (
+                <a
+                  href={shipment.excel_download_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300/80 px-2.5 py-1 rounded-lg transition-colors cursor-pointer shrink-0"
+                  title="Скачать Акт о расхождении (.xlsx)"
+                >
+                  <Download className="h-3.5 w-3.5 text-emerald-700" />
+                  <span className="hidden sm:inline">Excel (.xlsx)</span>
+                  <span className="sm:hidden">.xlsx</span>
+                </a>
+              )}
+            </div>
           )}
 
           <button
@@ -151,6 +186,54 @@ export function InboundShipmentCard({
       {/* Раскрывающийся список расхождений */}
       {isExpanded && (
         <div className="border-t border-slate-200 bg-slate-50/50 p-3 sm:p-4">
+          {/* Баннер электронного акта расхождений */}
+          {shipment.has_discrepancy_act && (
+            <div className="mb-4 p-3.5 sm:p-4 rounded-xl bg-gradient-to-r from-amber-50 to-orange-50/60 border border-amber-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+              <div className="flex items-start gap-3">
+                <div className="p-2 rounded-lg bg-amber-100 text-amber-800 shrink-0">
+                  <FileSpreadsheet className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-bold text-xs sm:text-sm text-slate-900">
+                      Официальный акт о расхождении при приёмке
+                    </span>
+                    {shipment.discrepancy_act_number && (
+                      <span className="inline-flex items-center rounded-md bg-amber-200/70 px-2 py-0.5 text-amber-900 font-mono text-[10px] sm:text-xs font-bold">
+                        {shipment.discrepancy_act_number}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] sm:text-xs text-slate-600 mt-0.5">
+                    Сформирован электронный акт со сводкой недостач, излишков и подписями комиссии склада.
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsActModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-300 bg-white text-xs font-semibold text-amber-900 hover:bg-amber-50 transition-colors cursor-pointer shadow-2xs"
+                >
+                  <Eye className="h-3.5 w-3.5 text-amber-700" />
+                  Смотреть акт
+                </button>
+                {shipment.excel_download_url && (
+                  <a
+                    href={shipment.excel_download_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-xs font-semibold text-white transition-colors cursor-pointer shadow-2xs"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Скачать Акт о расхождении (.xlsx)
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
+
           {shipment.items && shipment.items.length > 0 ? (
             <>
               <p className="text-xs font-bold text-slate-900 uppercase tracking-wide mb-3 flex items-center gap-1.5">
@@ -309,6 +392,15 @@ export function InboundShipmentCard({
           )}
         </div>
       )}
+
+      {/* Модальное окно просмотра акта расхождений */}
+      <DiscrepancyActModal
+        receiptId={shipment.receipt_id}
+        initialActNumber={shipment.discrepancy_act_number}
+        excelDownloadUrl={shipment.excel_download_url}
+        isOpen={isActModalOpen}
+        onClose={() => setIsActModalOpen(false)}
+      />
     </div>
   );
 }

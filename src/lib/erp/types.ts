@@ -6,7 +6,11 @@ export type {
   SupplierInboundShipmentsResponse,
   InboundShipment,
   SupplierDefectItem,
-  SupplierDefectsResponse
+  SupplierDefectsResponse,
+  DiscrepancyActItem,
+  DiscrepancyActSummary,
+  DiscrepancyActParty,
+  DiscrepancyActResponse
 } from '@/types';
 
 export interface CreateOrderPayload {

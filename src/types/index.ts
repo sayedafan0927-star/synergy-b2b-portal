@@ -191,9 +191,84 @@ export interface InboundShipment {
     area_sqm: number;
   };
   has_discrepancy: boolean;
+  has_discrepancy_act?: boolean;
+  discrepancy_act_number?: string | null;
+  excel_download_url?: string | null;
+  act_api_url?: string | null;
   comment?: string | null;
   items_count?: number;
   items?: InboundShipmentItem[];
+}
+
+export interface DiscrepancyActItem {
+  line_num: number;
+  article: string;
+  name: string;
+  barcode?: string | null;
+  plan_qty: number;
+  fact_qty: number;
+  diff_qty: number;
+  plan_sqm: number;
+  fact_sqm: number;
+  diff_sqm: number;
+  status: 'shortage' | 'surplus' | 'unplanned' | 'matched' | string;
+  status_label: string;
+  reason?: string | null;
+  cells?: string[];
+}
+
+export interface DiscrepancyActSummary {
+  plan_qty: number;
+  fact_qty: number;
+  diff_qty: number;
+  plan_sqm: number;
+  fact_sqm: number;
+  diff_sqm: number;
+  shortage_count: number;
+  surplus_count: number;
+  unplanned_count?: number;
+  matched_count: number;
+  total_positions: number;
+}
+
+export interface DiscrepancyActParty {
+  id?: number;
+  name: string;
+  bin?: string;
+  country?: string;
+  phone?: string;
+  address?: string;
+  city?: string;
+}
+
+export interface DiscrepancyActResponse {
+  success: boolean;
+  act_id?: number;
+  act_number: string;
+  act_date?: string;
+  act_date_formatted: string;
+  has_discrepancy: boolean;
+  status?: string;
+  status_label: string;
+  company?: DiscrepancyActParty;
+  supplier?: DiscrepancyActParty;
+  warehouse?: DiscrepancyActParty;
+  documents?: {
+    receipt_id?: number;
+    receipt_doc_number: string;
+    receipt_date?: string;
+    incoming_doc_number?: string;
+    incoming_doc_date?: string | null;
+    packing_doc_number?: string;
+  };
+  auditor?: {
+    name: string;
+    role: string;
+  };
+  summary: DiscrepancyActSummary;
+  items: DiscrepancyActItem[];
+  excel_download_url: string;
+  error?: string;
 }
 
 export interface SupplierInboundShipmentsResponse {

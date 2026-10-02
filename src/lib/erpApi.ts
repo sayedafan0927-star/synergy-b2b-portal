@@ -67,6 +67,7 @@ export {
   fetchSupplierInboundShipments,
   fetchSupplierDefects,
   fetchSuppliersFromErp,
+  fetchSupplierDiscrepancyAct,
 } from './erp/suppliersApi';
 
 export {

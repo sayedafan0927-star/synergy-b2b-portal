@@ -50,6 +50,15 @@ export async function handleGenericErpProxy(
   } = options;
 
   try {
+    if (action === 'download_discrepancy_act') {
+      const receiptId = String(req.query.receipt_id || '');
+      const callerPortalKey = (req.headers['x-portal-key'] || req.headers['X-Portal-Key']) as string | undefined;
+      const keyToSend = SERVER_ERP_KEY || callerPortalKey || '';
+      const downloadUrl = `${TARGET_ERP_URL}?action=download_discrepancy_act&receipt_id=${receiptId}&portal_key=${keyToSend}`;
+      res.redirect(302, downloadUrl);
+      return;
+    }
+
     // Собираем Query параметры
     const queryParams = new URLSearchParams();
     for (const [key, val] of Object.entries(req.query)) {

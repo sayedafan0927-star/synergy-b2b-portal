@@ -5,6 +5,7 @@ import type {
   SupplierInboundShipmentsResponse,
   SupplierDefectsResponse,
   SupplierInfo,
+  DiscrepancyActResponse,
 } from './types';
 
 /**
@@ -128,4 +129,33 @@ export async function fetchSuppliersFromErp(): Promise<SupplierInfo[]> {
     console.warn('[fetchSuppliersFromErp] Fallback on error:', err);
   }
   return [];
+}
+
+/**
+ * Запрос электронного акта расхождений при приёмке (ТТН vs Факт ТСД)
+ * action = 'supplier_discrepancy_act'
+ */
+export async function fetchSupplierDiscrepancyAct(
+  receiptId: number | string,
+  options?: { onlyDiscrepancies?: boolean }
+): Promise<DiscrepancyActResponse> {
+  const params: Record<string, string | number> = {
+    receipt_id: String(receiptId),
+    _t: Date.now(),
+  };
+
+  if (options?.onlyDiscrepancies) {
+    params.only_discrepancies = 1;
+  }
+
+  const response = await erpFetch('supplier_discrepancy_act', {
+    method: 'GET',
+    params,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Ошибка загрузки акта расхождений (${response.status})`);
+  }
+
+  return await response.json();
 }
