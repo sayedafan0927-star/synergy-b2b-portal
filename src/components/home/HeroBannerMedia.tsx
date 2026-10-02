@@ -11,9 +11,10 @@ const POSTER = '/assets/hero-poster-desktop-v2.webp';
 interface HeroBannerMediaProps {
   onNavigate?: (page: PageId) => void;
   isReady?: boolean;
+  isActive?: boolean;
 }
 
-export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBannerMediaProps) {
+export default function HeroBannerMedia({ onNavigate, isReady = true, isActive = true }: HeroBannerMediaProps) {
   const { t } = useLanguage();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isEnded, setIsEnded] = useState(false);
@@ -69,7 +70,7 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
-          if (entry.isIntersecting) {
+          if (entry.isIntersecting && isActive) {
             isVisibleRef.current = true;
             if (document.visibilityState !== 'hidden' && video && video.paused) {
               video.play().catch(() => {});
@@ -88,7 +89,7 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
 
     // Touch/click fallback for iOS devices in Low Power Mode
     const handleFirstGesture = () => {
-      if (video && video.paused && isVisibleRef.current) {
+      if (video && video.paused && isVisibleRef.current && isActive) {
         video.play().catch(() => {});
       }
     };
@@ -101,9 +102,23 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
       window.removeEventListener('touchstart', handleFirstGesture);
       window.removeEventListener('click', handleFirstGesture);
     };
-  }, [isReady]);
+  }, [isReady, isActive]);
 
   const loopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!isActive) {
+      if (video && !video.paused) {
+        video.pause();
+      }
+      if (loopTimerRef.current) {
+        clearTimeout(loopTimerRef.current);
+      }
+    } else if (video && video.paused && isReady) {
+      video.play().catch(() => {});
+    }
+  }, [isActive, isReady]);
 
   useEffect(() => {
     return () => {
@@ -234,7 +249,7 @@ export default function HeroBannerMedia({ onNavigate, isReady = true }: HeroBann
           {...({ 'webkit-playsinline': 'true' } as any)}
           disablePictureInPicture
           disableRemotePlayback
-          preload="auto"
+          preload={typeof window !== 'undefined' && window.innerWidth < 768 ? 'metadata' : 'auto'}
           poster={POSTER}
           onEnded={handleEnded}
           onTimeUpdate={handleTimeUpdate}

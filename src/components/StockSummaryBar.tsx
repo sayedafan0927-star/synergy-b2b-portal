@@ -18,17 +18,18 @@ function fmtNum(n: number, decimals = 0): string {
 }
 
 export const StockSummaryBar: React.FC<StockSummaryBarProps> = ({ summary, className = '', onReserveClick }) => {
-  const { language } = useLanguage();
+  const { t } = useLanguage();
 
   const labels = {
-    found: language === 'kz' ? 'Табылды' : 'Найдено',
-    free: language === 'kz' ? 'Қалдық' : 'Остаток',
-    freeSub: language === 'kz' ? 'еркін' : 'свободно',
-    reserve: language === 'kz' ? 'Резерв' : 'Резерв',
-    toShip: language === 'kz' ? 'Жөнелтуге' : 'К отгрузке',
-    total: language === 'kz' ? 'Барлығы' : 'Всего',
-    totalSub: language === 'kz' ? 'қоймада' : 'на складе',
-    pcs: language === 'kz' ? 'дн' : 'шт.',
+    found: t('catalog.found', 'Найдено'),
+    free: t('catalog.stock_free', 'Остаток'),
+    reserve: t('catalog.stock_reserve', 'Резерв'),
+    toShip: t('catalog.stock_to_ship', 'К отгрузке'),
+    total: t('catalog.stock_total', 'Всего'),
+    pcs: t('common.pcs', 'шт.'),
+    sqm: t('common.sqm', 'м²'),
+    clients: t('catalog.clients_link', 'клиенты ↗'),
+    reserveHint: t('catalog.reserve_hint', 'Нажмите, чтобы посмотреть клиентов и объём резерва'),
   };
 
   return (
@@ -55,7 +56,7 @@ export const StockSummaryBar: React.FC<StockSummaryBarProps> = ({ summary, class
             {fmtNum(summary.free_stock_qty)} {labels.pcs}
           </span>
           <span className="font-semibold text-emerald-700 font-mono">
-            {fmtNum(summary.free_stock_sqm, 2)} м²
+            {fmtNum(summary.free_stock_sqm, 2)} {labels.sqm}
           </span>
         </div>
 
@@ -69,7 +70,7 @@ export const StockSummaryBar: React.FC<StockSummaryBarProps> = ({ summary, class
               ? 'cursor-pointer hover:bg-amber-50 active:scale-95 border border-transparent hover:border-amber-200'
               : ''
           }`}
-          title={onReserveClick ? 'Нажмите, чтобы посмотреть клиентов и объём резерва' : undefined}
+          title={onReserveClick ? labels.reserveHint : undefined}
         >
           <div className="flex items-center gap-1.5">
             <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0" />
@@ -79,11 +80,11 @@ export const StockSummaryBar: React.FC<StockSummaryBarProps> = ({ summary, class
             {fmtNum(summary.reserved_stock_qty)} {labels.pcs}
           </span>
           <span className="font-semibold text-amber-700 font-mono">
-            {fmtNum(summary.reserved_stock_sqm, 2)} м²
+            {fmtNum(summary.reserved_stock_sqm, 2)} {labels.sqm}
           </span>
           {onReserveClick && (
             <span className="text-[10px] font-medium text-amber-800 bg-amber-100/80 px-1.5 py-0.5 rounded-full hover:bg-amber-200">
-              клиенты ↗
+              {labels.clients}
             </span>
           )}
         </div>
@@ -100,7 +101,7 @@ export const StockSummaryBar: React.FC<StockSummaryBarProps> = ({ summary, class
             {fmtNum(summary.to_ship_qty)} {labels.pcs}
           </span>
           <span className="font-semibold text-indigo-700 font-mono">
-            {fmtNum(summary.to_ship_sqm, 2)} м²
+            {fmtNum(summary.to_ship_sqm, 2)} {labels.sqm}
           </span>
         </div>
 
@@ -116,7 +117,7 @@ export const StockSummaryBar: React.FC<StockSummaryBarProps> = ({ summary, class
             {fmtNum(summary.total_stock_qty)} {labels.pcs}
           </span>
           <span className="font-bold text-slate-700 font-mono">
-            {fmtNum(summary.total_stock_sqm, 2)} м²
+            {fmtNum(summary.total_stock_sqm, 2)} {labels.sqm}
           </span>
         </div>
       </div>
@@ -141,7 +142,7 @@ export const StockSummaryBar: React.FC<StockSummaryBarProps> = ({ summary, class
               {fmtNum(summary.free_stock_qty)} {labels.pcs}
             </div>
             <div className="text-[11px] font-medium text-emerald-700 font-mono">
-              {fmtNum(summary.free_stock_sqm, 2)} м²
+              {fmtNum(summary.free_stock_sqm, 2)} {labels.sqm}
             </div>
           </div>
 
@@ -159,7 +160,7 @@ export const StockSummaryBar: React.FC<StockSummaryBarProps> = ({ summary, class
               </div>
               {onReserveClick && (
                 <span className="text-[9px] font-bold text-amber-700 bg-amber-100/90 px-1 py-0.5 rounded">
-                  клиенты ↗
+                  {labels.clients}
                 </span>
               )}
             </div>
@@ -167,7 +168,7 @@ export const StockSummaryBar: React.FC<StockSummaryBarProps> = ({ summary, class
               {fmtNum(summary.reserved_stock_qty)} {labels.pcs}
             </div>
             <div className="text-[11px] font-medium text-amber-700 font-mono">
-              {fmtNum(summary.reserved_stock_sqm, 2)} м²
+              {fmtNum(summary.reserved_stock_sqm, 2)} {labels.sqm}
             </div>
           </div>
 
@@ -181,7 +182,7 @@ export const StockSummaryBar: React.FC<StockSummaryBarProps> = ({ summary, class
               {fmtNum(summary.to_ship_qty)} {labels.pcs}
             </div>
             <div className="text-[11px] font-medium text-indigo-700 font-mono">
-              {fmtNum(summary.to_ship_sqm, 2)} м²
+              {fmtNum(summary.to_ship_sqm, 2)} {labels.sqm}
             </div>
           </div>
 
@@ -195,7 +196,7 @@ export const StockSummaryBar: React.FC<StockSummaryBarProps> = ({ summary, class
               {fmtNum(summary.total_stock_qty)} {labels.pcs}
             </div>
             <div className="text-[11px] font-bold text-slate-700 font-mono">
-              {fmtNum(summary.total_stock_sqm, 2)} м²
+              {fmtNum(summary.total_stock_sqm, 2)} {labels.sqm}
             </div>
           </div>
         </div>

@@ -117,6 +117,13 @@ export const en: TranslationDictionary = {
   'catalog.stock_reservations': 'Reservations',
   'catalog.in_stock_badge': 'In Stock',
   'catalog.total_found': 'Items found:',
+  'catalog.found': 'Found',
+  'catalog.stock_free': 'Available',
+  'catalog.stock_reserve': 'Reserved',
+  'catalog.stock_to_ship': 'To Ship',
+  'catalog.stock_total': 'Total',
+  'catalog.clients_link': 'clients ↗',
+  'catalog.reserve_hint': 'Click to view clients and reservation volume',
 
   // Product & Card
   'product.back_catalog': 'Back to Catalog',

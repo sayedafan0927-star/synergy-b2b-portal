@@ -192,30 +192,33 @@ export default function CatalogPage({
     }
 
     switch (sortBy) {
-      case 'popular':
+      case 'popular': {
+        const stockMap = new Map<string, number>();
+        const priorityMap = new Map<string, number>();
+
+        for (let i = 0; i < result.length; i++) {
+          const p = result[i];
+          stockMap.set(p.id, getTotalStock(p));
+
+          const art = (p.article || '').toUpperCase();
+          const col = (p.collection || '').toUpperCase();
+          const color = (p.color || '').toUpperCase();
+          let pr = 0;
+          if (col.includes('FLORA') && (art.includes('9568B') || art.includes('9568-B'))) pr = 100;
+          else if (col.includes('AFGAN') && (art.includes('123') || color.includes('CREAM'))) pr = 90;
+          else if (col.includes('HYPNOSE') && (art.includes('P1010') || art.includes('1010'))) pr = 80;
+          else if (col.includes('OCTAVIA') && (art.includes('75488') || color.includes('071'))) pr = 70;
+          else if (col.includes('FLORA') && (art.includes('9568G') || (art.includes('9114G') && color.includes('GREY')))) pr = 60;
+          priorityMap.set(p.id, pr);
+        }
+
         result.sort((a, b) => {
-          const getPriority = (p: Product) => {
-            const art = (p.article || '').toUpperCase();
-            const col = (p.collection || '').toUpperCase();
-            const color = (p.color || '').toUpperCase();
-            // 1. FLORA 9568B — L.VIZON / L.VIZON (horses, deer, and suns)
-            if (col.includes('FLORA') && (art.includes('9568B') || art.includes('9568-B'))) return 100;
-            // 2. AFGAN 123D / 123Д CREAM (steppe warriors and diamond medallions)
-            if (col.includes('AFGAN') && (art.includes('123') || color.includes('CREAM'))) return 90;
-            // 3. HYPNOSE DOTLU P1010 MULTI / MULTI (solar tamgas and fine geometric weave)
-            if (col.includes('HYPNOSE') && (art.includes('P1010') || art.includes('1010'))) return 80;
-            // 4. OCTAVIA 75488 071 BEIGE (ancient solar wheel petroglyphs)
-            if (col.includes('OCTAVIA') && (art.includes('75488') || color.includes('071'))) return 70;
-            // 5. FLORA 9568G — GREY / GREY (golden running steppe stallions and golden suns)
-            if (col.includes('FLORA') && (art.includes('9568G') || (art.includes('9114G') && color.includes('GREY')))) return 60;
-            return 0;
-          };
-          const pA = getPriority(a);
-          const pB = getPriority(b);
-          if (pA !== pB) return pB - pA;
-          return getTotalStock(b) - getTotalStock(a);
+          const diffPriority = (priorityMap.get(b.id) || 0) - (priorityMap.get(a.id) || 0);
+          if (diffPriority !== 0) return diffPriority;
+          return (stockMap.get(b.id) || 0) - (stockMap.get(a.id) || 0);
         });
         break;
+      }
       case 'price-asc':
         result.sort((a, b) => pricing.getMinPricePerSqm(a) - pricing.getMinPricePerSqm(b));
         break;

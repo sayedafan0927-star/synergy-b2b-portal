@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import type { Product, PageId, ProductVariant } from '@/types';
 import { parseSizeDimensions } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
@@ -68,7 +68,7 @@ export function formatProductTitle(product: { name: string; article?: string; co
   return isRunner ? `${prefix} ${base}` : base;
 }
 
-export default function ProductCard({ product, onNavigate }: ProductCardProps) {
+function ProductCard({ product, onNavigate }: ProductCardProps) {
   const { user, profile, isAdmin, isImpersonating } = useAuth();
   const isEffectiveAdmin = isAdmin && !isImpersonating;
   const clientContext = isEffectiveAdmin ? true : profile;
@@ -226,7 +226,7 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
         {/* Бейдж наличия */}
         {hasShowroom && totalShowroomQty > 0 && (
           <div className="absolute top-2.5 left-2.5 z-10 pointer-events-none">
-            <span className="inline-flex items-center gap-1 rounded-md bg-emerald-600/90 backdrop-blur-sm px-2 py-0.5 text-[11px] font-bold text-white shadow-sm">
+            <span className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2 py-0.5 text-[11px] font-bold text-white shadow-sm">
               🏪 В наличии: {totalShowroomQty} шт
             </span>
           </div>
@@ -235,7 +235,7 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
         {/* Бейдж для админа: если у товара 0 остаток и он скрыт от клиентов */}
         {isEffectiveAdmin && isOutOfStock && !isShowroomMode && (
           <div className="absolute top-2.5 right-2.5 z-10 pointer-events-none">
-            <span className="inline-flex items-center gap-1 rounded-md bg-amber-600/90 backdrop-blur-sm px-2 py-0.5 text-[10px] font-bold text-white shadow-sm" title="Товар с нулевым остатком скрыт от клиентов">
+            <span className="inline-flex items-center gap-1 rounded-md bg-amber-600 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm" title="Товар с нулевым остатком скрыт от клиентов">
               ⚠️ 0 шт · Скрыт от клиентов
             </span>
           </div>
@@ -248,7 +248,7 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
               type="button"
               onClick={handlePrevImage}
               aria-label="Предыдущее фото"
-              className="hidden sm:flex absolute left-2 top-1/2 -translate-y-1/2 z-20 h-8 w-8 items-center justify-center rounded-full bg-white/90 text-slate-700 shadow-md backdrop-blur-sm border border-slate-200/80 transition-all hover:bg-white hover:scale-110 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto"
+              className="hidden sm:flex absolute left-2 top-1/2 -translate-y-1/2 z-20 h-8 w-8 items-center justify-center rounded-full bg-white text-slate-700 shadow-md border border-slate-200/80 transition-all hover:bg-slate-50 hover:scale-110 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
@@ -256,7 +256,7 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
               type="button"
               onClick={handleNextImage}
               aria-label="Следующее фото"
-              className="hidden sm:flex absolute right-2 top-1/2 -translate-y-1/2 z-20 h-8 w-8 items-center justify-center rounded-full bg-white/90 text-slate-700 shadow-md backdrop-blur-sm border border-slate-200/80 transition-all hover:bg-white hover:scale-110 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto"
+              className="hidden sm:flex absolute right-2 top-1/2 -translate-y-1/2 z-20 h-8 w-8 items-center justify-center rounded-full bg-white text-slate-700 shadow-md border border-slate-200/80 transition-all hover:bg-slate-50 hover:scale-110 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto"
             >
               <ChevronRight className="h-4 w-4" />
             </button>
@@ -418,3 +418,5 @@ export default function ProductCard({ product, onNavigate }: ProductCardProps) {
     </div>
   );
 }
+
+export default memo(ProductCard);

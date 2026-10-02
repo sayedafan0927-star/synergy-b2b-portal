@@ -117,6 +117,13 @@ export const kz: TranslationDictionary = {
   'catalog.stock_reservations': 'Резервтер',
   'catalog.in_stock_badge': 'Қоймада бар',
   'catalog.total_found': 'Табылған тауарлар:',
+  'catalog.found': 'Табылды',
+  'catalog.stock_free': 'Қалдық',
+  'catalog.stock_reserve': 'Резерв',
+  'catalog.stock_to_ship': 'Жөнелтуге',
+  'catalog.stock_total': 'Барлығы',
+  'catalog.clients_link': 'клиенттер ↗',
+  'catalog.reserve_hint': 'Клиенттерді және резерв көлемін көру үшін басыңыз',
 
   // Товар и карточка
   'product.back_catalog': 'Каталогқа оралу',

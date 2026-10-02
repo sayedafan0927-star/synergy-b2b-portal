@@ -3,9 +3,12 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 interface UseSynchronizedCategoryVideosOptions {
   playDurationMs?: number; // duration of video playback phase (default: 6000ms)
   pauseDurationMs?: number; // breathing pause phase on final frame (default: 1200ms)
+  isActive?: boolean; // whether the parent page is currently active and visible in DOM
 }
 
-export function useSynchronizedCategoryVideos({}: UseSynchronizedCategoryVideosOptions = {}) {
+export function useSynchronizedCategoryVideos({
+  isActive = true,
+}: UseSynchronizedCategoryVideosOptions = {}) {
   const sectionRef = useRef<HTMLElement | null>(null);
   const videoRefs = useRef<(HTMLVideoElement | null)[]>([]);
   const isVisibleRef = useRef(false);
@@ -13,17 +16,20 @@ export function useSynchronizedCategoryVideos({}: UseSynchronizedCategoryVideosO
   const isHoldingPauseRef = useRef(false);
   const [isBreathing, setIsBreathing] = useState(false);
 
+  const isMobileDevice = typeof window !== 'undefined' && (window.innerWidth < 768 || 'ontouchstart' in window || navigator.maxTouchPoints > 0);
+
   const registerVideoRef = useCallback((index: number) => (el: HTMLVideoElement | null) => {
     videoRefs.current[index] = el;
     if (el) {
       el.muted = true;
       el.playsInline = true;
-      el.loop = false; // Never use native independent loop so they don't desynchronize
+      // On mobile devices, enable native zero-overhead hardware looping to prevent seek stalls
+      el.loop = isMobileDevice;
       el.setAttribute('muted', '');
       el.setAttribute('playsinline', '');
       el.setAttribute('webkit-playsinline', 'true');
     }
-  }, []);
+  }, [isMobileDevice]);
 
   const frameCallbackIdRef = useRef<number | null>(null);
 
@@ -64,12 +70,19 @@ export function useSynchronizedCategoryVideos({}: UseSynchronizedCategoryVideosO
       frameCallbackIdRef.current = null;
     }
 
-    if (!isVisibleRef.current || document.visibilityState === 'hidden') {
+    if (!isVisibleRef.current || !isActive || document.visibilityState === 'hidden') {
       return;
     }
 
     const activeVideos = videoRefs.current.filter((v): v is HTMLVideoElement => Boolean(v));
     if (activeVideos.length === 0) return;
+
+    if (isMobileDevice) {
+      activeVideos.forEach((v) => {
+        if (v.paused) v.play().catch(() => {});
+      });
+      return;
+    }
 
     isHoldingPauseRef.current = false;
     setIsBreathing(false);
@@ -103,15 +116,22 @@ export function useSynchronizedCategoryVideos({}: UseSynchronizedCategoryVideosO
     cycleTimeoutRef.current = setTimeout(() => {
       freezeAndHold();
     }, 5950);
-  }, [freezeAndHold]);
+  }, [freezeAndHold, isActive, isMobileDevice]);
 
   const resumePlayback = useCallback(() => {
-    if (!isVisibleRef.current || document.visibilityState === 'hidden') {
+    if (!isVisibleRef.current || !isActive || document.visibilityState === 'hidden') {
       return;
     }
 
     const activeVideos = videoRefs.current.filter((v): v is HTMLVideoElement => Boolean(v));
     if (activeVideos.length === 0) return;
+
+    if (isMobileDevice) {
+      activeVideos.forEach((v) => {
+        if (v.paused) v.play().catch(() => {});
+      });
+      return;
+    }
 
     // If currently in freeze pause on final face, let freeze finish its hold and cycle
     if (isHoldingPauseRef.current) {
@@ -162,7 +182,25 @@ export function useSynchronizedCategoryVideos({}: UseSynchronizedCategoryVideosO
     cycleTimeoutRef.current = setTimeout(() => {
       freezeAndHold();
     }, remainingMs);
-  }, [freezeAndHold, runSyncCycle]);
+  }, [freezeAndHold, runSyncCycle, isActive, isMobileDevice]);
+
+  // Handle isActive state changes from parent page
+  useEffect(() => {
+    if (!isActive) {
+      videoRefs.current.forEach((v) => v?.pause());
+      if (cycleTimeoutRef.current) {
+        clearTimeout(cycleTimeoutRef.current);
+        cycleTimeoutRef.current = null;
+      }
+      const primaryVid = videoRefs.current[0];
+      if (primaryVid && frameCallbackIdRef.current !== null && 'cancelVideoFrameCallback' in primaryVid) {
+        (primaryVid as any).cancelVideoFrameCallback(frameCallbackIdRef.current);
+        frameCallbackIdRef.current = null;
+      }
+    } else if (isVisibleRef.current) {
+      resumePlayback();
+    }
+  }, [isActive, resumePlayback]);
 
   // Handle Visibility and Viewport Intersection
   useEffect(() => {
@@ -175,17 +213,18 @@ export function useSynchronizedCategoryVideos({}: UseSynchronizedCategoryVideosO
           frameCallbackIdRef.current = null;
         }
         videoRefs.current.forEach((v) => v?.pause());
-      } else if (isVisibleRef.current) {
+      } else if (isVisibleRef.current && isActive) {
         resumePlayback();
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
+    const rootMargin = isMobileDevice ? '50px 0px 50px 0px' : '200px 0px 200px 0px';
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
-          if (entry.isIntersecting) {
+          if (entry.isIntersecting && isActive) {
             isVisibleRef.current = true;
             resumePlayback();
           } else {
@@ -203,7 +242,7 @@ export function useSynchronizedCategoryVideos({}: UseSynchronizedCategoryVideosO
           }
         });
       },
-      { threshold: 0.01, rootMargin: '250px 0px 250px 0px' }
+      { threshold: 0.05, rootMargin }
     );
 
     const sectionEl = sectionRef.current;

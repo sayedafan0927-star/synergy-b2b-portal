@@ -117,6 +117,13 @@ export const ru: TranslationDictionary = {
   'catalog.stock_reservations': 'Резервы',
   'catalog.in_stock_badge': 'В наличии',
   'catalog.total_found': 'Найдено позиций:',
+  'catalog.found': 'Найдено',
+  'catalog.stock_free': 'Остаток',
+  'catalog.stock_reserve': 'Резерв',
+  'catalog.stock_to_ship': 'К отгрузке',
+  'catalog.stock_total': 'Всего',
+  'catalog.clients_link': 'клиенты ↗',
+  'catalog.reserve_hint': 'Нажмите, чтобы посмотреть клиентов и объём резерва',
 
   // Товар и карточка
   'product.back_catalog': 'Назад в каталог',

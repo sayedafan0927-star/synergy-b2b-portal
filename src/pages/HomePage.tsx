@@ -38,10 +38,12 @@ const advantageItems = [
 
 export default function HomePage({ 
   onNavigate, 
-  isReady = true 
+  isReady = true,
+  isActive = true,
 }: { 
   onNavigate: (page: PageId, productId?: string) => void; 
   isReady?: boolean; 
+  isActive?: boolean;
 }) {
   const { t } = useLanguage();
   const { products } = useProducts();
@@ -53,7 +55,7 @@ export default function HomePage({
   const {
     sectionRef: categoriesSectionRef,
     registerVideoRef,
-  } = useSynchronizedCategoryVideos();
+  } = useSynchronizedCategoryVideos({ isActive });
 
   const featuredProducts = useMemo(() => {
     const available = products.filter(p => isProductInStockForUser(p, profile, isEffectiveAdmin, hideOutOfStock));
@@ -71,32 +73,7 @@ export default function HomePage({
     return counts;
   }, [products]);
 
-  // Touch scroll guard to prevent accidental navigation while swiping
-  const touchStartY = useRef<number | null>(null);
-  const touchStartX = useRef<number | null>(null);
-  const hasMoved = useRef(false);
-
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartX.current = e.touches[0].clientX;
-    touchStartY.current = e.touches[0].clientY;
-    hasMoved.current = false;
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (touchStartX.current === null || touchStartY.current === null) return;
-    const dx = Math.abs(e.touches[0].clientX - touchStartX.current);
-    const dy = Math.abs(e.touches[0].clientY - touchStartY.current);
-    if (dx > 8 || dy > 8) {
-      hasMoved.current = true;
-    }
-  };
-
-  const handleCatalogNavigate = (e: React.MouseEvent) => {
-    if (hasMoved.current) {
-      e.preventDefault();
-      e.stopPropagation();
-      return;
-    }
+  const handleCatalogNavigate = () => {
     if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }
@@ -107,15 +84,13 @@ export default function HomePage({
     <div className="pb-16 lg:pb-0">
       {/* ── Hero Video Banner (Pure animation + Harmonious End-State CTA) ── */}
       <section className="relative w-full bg-[#0a0a0c] pt-[60px] sm:pt-[70px] lg:pt-[74px]">
-        <HeroBannerMedia onNavigate={onNavigate} isReady={isReady} />
+        <HeroBannerMedia onNavigate={onNavigate} isReady={isReady} isActive={isActive} />
         {/* Mobile Action Bar: Variant 4 (Editorial Minimal Outline Pill) - Compact, zero blue bloat */}
         <div className="block sm:hidden px-6 pt-2 pb-6 max-w-xs mx-auto select-none relative z-20">
           <button
             type="button"
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
             onClick={handleCatalogNavigate}
-            className="w-full flex items-center justify-center gap-2 h-11 px-5 rounded-full border border-white/40 bg-white/[0.04] backdrop-blur-xs text-white text-xs font-semibold uppercase tracking-[0.16em] transition-all duration-200 active:scale-[0.98] hover:bg-white/[0.08] hover:border-white/60 cursor-pointer shadow-sm shadow-black/60"
+            className="w-full flex items-center justify-center gap-2 h-11 px-5 rounded-full border border-white/40 bg-white/[0.04] text-white text-xs font-semibold uppercase tracking-[0.16em] transition-all duration-200 active:scale-[0.98] hover:bg-white/[0.08] hover:border-white/60 cursor-pointer shadow-sm shadow-black/60 touch-manipulation"
             aria-label={t('home.hero_cta')}
           >
             <span>{t('home.hero_cta')}</span>
@@ -247,7 +222,7 @@ export default function HomePage({
                         {...({ 'webkit-playsinline': 'true' } as any)}
                         disablePictureInPicture
                         disableRemotePlayback
-                        preload="auto"
+                        preload={typeof window !== 'undefined' && window.innerWidth < 768 ? 'metadata' : 'auto'}
                         poster={category.poster || category.image}
                         style={{ willChange: 'transform' }}
                         className={`h-full w-full object-contain mix-blend-screen transition-transform duration-500 ${mediaScale}`}

@@ -117,6 +117,13 @@ export const tr: TranslationDictionary = {
   'catalog.stock_reservations': 'Rezervasyonlar',
   'catalog.in_stock_badge': 'Stokta',
   'catalog.total_found': 'Bulunan ürün sayısı:',
+  'catalog.found': 'Bulunan',
+  'catalog.stock_free': 'Stok',
+  'catalog.stock_reserve': 'Rezerve',
+  'catalog.stock_to_ship': 'Sevkiyata Hazır',
+  'catalog.stock_total': 'Toplam',
+  'catalog.clients_link': 'müşteriler ↗',
+  'catalog.reserve_hint': 'Müşterileri ve rezervasyon hacmini görmek için tıklayın',
 
   // Ürün ve Kart
   'product.back_catalog': 'Kataloğa Geri Dön',

@@ -22,7 +22,7 @@ export default function MobileNav({ currentPage, onNavigate }: MobileNavProps) {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-100 bg-white/95 backdrop-blur-md lg:hidden">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-200 bg-white shadow-sm lg:hidden">
       <div className="flex h-16 items-stretch">
         {tabs.map(({ icon: Icon, label, page }) => {
           const active = currentPage === page || (page === 'profile' && currentPage === 'login');

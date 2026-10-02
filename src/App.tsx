@@ -394,7 +394,7 @@ export default function App() {
                         inert={page !== 'home' ? '' : undefined}
                         aria-hidden={page !== 'home' ? true : undefined}
                       >
-                        <HomePage onNavigate={navigate} isReady={preloaderDone} />
+                        <HomePage onNavigate={navigate} isReady={preloaderDone} isActive={page === 'home'} />
                       </div>
                       {page !== 'home' && renderPage()}
                     </Suspense>
