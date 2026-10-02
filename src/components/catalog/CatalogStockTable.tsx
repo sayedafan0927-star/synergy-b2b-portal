@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { Download, Minus, Plus, ShoppingCart, Check } from 'lucide-react';
 import type { PageId, Product, ProductVariant, Warehouse } from '@/types';
 import { parseSizeDimensions } from '@/types';
+import { triggerFileDownload } from '@/lib/erpApi';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -143,12 +144,7 @@ export function CatalogStockTable({
     });
     const content = BOM + [header, ...rows].join('\n');
     const blob = new Blob([content], { type: 'application/vnd.ms-excel;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${collection}_${warehouse}.xls`;
-    a.click();
-    URL.revokeObjectURL(url);
+    triggerFileDownload(blob, `${collection}_${warehouse}.xls`);
   }
 
   if (filteredProducts.length === 0) return null;

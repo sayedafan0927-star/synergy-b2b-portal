@@ -218,13 +218,24 @@ export async function downloadDiscrepancyAct(
 export function triggerFileDownload(blob: Blob, filename: string): void {
   const blobUrl = URL.createObjectURL(blob);
   const tempLink = document.createElement('a');
+  tempLink.id = `download-anchor-${Date.now()}`;
   tempLink.style.display = 'none';
   tempLink.href = blobUrl;
   tempLink.setAttribute('download', filename);
   document.body.appendChild(tempLink);
-  tempLink.click();
-  document.body.removeChild(tempLink);
-  setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
+  try {
+    tempLink.click();
+  } catch (err) {
+    console.warn('[triggerFileDownload] a.click() failed, trying window.open:', err);
+    window.open(blobUrl, '_blank');
+  } finally {
+    setTimeout(() => {
+      if (tempLink.parentNode) {
+        tempLink.parentNode.removeChild(tempLink);
+      }
+      URL.revokeObjectURL(blobUrl);
+    }, 4000);
+  }
 }
 
 /**

@@ -15,6 +15,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { useCart } from '@/contexts/CartContext';
 import { useToast } from '@/contexts/ToastContext';
 import { normalizeDimensions } from '@/lib/searchNormalization';
+import { triggerFileDownload } from '@/lib/erpApi';
 import { BulkParsedRowItem, type ParsedBulkRow } from './bulk/BulkParsedRowItem';
 import type { Product, ProductVariant } from '@/types';
 
@@ -39,12 +40,7 @@ export function ExcelBulkOrderModal({ isOpen, onClose }: ExcelBulkOrderModalProp
   const handleDownloadTemplate = () => {
     const csvContent = 'Артикул;Размер;Количество\nFLORA 9568B;2x3;5\nSILK ROAD 102;1.6x2.3;2\nVINTAGE 405;2.4x3.4;1';
     const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'synergy_b2b_bulk_order_template.csv';
-    link.click();
-    URL.revokeObjectURL(url);
+    triggerFileDownload(blob, 'synergy_b2b_bulk_order_template.csv');
   };
 
 function sanitizeSpreadsheetCell(value: string): string {
