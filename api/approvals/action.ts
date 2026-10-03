@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { verifySignedDecisionToken } from './whatsapp';
 import { getErpApiKey, getTargetErpUrl } from '../lib/erpKey';
 import { triggerImmediateOutboxSync } from '../modules/orders/orderDispatcher';
+import { renderConfirmationPrompt, renderHtmlResult } from './renderHtml';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
@@ -63,22 +64,59 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
       // 2.0. Валидация заказа и защита от Replay-атак / случайных повторных кликов
       let existingOrder: any = null;
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(orderId).trim());
       if (supabase) {
-        const { data } = await supabase
-          .from('orders')
-          .select('id, order_number, status, reservations_released, created_at, notes')
-          .or(`id.eq.${orderId},order_number.eq.${orderId}`)
-          .maybeSingle();
-        existingOrder = data;
+        try {
+          let q = supabase
+            .from('orders')
+            .select('id, order_number, status, reservations_released, created_at, notes');
+          if (isUuid) {
+            q = q.or(`id.eq.${orderId},order_number.eq.${orderId}`);
+          } else {
+            q = q.eq('order_number', String(orderId));
+          }
+          const { data } = await q.maybeSingle();
+          existingOrder = data;
+        } catch (dbErr) {
+          console.warn('[Approval Action] Supabase order query notice:', dbErr);
+        }
+      }
+
+      // Fallback: Поиск заказа напрямую в ERP, если в локальной базе нет или передан ERP ID
+      if (!existingOrder && SERVER_ERP_KEY) {
+        try {
+          const erpCheckRes = await fetch(`${TARGET_ERP_URL}?action=orders&limit=25`, {
+            headers: {
+              'X-Portal-Key': SERVER_ERP_KEY,
+              Authorization: `Bearer ${SERVER_ERP_KEY}`,
+            },
+          });
+          const erpCheckData = await erpCheckRes.json();
+          const matchOrder = erpCheckData?.orders?.find((o: any) =>
+            String(o.id) === String(orderId) || String(o.doc_number) === String(orderId)
+          );
+          if (matchOrder) {
+            existingOrder = {
+              id: matchOrder.id,
+              order_number: matchOrder.doc_number,
+              status: matchOrder.status_code || 'pending',
+              created_at: matchOrder.date,
+              notes: matchOrder.comment,
+              is_erp_direct: true,
+            };
+          }
+        } catch (erpFindErr) {
+          console.warn('[Approval Action] ERP direct lookup notice:', erpFindErr);
+        }
       }
 
       if (!existingOrder) {
-        return res.status(404).send(renderHtmlResult(false, 'Заказ не найден в базе данных портала.'));
+        return res.status(404).send(renderHtmlResult(false, 'Заказ не найден в базе данных портала и ERP.'));
       }
 
       // Разрешенные статусы для согласования: только pending или processing
       const allowedStatuses = ['pending', 'processing'];
-      if (!allowedStatuses.includes(existingOrder.status)) {
+      if (!allowedStatuses.includes(existingOrder.status) && !existingOrder.is_erp_direct) {
         const currentStatus = existingOrder.status;
         const msg = currentStatus === 'confirmed'
           ? `Заказ №${existingOrder.order_number || existingOrder.id} уже был ранее одобрен и передан на комплектацию.`
@@ -183,6 +221,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Заказ уже был создан в 1С: обновляем статус через API
         const erpUrl = `${TARGET_ERP_URL}?action=update_order_status`;
         try {
+          let numericErpOrderId: number | null = null;
+          if (typeof existingOrder.id === 'number' && existingOrder.id > 0) {
+            numericErpOrderId = existingOrder.id;
+          } else if (typeof orderId === 'number' && orderId > 0) {
+            numericErpOrderId = orderId;
+          } else if (/^\d+$/.test(String(orderId).trim())) {
+            numericErpOrderId = Number(String(orderId).trim());
+          }
+
+          if (!numericErpOrderId) {
+            try {
+              const listRes = await fetch(`${TARGET_ERP_URL}?action=orders&limit=25`, {
+                headers: { 'X-Portal-Key': SERVER_ERP_KEY, Authorization: `Bearer ${SERVER_ERP_KEY}` },
+              });
+              const listData = await listRes.json();
+              const found = listData?.orders?.find((o: any) =>
+                o.doc_number === targetOrderNumber || String(o.id) === String(orderId)
+              );
+              if (found?.id) numericErpOrderId = Number(found.id);
+            } catch {}
+          }
+
           const controller = new AbortController();
           const timeout = setTimeout(() => controller.abort(), 3500);
           await fetch(erpUrl, {
@@ -192,13 +252,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               'X-Portal-Key': SERVER_ERP_KEY,
             },
             body: JSON.stringify({
-              order_id: targetOrderNumber,
+              order_id: numericErpOrderId || targetOrderNumber,
               status: newStatus,
               comment: `Решение подтверждено менеджером в WhatsApp (${statusLabel}) в ${new Date().toLocaleString('ru-RU')}`,
             }),
             signal: controller.signal,
           }).finally(() => clearTimeout(timeout));
-          console.log(`[Approval Action] Synced order status ${newStatus} to ERP for order ${targetOrderNumber}`);
+          console.log(`[Approval Action] Synced order status ${newStatus} to ERP for order ${targetOrderNumber} (ERP ID: ${numericErpOrderId})`);
         } catch (erpErr: any) {
           console.warn('[Approval Action] Notice syncing with ERP:', erpErr?.message);
         }
@@ -231,196 +291,4 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   return res.status(405).send('Method Not Allowed');
-}
-
-/**
- * Интерактивная форма подтверждения (защита от краулеров мессенджеров)
- */
-function renderConfirmationPrompt(params: {
-  orderId: string;
-  decision: string;
-  token: string;
-  statusLabel: string;
-  statusColor: string;
-  isApprove: boolean;
-}): string {
-  return `<!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Подтверждение решения | Synergy B2B</title>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-      background: #f8fafc;
-      color: #0f172a;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      margin: 0;
-      padding: 16px;
-    }
-    .card {
-      background: #ffffff;
-      border-radius: 16px;
-      padding: 32px;
-      max-width: 440px;
-      width: 100%;
-      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
-      border: 1px solid #e2e8f0;
-      text-align: center;
-    }
-    .badge {
-      display: inline-block;
-      padding: 6px 14px;
-      border-radius: 9999px;
-      font-weight: 700;
-      font-size: 13px;
-      letter-spacing: 0.05em;
-      color: #ffffff;
-      background: ${params.statusColor};
-      margin-bottom: 16px;
-    }
-    h1 {
-      font-size: 20px;
-      font-weight: 700;
-      margin: 0 0 12px;
-      color: #0f172a;
-    }
-    p {
-      color: #475569;
-      font-size: 14px;
-      line-height: 1.5;
-      margin: 0 0 24px;
-    }
-    .btn {
-      display: block;
-      width: 100%;
-      padding: 14px 20px;
-      font-size: 15px;
-      font-weight: 600;
-      color: #ffffff;
-      background: ${params.statusColor};
-      border: none;
-      border-radius: 10px;
-      cursor: pointer;
-      box-sizing: border-box;
-      transition: opacity 0.2s;
-    }
-    .btn:hover { opacity: 0.9; }
-    .footer {
-      font-size: 12px;
-      color: #94a3b8;
-      border-top: 1px solid #f1f5f9;
-      padding-top: 16px;
-      margin-top: 24px;
-    }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <div class="badge">${params.statusLabel}</div>
-    <h1>Подтверждение действия</h1>
-    <p>Вы собираетесь <strong>${params.isApprove ? 'ОДОБРИТЬ' : 'ОТКЛОНИТЬ'}</strong> отгрузку по заказу <strong>№${params.orderId}</strong>.</p>
-    <form method="POST" action="/api/approvals/action">
-      <input type="hidden" name="token" value="${params.token}">
-      <button type="submit" class="btn">
-        ${params.isApprove ? '✅ Подтвердить и одобрить заказ' : '❌ Подтвердить отклонение заказа'}
-      </button>
-    </form>
-    <div class="footer">
-      Synergy B2B Portal • Безопасный шлюз согласования
-    </div>
-  </div>
-</body>
-</html>`;
-}
-
-function renderHtmlResult(success: boolean, message: string, badgeLabel?: string, badgeColor?: string, orderId?: string): string {
-  return `<!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Решение по заказу | Synergy B2B</title>
-  <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-      background: #f8fafc;
-      color: #0f172a;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      margin: 0;
-      padding: 16px;
-    }
-    .card {
-      background: #ffffff;
-      border-radius: 16px;
-      padding: 32px;
-      max-width: 440px;
-      width: 100%;
-      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
-      border: 1px solid #e2e8f0;
-      text-align: center;
-    }
-    .icon-wrapper {
-      width: 64px;
-      height: 64px;
-      border-radius: 50%;
-      background: ${success ? (badgeLabel === 'ОДОБРЕНИЕ' ? '#ecfdf5' : '#fef2f2') : '#fef2f2'};
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin: 0 auto 20px;
-      font-size: 32px;
-    }
-    .badge {
-      display: inline-block;
-      padding: 4px 12px;
-      border-radius: 9999px;
-      font-weight: 700;
-      font-size: 13px;
-      letter-spacing: 0.05em;
-      color: #ffffff;
-      background: ${badgeColor || '#64748b'};
-      margin-bottom: 12px;
-    }
-    h1 {
-      font-size: 20px;
-      font-weight: 700;
-      margin: 0 0 12px;
-      color: #0f172a;
-    }
-    p {
-      color: #475569;
-      font-size: 14px;
-      line-height: 1.5;
-      margin: 0 0 24px;
-    }
-    .footer {
-      font-size: 12px;
-      color: #94a3b8;
-      border-top: 1px solid #f1f5f9;
-      padding-top: 16px;
-    }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <div class="icon-wrapper">
-      ${success ? (badgeLabel === 'ОДОБРЕНИЕ' ? '✅' : '❌') : '⚠️'}
-    </div>
-    ${badgeLabel ? `<div class="badge">${badgeLabel}</div>` : ''}
-    <h1>${success ? 'Решение зафиксировано' : 'Ошибка обработки'}</h1>
-    <p>${message}</p>
-    <div class="footer">
-      Synergy B2B Portal • Интеграционный шлюз ERP
-    </div>
-  </div>
-</body>
-</html>`;
 }
