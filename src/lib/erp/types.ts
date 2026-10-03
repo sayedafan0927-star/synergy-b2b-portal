@@ -110,6 +110,27 @@ export interface PaginatedCatalogResult {
   error?: string;
 }
 
+export interface Counterparty {
+  id: number | string;
+  name: string;
+  phone?: string;
+  city?: string;
+  address?: string;
+  bin?: string;
+  status?: string;
+  access?: string;
+  is_active?: number | boolean | string;
+  portal_access_enabled?: number | boolean | string;
+  is_archived?: boolean | number;
+  archived?: boolean | number;
+  is_archived_or_mailing?: boolean;
+  is_acting_client?: boolean;
+  price_type?: string;
+  debt_usd?: number;
+  balance_usd?: number;
+  [key: string]: any;
+}
+
 export interface ErpClientAuthResult {
   success: boolean;
   code?: 'CLIENT_DEACTIVATED' | 'AUTH_FAILED' | 'NETWORK_ERROR' | string;

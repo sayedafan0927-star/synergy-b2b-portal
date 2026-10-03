@@ -62,6 +62,8 @@ export {
   refreshLiveClientBalance,
 } from './erp/counterpartiesApi';
 
+export type { Counterparty } from './erp/types';
+
 export {
   fetchSupplierNetworkStock,
   fetchSupplierInboundShipments,

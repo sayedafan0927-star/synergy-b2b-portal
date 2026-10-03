@@ -321,6 +321,8 @@ export function CartCheckoutForm({
             </button>
           )}
         </div>
+      )}
+
       {/* ─── 3.5. Селектор режима оформления для менеджеров и администраторов ─── */}
       {isStaff && setCheckoutMode && onSelectClient && (
         <ManagerOrderSelector
