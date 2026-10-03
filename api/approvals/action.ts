@@ -171,7 +171,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Определение нового статуса:
       // Если заказ еще в буфере Outbox (pending) и одобрен, статус 'pending' сохраняется,
       // добавляется отметка одобрения в notes и немедленно активируется воркер Outbox.
-      const isBufferedOutbox = existingOrder.status === 'pending';
+      const isBufferedOutbox = existingOrder.status === 'pending' && !existingOrder.is_erp_direct;
       const newStatus = !isApprove
         ? 'cancelled'
         : (isBufferedOutbox ? 'pending' : 'confirmed');
@@ -237,8 +237,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         } catch (syncErr: any) {
           console.warn('[Approval Action] Outbox trigger notice:', syncErr?.message);
         }
-      } else if (SERVER_ERP_KEY) {
-        // Заказ уже был создан в 1С: обновляем статус через API
+      }
+
+      // Всегда синхронизируем статус с 1C:ERP, если заказ существует в 1С
+      if (SERVER_ERP_KEY && (!isBufferedOutbox || existingOrder.is_erp_direct)) {
         const erpUrl = `${TARGET_ERP_URL}?action=update_order_status`;
         try {
           let numericErpOrderId: number | null = null;
@@ -263,8 +265,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             } catch {}
           }
 
+          const erpStatus = isApprove ? 'picking' : 'cancelled';
           const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 3500);
+          const timeout = setTimeout(() => controller.abort(), 4500);
           await fetch(erpUrl, {
             method: 'POST',
             headers: {
@@ -273,12 +276,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             },
             body: JSON.stringify({
               order_id: numericErpOrderId || targetOrderNumber,
-              status: newStatus,
-              comment: `Решение подтверждено менеджером в WhatsApp (${statusLabel}) в ${new Date().toLocaleString('ru-RU')}`,
+              status: erpStatus,
+              comment: `Решение подтверждено менеджером в WhatsApp (${statusLabel}) в ${new Date().toLocaleString('ru-RU')}. Передано в WMS ТСД.`,
             }),
             signal: controller.signal,
           }).finally(() => clearTimeout(timeout));
-          console.log(`[Approval Action] Synced order status ${newStatus} to ERP for order ${targetOrderNumber} (ERP ID: ${numericErpOrderId})`);
+          console.log(`[Approval Action] Synced order status ${erpStatus} to ERP for order ${targetOrderNumber} (ERP ID: ${numericErpOrderId})`);
         } catch (erpErr: any) {
           console.warn('[Approval Action] Notice syncing with ERP:', erpErr?.message);
         }
@@ -300,10 +303,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       } catch {}
 
       const successMessage = isApprove
-        ? `Заказ №${orderId} успешно ОДОБРЕН и передан в WMS на комплектацию склада.`
-        : `Заказ №${orderId} успешно ОТКЛОНЕН. Резервирование товаров аннулировано в 1С:ERP.`;
+        ? `Заказ №${targetOrderNumber} успешно ОДОБРЕН и передан в WMS на комплектацию склада (статус: На сборке WMS).`
+        : `Заказ №${targetOrderNumber} успешно ОТКЛОНЕН. Резервирование товаров аннулировано в 1С:ERP и WMS.`;
 
-      return res.status(200).send(renderHtmlResult(true, successMessage, statusLabel, statusColor, String(orderId)));
+      return res.status(200).send(renderHtmlResult(true, successMessage, statusLabel, statusColor, String(targetOrderNumber)));
     } catch (err: any) {
       console.error('[Approval Action] Server execution error:', err);
       return res.status(500).send(renderHtmlResult(false, `Внутренняя ошибка обработки решения: ${err?.message}`));

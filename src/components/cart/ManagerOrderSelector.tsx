@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
-import { UserCheck, Building2, Search, X, Loader2, Check, MessageSquare, Send, CheckCircle2 } from 'lucide-react';
-import { fetchCounterpartiesFromErp, type Counterparty } from '@/lib/erpApi';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { UserCheck, Building2, Search, X, Loader2, Check, MessageSquare, Send, CheckCircle2, RotateCw } from 'lucide-react';
+import { fetchCounterpartiesFromErp, fetchClientOrdersFromErp, type Counterparty } from '@/lib/erpApi';
 import { useToast } from '@/contexts/ToastContext';
 
 interface ManagerOrderSelectorProps {
@@ -26,13 +26,45 @@ export function ManagerOrderSelector({
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Admin WhatsApp approval testing states
+  // Admin WhatsApp approval testing states for real orders
   const [showTestBox, setShowTestBox] = useState(false);
   const [testPhone, setTestPhone] = useState('87086984543');
+  const [recentOrders, setRecentOrders] = useState<any[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
+  const [selectedOrderId, setSelectedOrderId] = useState<string>('55');
   const [isSendingTest, setIsSendingTest] = useState(false);
   const [testSuccessNotice, setTestSuccessNotice] = useState<string | null>(null);
 
   const { success: toastSuccess, error: toastError } = useToast();
+
+  const loadRecentOrders = useCallback(async () => {
+    setLoadingOrders(true);
+    try {
+      const res = await fetchClientOrdersFromErp({ limit: 10 });
+      if (res && Array.isArray(res.orders)) {
+        setRecentOrders(res.orders);
+        if (res.orders.length > 0) {
+          // Preselect latest pending order if any, else latest order
+          const pending = res.orders.find((o: any) => o.status_code === 'pending');
+          if (pending) {
+            setSelectedOrderId(String(pending.id));
+          } else if (!selectedOrderId) {
+            setSelectedOrderId(String(res.orders[0].id));
+          }
+        }
+      }
+    } catch {
+      // Non-blocking
+    } finally {
+      setLoadingOrders(false);
+    }
+  }, [selectedOrderId]);
+
+  useEffect(() => {
+    if (isAdmin && showTestBox) {
+      loadRecentOrders();
+    }
+  }, [isAdmin, showTestBox, loadRecentOrders]);
 
   const handleSendTestApproval = async () => {
     const cleanDigits = testPhone.replace(/\D+/g, '');
@@ -40,6 +72,10 @@ export function ManagerOrderSelector({
       toastError('Укажите корректный номер телефона (например, 87086984543)');
       return;
     }
+
+    const currentOrder = recentOrders.find((o: any) => String(o.id) === String(selectedOrderId));
+    const targetOrderId = currentOrder ? currentOrder.id : (Number(selectedOrderId) || 55);
+    const targetDoc = currentOrder?.doc_number || `ORD-${targetOrderId}`;
 
     setIsSendingTest(true);
     setTestSuccessNotice(null);
@@ -49,24 +85,26 @@ export function ManagerOrderSelector({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          order_id: `TEST-${Math.floor(1000 + Math.random() * 9000)}`,
-          order_doc_number: `ORD-TEST-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-ADMIN`,
-          client_name: selectedClient?.name || 'ТОО «Тестовый Партнер Synergy»',
-          client_phone: '+7 (708) 698-45-43',
+          order_id: targetOrderId,
+          order_doc_number: targetDoc,
+          client_name: currentOrder?.client_name || selectedClient?.name || 'Хоум Стар ИП (Казмарт)',
+          client_phone: currentOrder?.client_phone || '87086984543',
           manager_phone: cleanDigits,
-          total_amount: 150000,
-          total_sqm: 45.8,
-          items_count: 2,
-          reason: 'Тестовая проверка аппрува отгрузки (Администратор)',
+          total_amount: currentOrder?.total_amount || 87.56,
+          total_sqm: currentOrder?.total_sqm || 6.9,
+          items_count: currentOrder?.items_count || 1,
+          reason: 'Проверка сквозной цепочки согласования (ERP / WMS ТСД)',
         }),
       });
 
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success !== false) {
-        toastSuccess(`Запрос на согласование отправлен в WhatsApp на номер +${cleanDigits}!`);
-        setTestSuccessNotice(`Тестовый запрос отправлен на номер +${cleanDigits}! Откройте WhatsApp и нажмите ссылку для проверки реакции системы.`);
+        toastSuccess(`Запрос на согласование заказа №${targetDoc} отправлен в WhatsApp!`);
+        setTestSuccessNotice(
+          `Запрос по реальному заказу №${targetDoc} (ID: ${targetOrderId}) отправлен в WhatsApp на +${cleanDigits}. Нажмите «Одобрить» на телефоне — заказ перейдет в статус «На сборке WMS» (picking) и появится в ТСД.`
+        );
       } else {
-        toastError(data.error || 'Не удалось отправить тестовое сообщение в WhatsApp');
+        toastError(data.error || 'Не удалось отправить согласование в WhatsApp');
       }
     } catch (err: any) {
       toastError(`Ошибка отправки: ${err?.message || 'сбой сети'}`);
@@ -115,6 +153,8 @@ export function ManagerOrderSelector({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const selectedOrderObj = recentOrders.find((o: any) => String(o.id) === String(selectedOrderId));
+
   return (
     <div className="rounded-xl border border-slate-200/90 bg-slate-50/80 p-3.5 space-y-3 shadow-2xs">
       <div className="flex items-center justify-between gap-2">
@@ -136,21 +176,21 @@ export function ManagerOrderSelector({
                 ? 'bg-brand-700 text-white border-brand-700 shadow-2xs'
                 : 'bg-white hover:bg-slate-100 text-brand-700 border-brand-300/80 shadow-2xs'
             }`}
-            title="Проверить интерактивное согласование в WhatsApp"
+            title="Проверить боевое согласование в WhatsApp"
           >
             <MessageSquare className="h-3.5 w-3.5 text-brand-600" />
-            <span>Тест WhatsApp</span>
+            <span>Тест цепочки согласования</span>
           </button>
         )}
       </div>
 
-      {/* Панель тестирования WhatsApp согласования для администратора */}
+      {/* Панель боевого тестирования WhatsApp согласования для администратора */}
       {isAdmin && showTestBox && (
         <div className="rounded-lg bg-white border border-brand-200 p-3 text-xs space-y-2.5 shadow-xs animate-in fade-in">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1.5 font-bold text-slate-900">
               <Send className="h-3.5 w-3.5 text-brand-600" />
-              <span>Проверка согласования в WhatsApp</span>
+              <span>Сквозная проверка WhatsApp-согласования (ERP / WMS ТСД)</span>
             </div>
             <button
               type="button"
@@ -160,10 +200,49 @@ export function ManagerOrderSelector({
               <X className="h-3.5 w-3.5" />
             </button>
           </div>
+
           <p className="text-[11px] text-slate-600 leading-tight">
-            Отправляет тестовое согласование на указанный номер через шлюз ERP. Вы сможете нажать «Одобрить» или «Отклонить» прямо на телефоне и проверить реакцию системы.
+            Выберите <strong>реальный заказ из 1С:ERP</strong> для отправки боевого запроса на телефон. При одобрении статус в 1С изменится на <em>«На сборке WMS» (picking)</em> и заказ поступит в ТСД склада. При отклонении — бронь аннулируется.
           </p>
-          <div className="flex items-center gap-2">
+
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-[11px]">
+              <label className="font-semibold text-slate-700">Заказ в базе 1С:ERP:</label>
+              <button
+                type="button"
+                onClick={loadRecentOrders}
+                disabled={loadingOrders}
+                className="text-brand-600 hover:text-brand-800 flex items-center gap-1 font-medium cursor-pointer"
+              >
+                <RotateCw className={`h-3 w-3 ${loadingOrders ? 'animate-spin' : ''}`} />
+                <span>Обновить статус из ERP</span>
+              </button>
+            </div>
+
+            <select
+              value={selectedOrderId}
+              onChange={e => setSelectedOrderId(e.target.value)}
+              className="input-field text-xs h-8 py-1 px-2 bg-slate-50 w-full border-slate-200 focus:border-brand-500 font-mono"
+            >
+              {recentOrders.map(o => (
+                <option key={o.id} value={o.id}>
+                  Заказ №{o.doc_number || o.id} (ID: {o.id}) — ${Number(o.total_amount || 0).toFixed(2)} — статус: [{o.status_code || o.status}]
+                </option>
+              ))}
+              {recentOrders.length === 0 && (
+                <option value="55">Заказ №ORD-WEB-20261003-DE0F (ID: 55)</option>
+              )}
+            </select>
+
+            {selectedOrderObj && (
+              <div className="text-[11px] text-slate-600 pt-0.5 flex items-center justify-between">
+                <span>Текущий статус в ERP: <strong className="text-slate-900">{selectedOrderObj.status} ({selectedOrderObj.status_code})</strong></span>
+                <span>Клиент: {selectedOrderObj.client_name}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 pt-1">
             <input
               type="tel"
               value={testPhone}
@@ -174,13 +253,14 @@ export function ManagerOrderSelector({
             <button
               type="button"
               onClick={handleSendTestApproval}
-              disabled={isSendingTest}
+              disabled={isSendingTest || loadingOrders}
               className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs transition-colors cursor-pointer shadow-2xs disabled:opacity-50"
             >
               {isSendingTest ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-              <span>{isSendingTest ? 'Отправка...' : 'Отправить'}</span>
+              <span>{isSendingTest ? 'Отправка...' : 'Отправить в WhatsApp'}</span>
             </button>
           </div>
+
           {testSuccessNotice && (
             <div className="flex items-start gap-1.5 p-2 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-900 text-[11px] leading-tight">
               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0 mt-0.5" />
