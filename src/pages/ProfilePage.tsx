@@ -40,12 +40,43 @@ import {
 
 type TabId = 'orders' | 'supplier-portal' | 'admin-erp' | 'admin-users' | 'admin-display' | 'settings';
 
-export default function ProfilePage({ onNavigate }: { onNavigate: (page: PageId) => void }) {
+export default function ProfilePage({
+  onNavigate,
+  initialTab,
+}: {
+  onNavigate: (page: PageId, id?: string, tab?: string) => void;
+  initialTab?: string;
+}) {
   const { user, profile, loading, signOut, isAdmin, realIsAdmin, isManager, isSupplier } = useAuth();
   const { t } = useLanguage();
   const adminAccess = realIsAdmin;
   const clientsAccess = realIsAdmin || isManager;
-  const [activeTab, setActiveTab] = useState<TabId>(isSupplier ? 'supplier-portal' : 'orders');
+
+  const [activeTab, setActiveTabState] = useState<TabId>(() => {
+    const validTabs: TabId[] = ['orders', 'supplier-portal', 'admin-erp', 'admin-users', 'admin-display', 'settings'];
+    if (initialTab && validTabs.includes(initialTab as TabId)) {
+      return initialTab as TabId;
+    }
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const urlTab = params.get('tab');
+      if (urlTab && validTabs.includes(urlTab as TabId)) return urlTab as TabId;
+      const storedTab = sessionStorage.getItem('synergy:profile_tab');
+      if (storedTab && validTabs.includes(storedTab as TabId)) return storedTab as TabId;
+    }
+    return isSupplier ? 'supplier-portal' : 'orders';
+  });
+
+  const setActiveTab = (tab: TabId) => {
+    setActiveTabState(tab);
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('synergy:profile_tab', tab);
+      const url = new URL(window.location.href);
+      url.searchParams.set('page', 'profile');
+      url.searchParams.set('tab', tab);
+      window.history.replaceState({ page: 'profile', tab }, '', url.pathname + url.search);
+    }
+  };
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [clientDebt, setClientDebt] = useState<ClientDebtReport | null>(null);
   const [loadingDebt, setLoadingDebt] = useState<boolean>(false);

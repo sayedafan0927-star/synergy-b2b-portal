@@ -53,9 +53,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const ssoParam = urlParams.get('sso_session');
       if (ssoParam) {
         urlParams.delete('sso_session');
+        const targetPage = urlParams.get('page') || 'profile';
+        if (!urlParams.has('page')) urlParams.set('page', targetPage);
         const newSearch = urlParams.toString();
         const cleanUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '');
-        window.history.replaceState({ page: 'profile' }, document.title, cleanUrl);
+        window.history.replaceState({ page: targetPage }, document.title, cleanUrl);
 
         try {
           const p = JSON.parse(atob(ssoParam.replace(/-/g, '+').replace(/_/g, '/')));

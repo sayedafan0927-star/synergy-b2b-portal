@@ -149,13 +149,19 @@ export async function requestSignedClientToken(clientProfile: Profile, mockUser:
 
 export function getStoredAuthSession(): { user: User; profile: Profile; token?: string } | null {
   if (typeof window === 'undefined') return null;
-  const stored = sessionStorage.getItem(AUTH_SESSION_KEY) || sessionStorage.getItem(DEMO_AUTH_KEY);
+  const stored =
+    sessionStorage.getItem(AUTH_SESSION_KEY) ||
+    sessionStorage.getItem(DEMO_AUTH_KEY) ||
+    localStorage.getItem(AUTH_SESSION_KEY) ||
+    localStorage.getItem(DEMO_AUTH_KEY);
   if (!stored) return null;
   try {
     return JSON.parse(stored);
   } catch {
     sessionStorage.removeItem(AUTH_SESSION_KEY);
     sessionStorage.removeItem(DEMO_AUTH_KEY);
+    localStorage.removeItem(AUTH_SESSION_KEY);
+    localStorage.removeItem(DEMO_AUTH_KEY);
     return null;
   }
 }
@@ -165,6 +171,10 @@ export function saveAuthSession(user: unknown, profile: Profile, token?: string)
   const payload = JSON.stringify({ user, profile, token, savedAt: Date.now() });
   sessionStorage.setItem(AUTH_SESSION_KEY, payload);
   sessionStorage.setItem(DEMO_AUTH_KEY, payload);
+  try {
+    localStorage.setItem(AUTH_SESSION_KEY, payload);
+    localStorage.setItem(DEMO_AUTH_KEY, payload);
+  } catch {}
 }
 
 export function renewSessionIfActive(user: unknown, profile: Profile): void {
@@ -183,4 +193,8 @@ export function clearAuthSession(): void {
   if (typeof window === 'undefined') return;
   sessionStorage.removeItem(AUTH_SESSION_KEY);
   sessionStorage.removeItem(DEMO_AUTH_KEY);
+  try {
+    localStorage.removeItem(AUTH_SESSION_KEY);
+    localStorage.removeItem(DEMO_AUTH_KEY);
+  } catch {}
 }

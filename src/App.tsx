@@ -54,6 +54,7 @@ const ProfilePage = lazyWithRetry(() => import('@/pages/ProfilePage'));
 import { useNetworkStatus } from '@/registerServiceWorker';
 import { initOfflineQueueAutoSync } from '@/lib/offlineOrderQueue';
 import OfflineBanner from '@/components/common/OfflineBanner';
+import Preloader from '@/components/common/Preloader';
 import type { PageId } from '@/types';
 
 function PageLoadingFallback({ page }: { page?: PageId }) {
@@ -103,70 +104,6 @@ function PageLoadingFallback({ page }: { page?: PageId }) {
   );
 }
 
-function Preloader({ onFinished }: { onFinished: () => void }) {
-  const [phase, setPhase] = useState<'logo' | 'expand' | 'done'>('logo');
-  const [imageReady, setImageReady] = useState(false);
-
-  useEffect(() => {
-    // Гарантируем полную готовность оптимизированного логотипа перед стартом анимации
-    const img = new Image();
-    img.src = '/Вектор_Синэнергия.png';
-    if (img.complete && img.naturalWidth > 0) {
-      setImageReady(true);
-    } else {
-      img.onload = () => setImageReady(true);
-      img.onerror = () => setImageReady(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    // Zero-Wait TTI: мгновенный переход без искусственных задержек для B2B-пользователей
-    const t = setTimeout(() => {
-      setPhase('done');
-      onFinished();
-    }, 50);
-    return () => clearTimeout(t);
-  }, [onFinished]);
-
-  return (
-    <div
-      className={`fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900 transition-opacity duration-400 ease-out ${
-        phase === 'done' ? 'opacity-0 pointer-events-none' : 'opacity-100'
-      }`}
-    >
-      {/* Radial glow behind logo */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div
-          className={`w-72 h-72 rounded-full bg-brand-600/30 blur-3xl transition-all duration-700 ${
-            phase === 'logo' ? 'scale-100 opacity-100' : 'scale-125 opacity-0'
-          }`}
-        />
-      </div>
-
-      {/* Logo container */}
-      <div
-        className={`relative flex flex-col items-center gap-5 transition-all duration-400 ease-out ${
-          phase === 'expand' ? 'scale-105 opacity-0 -translate-y-2' : 'scale-100 opacity-100 translate-y-0'
-        }`}
-      >
-        <img
-          src="/Вектор_Синэнергия.png"
-          alt="Synergiya Group"
-          onLoad={() => setImageReady(true)}
-          className={`h-28 sm:h-36 w-auto drop-shadow-2xl brightness-0 invert transition-opacity duration-300 ${
-            imageReady ? 'opacity-100 animate-preloader-logo' : 'opacity-0'
-          }`}
-        />
-        <div className={`flex items-center gap-2 transition-opacity duration-300 ${imageReady ? 'opacity-100' : 'opacity-0'}`}>
-          <div className="h-0.5 w-8 bg-brand-400 rounded-full animate-preloader-line-left" />
-          <div className="h-1.5 w-1.5 rounded-full bg-brand-400 animate-preloader-dot" />
-          <div className="h-0.5 w-8 bg-brand-400 rounded-full animate-preloader-line-right" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function MainLayout({ children, page, navigate, showFooter }: { children: React.ReactNode; page: PageId; navigate: (page: PageId, id?: string) => void; showFooter: boolean }) {
   const { isImpersonating, profile } = useAuth();
   const showBanner = Boolean(isImpersonating && profile);
@@ -182,7 +119,7 @@ function MainLayout({ children, page, navigate, showFooter }: { children: React.
   );
 }
 
-function parseUrlState(): { page: PageId; id?: string } {
+function parseUrlState(): { page: PageId; id?: string; tab?: string } {
   try {
     const rawPath = typeof window !== 'undefined' ? window.location.pathname.replace(/^\/+|\/+$/g, '') : '';
     if (rawPath && ['home', 'catalog', 'product', 'cart', 'contacts', 'login', 'profile'].includes(rawPath)) {
@@ -202,16 +139,29 @@ function parseUrlState(): { page: PageId; id?: string } {
     const collection = params.get('collection');
     if (collection) return { page: 'catalog', id: collection };
 
+    const tabParam = params.get('tab') || undefined;
+
     const pageParam = params.get('page') as PageId | null;
     if (pageParam && ['home', 'catalog', 'product', 'cart', 'contacts', 'login', 'profile'].includes(pageParam)) {
-      return { page: pageParam };
+      return { page: pageParam, tab: tabParam };
     }
 
     if (params.has('catalog')) return { page: 'catalog' };
     if (params.has('cart')) return { page: 'cart' };
     if (params.has('contacts')) return { page: 'contacts' };
     if (params.has('login')) return { page: 'login' };
-    if (params.has('profile')) return { page: 'profile' };
+    if (params.has('profile')) return { page: 'profile', tab: tabParam };
+
+    // Fallback restoration from sessionStorage if URL has no explicit query params
+    if (typeof window !== 'undefined') {
+      const stored = sessionStorage.getItem('synergy:last_active_route');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.page && ['home', 'catalog', 'product', 'cart', 'contacts', 'login', 'profile'].includes(parsed.page)) {
+          return { page: parsed.page, id: parsed.id, tab: parsed.tab };
+        }
+      }
+    }
   } catch {
     // fallback
   }
@@ -221,6 +171,7 @@ function parseUrlState(): { page: PageId; id?: string } {
 export default function App() {
   const [page, setPage] = useState<PageId>('home');
   const [productId, setProductId] = useState<string>('');
+  const [profileTab, setProfileTab] = useState<string | undefined>(undefined);
   const [catalogCollection, setCatalogCollection] = useState<string | undefined>(undefined);
   const [catalogCountry, setCatalogCountry] = useState<string | undefined>(undefined);
   const [catalogSearch, setCatalogSearch] = useState<string | undefined>(undefined);
@@ -228,12 +179,24 @@ export default function App() {
   const isOnline = useNetworkStatus();
   const [isPending, startTransition] = useTransition();
 
-  const navigate = useCallback((target: PageId, id?: string, pushToHistory = true) => {
+  const navigate = useCallback((target: PageId, id?: string, tabOrPush?: string | boolean, pushToHistory = true) => {
+    let tab: string | undefined = undefined;
+    let push = pushToHistory;
+
+    if (typeof tabOrPush === 'string') {
+      tab = tabOrPush;
+    } else if (typeof tabOrPush === 'boolean') {
+      push = tabOrPush;
+    }
+
     if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }
     startTransition(() => {
       setPage(target);
+      if (target === 'profile' && tab) {
+        setProfileTab(tab);
+      }
       if (target === 'catalog' && id?.startsWith('country:')) {
         setCatalogCountry(id.slice('country:'.length));
         setCatalogCollection(undefined);
@@ -254,7 +217,13 @@ export default function App() {
       if (id && target === 'product') setProductId(id);
     });
 
-    if (pushToHistory) {
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem('synergy:last_active_route', JSON.stringify({ page: target, id, tab, timestamp: Date.now() }));
+      } catch {}
+    }
+
+    if (push) {
       const url = new URL(window.location.href);
       url.search = '';
       if (target === 'product' && id) {
@@ -269,10 +238,13 @@ export default function App() {
         } else {
           url.searchParams.set('page', 'catalog');
         }
+      } else if (target === 'profile') {
+        url.searchParams.set('page', 'profile');
+        if (tab) url.searchParams.set('tab', tab);
       } else if (target !== 'home') {
         url.searchParams.set('page', target);
       }
-      window.history.pushState({ page: target, id }, '', url.pathname + url.search);
+      window.history.pushState({ page: target, id, tab }, '', url.pathname + url.search);
     }
 
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
@@ -295,10 +267,10 @@ export default function App() {
     const handlePopState = (event: PopStateEvent) => {
       const state = event.state;
       if (state && state.page) {
-        navigate(state.page, state.id, false);
+        navigate(state.page, state.id, state.tab, false);
       } else {
         const parsed = parseUrlState();
-        navigate(parsed.page, parsed.id, false);
+        navigate(parsed.page, parsed.id, parsed.tab, false);
       }
     };
 
@@ -309,9 +281,18 @@ export default function App() {
   // Первоначальное чтение URL при загрузке страницы
   useEffect(() => {
     const initial = parseUrlState();
-    if (initial.page !== 'home' || initial.id) {
-      navigate(initial.page, initial.id, false);
-      window.history.replaceState({ page: initial.page, id: initial.id }, '', window.location.href);
+    if (initial.page !== 'home' || initial.id || initial.tab) {
+      navigate(initial.page, initial.id, initial.tab, false);
+      const url = new URL(window.location.href);
+      if (url.searchParams.toString() === '') {
+        if (initial.page === 'product' && initial.id) url.searchParams.set('product', initial.id);
+        else if (initial.page === 'catalog') url.searchParams.set('page', 'catalog');
+        else if (initial.page === 'profile') {
+          url.searchParams.set('page', 'profile');
+          if (initial.tab) url.searchParams.set('tab', initial.tab);
+        } else if (initial.page !== 'home') url.searchParams.set('page', initial.page);
+      }
+      window.history.replaceState({ page: initial.page, id: initial.id, tab: initial.tab }, '', url.pathname + url.search);
     } else {
       window.history.replaceState({ page: 'home' }, '', window.location.href);
     }
@@ -368,7 +349,7 @@ export default function App() {
       case 'cart': return <CartPage onNavigate={navigate} />;
       case 'contacts': return <ContactsPage onNavigate={navigate} />;
       case 'login': return <LoginPage onNavigate={navigate} />;
-      case 'profile': return <ProfilePage onNavigate={navigate} />;
+      case 'profile': return <ProfilePage onNavigate={navigate} initialTab={profileTab} />;
       default: return null;
     }
   };
