@@ -208,7 +208,10 @@ export function useProducts(customDealerId?: string | number) {
       })
       .subscribe((status, err) => {
         if (status === 'CHANNEL_ERROR') {
-          console.warn('[Realtime] portal_live_updates channel error:', err?.message || status);
+          // При недоступности WSS соединений портал автоматически работает через единый HTTP Gateway
+          if (import.meta.env.DEV) {
+            console.debug('[Realtime] portal_live_updates channel offline:', err?.message || status);
+          }
         }
       });
 

@@ -211,15 +211,16 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
     }
   }, [items, stockConflictDetails, removeItem, updateQuantity, toastInfo]);
 
-  // Проверка финансовых блокировок и условий
-  const isBlocked = debtReport?.client?.is_blocked_for_shipment === true;
+  // Проверка финансовых блокировок и условий (администраторы освобождены от согласования)
+  const isAdmin = profile?.role === 'admin';
+  const isBlocked = !isAdmin && debtReport?.client?.is_blocked_for_shipment === true;
   const overdueDebt = debtReport?.financials?.overdue_usd || 0;
   const currentDebt = debtReport?.financials?.total_debt_usd || debtReport?.client?.debt_usd || 0;
   const creditLimit = debtReport?.client?.credit_limit_usd || 0;
   const totalExposure = currentDebt + totalPrice;
   const exceedsLimit = creditLimit > 0 && totalExposure > creditLimit;
   const hasOverdue = overdueDebt > 0;
-  const requiresApproval = isBlocked || exceedsLimit || hasOverdue;
+  const requiresApproval = !isAdmin && (isBlocked || exceedsLimit || hasOverdue);
 
   // Анализ распределения товаров по складам для мультискладских заказов
   const warehousesInCart = useMemo(() => {
@@ -406,9 +407,11 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
         setIsOfflineQueued(false);
 
         const isApprovalRequired =
-          requiresApproval ||
-          Boolean((data.order as any)?.requires_approval) ||
-          Boolean((data as any)?.requires_approval);
+          !isAdmin && (
+            requiresApproval ||
+            Boolean((data.order as any)?.requires_approval) ||
+            Boolean((data as any)?.requires_approval)
+          );
         setIsWaitingApproval(isApprovalRequired);
 
         const isPartial = Boolean(

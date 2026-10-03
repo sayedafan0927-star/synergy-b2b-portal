@@ -216,8 +216,8 @@ export function useOrdersList({ isAdmin, isManager }: UseOrdersListOptions) {
       .channel('portal_live_updates')
       .on('broadcast', { event: 'order_status_changed' }, handleOrderStatusEvent)
       .subscribe((status, err) => {
-        if (status === 'CHANNEL_ERROR') {
-          console.warn('[Realtime] portal_live_updates order sync error:', err?.message || status);
+        if (status === 'CHANNEL_ERROR' && import.meta.env.DEV) {
+          console.debug('[Realtime] portal_live_updates order sync offline:', err?.message || status);
         }
       });
 
@@ -225,8 +225,8 @@ export function useOrdersList({ isAdmin, isManager }: UseOrdersListOptions) {
       .channel('portal_order_live_sync')
       .on('broadcast', { event: 'order_status_changed' }, handleOrderStatusEvent)
       .subscribe((status, err) => {
-        if (status === 'CHANNEL_ERROR') {
-          console.warn('[Realtime] portal_order_live_sync error:', err?.message || status);
+        if (status === 'CHANNEL_ERROR' && import.meta.env.DEV) {
+          console.debug('[Realtime] portal_order_live_sync offline:', err?.message || status);
         }
       });
 
