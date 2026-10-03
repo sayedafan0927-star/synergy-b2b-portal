@@ -3,6 +3,7 @@ import { Loader2, Send, AlertTriangle, AlertCircle, Boxes, CheckCircle2 } from '
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { fmt2, CITIES } from './types';
+import { ManagerOrderSelector } from './ManagerOrderSelector';
 
 interface CartCheckoutFormProps {
   clientName: string;
@@ -38,6 +39,12 @@ interface CartCheckoutFormProps {
   currentDebt: number;
   overdueDebt: number;
   isAccountant?: boolean;
+  isStaff?: boolean;
+  checkoutMode?: 'manager_self' | 'dealer_client';
+  setCheckoutMode?: (mode: 'manager_self' | 'dealer_client') => void;
+  selectedClient?: any | null;
+  onSelectClient?: (client: any) => void;
+  managerName?: string;
 }
 
 export function CartCheckoutForm({
@@ -74,6 +81,12 @@ export function CartCheckoutForm({
   currentDebt,
   overdueDebt,
   isAccountant = false,
+  isStaff = false,
+  checkoutMode = 'manager_self',
+  setCheckoutMode,
+  selectedClient = null,
+  onSelectClient,
+  managerName,
 }: CartCheckoutFormProps) {
   const { formatPrice: fmtPrice } = useCurrency();
   const { t } = useLanguage();
@@ -308,6 +321,15 @@ export function CartCheckoutForm({
             </button>
           )}
         </div>
+      {/* ─── 3.5. Селектор режима оформления для менеджеров и администраторов ─── */}
+      {isStaff && setCheckoutMode && onSelectClient && (
+        <ManagerOrderSelector
+          checkoutMode={checkoutMode || 'manager_self'}
+          setCheckoutMode={setCheckoutMode}
+          selectedClient={selectedClient || null}
+          onSelectClient={onSelectClient}
+          managerName={managerName}
+        />
       )}
 
       {/* ─── 4. Реквизиты и адрес доставки ─── */}

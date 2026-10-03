@@ -323,7 +323,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
           total_amount: finalTotalAmount,
           total_items: finalTotalItems,
           total_sqm: finalTotalSqm,
-          status: 'pending',
+          status: (serverRequiresApproval || Boolean(rawPayload.requires_approval)) ? 'waiting_approval' : 'pending',
           idempotency_key: incomingIdempotencyKey || null,
           currency: rawPayload.currency || 'USD',
           applied_exchange_rate: authoritativeRate,
@@ -402,6 +402,9 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
     partner_id: (callerAuth.role === 'client' ? callerAuth.partnerId : rawPayload.partner_id) || rawPayload.client_id,
     client_name: rawPayload.client_name || rawPayload.buyer?.name,
     client_phone: rawPayload.client_phone || rawPayload.buyer?.phone,
+    requires_approval: serverRequiresApproval || Boolean(rawPayload.requires_approval),
+    hold_wms: serverRequiresApproval || Boolean(rawPayload.requires_approval) || Boolean(rawPayload.hold_wms),
+    status: (serverRequiresApproval || Boolean(rawPayload.requires_approval)) ? 'waiting_approval' : 'pending',
     items: pricingResult.items.map(it => {
       const itemObj: Record<string, any> = {
         item_id: it.item_id, sku: it.sku, width: it.width, length: it.length, area_sqm: it.area_sqm,

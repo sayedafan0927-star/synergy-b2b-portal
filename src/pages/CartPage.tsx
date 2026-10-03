@@ -47,45 +47,57 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
   const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
 
   const effectiveProfile = isImpersonating && impersonatedProfile ? impersonatedProfile : profile;
+  const isStaff = profile?.role === 'admin' || profile?.role === 'manager_rm' || profile?.role === 'manager_lm';
+  const [checkoutMode, setCheckoutMode] = useState<'manager_self' | 'dealer_client'>('manager_self');
+  const [selectedClient, setSelectedClient] = useState<any | null>(null);
 
   const [clientName, setClientName] = useState(() => effectiveProfile?.full_name ?? '');
   const [clientPhone, setClientPhone] = useState(() => {
-    // 1. Профиль авторизованного клиента / сотрудника
-    if (effectiveProfile?.phone && isValidPhone(effectiveProfile.phone)) {
-      return formatPhone(effectiveProfile.phone);
-    }
-    // 2. Ранее сохраненный на данном устройстве номер (из предыдущих заказов)
+    if (effectiveProfile?.phone && isValidPhone(effectiveProfile.phone)) return formatPhone(effectiveProfile.phone);
     if (typeof window !== 'undefined') {
       try {
         const stored = localStorage.getItem(CHECKOUT_PHONE_STORAGE_KEY);
         if (isValidPhone(stored)) return formatPhone(stored);
       } catch {}
     }
-    // 3. Номер из Supabase Auth
-    if (user?.phone && isValidPhone(user.phone)) {
-      return formatPhone(user.phone);
-    }
-    // 4. Корпоративный номер Synergy по умолчанию для моментального заказа
-    return DEFAULT_CHECKOUT_PHONE;
+    return user?.phone && isValidPhone(user.phone) ? formatPhone(user.phone) : DEFAULT_CHECKOUT_PHONE;
   });
-  const [clientCompany, setClientCompany] = useState(() => effectiveProfile?.company_name ?? '');
+  const [clientCompany, setClientCompany] = useState(() =>
+    isStaff && checkoutMode === 'manager_self' ? 'Synergy Group (Внутренний заказ)' : (effectiveProfile?.company_name ?? '')
+  );
   const [selectedCity, setSelectedCity] = useState(CITIES[0]);
   const [orderComment, setOrderComment] = useState('');
 
-  // Автоматическая подстановка и актуализация контактных данных при загрузке профиля
-  useEffect(() => {
-    if (effectiveProfile) {
-      if (effectiveProfile.full_name && !clientName) {
-        setClientName(effectiveProfile.full_name);
+  // Выбор клиента для менеджера / возврат на заказ под собой
+  const handleSelectClient = useCallback((client: any | null) => {
+    setSelectedClient(client);
+    if (client) {
+      setClientName(client.name || '');
+      setClientCompany(client.name || '');
+      if (client.phone && isValidPhone(client.phone)) setClientPhone(formatPhone(client.phone));
+      if (client.city) {
+        const matchedCity = CITIES.find(c => c.toLowerCase() === client.city.toLowerCase());
+        if (matchedCity) setSelectedCity(matchedCity);
       }
-      if (effectiveProfile.company_name && !clientCompany) {
-        setClientCompany(effectiveProfile.company_name);
-      }
-      if (isValidPhone(effectiveProfile.phone)) {
-        setClientPhone(formatPhone(effectiveProfile.phone));
-      }
+      fetchClientDebtFromErp({ phone: client.phone, counterpartyId: Number(client.id) || undefined, search: client.name })
+        .then(res => setDebtReport(res?.success && res.found ? res : null))
+        .catch(() => setDebtReport(null));
+    } else {
+      setClientName(effectiveProfile?.full_name || 'Менеджер Synergy');
+      setClientCompany('Synergy Group (Внутренний заказ)');
+      setClientPhone(effectiveProfile?.phone && isValidPhone(effectiveProfile.phone) ? formatPhone(effectiveProfile.phone) : DEFAULT_CHECKOUT_PHONE);
+      setDebtReport(null);
     }
   }, [effectiveProfile]);
+
+  // Автоматическая подстановка и актуализация контактных данных при загрузке профиля
+  useEffect(() => {
+    if (effectiveProfile && (!isStaff || checkoutMode === 'dealer_client')) {
+      if (effectiveProfile.full_name && !clientName) setClientName(effectiveProfile.full_name);
+      if (effectiveProfile.company_name && !clientCompany) setClientCompany(effectiveProfile.company_name);
+      if (isValidPhone(effectiveProfile.phone)) setClientPhone(formatPhone(effectiveProfile.phone));
+    }
+  }, [effectiveProfile, isStaff, checkoutMode]);
 
   const handleClientPhoneChange = useCallback((value: string) => {
     const formatted = formatPhone(value);
@@ -99,11 +111,17 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
 
   // Загрузка финансового состояния клиента (кредитный лимит, просрочки)
   useEffect(() => {
-    if (!effectiveProfile?.partner_id && !effectiveProfile?.phone) return;
+    if (isStaff && checkoutMode === 'manager_self') {
+      setDebtReport(null);
+      return;
+    }
+    const targetPhone = selectedClient?.phone || effectiveProfile?.phone;
+    const targetPartnerId = selectedClient?.id || effectiveProfile?.partner_id;
+    if (!targetPartnerId && !targetPhone) return;
     fetchClientDebtFromErp({
-      phone: effectiveProfile.phone,
-      counterpartyId: Number(effectiveProfile.partner_id) || undefined,
-      search: effectiveProfile.full_name || effectiveProfile.company_name,
+      phone: targetPhone,
+      counterpartyId: Number(targetPartnerId) || undefined,
+      search: selectedClient?.name || effectiveProfile?.full_name || effectiveProfile?.company_name,
     })
       .then(res => {
         if (res?.success && res.found) {
@@ -111,7 +129,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
         }
       })
       .catch(err => console.warn('Debt check notice:', err));
-  }, [profile, isImpersonating, impersonatedProfile]);
+  }, [profile, isImpersonating, impersonatedProfile, isStaff, checkoutMode, selectedClient]);
 
   // Автоматическая тихая синхронизация цен и курса валют при входе в корзину
   useEffect(() => {
@@ -211,16 +229,17 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
     }
   }, [items, stockConflictDetails, removeItem, updateQuantity, toastInfo]);
 
-  // Проверка финансовых блокировок и условий (администраторы освобождены от согласования)
+  // Проверка финансовых блокировок и условий (администраторы и заказы менеджеров на себя освобождены)
   const isAdmin = profile?.role === 'admin';
-  const isBlocked = !isAdmin && debtReport?.client?.is_blocked_for_shipment === true;
+  const isManagerSelfOrder = isStaff && checkoutMode === 'manager_self';
+  const isBlocked = !isAdmin && !isManagerSelfOrder && debtReport?.client?.is_blocked_for_shipment === true;
   const overdueDebt = debtReport?.financials?.overdue_usd || 0;
   const currentDebt = debtReport?.financials?.total_debt_usd || debtReport?.client?.debt_usd || 0;
   const creditLimit = debtReport?.client?.credit_limit_usd || 0;
   const totalExposure = currentDebt + totalPrice;
   const exceedsLimit = creditLimit > 0 && totalExposure > creditLimit;
   const hasOverdue = overdueDebt > 0;
-  const requiresApproval = !isAdmin && (isBlocked || exceedsLimit || hasOverdue);
+  const requiresApproval = !isAdmin && !isManagerSelfOrder && (isBlocked || exceedsLimit || hasOverdue);
 
   // Анализ распределения товаров по складам для мультискладских заказов
   const warehousesInCart = useMemo(() => {
@@ -322,16 +341,20 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
     setSubmitError(null);
 
     const effectiveProfile = isImpersonating && impersonatedProfile ? impersonatedProfile : profile;
-    const clientId = effectiveProfile?.partner_id
-      ? Number(effectiveProfile.partner_id) || effectiveProfile.partner_id
-      : undefined;
+    const isManagerSelfOrder = isStaff && checkoutMode === 'manager_self';
+    const clientId = isManagerSelfOrder
+      ? undefined
+      : (selectedClient?.id || (effectiveProfile?.partner_id ? Number(effectiveProfile.partner_id) || effectiveProfile.partner_id : undefined));
 
     const whSummaryTag = hasMultipleWarehouses
       ? ` [МУЛЬТИСКЛАД: ${Array.from(warehousesInCart.entries())
           .map(([w, d]) => `${w} (${d.count} шт, $${d.totalAmount.toFixed(0)})`)
           .join(', ')}]`
       : '';
-    const fullComment = `${orderComment.trim()}${whSummaryTag}${
+    const managerTag = isManagerSelfOrder
+      ? ` [ВНУТРЕННИЙ ЗАКАЗ: ${profile?.full_name || 'Менеджер'} - Переброска на клиента в ERP]`
+      : (selectedClient ? ` [ОФОРМЛЕНО МЕНЕДЖЕРОМ: ${profile?.full_name || 'РМ'} ДЛЯ ${selectedClient.name} (ID: ${selectedClient.id})]` : '');
+    const fullComment = `${orderComment.trim()}${whSummaryTag}${managerTag}${
       requiresApproval
         ? ' [ТРЕБУЕТСЯ АППРУВ В WHATSAPP: ' +
           (isBlocked ? 'Стоп-лист' : exceedsLimit ? 'Превышение кредитного лимита' : 'Просроченная задолженность') +
@@ -356,6 +379,11 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
       client_company: clientCompany.trim(),
       city: selectedCity,
       comment: fullComment,
+      is_manager_order: isManagerSelfOrder,
+      requires_approval: requiresApproval,
+      is_held: requiresApproval,
+      hold_wms: requiresApproval,
+      status: requiresApproval ? 'waiting_approval' : 'pending',
       items: items.map(item => ({
         item_id: item.item_id,
         productId: item.productId,
@@ -586,6 +614,12 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
               currentDebt={currentDebt}
               overdueDebt={overdueDebt}
               isAccountant={isAccountant}
+              isStaff={isStaff}
+              checkoutMode={checkoutMode}
+              setCheckoutMode={setCheckoutMode}
+              selectedClient={selectedClient}
+              onSelectClient={handleSelectClient}
+              managerName={profile?.full_name}
             />
           </div>
         </div>

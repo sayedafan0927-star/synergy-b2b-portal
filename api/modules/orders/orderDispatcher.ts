@@ -278,11 +278,14 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
       await recordSuccess('erp_gateway');
       const docNumber = jsonData.order?.doc_number || jsonData.order_id || outboxOrderDoc;
       if (outboxOrderId) {
+        const initialStatus = (outboundPayload?.requires_approval || outboundPayload?.hold_wms)
+          ? 'waiting_approval'
+          : 'processing';
         await supabase
           .from('orders')
           .update({
             order_number: docNumber,
-            status: 'processing',
+            status: initialStatus,
             updated_at: new Date().toISOString(),
           })
           .eq('id', outboxOrderId);
@@ -329,7 +332,7 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
                 await supabase
                   .from('orders')
                   .update({
-                    status: 'processing',
+                    status: initialStatus,
                     order_number: childDocNumber,
                     updated_at: new Date().toISOString(),
                   })
