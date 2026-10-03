@@ -615,6 +615,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
               overdueDebt={overdueDebt}
               isAccountant={isAccountant}
               isStaff={isStaff}
+              isAdmin={isAdmin}
               checkoutMode={checkoutMode}
               setCheckoutMode={setCheckoutMode}
               selectedClient={selectedClient}

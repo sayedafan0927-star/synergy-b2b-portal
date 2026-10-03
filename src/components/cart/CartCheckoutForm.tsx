@@ -40,6 +40,7 @@ interface CartCheckoutFormProps {
   overdueDebt: number;
   isAccountant?: boolean;
   isStaff?: boolean;
+  isAdmin?: boolean;
   checkoutMode?: 'manager_self' | 'dealer_client';
   setCheckoutMode?: (mode: 'manager_self' | 'dealer_client') => void;
   selectedClient?: any | null;
@@ -82,6 +83,7 @@ export function CartCheckoutForm({
   overdueDebt,
   isAccountant = false,
   isStaff = false,
+  isAdmin = false,
   checkoutMode = 'manager_self',
   setCheckoutMode,
   selectedClient = null,
@@ -331,6 +333,7 @@ export function CartCheckoutForm({
           selectedClient={selectedClient || null}
           onSelectClient={onSelectClient}
           managerName={managerName}
+          isAdmin={isAdmin}
         />
       )}
 

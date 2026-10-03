@@ -137,7 +137,7 @@ function clean1CName(rawName?: string): { name: string; sku: string; collection:
         .order('created_at', { ascending: false })
         .limit(200);
 
-      orders = fallback.data;
+      orders = fallback.data as any;
       error = fallback.error;
     }
 

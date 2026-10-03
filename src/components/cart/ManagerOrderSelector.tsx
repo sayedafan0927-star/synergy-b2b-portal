@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { UserCheck, Building2, Search, X, Loader2, Check } from 'lucide-react';
+import { UserCheck, Building2, Search, X, Loader2, Check, MessageSquare, Send, CheckCircle2 } from 'lucide-react';
 import { fetchCounterpartiesFromErp, type Counterparty } from '@/lib/erpApi';
+import { useToast } from '@/contexts/ToastContext';
 
 interface ManagerOrderSelectorProps {
   checkoutMode: 'manager_self' | 'dealer_client';
@@ -8,6 +9,7 @@ interface ManagerOrderSelectorProps {
   selectedClient: Counterparty | null;
   onSelectClient: (client: Counterparty | null) => void;
   managerName?: string;
+  isAdmin?: boolean;
 }
 
 export function ManagerOrderSelector({
@@ -16,12 +18,62 @@ export function ManagerOrderSelector({
   selectedClient,
   onSelectClient,
   managerName,
+  isAdmin = false,
 }: ManagerOrderSelectorProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Counterparty[]>([]);
   const [searching, setSearching] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Admin WhatsApp approval testing states
+  const [showTestBox, setShowTestBox] = useState(false);
+  const [testPhone, setTestPhone] = useState('87086984543');
+  const [isSendingTest, setIsSendingTest] = useState(false);
+  const [testSuccessNotice, setTestSuccessNotice] = useState<string | null>(null);
+
+  const { success: toastSuccess, error: toastError } = useToast();
+
+  const handleSendTestApproval = async () => {
+    const cleanDigits = testPhone.replace(/\D+/g, '');
+    if (cleanDigits.length < 10) {
+      toastError('Укажите корректный номер телефона (например, 87086984543)');
+      return;
+    }
+
+    setIsSendingTest(true);
+    setTestSuccessNotice(null);
+
+    try {
+      const res = await fetch('/api/erp?action=request_approval', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          order_id: `TEST-${Math.floor(1000 + Math.random() * 9000)}`,
+          order_doc_number: `ORD-TEST-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-ADMIN`,
+          client_name: selectedClient?.name || 'ТОО «Тестовый Партнер Synergy»',
+          client_phone: '+7 (708) 698-45-43',
+          manager_phone: cleanDigits,
+          total_amount: 150000,
+          total_sqm: 45.8,
+          items_count: 2,
+          reason: 'Тестовая проверка аппрува отгрузки (Администратор)',
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success !== false) {
+        toastSuccess(`Запрос на согласование отправлен в WhatsApp на номер +${cleanDigits}!`);
+        setTestSuccessNotice(`Тестовый запрос отправлен на номер +${cleanDigits}! Откройте WhatsApp и нажмите ссылку для проверки реакции системы.`);
+      } else {
+        toastError(data.error || 'Не удалось отправить тестовое сообщение в WhatsApp');
+      }
+    } catch (err: any) {
+      toastError(`Ошибка отправки: ${err?.message || 'сбой сети'}`);
+    } finally {
+      setIsSendingTest(false);
+    }
+  };
 
   // Debounced counterparty search
   useEffect(() => {
@@ -64,15 +116,82 @@ export function ManagerOrderSelector({
   }, []);
 
   return (
-    <div className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-3 space-y-2.5">
-      <div className="flex items-center justify-between">
-        <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-900">
-          Режим оформления (Менеджер / Администратор)
-        </span>
+    <div className="rounded-xl border border-slate-200/90 bg-slate-50/80 p-3.5 space-y-3 shadow-2xs">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-700">
+            Режим оформления
+          </span>
+          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-200/70 text-slate-600 border border-slate-300/40">
+            Служебный
+          </span>
+        </div>
+
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={() => setShowTestBox(v => !v)}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all cursor-pointer border ${
+              showTestBox
+                ? 'bg-brand-700 text-white border-brand-700 shadow-2xs'
+                : 'bg-white hover:bg-slate-100 text-brand-700 border-brand-300/80 shadow-2xs'
+            }`}
+            title="Проверить интерактивное согласование в WhatsApp"
+          >
+            <MessageSquare className="h-3.5 w-3.5 text-brand-600" />
+            <span>Тест WhatsApp</span>
+          </button>
+        )}
       </div>
 
+      {/* Панель тестирования WhatsApp согласования для администратора */}
+      {isAdmin && showTestBox && (
+        <div className="rounded-lg bg-white border border-brand-200 p-3 text-xs space-y-2.5 shadow-xs animate-in fade-in">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 font-bold text-slate-900">
+              <Send className="h-3.5 w-3.5 text-brand-600" />
+              <span>Проверка согласования в WhatsApp</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowTestBox(false)}
+              className="text-slate-400 hover:text-slate-600 p-0.5 rounded cursor-pointer"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <p className="text-[11px] text-slate-600 leading-tight">
+            Отправляет тестовое согласование на указанный номер через шлюз ERP. Вы сможете нажать «Одобрить» или «Отклонить» прямо на телефоне и проверить реакцию системы.
+          </p>
+          <div className="flex items-center gap-2">
+            <input
+              type="tel"
+              value={testPhone}
+              onChange={e => setTestPhone(e.target.value)}
+              placeholder="87086984543"
+              className="input-field text-xs h-8 py-1 px-2.5 bg-slate-50 w-full border-slate-200 focus:border-brand-500 focus:bg-white"
+            />
+            <button
+              type="button"
+              onClick={handleSendTestApproval}
+              disabled={isSendingTest}
+              className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs transition-colors cursor-pointer shadow-2xs disabled:opacity-50"
+            >
+              {isSendingTest ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+              <span>{isSendingTest ? 'Отправка...' : 'Отправить'}</span>
+            </button>
+          </div>
+          {testSuccessNotice && (
+            <div className="flex items-start gap-1.5 p-2 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-900 text-[11px] leading-tight">
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0 mt-0.5" />
+              <span>{testSuccessNotice}</span>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Переключатель режимов */}
-      <div className="grid grid-cols-2 gap-1.5 p-1 bg-white rounded-lg border border-indigo-200/80 text-xs">
+      <div className="grid grid-cols-2 gap-1.5 p-1 bg-white rounded-lg border border-slate-200 text-xs shadow-2xs">
         <button
           type="button"
           onClick={() => {
@@ -81,7 +200,7 @@ export function ManagerOrderSelector({
           }}
           className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md font-semibold transition-all cursor-pointer ${
             checkoutMode === 'manager_self'
-              ? 'bg-indigo-600 text-white shadow-2xs'
+              ? 'bg-brand-600 text-white shadow-2xs'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
           }`}
         >
@@ -97,7 +216,7 @@ export function ManagerOrderSelector({
           }}
           className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md font-semibold transition-all cursor-pointer ${
             checkoutMode === 'dealer_client'
-              ? 'bg-indigo-600 text-white shadow-2xs'
+              ? 'bg-brand-600 text-white shadow-2xs'
               : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
           }`}
         >
@@ -108,24 +227,24 @@ export function ManagerOrderSelector({
 
       {/* Описание и выбор в зависимости от режима */}
       {checkoutMode === 'manager_self' ? (
-        <div className="rounded-lg bg-indigo-100/60 border border-indigo-200/60 px-3 py-2 text-[11px] text-indigo-950 flex items-start gap-2">
-          <UserCheck className="h-4 w-4 text-indigo-600 shrink-0 mt-0.5" />
+        <div className="rounded-lg bg-emerald-50/70 border border-emerald-200/80 px-3 py-2.5 text-[11px] text-emerald-950 flex items-start gap-2.5">
+          <UserCheck className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
           <div className="leading-tight">
-            <strong>Служебный заказ под учетной записью {managerName || 'менеджера'}.</strong>
-            <p className="mt-0.5 text-indigo-800">
-              Товары будут зарезервированы без привязки к долгам дилеров. В 1C:ERP оператор или менеджер сможет перебросить заказ на нужного контрагента.
+            <strong className="text-slate-900 font-bold">Служебный заказ под учетной записью {managerName || 'менеджера'}.</strong>
+            <p className="mt-0.5 text-slate-600">
+              Товары будут зарезервированы на складе без привязки к лимитам дилеров. В 1C:ERP оператор или менеджер сможет перебросить заказ на нужного контрагента перед отгрузкой.
             </p>
           </div>
         </div>
       ) : (
         <div className="space-y-2" ref={dropdownRef}>
           {selectedClient ? (
-            <div className="flex items-center justify-between p-2.5 rounded-lg bg-white border border-indigo-300 shadow-2xs">
+            <div className="flex items-center justify-between p-2.5 rounded-lg bg-white border border-brand-300 shadow-2xs">
               <div className="min-w-0 pr-2">
                 <div className="flex items-center gap-1.5">
                   <span className="font-bold text-xs text-slate-900 truncate">{selectedClient.name}</span>
                   {selectedClient.city && (
-                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-slate-100 text-slate-600 font-medium">
+                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-brand-50 text-brand-700 border border-brand-200/60 font-semibold">
                       {selectedClient.city}
                     </span>
                   )}
@@ -160,11 +279,11 @@ export function ManagerOrderSelector({
                   }}
                   onFocus={() => setDropdownOpen(true)}
                   placeholder="Начните вводить название, БИН или телефон клиента..."
-                  className="input-field text-xs h-9 py-1 pl-8 pr-7 bg-white w-full border-indigo-200 focus:border-indigo-500"
+                  className="input-field text-xs h-9 py-1 pl-8 pr-7 bg-white w-full border-slate-200 focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
                 />
                 <Search className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-3 pointer-events-none" />
                 {searching ? (
-                  <Loader2 className="h-3.5 w-3.5 text-indigo-600 animate-spin absolute right-2.5 top-3" />
+                  <Loader2 className="h-3.5 w-3.5 text-brand-600 animate-spin absolute right-2.5 top-3" />
                 ) : searchQuery ? (
                   <button
                     type="button"
@@ -180,7 +299,7 @@ export function ManagerOrderSelector({
                 <div className="absolute z-30 left-0 right-0 mt-1 max-h-56 overflow-y-auto rounded-lg bg-white border border-slate-200 shadow-lg divide-y divide-slate-100 text-xs">
                   {searching && (
                     <div className="p-3 text-center text-slate-400 flex items-center justify-center gap-2">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-600" />
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-brand-600" />
                       <span>Поиск в базе ERP...</span>
                     </div>
                   )}
@@ -206,7 +325,7 @@ export function ManagerOrderSelector({
                           onSelectClient(cp);
                           setDropdownOpen(false);
                         }}
-                        className="w-full text-left p-2.5 hover:bg-indigo-50/70 transition-colors flex items-center justify-between cursor-pointer"
+                        className="w-full text-left p-2.5 hover:bg-brand-50/70 transition-colors flex items-center justify-between cursor-pointer group"
                       >
                         <div className="min-w-0 pr-2">
                           <div className="font-semibold text-slate-900 truncate">{cp.name}</div>
@@ -216,7 +335,7 @@ export function ManagerOrderSelector({
                             {cp.phone && <span>тел: {cp.phone}</span>}
                           </div>
                         </div>
-                        <Check className="h-4 w-4 text-indigo-600 opacity-0 group-hover:opacity-100" />
+                        <Check className="h-4 w-4 text-brand-600 opacity-0 group-hover:opacity-100 transition-opacity" />
                       </button>
                     ))}
                 </div>
