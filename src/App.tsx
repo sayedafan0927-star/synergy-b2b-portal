@@ -121,11 +121,6 @@ function MainLayout({ children, page, navigate, showFooter }: { children: React.
 
 function parseUrlState(): { page: PageId; id?: string; tab?: string } {
   try {
-    const rawPath = typeof window !== 'undefined' ? window.location.pathname.replace(/^\/+|\/+$/g, '') : '';
-    if (rawPath && ['home', 'catalog', 'product', 'cart', 'contacts', 'login', 'profile'].includes(rawPath)) {
-      return { page: rawPath as PageId };
-    }
-
     const params = new URLSearchParams(window.location.search);
     const prodId = params.get('product');
     if (prodId) return { page: 'product', id: prodId };
@@ -152,7 +147,13 @@ function parseUrlState(): { page: PageId; id?: string; tab?: string } {
     if (params.has('login')) return { page: 'login' };
     if (params.has('profile')) return { page: 'profile', tab: tabParam };
 
-    // Fallback restoration from sessionStorage if URL has no explicit query params
+    // Check pathname only if query params have no explicit route declaration
+    const rawPath = typeof window !== 'undefined' ? window.location.pathname.replace(/^\/+|\/+$/g, '') : '';
+    if (rawPath && ['home', 'catalog', 'product', 'cart', 'contacts', 'login', 'profile'].includes(rawPath)) {
+      return { page: rawPath as PageId, tab: tabParam };
+    }
+
+    // Fallback restoration from sessionStorage if URL has no explicit query params or pathname route
     if (typeof window !== 'undefined') {
       const stored = sessionStorage.getItem('synergy:last_active_route');
       if (stored) {
@@ -224,8 +225,7 @@ export default function App() {
     }
 
     if (push) {
-      const url = new URL(window.location.href);
-      url.search = '';
+      const url = new URL(window.location.origin + '/');
       if (target === 'product' && id) {
         url.searchParams.set('product', id);
       } else if (target === 'catalog') {
@@ -283,18 +283,16 @@ export default function App() {
     const initial = parseUrlState();
     if (initial.page !== 'home' || initial.id || initial.tab) {
       navigate(initial.page, initial.id, initial.tab, false);
-      const url = new URL(window.location.href);
-      if (url.searchParams.toString() === '') {
-        if (initial.page === 'product' && initial.id) url.searchParams.set('product', initial.id);
-        else if (initial.page === 'catalog') url.searchParams.set('page', 'catalog');
-        else if (initial.page === 'profile') {
-          url.searchParams.set('page', 'profile');
-          if (initial.tab) url.searchParams.set('tab', initial.tab);
-        } else if (initial.page !== 'home') url.searchParams.set('page', initial.page);
-      }
+      const url = new URL(window.location.origin + '/');
+      if (initial.page === 'product' && initial.id) url.searchParams.set('product', initial.id);
+      else if (initial.page === 'catalog') url.searchParams.set('page', 'catalog');
+      else if (initial.page === 'profile') {
+        url.searchParams.set('page', 'profile');
+        if (initial.tab) url.searchParams.set('tab', initial.tab);
+      } else if (initial.page !== 'home') url.searchParams.set('page', initial.page);
       window.history.replaceState({ page: initial.page, id: initial.id, tab: initial.tab }, '', url.pathname + url.search);
     } else {
-      window.history.replaceState({ page: 'home' }, '', window.location.href);
+      window.history.replaceState({ page: 'home' }, '', '/');
     }
   }, [navigate]);
 
