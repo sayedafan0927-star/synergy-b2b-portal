@@ -20,6 +20,8 @@ export function ProductGallery({
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
   const isHorizontalSwipe = useRef(false);
+  const thumbsContainerRef = useRef<HTMLDivElement | null>(null);
+  const thumbRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
   const validImages = images.filter(img => typeof img === 'string' && img.trim().length > 0);
   const imageCount = validImages.length;
@@ -28,6 +30,23 @@ export function ProductGallery({
     setSelectedImage(0);
     setFailedImages({});
   }, [images]);
+
+  // Автопрокрутка колонки миниатюр к активному фото (скроллим только контейнер, не страницу)
+  useEffect(() => {
+    const container = thumbsContainerRef.current;
+    const thumb = thumbRefs.current[selectedImage];
+    if (!container || !thumb) return;
+    const cRect = container.getBoundingClientRect();
+    const tRect = thumb.getBoundingClientRect();
+    const thumbTop = tRect.top - cRect.top + container.scrollTop;
+    // Центрируем активную миниатюру в колонке
+    const target = thumbTop - (container.clientHeight - tRect.height) / 2;
+    const maxScroll = container.scrollHeight - container.clientHeight;
+    const top = Math.min(Math.max(0, target), Math.max(0, maxScroll));
+    if (Math.abs(container.scrollTop - top) > 1) {
+      container.scrollTo({ top, behavior: 'smooth' });
+    }
+  }, [selectedImage, imageCount]);
 
   const prevImage = useCallback(() => {
     setSelectedImage(prev => (prev === 0 ? imageCount - 1 : prev - 1));
@@ -88,10 +107,14 @@ export function ProductGallery({
       <div className="hidden lg:flex items-start gap-3.5 select-none">
         {/* THUMBNAILS (LEFT) */}
         {imageCount > 1 && (
-          <div className="flex w-20 xl:w-22 shrink-0 flex-col gap-2.5 max-h-[500px] xl:max-h-[540px] overflow-y-auto pr-1 select-none scrollbar-thin">
+          <div
+            ref={thumbsContainerRef}
+            className="flex w-20 xl:w-22 shrink-0 flex-col gap-2.5 max-h-[500px] xl:max-h-[540px] overflow-y-auto pr-1 select-none scrollbar-thin"
+          >
             {validImages.map((img, idx) => (
               <button
                 key={idx}
+                ref={el => { thumbRefs.current[idx] = el; }}
                 type="button"
                 onClick={() => setSelectedImage(idx)}
                 className={`relative aspect-[4/5] w-full rounded-xl overflow-hidden border-2 transition-all shrink-0 cursor-pointer ${
