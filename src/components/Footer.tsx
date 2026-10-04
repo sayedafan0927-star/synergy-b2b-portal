@@ -122,13 +122,33 @@ export default function Footer({ onNavigate }: FooterProps) {
           </div>
         </div>
 
-        <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-slate-800 pt-8 sm:flex-row">
-          <p className="text-xs text-slate-500">&copy; 2025 Synergy-Group. {t('footer.rights')}</p>
-          <div className="flex gap-6">
-            <button onClick={() => onNavigate('contacts')} className="text-xs text-slate-500 hover:text-slate-300 transition-colors cursor-pointer">
+        <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-slate-800 pt-8 lg:flex-row">
+          <p className="text-xs text-slate-500 text-center lg:text-left">
+            &copy; 2025 ТОО «Синэнергия Груп» (БИН 250140013808). {t('footer.rights')}
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
+            <button
+              onClick={() => onNavigate('delivery')}
+              className="text-xs text-slate-400 hover:text-white transition-colors cursor-pointer"
+            >
+              {t('footer.delivery_payment')}
+            </button>
+            <button
+              onClick={() => onNavigate('returns')}
+              className="text-xs text-slate-400 hover:text-white transition-colors cursor-pointer font-medium text-amber-400/90 hover:text-amber-300"
+            >
+              {t('footer.returns_refunds')}
+            </button>
+            <button
+              onClick={() => onNavigate('privacy')}
+              className="text-xs text-slate-400 hover:text-white transition-colors cursor-pointer"
+            >
               {t('footer.privacy_policy')}
             </button>
-            <button onClick={() => onNavigate('contacts')} className="text-xs text-slate-500 hover:text-slate-300 transition-colors cursor-pointer">
+            <button
+              onClick={() => onNavigate('terms')}
+              className="text-xs text-slate-400 hover:text-white transition-colors cursor-pointer"
+            >
               {t('footer.public_offer')}
             </button>
           </div>

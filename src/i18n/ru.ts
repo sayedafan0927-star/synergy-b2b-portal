@@ -338,6 +338,8 @@ export const ru: TranslationDictionary = {
   'footer.rights': 'Все права защищены.',
   'footer.privacy_policy': 'Политика конфиденциальности',
   'footer.public_offer': 'Публичная оферта',
+  'footer.delivery_payment': 'Доставка и оплата',
+  'footer.returns_refunds': 'Возврат и обмен (14 дней)',
 
   // WhatsApp
   'whatsapp.chat': 'Написать в WhatsApp',

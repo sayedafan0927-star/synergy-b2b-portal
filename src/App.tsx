@@ -50,10 +50,12 @@ const CatalogPage = lazyWithRetry(() => import('@/pages/CatalogPage'));
 const ProductPage = lazyWithRetry(() => import('@/pages/ProductPage'));
 const CartPage = lazyWithRetry(() => import('@/pages/CartPage'));
 const ProfilePage = lazyWithRetry(() => import('@/pages/ProfilePage'));
+const LegalPage = lazyWithRetry(() => import('@/pages/LegalPage'));
 
 import { useNetworkStatus } from '@/registerServiceWorker';
 import { initOfflineQueueAutoSync } from '@/lib/offlineOrderQueue';
 import OfflineBanner from '@/components/common/OfflineBanner';
+import CookieBanner from '@/components/common/CookieBanner';
 import Preloader from '@/components/common/Preloader';
 import type { PageId } from '@/types';
 
@@ -137,7 +139,8 @@ function parseUrlState(): { page: PageId; id?: string; tab?: string } {
     const tabParam = params.get('tab') || undefined;
 
     const pageParam = params.get('page') as PageId | null;
-    if (pageParam && ['home', 'catalog', 'product', 'cart', 'contacts', 'login', 'profile'].includes(pageParam)) {
+    const knownPages: PageId[] = ['home', 'catalog', 'product', 'cart', 'contacts', 'login', 'profile', 'delivery', 'returns', 'privacy', 'terms'];
+    if (pageParam && knownPages.includes(pageParam)) {
       return { page: pageParam, tab: tabParam };
     }
 
@@ -146,10 +149,14 @@ function parseUrlState(): { page: PageId; id?: string; tab?: string } {
     if (params.has('contacts')) return { page: 'contacts' };
     if (params.has('login')) return { page: 'login' };
     if (params.has('profile')) return { page: 'profile', tab: tabParam };
+    if (params.has('delivery')) return { page: 'delivery' };
+    if (params.has('returns')) return { page: 'returns' };
+    if (params.has('privacy')) return { page: 'privacy' };
+    if (params.has('terms')) return { page: 'terms' };
 
     // Check pathname only if query params have no explicit route declaration
     const rawPath = typeof window !== 'undefined' ? window.location.pathname.replace(/^\/+|\/+$/g, '') : '';
-    if (rawPath && ['home', 'catalog', 'product', 'cart', 'contacts', 'login', 'profile'].includes(rawPath)) {
+    if (rawPath && knownPages.includes(rawPath as PageId)) {
       return { page: rawPath as PageId, tab: tabParam };
     }
 
@@ -158,7 +165,7 @@ function parseUrlState(): { page: PageId; id?: string; tab?: string } {
       const stored = sessionStorage.getItem('synergy:last_active_route');
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (parsed?.page && ['home', 'catalog', 'product', 'cart', 'contacts', 'login', 'profile'].includes(parsed.page)) {
+        if (parsed?.page && knownPages.includes(parsed.page)) {
           return { page: parsed.page, id: parsed.id, tab: parsed.tab };
         }
       }
@@ -305,8 +312,12 @@ export default function App() {
       contacts: 'Контакты — Synergy-Group | Склад в Астане',
       login: 'Вход в личный кабинет — Synergy-Group',
       profile: 'Личный кабинет — Synergy-Group',
+      delivery: 'Условия доставки и оплаты — Synergy-Group',
+      returns: 'Политика возврата и обмена (14 дней) — Synergy-Group',
+      privacy: 'Политика конфиденциальности — Synergy-Group',
+      terms: 'Публичная оферта — Synergy-Group',
     };
-    document.title = titles[page];
+    document.title = titles[page] || titles.home;
   }, [page]);
 
   useEffect(() => {
@@ -348,6 +359,11 @@ export default function App() {
       case 'contacts': return <ContactsPage onNavigate={navigate} />;
       case 'login': return <LoginPage onNavigate={navigate} />;
       case 'profile': return <ProfilePage onNavigate={navigate} initialTab={profileTab} />;
+      case 'delivery':
+      case 'returns':
+      case 'privacy':
+      case 'terms':
+        return <LegalPage initialDoc={page} onNavigate={navigate} />;
       default: return null;
     }
   };
@@ -363,6 +379,7 @@ export default function App() {
               <ToastProvider>
                 <RealtimeNotificationsWatcher />
                 <OfflineBanner />
+                <CookieBanner onNavigate={navigate} />
                 {isPending && (
                   <div className="fixed top-0 left-0 right-0 z-[99999] h-0.5 bg-gradient-to-r from-brand-600 via-amber-500 to-brand-700 animate-pulse pointer-events-none" />
                 )}

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Phone, Mail, MapPin, Clock, Send, CheckCircle, Warehouse, MessageCircle, Loader2 } from 'lucide-react';
+import { Phone, Mail, MapPin, Clock, Send, CheckCircle, Warehouse, MessageCircle, Loader2, Building } from 'lucide-react';
 import { useReveal } from '@/hooks/useReveal';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { submitLeadToErp } from '@/lib/erpApi';
@@ -164,6 +164,20 @@ export default function ContactsPage({ onNavigate: _onNavigate }: { onNavigate: 
               <p className="text-sm text-slate-600 leading-relaxed">
                 {t('contacts.b2b_info_desc')}
               </p>
+            </div>
+
+            {/* Официальные реквизиты компании */}
+            <div className="rounded-xl border border-slate-200/80 bg-white p-5 space-y-3 shadow-2xs">
+              <div className="flex items-center gap-2 text-slate-900 font-bold text-sm">
+                <Building className="h-4 w-4 text-brand-600" />
+                <span>Юридические реквизиты</span>
+              </div>
+              <div className="space-y-1.5 text-xs text-slate-600 leading-relaxed">
+                <p><strong className="text-slate-800">Наименование:</strong> ТОО «Синэнергия Груп»</p>
+                <p><strong className="text-slate-800">БИН:</strong> 250140013808</p>
+                <p><strong className="text-slate-800">Юр. адрес:</strong> РК, г. Астана, район Байконыр, шоссе Алаш, зд. 13, инд. 010000</p>
+                <p><strong className="text-slate-800">Центральный склад:</strong> РК, г. Астана, шоссе Астана-Караганда, 39/1</p>
+              </div>
             </div>
           </div>
 

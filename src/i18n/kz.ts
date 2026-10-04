@@ -338,6 +338,8 @@ export const kz: TranslationDictionary = {
   'footer.rights': 'Барлық құқықтар қорғалған.',
   'footer.privacy_policy': 'Құпиялылық саясаты',
   'footer.public_offer': 'Көпшілік офертасы',
+  'footer.delivery_payment': 'Жеткізу және төлеу',
+  'footer.returns_refunds': 'Қайтару және айырбастау (14 күн)',
 
   // WhatsApp
   'whatsapp.chat': 'WhatsApp-қа жазу',

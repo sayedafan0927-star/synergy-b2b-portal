@@ -130,6 +130,29 @@ export default function CurtainNavigationDrawer({
               </button>
             );
           })}
+          {/* Service & Legal links for mobile compliance */}
+          <div className="pt-2 sm:pt-4 flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 text-xs text-white/60 border-t border-white/5 mt-2">
+            <button
+              onClick={() => handleLinkClick('delivery')}
+              className="hover:text-amber-300 transition-colors cursor-pointer"
+            >
+              Доставка и оплата
+            </button>
+            <span>•</span>
+            <button
+              onClick={() => handleLinkClick('returns')}
+              className="text-amber-400/90 hover:text-amber-300 transition-colors cursor-pointer font-medium"
+            >
+              Возврат 14 дней
+            </button>
+            <span>•</span>
+            <button
+              onClick={() => handleLinkClick('terms')}
+              className="hover:text-amber-300 transition-colors cursor-pointer"
+            >
+              Оферта и реквизиты
+            </button>
+          </div>
         </nav>
 
         {/* Bottom Controls: Language Selector Bar + Action Icons */}

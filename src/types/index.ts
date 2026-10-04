@@ -373,7 +373,11 @@ export type PageId =
   | 'cart'
   | 'contacts'
   | 'login'
-  | 'profile';
+  | 'profile'
+  | 'delivery'
+  | 'returns'
+  | 'privacy'
+  | 'terms';
 
 export interface Category {
   id: string;

@@ -338,6 +338,8 @@ export const tr: TranslationDictionary = {
   'footer.rights': 'Tüm hakları saklıdır.',
   'footer.privacy_policy': 'Gizlilik Politikası',
   'footer.public_offer': 'Kullanım Koşulları',
+  'footer.delivery_payment': 'Teslimat ve Ödeme',
+  'footer.returns_refunds': 'İade ve Değişim (14 Gün)',
 
   // WhatsApp
   'whatsapp.chat': 'WhatsApp ile İletişime Geçin',

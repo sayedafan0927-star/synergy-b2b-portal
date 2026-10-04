@@ -338,6 +338,8 @@ export const en: TranslationDictionary = {
   'footer.rights': 'All rights reserved.',
   'footer.privacy_policy': 'Privacy Policy',
   'footer.public_offer': 'Public Terms',
+  'footer.delivery_payment': 'Shipping & Payment',
+  'footer.returns_refunds': 'Returns & Refunds (14 days)',
 
   // WhatsApp
   'whatsapp.chat': 'Chat on WhatsApp',
