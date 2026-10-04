@@ -12,9 +12,8 @@ interface LegalPageProps {
 const COMPANY_INFO = {
   name: 'ТОО «Синэнергия Груп»',
   bin: '250140013808',
-  regDate: '15.01.2025',
   legalAddress: 'Республика Казахстан, г. Астана, район Байконыр, шоссе Алаш, здание 13, индекс 010000',
-  warehouseAddress: 'Республика Казахстан, г. Астана, шоссе Астана-Караганда, 39/1',
+  warehouseAddress: 'Республика Казахстан, г. Астана, 69-ый проезд, 20-ое строение',
   phone: '+7 (778) 580-68-66',
   email: 'synergiya.group@gmail.com',
   workingHours: 'Пн — Пт: 09:00 — 17:00, Сб — Вс: выходной',
@@ -241,7 +240,7 @@ export default function LegalPage({ initialDoc = 'returns', onNavigate }: LegalP
               <section className="space-y-3">
                 <h2 className="text-lg font-bold text-slate-900">1. Предмет договора</h2>
                 <p className="text-sm text-slate-600 leading-relaxed">
-                  Поставщик ({COMPANY_INFO.name}) обязуется поставить, а Покупатель — принять и оплатить ковровые изделия в ассортименте, количестве и по ценам, зафиксированным в оформленном заказе на портале либо в договоре поставки 1С:ERP.
+                  Поставщик ({COMPANY_INFO.name}) обязуется поставить, а Покупатель — принять и оплатить ковровые изделия в ассортименте, количестве и по ценам, зафиксированным в оформленном заказе на портале либо в договоре поставки или счете на оплату.
                 </p>
               </section>
 
@@ -270,8 +269,8 @@ export default function LegalPage({ initialDoc = 'returns', onNavigate }: LegalP
             <div className="grid gap-2 text-xs sm:text-sm text-slate-600 sm:grid-cols-2">
               <div><strong className="text-slate-900">Компания:</strong> {COMPANY_INFO.name}</div>
               <div><strong className="text-slate-900">БИН:</strong> {COMPANY_INFO.bin}</div>
-              <div><strong className="text-slate-900">Дата регистрации:</strong> {COMPANY_INFO.regDate}</div>
               <div><strong className="text-slate-900">Телефон:</strong> {COMPANY_INFO.phone}</div>
+              <div><strong className="text-slate-900">Email:</strong> {COMPANY_INFO.email}</div>
               <div className="sm:col-span-2"><strong className="text-slate-900">Юр. адрес:</strong> {COMPANY_INFO.legalAddress}</div>
               <div className="sm:col-span-2"><strong className="text-slate-900">Склад:</strong> {COMPANY_INFO.warehouseAddress}</div>
             </div>

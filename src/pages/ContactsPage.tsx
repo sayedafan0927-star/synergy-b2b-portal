@@ -176,7 +176,7 @@ export default function ContactsPage({ onNavigate: _onNavigate }: { onNavigate: 
                 <p><strong className="text-slate-800">Наименование:</strong> ТОО «Синэнергия Груп»</p>
                 <p><strong className="text-slate-800">БИН:</strong> 250140013808</p>
                 <p><strong className="text-slate-800">Юр. адрес:</strong> РК, г. Астана, район Байконыр, шоссе Алаш, зд. 13, инд. 010000</p>
-                <p><strong className="text-slate-800">Центральный склад:</strong> РК, г. Астана, шоссе Астана-Караганда, 39/1</p>
+                <p><strong className="text-slate-800">Центральный склад:</strong> РК, г. Астана, 69-ый проезд, 20-ое строение</p>
               </div>
             </div>
           </div>
