@@ -172,19 +172,19 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
       let photos = getValidImages(raw.images);
       const thematic = getThematicCarpetImage(collection, article, color);
       if (thematic) {
-        if (
-          photos.length === 0 ||
-          (collection.includes('FLORA') && (article.includes('9568B') || article.includes('9568G'))) ||
-          (collection.includes('AFGAN') && article.includes('123')) ||
-          (collection.includes('HYPNOSE') && article.includes('P1010')) ||
-          (collection.includes('OCTAVIA') && article.includes('75488'))
-        ) {
-          photos = [thematic, ...photos.filter(p => p !== thematic)];
+        if (photos.length === 0) {
+          photos = [thematic];
+        } else if (!photos.includes(thematic)) {
+          photos.push(thematic);
         }
       }
       const rawPrice = Number(raw.price) > 0 ? Number(raw.price) : (itemVariants[0]?.base_price || 0);
       const rawMinPrice = itemVariants.length > 0 ? Math.min(...itemVariants.map(v => v.base_price)) : rawPrice;
       const rawMaxPrice = itemVariants.length > 0 ? Math.max(...itemVariants.map(v => v.base_price)) : rawPrice;
+
+      const rawThumb = raw.image_thumb && !raw.image_thumb.includes('unsplash.com')
+        ? raw.image_thumb.replace(/^https?:\/\/(?:crm\.)?kilem-khan\.kz\/api\/sin\/public\/image\.php/i, 'https://erp.synergy-tech.kz/image.php')
+        : undefined;
 
       map.set(groupKey, {
         ...raw,
@@ -201,25 +201,30 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
         min_price: rawMinPrice,
         max_price: rawMaxPrice,
         images: photos,
-        image_thumb: photos[0] || (raw.image_thumb && !raw.image_thumb.includes('unsplash.com') ? raw.image_thumb : thematic),
+        image_thumb: photos[0] || rawThumb || thematic,
         characteristics: raw.characteristics,
         variants: [...itemVariants],
       });
     } else {
       // Обогащаем медиа и характеристики, если они появились у следующего элемента того же дизайна
       const thematic = getThematicCarpetImage(collection, article, color);
-      if (thematic && (!existing.images || existing.images.length === 0 || !existing.images.includes(thematic))) {
-        existing.images = [thematic, ...(existing.images || []).filter(p => p !== thematic)];
-        existing.image_thumb = thematic;
-      } else if ((!existing.images || existing.images.length === 0) && raw.images && raw.images.length > 0) {
-        const photos = getValidImages(raw.images);
-        if (photos.length > 0) {
-          existing.images = photos;
-          existing.image_thumb = photos[0];
+      const rawPhotos = getValidImages(raw.images);
+      if (rawPhotos.length > 0) {
+        const currentPhotos = (existing.images || []).filter(p => !p.startsWith('/carpets/'));
+        const combined = Array.from(new Set([...currentPhotos, ...rawPhotos]));
+        if (thematic && !combined.includes(thematic)) {
+          combined.push(thematic);
+        }
+        existing.images = combined;
+        existing.image_thumb = combined[0];
+      } else if (!existing.images || existing.images.length === 0) {
+        if (thematic) {
+          existing.images = [thematic];
+          existing.image_thumb = thematic;
         }
       }
       if (!existing.image_thumb && raw.image_thumb && !raw.image_thumb.includes('unsplash.com')) {
-        existing.image_thumb = raw.image_thumb;
+        existing.image_thumb = raw.image_thumb.replace(/^https?:\/\/(?:crm\.)?kilem-khan\.kz\/api\/sin\/public\/image\.php/i, 'https://erp.synergy-tech.kz/image.php');
       }
       if ((!existing.characteristics || existing.characteristics.length === 0) && raw.characteristics && raw.characteristics.length > 0) {
         existing.characteristics = raw.characteristics;

@@ -176,7 +176,12 @@ export async function handleCatalogRequests(
 
         if (found) {
           res.setHeader('X-Cache', cached ? 'HIT' : 'FETCHED');
-          res.status(200).json({ success: true, product: found });
+          const normalizedFound = {
+            ...found,
+            images: (Array.isArray(found.images) ? found.images : (found.image ? [found.image] : [])).map(normalizeImageUrl).filter(Boolean),
+            image_thumb: found.image_thumb ? normalizeImageUrl(found.image_thumb) : undefined,
+          };
+          res.status(200).json({ success: true, product: normalizedFound });
           return true;
         }
       }

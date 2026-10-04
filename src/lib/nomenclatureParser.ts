@@ -111,5 +111,7 @@ export function parse1CNomenclature(rawName: string, fallbackCollection = ''): {
 
 export function getValidImages(rawImages?: string[] | null): string[] {
   if (!rawImages || !Array.isArray(rawImages)) return [];
-  return rawImages.filter(img => typeof img === 'string' && img.trim().length > 0 && !img.includes('unsplash.com'));
+  return rawImages
+    .filter(img => typeof img === 'string' && img.trim().length > 0 && !img.includes('unsplash.com'))
+    .map(img => img.replace(/^https?:\/\/(?:crm\.)?kilem-khan\.kz\/api\/sin\/public\/image\.php/i, 'https://erp.synergy-tech.kz/image.php'));
 }

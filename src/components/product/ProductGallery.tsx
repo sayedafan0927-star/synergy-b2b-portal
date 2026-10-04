@@ -14,7 +14,7 @@ export function ProductGallery({
   cleanTitle,
 }: ProductGalleryProps) {
   const [selectedImage, setSelectedImage] = useState(0);
-  const [imageError, setImageError] = useState(false);
+  const [failedImages, setFailedImages] = useState<Record<number, boolean>>({});
   const [lightboxOpen, setLightboxOpen] = useState(false);
 
   const touchStartX = useRef<number | null>(null);
@@ -26,7 +26,7 @@ export function ProductGallery({
 
   useEffect(() => {
     setSelectedImage(0);
-    setImageError(false);
+    setFailedImages({});
   }, [images]);
 
   const prevImage = useCallback(() => {
@@ -111,13 +111,13 @@ export function ProductGallery({
           className={`relative aspect-[4/5] min-w-0 flex-1 rounded-2xl overflow-hidden bg-slate-50 border border-slate-200/80 ${imageCount > 0 ? 'cursor-zoom-in group' : ''}`}
           onClick={() => imageCount > 0 && setLightboxOpen(true)}
         >
-          {imageCount > 0 && validImages[selectedImage] && !imageError ? (
+          {imageCount > 0 && validImages[selectedImage] && !failedImages[selectedImage] ? (
             <>
               <img
                 src={validImages[selectedImage]}
                 alt={`${cleanTitle} — фото ${selectedImage + 1}`}
                 className="h-full w-full object-contain p-4 transition-transform duration-300 group-hover:scale-105"
-                onError={() => setImageError(true)}
+                onError={() => setFailedImages(prev => ({ ...prev, [selectedImage]: true }))}
                 draggable={false}
               />
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors flex items-center justify-center pointer-events-none">
@@ -164,13 +164,13 @@ export function ProductGallery({
           onTouchMove={imageCount > 1 ? handleTouchMove : undefined}
           onTouchEnd={imageCount > 1 ? handleTouchEnd : undefined}
         >
-          {imageCount > 0 && validImages[selectedImage] && !imageError ? (
+          {imageCount > 0 && validImages[selectedImage] && !failedImages[selectedImage] ? (
             <img
               src={validImages[selectedImage]}
               alt={`${cleanTitle} — фото ${selectedImage + 1}`}
               className="h-full w-full object-contain pointer-events-none drop-shadow-sm transition-transform duration-300"
               draggable={false}
-              onError={() => setImageError(true)}
+              onError={() => setFailedImages(prev => ({ ...prev, [selectedImage]: true }))}
             />
           ) : (
             <CarpetPlaceholderIcon className="h-full w-full" />
