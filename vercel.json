@@ -82,6 +82,14 @@
   ],
   "rewrites": [
     {
+      "source": "/google-feed.xml",
+      "destination": "/api/catalog/google-feed"
+    },
+    {
+      "source": "/google-feed",
+      "destination": "/api/catalog/google-feed"
+    },
+    {
       "source": "/api/outbox/sync",
       "destination": "/api/outbox/sync"
     },
