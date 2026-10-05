@@ -37,7 +37,8 @@ export function compactCatalogPayload(data: any): any {
     country: p.country,
     density: p.density,
     pile_height: p.pile_height,
-    images: (Array.isArray(p.images) ? p.images.slice(0, 3) : (p.image ? [p.image] : [])).map(normalizeImageUrl).filter(Boolean),
+    // Ссылки на фото весят ~60 байт — держим всю галерею (до 12), чтобы карточка каталога совпадала со страницей товара
+    images: (Array.isArray(p.images) ? p.images.slice(0, 12) : (p.image ? [p.image] : [])).map(normalizeImageUrl).filter(Boolean),
     image_thumb: p.image_thumb ? normalizeImageUrl(p.image_thumb) : undefined,
     variants: (p.variants || []).map((v: any) => ({
       id: v.id,

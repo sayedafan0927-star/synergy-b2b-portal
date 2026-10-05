@@ -263,22 +263,33 @@ function ProductCard({ product, onNavigate }: ProductCardProps) {
 
             {/* Точки-индикаторы снизу (dots) - контейнер не перехватывает клики */}
             <div className="absolute bottom-2 left-0 right-0 z-20 flex items-center justify-center gap-1 pointer-events-none">
-              {allImages.slice(0, 6).map((_, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setCurrentImgIndex(idx);
-                  }}
-                  className={`h-1.5 rounded-full transition-all pointer-events-auto ${
-                    idx === currentImgIndex
-                      ? 'w-3.5 bg-slate-900 shadow'
-                      : 'w-1.5 bg-white/90 border border-slate-300 hover:bg-slate-400'
-                  }`}
-                  aria-label={`Фото ${idx + 1}`}
-                />
-              ))}
+              {(() => {
+                const MAX_DOTS = 8;
+                const total = allImages.length;
+                const start = total <= MAX_DOTS
+                  ? 0
+                  : Math.min(Math.max(0, currentImgIndex - Math.floor(MAX_DOTS / 2)), total - MAX_DOTS);
+                const end = Math.min(total, start + MAX_DOTS);
+                return allImages.slice(start, end).map((_, i) => {
+                  const idx = start + i;
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCurrentImgIndex(idx);
+                      }}
+                      className={`h-1.5 rounded-full transition-all pointer-events-auto ${
+                        idx === currentImgIndex
+                          ? 'w-3.5 bg-slate-900 shadow'
+                          : 'w-1.5 bg-white/90 border border-slate-300 hover:bg-slate-400'
+                      }`}
+                      aria-label={`Фото ${idx + 1}`}
+                    />
+                  );
+                });
+              })()}
             </div>
           </>
         )}
