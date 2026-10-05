@@ -334,12 +334,13 @@ export interface ActiveReservationsResponse {
  * Получить список активных складских резервов с разбивкой по клиентам и позициям
  */
 export async function fetchActiveReservations(params?: { sku?: string; q?: string }): Promise<ActiveReservationsResponse> {
-  const queryParts: string[] = [];
-  if (params?.sku) queryParts.push(`sku=${encodeURIComponent(params.sku)}`);
-  if (params?.q) queryParts.push(`q=${encodeURIComponent(params.q)}`);
-  const queryStr = queryParts.length > 0 ? `&${queryParts.join('&')}` : '';
+  const queryParams: Record<string, string> = {};
+  if (params?.sku) queryParams.sku = params.sku;
+  if (params?.q) queryParams.q = params.q;
 
-  const response = await erpFetch(`active_reservations${queryStr}`);
+  const response = await erpFetch('active_reservations', {
+    params: queryParams,
+  });
   const data = await response.json().catch(() => null);
   if (!response.ok || !data?.success) {
     throw new Error(data?.error || `Не удалось загрузить данные резервов (${response.status})`);

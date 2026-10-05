@@ -11,6 +11,7 @@ import {
 import { fetchActiveReservations, type ActiveReservation } from '@/lib/erpApi';
 import { Portal } from '@/components/common/Portal';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { ReservationMetricsBar } from './reservations/ReservationMetricsBar';
 import { ReservationCard, clean1CName } from './reservations/ReservationCard';
 
@@ -20,6 +21,7 @@ interface StockReservationsModalProps {
   filterSku?: string;
   catalogSkus?: string[];
   initialTab?: 'all' | 'processing' | 'pending' | 'expired';
+  onNavigate?: (page: any) => void;
 }
 
 function fmtNum(n: number, decimals = 0): string {
@@ -85,8 +87,10 @@ export function StockReservationsModal({
   filterSku,
   catalogSkus,
   initialTab,
+  onNavigate,
 }: StockReservationsModalProps) {
   const { t } = useLanguage();
+  const { profile } = useAuth();
   const [reservations, setReservations] = useState<ActiveReservation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -98,6 +102,11 @@ export function StockReservationsModal({
   const hasCatalogContext = Boolean(catalogSkus && catalogSkus.length > 0);
 
   const loadData = async () => {
+    if (!profile) {
+      setLoading(false);
+      setError('Для просмотра детальной информации о бронях и заказах клиентов требуется авторизация.');
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -109,7 +118,12 @@ export function StockReservationsModal({
       }
     } catch (err: any) {
       console.warn('[StockReservationsModal] Load error:', err);
-      setError(err?.message || 'Ошибка загрузки резервов');
+      const msg = String(err?.message || '');
+      if (msg.includes('401') || msg.includes('авторизац')) {
+        setError('Сессия истекла или требуется повторная авторизация.');
+      } else {
+        setError(msg || 'Ошибка загрузки резервов');
+      }
     } finally {
       setLoading(false);
     }
@@ -389,12 +403,26 @@ export function StockReservationsModal({
                 <p className="text-xs font-medium">{t('reservations.loading')}</p>
               </div>
             ) : error ? (
-              <div className="rounded-xl border border-rose-200 bg-rose-50/70 p-4 text-xs text-rose-800 flex items-start gap-3">
-                <ShieldAlert className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-bold">{t('common.error')}</p>
-                  <p className="mt-0.5">{error}</p>
+              <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-5 text-xs text-amber-900 flex flex-col items-center justify-center text-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-700">
+                  <ShieldAlert className="h-5 w-5" />
                 </div>
+                <div>
+                  <p className="font-bold text-sm text-slate-800">Доступ ограничен</p>
+                  <p className="mt-1 text-slate-600 max-w-sm">{error}</p>
+                </div>
+                {!profile && onNavigate && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onNavigate('login');
+                    }}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-medium text-xs shadow-2xs transition-colors cursor-pointer"
+                  >
+                    Войти в личный кабинет
+                  </button>
+                )}
               </div>
             ) : filteredReservations.length === 0 ? (
               <div className="py-16 text-center text-slate-400">

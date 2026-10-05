@@ -98,6 +98,15 @@ export default function CatalogPage({
     const key = profile?.partner_id || profile?.id;
     return Boolean(key && getClientWarehouseSettings(key)?.showStockSummary);
   }, [isEffectiveAdmin, displaySettings.show_reserve, profile?.partner_id, profile?.id]);
+
+  const canViewStockDetails = useMemo(() => {
+    if (!profile) return false;
+    if (isEffectiveAdmin) return true;
+    const role = profile.role;
+    if (role === 'admin' || role === 'manager_rm' || role === 'manager_lm') return true;
+    const key = profile.partner_id || profile.id;
+    return Boolean(key && getClientWarehouseSettings(key)?.showStockSummary);
+  }, [profile, isEffectiveAdmin]);
   const hideOutOfStockSetting = displaySettings.hide_out_of_stock_products !== false;
 
   const baseProducts = useMemo(() => {
@@ -458,8 +467,8 @@ export default function CatalogPage({
           <div className="mb-4">
             <StockSummaryBar
               summary={currentSummary}
-              onReserveClick={() => { setReservationsTab('all'); setReservationsModalOpen(true); }}
-              onAssemblyClick={() => { setReservationsTab('processing'); setReservationsModalOpen(true); }}
+              onReserveClick={canViewStockDetails ? () => { setReservationsTab('all'); setReservationsModalOpen(true); } : undefined}
+              onAssemblyClick={canViewStockDetails ? () => { setReservationsTab('processing'); setReservationsModalOpen(true); } : undefined}
             />
           </div>
         )}
@@ -637,12 +646,13 @@ export default function CatalogPage({
           {...filterProps}
         />
 
-      {canViewStockSummary && (
+      {canViewStockDetails && (
         <StockReservationsModal
           isOpen={reservationsModalOpen}
           onClose={() => setReservationsModalOpen(false)}
           catalogSkus={catalogReservedSkus}
           initialTab={reservationsTab}
+          onNavigate={onNavigate}
         />
       )}
     </DecklePaperWrapper>
