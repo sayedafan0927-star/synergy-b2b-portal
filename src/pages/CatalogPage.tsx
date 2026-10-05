@@ -1,13 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import {
-  Search,
-  SlidersHorizontal,
-  ChevronDown,
-  X,
-  LayoutGrid,
-  Table2,
-  Globe,
-} from 'lucide-react';
+import { Search, SlidersHorizontal, ChevronDown, X, LayoutGrid, Table2, Globe } from 'lucide-react';
 import type { PageId, Warehouse, StockSummary, Product } from '@/types';
 import { useProducts } from '@/hooks/useProductData';
 import { useUserPricing } from '@/hooks/usePricing';
@@ -18,20 +10,11 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
 import { filterWarehousesForClient, isProductInStockForUser, getClientWarehouseSettings } from '@/lib/warehouseVisibility';
 import {
-  FilterDrawer,
-  CatalogFilterSidebar,
-  CatalogStockTable,
-  CatalogLoadingSkeleton,
-  CatalogLoadError,
-  StockReservationsModal,
-  ActiveFilterChips,
-  useCatalogStatePersistence,
-  DecklePaperWrapper,
-  CatalogPetroglyphHero,
-  getTotalStock,
-  sizeArea,
-  type SortOption,
-  type ViewMode,
+  FilterDrawer, CatalogFilterSidebar, CatalogStockTable,
+  CatalogLoadingSkeleton, CatalogLoadError, StockReservationsModal,
+  ActiveFilterChips, useCatalogStatePersistence, DecklePaperWrapper,
+  CatalogPetroglyphHero, getTotalStock, sizeArea,
+  type SortOption, type ViewMode,
 } from '@/components/catalog';
 import { tokenizeSearchQuery, matchesSearchTokens } from '@/lib/searchNormalization';
 

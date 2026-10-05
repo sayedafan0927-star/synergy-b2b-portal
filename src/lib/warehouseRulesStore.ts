@@ -25,6 +25,10 @@ export async function initWarehouseRulesFromServer(): Promise<Record<string, Cli
   try {
     const res = await fetch('/api/warehouse-rules');
     if (res.ok) {
+      const contentType = res.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        return getAllClientWarehouseRules();
+      }
       const data = await res.json();
       if (data?.success && data?.rules) {
         serverRulesCache = data.rules;

@@ -1,13 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import {
-  X,
-  Search,
-  Clock,
-  RefreshCw,
-  ShieldAlert,
-  AlertCircle,
-  Building2,
-} from 'lucide-react';
+import { X, Search, Clock, RefreshCw, ShieldAlert, AlertCircle, Building2 } from 'lucide-react';
 import { fetchActiveReservations, type ActiveReservation } from '@/lib/erpApi';
 import { Portal } from '@/components/common/Portal';
 import { useLanguage } from '@/contexts/LanguageContext';
