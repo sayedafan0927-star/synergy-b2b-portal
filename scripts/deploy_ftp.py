@@ -102,7 +102,10 @@ def sync_directory(ftp: ftplib.FTP, local_dir: str, remote_base: str, force: boo
             remote_file = os.path.join(remote_dir, file).replace("\\", "/")
             file_size = os.path.getsize(local_file)
             
-            if not force:
+            # Always upload entrypoints and manifests regardless of size
+            is_critical_entry = file in ("index.html", "sw.js", "manifest.json") or file.endswith(".html")
+            
+            if not force and not is_critical_entry:
                 rem_size = get_remote_file_size(ftp, remote_file)
                 if rem_size is not None and rem_size == file_size:
                     skipped += 1

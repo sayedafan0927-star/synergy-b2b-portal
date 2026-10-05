@@ -51,43 +51,82 @@ export async function fetchCatalogFromErp(dealerId?: string | number, priceType?
 }
 
 /**
- * Точечная загрузка одного товара по ID или артикулу (исключает скачивание всего каталога)
+ * Точечная загрузка одного товара по ID или артикулу.
+ * Ищет товар в кэшированном каталоге ERP (с 60s Stale-While-Revalidate TTL),
+ * предотвращая лишние запросы к неподдерживаемым эндпоинтам и ошибки 401.
  */
-export async function fetchSingleProductFromErp(id: string) {
-  const response = await erpFetch('product', {
-    method: 'GET',
-    params: { id },
-  });
+export async function fetchSingleProductFromErp(id: string, dealerId?: string | number) {
+  if (!id) return null;
+  const cleanId = decodeURIComponent(String(id)).trim().toLowerCase();
+  if (!cleanId) return null;
 
-  if (!response.ok) {
+  try {
+    const catalogData = await fetchCatalogFromErp(dealerId);
+    const products: any[] = catalogData?.products || [];
+    const found = products.find((p: any) => {
+      if (String(p.id).toLowerCase() === cleanId) return true;
+      if (String(p.article || '').toLowerCase() === cleanId) return true;
+      return (p.variants || []).some(
+        (v: any) =>
+          String(v.id).toLowerCase() === cleanId ||
+          String(v.sku || '').toLowerCase() === cleanId ||
+          String(v.barcode || '').toLowerCase() === cleanId ||
+          String(v.article || '').toLowerCase() === cleanId ||
+          String((v as any).code || '').toLowerCase() === cleanId
+      );
+    });
+    return found || null;
+  } catch (err) {
+    console.warn('[Catalog API] fetchSingleProductFromErp notice:', err);
     return null;
   }
-
-  const data = await response.json();
-  return data?.product || null;
 }
 
 /**
- * Серверная пагинация, фильтрация и поиск каталога (масштабирование до 50k+ SKU)
+ * Пагинация, фильтрация и поиск каталога на основе кэшированного каталога ERP
  */
 export async function fetchPaginatedCatalogFromErp(params: PaginatedCatalogParams = {}): Promise<PaginatedCatalogResult> {
-  const response = await erpFetch('catalog_paginated', {
-    method: 'GET',
-    params: {
-      page: params.page ? String(params.page) : '1',
-      limit: params.limit ? String(params.limit) : '24',
-      search: params.search || undefined,
-      category: params.category || undefined,
-      collection: params.collection || undefined,
-      in_stock: params.inStockOnly ? 'true' : undefined,
-    },
-  });
+  const catalogData = await fetchCatalogFromErp();
+  let items: any[] = catalogData?.products || [];
 
-  if (!response.ok) {
-    throw new Error(`Ошибка загрузки каталога (${response.status})`);
+  if (params.search) {
+    const q = params.search.toLowerCase();
+    items = items.filter((p: any) =>
+      (p.name || '').toLowerCase().includes(q) ||
+      (p.article || '').toLowerCase().includes(q) ||
+      (p.collection || '').toLowerCase().includes(q)
+    );
+  }
+  if (params.category) {
+    items = items.filter((p: any) => (p.category || '').toLowerCase() === params.category?.toLowerCase());
+  }
+  if (params.collection) {
+    items = items.filter((p: any) => (p.collection || '').toLowerCase() === params.collection?.toLowerCase());
+  }
+  if (params.inStockOnly) {
+    items = items.filter((p: any) => {
+      const totalStock = (p.variants || []).reduce((sum: number, v: any) => {
+        const whStock = (v.warehouses || []).reduce((wSum: number, w: any) => wSum + (w.stock || 0), 0);
+        return sum + whStock;
+      }, 0);
+      return totalStock > 0;
+    });
   }
 
-  return response.json();
+  const page = Number(params.page) || 1;
+  const limit = Number(params.limit) || 24;
+  const total = items.length;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const pagedItems = items.slice((page - 1) * limit, page * limit);
+
+  return {
+    success: true,
+    page,
+    limit,
+    total,
+    totalPages,
+    items: pagedItems,
+  };
 }
 
 /**
