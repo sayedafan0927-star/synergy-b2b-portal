@@ -252,7 +252,21 @@ export default function App() {
       } else if (target !== 'home') {
         url.searchParams.set('page', target);
       }
-      window.history.pushState({ page: target, id, tab }, '', url.pathname + url.search);
+
+      const nextUrl = url.pathname + url.search;
+      const currentUrl = typeof window !== 'undefined' ? (window.location.pathname + window.location.search) : '';
+      const currentState = typeof window !== 'undefined' ? window.history.state : null;
+      
+      const isDuplicate = 
+        currentState && 
+        currentState.page === target && 
+        currentState.id === id && 
+        currentState.tab === tab && 
+        currentUrl === nextUrl;
+
+      if (!isDuplicate) {
+        window.history.pushState({ page: target, id, tab }, '', nextUrl);
+      }
     }
 
     const isBackNavToCatalog = target === 'catalog' && Boolean(

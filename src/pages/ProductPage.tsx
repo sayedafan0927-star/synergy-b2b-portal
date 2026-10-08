@@ -271,8 +271,37 @@ export default function ProductPage({
   const isOutOfStockForClient = product ? !isProductInStockForUser(product, profile, false, true) : false;
   const cleanTitle = formatProductTitle(product, language);
 
+  const edgeStartXRef = useRef<number | null>(null);
+  const edgeStartYRef = useRef<number | null>(null);
+
+  const handlePageTouchStart = (e: React.TouchEvent) => {
+    if (e.touches[0].clientX < 55) {
+      edgeStartXRef.current = e.touches[0].clientX;
+      edgeStartYRef.current = e.touches[0].clientY;
+    } else {
+      edgeStartXRef.current = null;
+      edgeStartYRef.current = null;
+    }
+  };
+
+  const handlePageTouchEnd = (e: React.TouchEvent) => {
+    if (edgeStartXRef.current !== null && edgeStartYRef.current !== null) {
+      const dx = e.changedTouches[0].clientX - edgeStartXRef.current;
+      const dy = Math.abs(e.changedTouches[0].clientY - edgeStartYRef.current);
+      if (dx > 65 && dy < 45) {
+        onNavigate('catalog');
+      }
+    }
+    edgeStartXRef.current = null;
+    edgeStartYRef.current = null;
+  };
+
   return (
-    <section className="pt-20 pb-24 lg:pb-8 bg-white min-h-screen">
+    <section 
+      onTouchStart={handlePageTouchStart}
+      onTouchEnd={handlePageTouchEnd}
+      className="pt-20 pb-24 lg:pb-8 bg-white min-h-screen"
+    >
       <div className="container-w">
         {/* КНОПКА НАЗАД В КАТАЛОГ И ХЛЕБНЫЕ КРОШКИ */}
         <div className="flex items-center gap-3 mb-6">

@@ -106,8 +106,8 @@ export function ProductCardCarousel({
   }, [allImages.length, currentImgIndex, onIndexChange]);
 
   const handleImageAreaClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
     if (isSwiping.current || Date.now() < preventClickUntilRef.current) {
-      e.stopPropagation();
       e.preventDefault();
       return;
     }

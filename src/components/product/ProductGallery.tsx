@@ -140,6 +140,11 @@ export function ProductGallery({
       else nextImage();
     } else if (deltaY > 80 && Math.abs(deltaY) > Math.abs(deltaX) * 1.5) {
       setLightboxOpen(false);
+    } else if (Math.abs(deltaX) < 15 && Math.abs(deltaY) < 15) {
+      const target = e.target as HTMLElement;
+      if (target === e.currentTarget || target.dataset.backdrop === 'true') {
+        setLightboxOpen(false);
+      }
     }
     lightboxTouchStartX.current = null;
     lightboxTouchStartY.current = null;
@@ -375,48 +380,67 @@ export function ProductGallery({
           aria-modal="true"
           aria-label={`Просмотр изображения ${selectedImage + 1} из ${imageCount}`}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm select-none"
-          onClick={() => setLightboxOpen(false)}
+          data-backdrop="true"
+          onClick={(e) => {
+            if (e.target === e.currentTarget || (e.target as HTMLElement).dataset.backdrop === 'true') {
+              setLightboxOpen(false);
+            }
+          }}
           onTouchStart={handleLightboxTouchStart}
           onTouchEnd={handleLightboxTouchEnd}
         >
           <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setLightboxOpen(false);
+            }}
             aria-label="Закрыть"
             autoFocus
-            className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors z-10 cursor-pointer"
+            className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors z-20 cursor-pointer"
           >
             <X className="h-6 w-6" />
           </button>
           {imageCount > 1 && (
             <>
               <button
+                type="button"
                 onClick={e => { e.stopPropagation(); prevImage(); }}
                 aria-label="Предыдущее изображение"
-                className="absolute left-4 top-1/2 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors z-10 cursor-pointer"
+                className="absolute left-4 top-1/2 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors z-20 cursor-pointer"
               >
                 <ChevronLeft className="h-7 w-7" />
               </button>
               <button
+                type="button"
                 onClick={e => { e.stopPropagation(); nextImage(); }}
                 aria-label="Следующее изображение"
-                className="absolute right-4 top-1/2 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors z-10 cursor-pointer"
+                className="absolute right-4 top-1/2 -translate-y-1/2 flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors z-20 cursor-pointer"
               >
                 <ChevronRight className="h-7 w-7" />
               </button>
             </>
           )}
           {imageCount > 0 && validImages[selectedImage] && (
-            <img
-              src={validImages[selectedImage]}
-              alt={`${cleanTitle} — фото ${selectedImage + 1}`}
-              className="max-h-[85vh] max-w-[90vw] object-contain rounded-lg shadow-2xl pointer-events-none"
+            <div
+              className="relative max-h-[85vh] max-w-[90vw] flex items-center justify-center p-2 z-10"
               onClick={e => e.stopPropagation()}
-            />
+              onTouchStart={e => e.stopPropagation()}
+              onTouchEnd={e => e.stopPropagation()}
+            >
+              <img
+                src={validImages[selectedImage]}
+                alt={`${cleanTitle} — фото ${selectedImage + 1}`}
+                className="max-h-[85vh] max-w-[90vw] object-contain rounded-lg shadow-2xl pointer-events-auto select-none"
+              />
+            </div>
           )}
           {imageCount > 1 && (
-            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2">
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-2 z-20" onClick={e => e.stopPropagation()}>
               {validImages.map((_, idx) => (
                 <button
                   key={idx}
+                  type="button"
                   onClick={e => { e.stopPropagation(); scrollToIndex(idx); }}
                   aria-label={`Изображение ${idx + 1}`}
                   aria-current={idx === selectedImage}
