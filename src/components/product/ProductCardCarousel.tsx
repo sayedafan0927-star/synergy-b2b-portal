@@ -84,16 +84,31 @@ export function ProductCardCarousel({
     }
   }, []);
 
-  const handleTouchEnd = useCallback(() => {
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (touchStartX.current !== null && touchStartY.current !== null && allImages.length > 1) {
+      const deltaX = e.changedTouches[0].clientX - touchStartX.current;
+      const deltaY = Math.abs(e.changedTouches[0].clientY - touchStartY.current);
+      if (Math.abs(deltaX) > 28 && Math.abs(deltaX) > deltaY) {
+        preventClickUntilRef.current = Date.now() + 800;
+        isSwiping.current = true;
+        if (deltaX < 0) {
+          const nextIdx = currentImgIndex === allImages.length - 1 ? 0 : currentImgIndex + 1;
+          scrollToIndex(nextIdx);
+        } else {
+          const nextIdx = currentImgIndex === 0 ? allImages.length - 1 : currentImgIndex - 1;
+          scrollToIndex(nextIdx);
+        }
+      }
+    }
     if (isSwiping.current) {
-      preventClickUntilRef.current = Date.now() + 600;
+      preventClickUntilRef.current = Date.now() + 800;
       setTimeout(() => {
         isSwiping.current = false;
-      }, 300);
+      }, 350);
     }
     touchStartX.current = null;
     touchStartY.current = null;
-  }, []);
+  }, [allImages.length, currentImgIndex, scrollToIndex]);
 
   const handleCarouselScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     preventClickUntilRef.current = Date.now() + 600;
@@ -126,8 +141,8 @@ export function ProductCardCarousel({
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
-          className="w-full h-full flex overflow-x-auto snap-x snap-mandatory scroll-smooth no-scrollbar"
-          style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
+          className="w-full h-full flex overflow-x-auto snap-x snap-mandatory no-scrollbar"
+          style={{ WebkitOverflowScrolling: 'touch' }}
         >
           {allImages.map((img, idx) => (
             <div

@@ -62,6 +62,10 @@ export function clearCatalogState(): void {
 export function restoreCatalogScroll(productId?: string | null, scrollY?: number): void {
   if (typeof window === 'undefined') return;
 
+  if (typeof scrollY === 'number' && scrollY > 0) {
+    window.scrollTo({ top: scrollY, behavior: 'instant' });
+  }
+
   let attempts = 0;
   const maxAttempts = 30; // Retry for ~2.5-3 seconds as layout and images settle
 
@@ -92,7 +96,7 @@ export function restoreCatalogScroll(productId?: string | null, scrollY?: number
     }
 
     if (!handled && attempts < maxAttempts) {
-      setTimeout(attemptScroll, 80);
+      setTimeout(attemptScroll, 60);
     }
   };
 
@@ -257,6 +261,27 @@ export function useCatalogStatePersistence(options: UseCatalogStatePersistenceOp
     selectedSizes,
     visibleCount,
   ]);
+
+  useEffect(() => {
+    let timer: any;
+    const handleScroll = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        const currentScroll = window.scrollY || document.documentElement.scrollTop || 0;
+        if (currentScroll > 0) {
+          const state = readCatalogState();
+          if (state) {
+            writeCatalogState({ ...state, scrollY: currentScroll });
+          }
+        }
+      }, 150);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, []);
 
   const attemptScrollRestoration = useCallback((isReady: boolean) => {
     if (!isReady || hasRestoredScrollRef.current) return;

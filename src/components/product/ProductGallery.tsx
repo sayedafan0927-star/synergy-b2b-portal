@@ -101,7 +101,15 @@ export function ProductGallery({
     }
   }, []);
 
-  const handleTouchEnd = useCallback(() => {
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (touchStartX.current !== null && touchStartY.current !== null && imageCount > 1) {
+      const deltaX = e.changedTouches[0].clientX - touchStartX.current;
+      const deltaY = Math.abs(e.changedTouches[0].clientY - touchStartY.current);
+      if (Math.abs(deltaX) > 30 && Math.abs(deltaX) > deltaY) {
+        if (deltaX < 0) nextImage();
+        else prevImage();
+      }
+    }
     if (isSwiping.current) {
       setTimeout(() => {
         isSwiping.current = false;
@@ -109,7 +117,7 @@ export function ProductGallery({
     }
     touchStartX.current = null;
     touchStartY.current = null;
-  }, []);
+  }, [imageCount, nextImage, prevImage]);
 
   const handleMobileScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const container = e.currentTarget;
@@ -252,8 +260,8 @@ export function ProductGallery({
               onTouchStart={handleTouchStart}
               onTouchMove={handleTouchMove}
               onTouchEnd={handleTouchEnd}
-              className="w-full h-full flex overflow-x-auto snap-x snap-mandatory scroll-smooth no-scrollbar"
-              style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
+              className="w-full h-full flex overflow-x-auto snap-x snap-mandatory no-scrollbar"
+              style={{ WebkitOverflowScrolling: 'touch' }}
             >
               {validImages.map((img, idx) => (
                 <div
@@ -422,15 +430,11 @@ export function ProductGallery({
             </>
           )}
           {imageCount > 0 && validImages[selectedImage] && (
-            <div
-              className="relative max-h-[85vh] max-w-[90vw] flex items-center justify-center p-2 z-10"
-              onClick={e => e.stopPropagation()}
-              onTouchStart={e => e.stopPropagation()}
-              onTouchEnd={e => e.stopPropagation()}
-            >
+            <div className="relative max-h-[85vh] max-w-[90vw] flex items-center justify-center p-2 z-10 pointer-events-none">
               <img
                 src={validImages[selectedImage]}
                 alt={`${cleanTitle} — фото ${selectedImage + 1}`}
+                onClick={e => e.stopPropagation()}
                 className="max-h-[85vh] max-w-[90vw] object-contain rounded-lg shadow-2xl pointer-events-auto select-none"
               />
             </div>

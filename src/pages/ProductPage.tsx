@@ -274,6 +274,14 @@ export default function ProductPage({
   const edgeStartXRef = useRef<number | null>(null);
   const edgeStartYRef = useRef<number | null>(null);
 
+  const handleBackToCatalog = useCallback(() => {
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      window.history.back();
+    } else {
+      onNavigate('catalog');
+    }
+  }, [onNavigate]);
+
   const handlePageTouchStart = (e: React.TouchEvent) => {
     if (e.touches[0].clientX < 55) {
       edgeStartXRef.current = e.touches[0].clientX;
@@ -288,8 +296,8 @@ export default function ProductPage({
     if (edgeStartXRef.current !== null && edgeStartYRef.current !== null) {
       const dx = e.changedTouches[0].clientX - edgeStartXRef.current;
       const dy = Math.abs(e.changedTouches[0].clientY - edgeStartYRef.current);
-      if (dx > 65 && dy < 45) {
-        onNavigate('catalog');
+      if (dx > 55 && dy < 45) {
+        handleBackToCatalog();
       }
     }
     edgeStartXRef.current = null;
@@ -307,7 +315,7 @@ export default function ProductPage({
         <div className="flex items-center gap-3 mb-6">
           <button
             type="button"
-            onClick={() => onNavigate('catalog')}
+            onClick={handleBackToCatalog}
             className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 shadow-2xs transition-all cursor-pointer group"
           >
             <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
@@ -315,7 +323,7 @@ export default function ProductPage({
           </button>
           <span className="text-slate-300">/</span>
           <nav className="flex items-center gap-1.5 text-xs text-slate-400">
-            <button onClick={() => onNavigate('catalog')} className="hover:text-brand-600 transition-colors cursor-pointer">{t('nav.catalog')}</button>
+            <button onClick={handleBackToCatalog} className="hover:text-brand-600 transition-colors cursor-pointer">{t('nav.catalog')}</button>
             <ChevronRight className="h-3 w-3 shrink-0" />
             <button onClick={() => onNavigate('catalog', product.collection)} className="hover:text-brand-600 transition-colors font-medium text-slate-600 cursor-pointer">{product.collection}</button>
           </nav>
@@ -335,7 +343,7 @@ export default function ProductPage({
             </div>
             <button
               type="button"
-              onClick={() => onNavigate('catalog')}
+              onClick={handleBackToCatalog}
               className="btn-primary !bg-amber-800 hover:!bg-amber-900 text-xs py-2 px-4 shrink-0 self-start sm:self-center cursor-pointer"
             >
               Перейти в каталог

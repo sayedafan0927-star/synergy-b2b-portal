@@ -32,6 +32,10 @@ export {
   getCachedProduct,
 } from '@/lib/productCache';
 
+// Global in-memory cache for instant zero-skeleton remounting
+let globalProductsCache: Product[] = [];
+let globalSummaryCache: StockSummary | null = null;
+
 export function useProducts(customDealerId?: string | number) {
   const authContext = useContext(AuthContext);
   const effectiveDealerId =
@@ -40,15 +44,17 @@ export function useProducts(customDealerId?: string | number) {
     authContext?.profile?.partner_id ??
     undefined;
 
-  const [products, setProducts] = useState<Product[]>([]);
-  const [summary, setSummary] = useState<StockSummary | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [products, setProducts] = useState<Product[]>(() => globalProductsCache);
+  const [summary, setSummary] = useState<StockSummary | null>(() => globalSummaryCache);
+  const [loading, setLoading] = useState<boolean>(() => globalProductsCache.length === 0);
   const [error, setError] = useState<string | null>(null);
   const [reloadCounter, setReloadCounter] = useState(0);
 
   useEffect(() => {
     const handler = () => {
-      setLoading(true);
+      if (globalProductsCache.length === 0) {
+        setLoading(true);
+      }
       setReloadCounter(c => c + 1);
     };
     window.addEventListener('synergy:reload-catalog', handler);
@@ -197,6 +203,7 @@ export function useProducts(customDealerId?: string | number) {
               });
             }
 
+            globalProductsCache = updatedProducts;
             return updatedProducts;
           });
         }
@@ -230,15 +237,20 @@ export function useProducts(customDealerId?: string | number) {
         if (!cancelled && erpData && erpData.success && Array.isArray(erpData.products) && erpData.products.length > 0) {
           const merged = mergeProducts(erpData.products as Product[]);
           cacheProducts(merged);
+          globalProductsCache = merged;
           setProducts(merged);
           if (erpData.summary) {
+            globalSummaryCache = erpData.summary;
             setSummary(erpData.summary);
           }
           setLoading(false);
           return;
         }
         if (!cancelled) {
-          if (erpData?.summary) setSummary(erpData.summary);
+          if (erpData?.summary) {
+            globalSummaryCache = erpData.summary;
+            setSummary(erpData.summary);
+          }
           setLoading(false);
         }
       } catch (erpErr) {
