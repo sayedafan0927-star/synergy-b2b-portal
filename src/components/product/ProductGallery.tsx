@@ -19,10 +19,11 @@ export function ProductGallery({
 
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
+  const [mobileDragOffset, setMobileDragOffset] = useState<number>(0);
+  const [isMobileDragging, setIsMobileDragging] = useState<boolean>(false);
   const isSwiping = useRef(false);
   const thumbsContainerRef = useRef<HTMLDivElement | null>(null);
   const thumbRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const mobileScrollRef = useRef<HTMLDivElement | null>(null);
   const mobileThumbsRef = useRef<HTMLDivElement | null>(null);
   const mobileThumbRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const lightboxTouchStartX = useRef<number | null>(null);
@@ -34,9 +35,8 @@ export function ProductGallery({
   useEffect(() => {
     setSelectedImage(0);
     setFailedImages({});
-    if (mobileScrollRef.current) {
-      mobileScrollRef.current.scrollLeft = 0;
-    }
+    setMobileDragOffset(0);
+    setIsMobileDragging(false);
   }, [images]);
 
   // Автопрокрутка колонки миниатюр к активному фото на десктопе
@@ -68,40 +68,54 @@ export function ProductGallery({
 
   const scrollToIndex = useCallback((idx: number) => {
     setSelectedImage(idx);
-    if (mobileScrollRef.current) {
-      mobileScrollRef.current.scrollTo({
-        left: idx * mobileScrollRef.current.clientWidth,
-        behavior: 'smooth',
-      });
-    }
   }, []);
 
   const prevImage = useCallback(() => {
-    const nextIdx = selectedImage === 0 ? imageCount - 1 : selectedImage - 1;
-    scrollToIndex(nextIdx);
-  }, [imageCount, selectedImage, scrollToIndex]);
+    setSelectedImage(curr => (curr === 0 ? imageCount - 1 : curr - 1));
+  }, [imageCount]);
 
   const nextImage = useCallback(() => {
-    const nextIdx = selectedImage === imageCount - 1 ? 0 : selectedImage + 1;
-    scrollToIndex(nextIdx);
-  }, [imageCount, selectedImage, scrollToIndex]);
+    setSelectedImage(curr => (curr === imageCount - 1 ? 0 : curr + 1));
+  }, [imageCount]);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (imageCount <= 1) return;
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
     isSwiping.current = false;
-  }, []);
+    setIsMobileDragging(true);
+    setMobileDragOffset(0);
+  }, [imageCount]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (touchStartX.current === null || touchStartY.current === null) return;
-    const dx = Math.abs(e.touches[0].clientX - touchStartX.current);
-    const dy = Math.abs(e.touches[0].clientY - touchStartY.current);
-    if (dx > 8 && dx > dy) {
-      isSwiping.current = true;
-    }
-  }, []);
+    if (touchStartX.current === null || touchStartY.current === null || imageCount <= 1) return;
+    const dx = e.touches[0].clientX - touchStartX.current;
+    const dy = e.touches[0].clientY - touchStartY.current;
 
-  const handleTouchEnd = useCallback(() => {
+    if (Math.abs(dy) > Math.abs(dx) && !isSwiping.current) {
+      return;
+    }
+
+    if (Math.abs(dx) > 6) {
+      isSwiping.current = true;
+      setMobileDragOffset(dx);
+    }
+  }, [imageCount]);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (touchStartX.current !== null && imageCount > 1) {
+      const deltaX = e.changedTouches[0].clientX - touchStartX.current;
+      const deltaY = touchStartY.current !== null ? Math.abs(e.changedTouches[0].clientY - touchStartY.current) : 0;
+      if (Math.abs(deltaX) > 28 && Math.abs(deltaX) > deltaY) {
+        if (deltaX < 0) {
+          nextImage();
+        } else {
+          prevImage();
+        }
+      }
+    }
+    setIsMobileDragging(false);
+    setMobileDragOffset(0);
     if (isSwiping.current) {
       setTimeout(() => {
         isSwiping.current = false;
@@ -109,22 +123,8 @@ export function ProductGallery({
     }
     touchStartX.current = null;
     touchStartY.current = null;
-  }, []);
+  }, [imageCount, nextImage, prevImage]);
 
-  const handleMobileScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    const container = e.currentTarget;
-    if (!container || container.clientWidth === 0) return;
-    const newIndex = Math.round(container.scrollLeft / container.clientWidth);
-    if (newIndex >= 0 && newIndex < imageCount && newIndex !== selectedImage) {
-      setSelectedImage(newIndex);
-    }
-  }, [imageCount, selectedImage]);
-
-  const handleMobileImageTap = useCallback((idx: number) => {
-    if (isSwiping.current) return;
-    setSelectedImage(idx);
-    setLightboxOpen(true);
-  }, []);
 
   const handleLightboxTouchStart = useCallback((e: React.TouchEvent) => {
     lightboxTouchStartX.current = e.touches[0].clientX;
@@ -244,24 +244,32 @@ export function ProductGallery({
 
       {/* MOBILE GALLERY (Hidden on desktop) */}
       <div className="lg:hidden select-none">
-        <div className="relative aspect-[4/5] rounded-2xl overflow-hidden bg-slate-50 border border-slate-200/80 mb-3 shadow-2xs">
+        <div
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          onTouchCancel={() => {
+            setIsMobileDragging(false);
+            setMobileDragOffset(0);
+            touchStartX.current = null;
+            touchStartY.current = null;
+          }}
+          className="relative aspect-[4/5] rounded-2xl overflow-hidden bg-slate-50 border border-slate-200/80 mb-3 shadow-2xs"
+          style={{ touchAction: 'pan-y' }}
+        >
           {imageCount > 0 ? (
             <div
-              ref={mobileScrollRef}
-              onScroll={handleMobileScroll}
-              onTouchStart={handleTouchStart}
-              onTouchMove={handleTouchMove}
-              onTouchEnd={handleTouchEnd}
-              className="w-full h-full flex overflow-x-auto snap-x snap-mandatory no-scrollbar"
+              className="w-full h-full flex"
               style={{
-                WebkitOverflowScrolling: 'touch',
-                overscrollBehaviorX: 'contain',
+                transform: `translateX(calc(-${selectedImage * 100}% + ${mobileDragOffset}px))`,
+                transition: isMobileDragging ? 'none' : 'transform 300ms cubic-bezier(0.25, 1, 0.5, 1)',
+                willChange: 'transform',
               }}
             >
               {validImages.map((img, idx) => (
                 <div
                   key={idx}
-                  className="w-full h-full shrink-0 snap-start snap-always p-3 flex items-center justify-center relative select-none"
+                  className="w-full h-full shrink-0 p-3 flex items-center justify-center relative select-none"
                 >
                   {!failedImages[idx] ? (
                     <img

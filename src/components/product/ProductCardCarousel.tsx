@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import type { Product } from '@/types';
 import ProductImage from '@/components/ProductImage';
 
@@ -29,47 +29,64 @@ export function ProductCardCarousel({
   isOutOfStock,
   isShowroomMode,
 }: ProductCardCarouselProps) {
-  const carouselRef = useRef<HTMLDivElement | null>(null);
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
+  const [dragOffset, setDragOffset] = useState<number>(0);
+  const [isDragging, setIsDragging] = useState<boolean>(false);
   const isSwiping = useRef(false);
   const preventClickUntilRef = useRef<number>(0);
 
   useEffect(() => {
     onIndexChange(0);
-    if (carouselRef.current) {
-      carouselRef.current.scrollLeft = 0;
-    }
+    setDragOffset(0);
+    setIsDragging(false);
   }, [product.id, onIndexChange]);
 
-  const scrollToIndex = useCallback((nextIdx: number) => {
-    preventClickUntilRef.current = Date.now() + 600;
-    onIndexChange(nextIdx);
-    if (carouselRef.current) {
-      carouselRef.current.scrollTo({
-        left: nextIdx * carouselRef.current.clientWidth,
-        behavior: 'smooth',
-      });
-    }
-  }, [onIndexChange]);
-
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (allImages.length <= 1) return;
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
     isSwiping.current = false;
-  }, []);
+    setIsDragging(true);
+    setDragOffset(0);
+  }, [allImages.length]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (touchStartX.current === null || touchStartY.current === null) return;
-    const dx = Math.abs(e.touches[0].clientX - touchStartX.current);
-    const dy = Math.abs(e.touches[0].clientY - touchStartY.current);
-    if (dx > 6 || dy > 6) {
+    if (touchStartX.current === null || touchStartY.current === null || allImages.length <= 1) return;
+    const dx = e.touches[0].clientX - touchStartX.current;
+    const dy = e.touches[0].clientY - touchStartY.current;
+
+    // Don't interfere with vertical catalog page scroll
+    if (Math.abs(dy) > Math.abs(dx) && !isSwiping.current) {
+      return;
+    }
+
+    if (Math.abs(dx) > 6) {
       isSwiping.current = true;
       preventClickUntilRef.current = Date.now() + 600;
+      setDragOffset(dx);
     }
-  }, []);
+  }, [allImages.length]);
 
-  const handleTouchEnd = useCallback(() => {
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (touchStartX.current !== null && allImages.length > 1) {
+      const deltaX = e.changedTouches[0].clientX - touchStartX.current;
+      const deltaY = touchStartY.current !== null ? Math.abs(e.changedTouches[0].clientY - touchStartY.current) : 0;
+
+      if (Math.abs(deltaX) > 28 && Math.abs(deltaX) > deltaY) {
+        preventClickUntilRef.current = Date.now() + 600;
+        if (deltaX < 0) {
+          const nextIdx = currentImgIndex === allImages.length - 1 ? 0 : currentImgIndex + 1;
+          onIndexChange(nextIdx);
+        } else {
+          const nextIdx = currentImgIndex === 0 ? allImages.length - 1 : currentImgIndex - 1;
+          onIndexChange(nextIdx);
+        }
+      }
+    }
+
+    setIsDragging(false);
+    setDragOffset(0);
     if (isSwiping.current) {
       preventClickUntilRef.current = Date.now() + 600;
       setTimeout(() => {
@@ -78,15 +95,6 @@ export function ProductCardCarousel({
     }
     touchStartX.current = null;
     touchStartY.current = null;
-  }, []);
-
-  const handleCarouselScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    const el = e.currentTarget;
-    if (!el || el.clientWidth === 0) return;
-    const idx = Math.round(el.scrollLeft / el.clientWidth);
-    if (idx >= 0 && idx < allImages.length && idx !== currentImgIndex) {
-      onIndexChange(idx);
-    }
   }, [allImages.length, currentImgIndex, onIndexChange]);
 
   const handleImageAreaClick = useCallback((e: React.MouseEvent) => {
@@ -101,25 +109,31 @@ export function ProductCardCarousel({
   return (
     <div 
       onClick={handleImageAreaClick}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={() => {
+        setIsDragging(false);
+        setDragOffset(0);
+        touchStartX.current = null;
+        touchStartY.current = null;
+      }}
       className="relative aspect-[4/5] sm:aspect-[3/4] overflow-hidden rounded-t-xl bg-slate-50 flex items-center justify-center cursor-pointer select-none"
+      style={{ touchAction: 'pan-y' }}
     >
       {allImages.length > 1 ? (
         <div
-          ref={carouselRef}
-          onScroll={handleCarouselScroll}
-          onTouchStart={handleTouchStart}
-          onTouchMove={handleTouchMove}
-          onTouchEnd={handleTouchEnd}
-          className="w-full h-full flex overflow-x-auto snap-x snap-mandatory no-scrollbar"
+          className="w-full h-full flex"
           style={{
-            WebkitOverflowScrolling: 'touch',
-            overscrollBehaviorX: 'contain',
+            transform: `translateX(calc(-${currentImgIndex * 100}% + ${dragOffset}px))`,
+            transition: isDragging ? 'none' : 'transform 300ms cubic-bezier(0.25, 1, 0.5, 1)',
+            willChange: 'transform',
           }}
         >
           {allImages.map((img, idx) => (
             <div
               key={idx}
-              className="w-full h-full shrink-0 snap-start snap-always flex items-center justify-center p-2 sm:p-2.5"
+              className="w-full h-full shrink-0 flex items-center justify-center p-2 sm:p-2.5"
             >
               <ProductImage
                 src={img}
@@ -186,7 +200,7 @@ export function ProductCardCarousel({
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        scrollToIndex(idx);
+                        onIndexChange(idx);
                       }}
                       className={`h-1.5 rounded-full transition-all cursor-pointer ${
                         idx === currentImgIndex
