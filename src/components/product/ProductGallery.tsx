@@ -126,6 +126,11 @@ export function ProductGallery({
   }, [imageCount, nextImage, prevImage]);
 
 
+  const handleMobilePhotoClick = useCallback(() => {
+    if (isSwiping.current) return;
+    if (imageCount > 0) setLightboxOpen(true);
+  }, [imageCount]);
+
   const handleLightboxTouchStart = useCallback((e: React.TouchEvent) => {
     lightboxTouchStartX.current = e.touches[0].clientX;
     lightboxTouchStartY.current = e.touches[0].clientY;
@@ -245,6 +250,7 @@ export function ProductGallery({
       {/* MOBILE GALLERY (Hidden on desktop) */}
       <div className="lg:hidden select-none">
         <div
+          onClick={handleMobilePhotoClick}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
@@ -254,7 +260,7 @@ export function ProductGallery({
             touchStartX.current = null;
             touchStartY.current = null;
           }}
-          className="relative aspect-[4/5] rounded-2xl overflow-hidden bg-slate-50 border border-slate-200/80 mb-3 shadow-2xs"
+          className="relative aspect-[4/5] rounded-2xl overflow-hidden bg-slate-50 border border-slate-200/80 mb-3 shadow-2xs cursor-zoom-in"
           style={{ touchAction: 'pan-y' }}
         >
           {imageCount > 0 ? (
