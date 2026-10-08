@@ -1,7 +1,5 @@
-const CACHE_NAME = 'synergy-b2b-v20';
+const CACHE_NAME = 'synergy-b2b-v22';
 const STATIC_ASSETS = [
-  '/',
-  '/index.html',
   '/favicon.svg',
   '/manifest.json',
   '/Вектор_Синэнергия.png',
@@ -128,12 +126,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       (async () => {
         try {
-          const networkResponse = await fetch(request, { cache: 'no-cache' });
-          if (networkResponse && networkResponse.status === 200) {
-            const responseToCache = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', responseToCache));
-          }
-          return networkResponse;
+          return await fetch(request, { cache: 'no-cache' });
         } catch {
           const cached =
             (await caches.match(request)) ||

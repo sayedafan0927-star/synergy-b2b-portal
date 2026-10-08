@@ -34,6 +34,7 @@ export function ProductCardCarousel({
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
   const isSwiping = useRef(false);
+  const preventClickUntilRef = useRef<number>(0);
 
   useEffect(() => {
     onIndexChange(0);
@@ -43,6 +44,7 @@ export function ProductCardCarousel({
   }, [product.id, onIndexChange]);
 
   const scrollToIndex = useCallback((nextIdx: number) => {
+    preventClickUntilRef.current = Date.now() + 600;
     onIndexChange(nextIdx);
     if (carouselRef.current) {
       carouselRef.current.scrollTo({
@@ -54,12 +56,14 @@ export function ProductCardCarousel({
 
   const handlePrevImage = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
+    preventClickUntilRef.current = Date.now() + 600;
     const nextIdx = currentImgIndex === 0 ? allImages.length - 1 : currentImgIndex - 1;
     scrollToIndex(nextIdx);
   }, [currentImgIndex, allImages.length, scrollToIndex]);
 
   const handleNextImage = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
+    preventClickUntilRef.current = Date.now() + 600;
     const nextIdx = currentImgIndex === allImages.length - 1 ? 0 : currentImgIndex + 1;
     scrollToIndex(nextIdx);
   }, [currentImgIndex, allImages.length, scrollToIndex]);
@@ -74,22 +78,25 @@ export function ProductCardCarousel({
     if (touchStartX.current === null || touchStartY.current === null) return;
     const dx = Math.abs(e.touches[0].clientX - touchStartX.current);
     const dy = Math.abs(e.touches[0].clientY - touchStartY.current);
-    if (dx > 8 && dx > dy) {
+    if (dx > 6 || dy > 6) {
       isSwiping.current = true;
+      preventClickUntilRef.current = Date.now() + 600;
     }
   }, []);
 
   const handleTouchEnd = useCallback(() => {
     if (isSwiping.current) {
+      preventClickUntilRef.current = Date.now() + 600;
       setTimeout(() => {
         isSwiping.current = false;
-      }, 250);
+      }, 300);
     }
     touchStartX.current = null;
     touchStartY.current = null;
   }, []);
 
   const handleCarouselScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    preventClickUntilRef.current = Date.now() + 600;
     const el = e.currentTarget;
     if (!el || el.clientWidth === 0) return;
     const idx = Math.round(el.scrollLeft / el.clientWidth);
@@ -99,8 +106,9 @@ export function ProductCardCarousel({
   }, [allImages.length, currentImgIndex, onIndexChange]);
 
   const handleImageAreaClick = useCallback((e: React.MouseEvent) => {
-    if (isSwiping.current) {
+    if (isSwiping.current || Date.now() < preventClickUntilRef.current) {
       e.stopPropagation();
+      e.preventDefault();
       return;
     }
     onOpenProduct();
@@ -119,7 +127,7 @@ export function ProductCardCarousel({
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
           className="w-full h-full flex overflow-x-auto snap-x snap-mandatory scroll-smooth no-scrollbar"
-          style={{ WebkitOverflowScrolling: 'touch' }}
+          style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
         >
           {allImages.map((img, idx) => (
             <div
@@ -179,17 +187,17 @@ export function ProductCardCarousel({
             type="button"
             onClick={handlePrevImage}
             aria-label="Предыдущее фото"
-            className="hidden sm:flex absolute left-2 top-1/2 -translate-y-1/2 z-20 h-8 w-8 items-center justify-center rounded-full bg-white text-slate-700 shadow-md border border-slate-200/80 transition-all hover:bg-slate-50 hover:scale-110 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto cursor-pointer"
+            className="flex absolute left-1 sm:left-2 top-1/2 -translate-y-1/2 z-20 h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full bg-white/90 sm:bg-white text-slate-700 shadow-md border border-slate-200/80 transition-all hover:bg-slate-50 hover:scale-110 opacity-70 sm:opacity-0 sm:group-hover:opacity-100 cursor-pointer active:scale-95"
           >
-            <ChevronLeft className="h-4 w-4" />
+            <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
           </button>
           <button
             type="button"
             onClick={handleNextImage}
             aria-label="Следующее фото"
-            className="hidden sm:flex absolute right-2 top-1/2 -translate-y-1/2 z-20 h-8 w-8 items-center justify-center rounded-full bg-white text-slate-700 shadow-md border border-slate-200/80 transition-all hover:bg-slate-50 hover:scale-110 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto cursor-pointer"
+            className="flex absolute right-1 sm:right-2 top-1/2 -translate-y-1/2 z-20 h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full bg-white/90 sm:bg-white text-slate-700 shadow-md border border-slate-200/80 transition-all hover:bg-slate-50 hover:scale-110 opacity-70 sm:opacity-0 sm:group-hover:opacity-100 cursor-pointer active:scale-95"
           >
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
           </button>
 
           {/* Точки-индикаторы снизу (dots) */}

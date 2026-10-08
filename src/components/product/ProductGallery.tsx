@@ -248,13 +248,12 @@ export function ProductGallery({
               onTouchMove={handleTouchMove}
               onTouchEnd={handleTouchEnd}
               className="w-full h-full flex overflow-x-auto snap-x snap-mandatory scroll-smooth no-scrollbar"
-              style={{ WebkitOverflowScrolling: 'touch' }}
+              style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}
             >
               {validImages.map((img, idx) => (
                 <div
                   key={idx}
-                  className="w-full h-full shrink-0 snap-center p-3 flex items-center justify-center relative cursor-zoom-in"
-                  onClick={() => handleMobileImageTap(idx)}
+                  className="w-full h-full shrink-0 snap-center p-3 flex items-center justify-center relative select-none"
                 >
                   {!failedImages[idx] ? (
                     <img

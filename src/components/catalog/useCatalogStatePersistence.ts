@@ -63,7 +63,7 @@ export function restoreCatalogScroll(productId?: string | null, scrollY?: number
   if (typeof window === 'undefined') return;
 
   let attempts = 0;
-  const maxAttempts = 25; // Retry for ~2 seconds as layout and images settle
+  const maxAttempts = 30; // Retry for ~2.5-3 seconds as layout and images settle
 
   const attemptScroll = () => {
     attempts++;
@@ -82,9 +82,11 @@ export function restoreCatalogScroll(productId?: string | null, scrollY?: number
       }
     }
 
-    if (!handled && typeof scrollY === 'number' && scrollY > 0) {
+    // Only fallback to raw scrollY if no productId was specified, or if card element wasn't found after 15 attempts
+    if (!handled && (!productId || attempts >= 15) && typeof scrollY === 'number' && scrollY > 0) {
       window.scrollTo({ top: scrollY, behavior: 'instant' });
-      if (Math.abs(window.scrollY - scrollY) < 30) {
+      const current = window.scrollY || document.documentElement.scrollTop || 0;
+      if (Math.abs(current - scrollY) < 40) {
         handled = true;
       }
     }
@@ -123,7 +125,12 @@ export function useCatalogStatePersistence(options: UseCatalogStatePersistenceOp
   const [viewMode, setViewMode] = useState<ViewMode>(() => savedState?.viewMode || 'grid');
   const [searchQuery, setSearchQuery] = useState<string>(() => initialSearch || savedState?.searchQuery || '');
   const [sortBy, setSortBy] = useState<SortOption>(() => savedState?.sortBy || 'popular');
-  const [visibleCount, setVisibleCount] = useState<number>(() => savedState?.visibleCount || 12);
+  const [visibleCount, setVisibleCount] = useState<number>(() => {
+    if (savedState?.lastViewedProductId && savedState?.visibleCount) {
+      return Math.max(savedState.visibleCount, 24);
+    }
+    return savedState?.visibleCount || 12;
+  });
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'Ковры' | 'Дорожки'>(
     () => savedState?.selectedCategory || 'all',
   );

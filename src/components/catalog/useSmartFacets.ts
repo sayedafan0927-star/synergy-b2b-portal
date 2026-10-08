@@ -18,6 +18,19 @@ export interface UseSmartFacetsParams {
   myShowroomName: string;
 }
 
+function matchesSet(set: Set<string> | undefined, val: string | undefined): boolean {
+  if (!set || set.size === 0) return true;
+  if (!val) return false;
+  if (set.has(val)) return true;
+  const trimmed = val.trim();
+  if (set.has(trimmed)) return true;
+  const lower = trimmed.toLowerCase();
+  for (const item of set) {
+    if (item.trim().toLowerCase() === lower) return true;
+  }
+  return false;
+}
+
 function productMatches(
   p: Product,
   opts: {
@@ -47,30 +60,30 @@ function productMatches(
   }
 
   if (opts.clusters && opts.clusters.size > 0) {
-    if (!p.variants.some(v => v.size_cluster && opts.clusters!.has(v.size_cluster))) return false;
+    if (!p.variants.some(v => v.size_cluster && matchesSet(opts.clusters, v.size_cluster))) return false;
   }
 
   if (opts.collections && opts.collections.size > 0) {
-    if (!opts.collections.has(p.collection)) return false;
+    if (!matchesSet(opts.collections, p.collection)) return false;
   }
 
   if (opts.manufacturers && opts.manufacturers.size > 0) {
-    if (!opts.manufacturers.has(p.manufacturer)) return false;
+    if (!matchesSet(opts.manufacturers, p.manufacturer)) return false;
   }
 
   if (opts.countries && opts.countries.size > 0) {
-    if (!opts.countries.has(p.country)) return false;
+    if (!matchesSet(opts.countries, p.country)) return false;
   }
 
   if (opts.warehouses && opts.warehouses.size > 0) {
     const hasWh = p.variants.some(v =>
-      v.warehouses.some(w => opts.warehouses!.has(w.warehouse_name || w.city) && w.stock > 0)
+      v.warehouses.some(w => matchesSet(opts.warehouses, w.warehouse_name || w.city) && ((w.stock || 0) > 0 || (w.free_stock || 0) > 0))
     );
     if (!hasWh) return false;
   }
 
   if (opts.sizes && opts.sizes.size > 0) {
-    if (!p.variants.some(v => opts.sizes!.has(v.size))) return false;
+    if (!p.variants.some(v => v.size && matchesSet(opts.sizes, v.size))) return false;
   }
 
   return true;
@@ -172,7 +185,10 @@ export function useSmartFacets({
     const set = new Set<string>();
     for (const p of matching) {
       for (const v of p.variants) {
-        if (v.size) set.add(v.size);
+        if (v.size) {
+          const hasStock = isEffectiveAdmin || (v.total_stock ?? v.stock ?? 0) > 0 || (v.warehouses && v.warehouses.some(w => ((w.stock || 0) > 0 || (w.free_stock || 0) > 0)));
+          if (hasStock) set.add(v.size);
+        }
       }
     }
     for (const s of selectedSizes) {
