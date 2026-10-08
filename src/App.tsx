@@ -58,6 +58,7 @@ import OfflineBanner from '@/components/common/OfflineBanner';
 import CookieBanner from '@/components/common/CookieBanner';
 import Preloader from '@/components/common/Preloader';
 import type { PageId } from '@/types';
+import { readCatalogState } from '@/components/catalog/useCatalogStatePersistence';
 
 function PageLoadingFallback({ page }: { page?: PageId }) {
   if (page === 'catalog') {
@@ -254,14 +255,25 @@ export default function App() {
       window.history.pushState({ page: target, id, tab }, '', url.pathname + url.search);
     }
 
-    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-    requestAnimationFrame(() => {
+    const isBackNavToCatalog = target === 'catalog' && Boolean(
+      readCatalogState()?.lastViewedProductId || (readCatalogState()?.scrollY && readCatalogState()!.scrollY > 0)
+    );
+
+    if (!isBackNavToCatalog) {
       window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
-    });
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      });
+    }
   }, []);
 
-  // Guarantee scroll-to-top on page and filter transitions
+  // Guarantee scroll-to-top on page and filter transitions, unless returning to catalog with saved state
   useEffect(() => {
+    const isReturningToCatalogWithState = page === 'catalog' && Boolean(
+      readCatalogState()?.lastViewedProductId || (readCatalogState()?.scrollY && readCatalogState()!.scrollY > 0)
+    );
+    if (isReturningToCatalogWithState) return;
+
     window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
     const raf = requestAnimationFrame(() => {
       window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
@@ -284,6 +296,12 @@ export default function App() {
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, [navigate]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'scrollRestoration' in window.history) {
+      window.history.scrollRestoration = 'manual';
+    }
+  }, []);
 
   // Первоначальное чтение URL при загрузке страницы
   useEffect(() => {

@@ -62,29 +62,40 @@ export function clearCatalogState(): void {
 export function restoreCatalogScroll(productId?: string | null, scrollY?: number): void {
   if (typeof window === 'undefined') return;
 
+  let attempts = 0;
+  const maxAttempts = 25; // Retry for ~2 seconds as layout and images settle
+
   const attemptScroll = () => {
+    attempts++;
     let handled = false;
+
     if (productId) {
       const card = document.querySelector(`[data-product-id="${productId}"]`);
       if (card) {
         card.scrollIntoView({ block: 'center', behavior: 'instant' });
-        // Pulse ring highlight for 1.2s to visually orient the returning user
+        // Pulse ring highlight for 1.4s to visually orient the returning user
         card.classList.add('ring-2', 'ring-amber-500/80', 'transition-all');
         setTimeout(() => {
           card.classList.remove('ring-2', 'ring-amber-500/80');
-        }, 1200);
+        }, 1400);
         handled = true;
       }
     }
+
     if (!handled && typeof scrollY === 'number' && scrollY > 0) {
       window.scrollTo({ top: scrollY, behavior: 'instant' });
+      if (Math.abs(window.scrollY - scrollY) < 30) {
+        handled = true;
+      }
+    }
+
+    if (!handled && attempts < maxAttempts) {
+      setTimeout(attemptScroll, 80);
     }
   };
 
   requestAnimationFrame(() => {
     attemptScroll();
-    // Subsequent frame check in case card images/grid took an extra frame to calculate dimensions
-    setTimeout(attemptScroll, 60);
   });
 }
 
@@ -97,13 +108,16 @@ export interface UseCatalogStatePersistenceOptions {
 export function useCatalogStatePersistence(options: UseCatalogStatePersistenceOptions = {}) {
   const { initialCollection, initialCountry, initialSearch } = options;
 
-  // Retrieve saved snapshot if not an explicit navigation link (such as banner click or search redirect)
+  // Retrieve saved snapshot: preserve if returning from a product card view!
   const savedState = useMemo(() => {
-    if (initialCollection || initialCountry || initialSearch) {
+    const state = readCatalogState();
+    if (!state) return null;
+    // Only clear if user explicitly clicked an external direct link and is not returning from a product
+    if (!state.lastViewedProductId && (initialCollection || initialCountry || initialSearch)) {
       clearCatalogState();
       return null;
     }
-    return readCatalogState();
+    return state;
   }, [initialCollection, initialCountry, initialSearch]);
 
   const [viewMode, setViewMode] = useState<ViewMode>(() => savedState?.viewMode || 'grid');
@@ -204,6 +218,10 @@ export function useCatalogStatePersistence(options: UseCatalogStatePersistenceOp
   }, []);
 
   const saveCatalogSnapshot = useCallback((productId?: string | null) => {
+    const currentScroll = typeof window !== 'undefined'
+      ? (window.scrollY || document.documentElement.scrollTop || 0)
+      : 0;
+
     writeCatalogState({
       searchQuery,
       sortBy,
@@ -216,7 +234,7 @@ export function useCatalogStatePersistence(options: UseCatalogStatePersistenceOp
       selectedWarehouses: Array.from(selectedWarehouses),
       selectedSizes: Array.from(selectedSizes),
       visibleCount,
-      scrollY: typeof window !== 'undefined' ? window.scrollY : 0,
+      scrollY: currentScroll,
       lastViewedProductId: productId || null,
     });
   }, [
@@ -274,5 +292,6 @@ export function useCatalogStatePersistence(options: UseCatalogStatePersistenceOp
     saveCatalogSnapshot,
     attemptScrollRestoration,
     hasSavedState: Boolean(savedState),
+    savedState,
   };
 }

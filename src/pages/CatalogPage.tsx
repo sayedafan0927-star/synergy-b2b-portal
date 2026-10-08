@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { Search, SlidersHorizontal, ChevronDown, X, LayoutGrid, Table2, Globe } from 'lucide-react';
-import type { PageId, Warehouse, StockSummary, Product } from '@/types';
+import type { PageId, StockSummary, Product } from '@/types';
 import { useProducts } from '@/hooks/useProductData';
 import { useUserPricing } from '@/hooks/usePricing';
 import ProductCard from '@/components/ProductCard';
@@ -8,11 +8,11 @@ import StockSummaryBar from '@/components/StockSummaryBar';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
-import { filterWarehousesForClient, isProductInStockForUser, getClientWarehouseSettings } from '@/lib/warehouseVisibility';
+import { isProductInStockForUser, getClientWarehouseSettings } from '@/lib/warehouseVisibility';
 import {
   FilterDrawer, CatalogFilterSidebar, CatalogStockTable,
   CatalogLoadingSkeleton, CatalogLoadError, StockReservationsModal,
-  ActiveFilterChips, useCatalogStatePersistence, DecklePaperWrapper,
+  ActiveFilterChips, useCatalogStatePersistence, useSmartFacets, DecklePaperWrapper,
   CatalogPetroglyphHero, getTotalStock, sizeArea,
   type SortOption, type ViewMode,
 } from '@/components/catalog';
@@ -69,6 +69,7 @@ export default function CatalogPage({
     saveCatalogSnapshot,
     attemptScrollRestoration,
     hasSavedState,
+    savedState,
   } = useCatalogStatePersistence({ initialCollection, initialCountry, initialSearch });
 
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -106,37 +107,25 @@ export default function CatalogPage({
     return products.filter(p => isProductInStockForUser(p, profile, false, hideOutOfStockSetting));
   }, [products, isEffectiveAdmin, adminStockFilter, profile, hideOutOfStockSetting]);
 
-  const allCollections = useMemo(() => [...new Set(baseProducts.map(p => p.collection))].sort(), [baseProducts]);
-  const allManufacturers = useMemo(() => [...new Set(baseProducts.map(p => p.manufacturer))].sort(), [baseProducts]);
-  const allCountries = useMemo(() => [...new Set(baseProducts.map(p => p.country))].sort(), [baseProducts]);
-  const allWarehouses = useMemo(() => {
-    if (isEffectiveAdmin) {
-      return [...new Set(baseProducts.flatMap(p => p.variants.flatMap(v => v.warehouses.map(w => w.warehouse_name || w.city))))].sort();
-    }
-    const uniqueRawWarehouses: Warehouse[] = [];
-    const seenKeys = new Set<string>();
-    for (const p of baseProducts) {
-      for (const v of p.variants) {
-        for (const w of v.warehouses) {
-          const key = `${w.warehouse_id}::${w.warehouse_name || w.city}`;
-          if (!seenKeys.has(key)) {
-            seenKeys.add(key);
-            uniqueRawWarehouses.push(w);
-          }
-        }
-      }
-    }
-    const visible = filterWarehousesForClient(uniqueRawWarehouses, profile, myShowroomName);
-    const names = [...new Set(visible.map(w => w.warehouse_name || w.city))].filter(Boolean);
-    return names.length > 0 ? names.sort() : ['Основной Склад Астана'];
-  }, [baseProducts, isEffectiveAdmin, profile, myShowroomName]);
-  const allSizes = useMemo(
-    () => [...new Set(baseProducts.flatMap(p => p.variants.map(v => v.size)))].sort((a, b) => sizeArea(a) - sizeArea(b)),
-    [baseProducts],
-  );
+  const { allCollections, allCountries, allSizes, allManufacturers, allWarehouses } = useSmartFacets({
+    baseProducts,
+    selectedCategory,
+    activeClusterQuickFilter,
+    selectedClusters,
+    selectedCollections,
+    selectedManufacturers,
+    selectedCountries,
+    selectedWarehouses,
+    selectedSizes,
+    isEffectiveAdmin,
+    profile,
+    myShowroomName,
+  });
 
   useEffect(() => {
-    if (!stockWarehouse && allWarehouses.length > 0) setStockWarehouse(allWarehouses[0]);
+    if (allWarehouses.length > 0 && (!stockWarehouse || !allWarehouses.includes(stockWarehouse))) {
+      setStockWarehouse(allWarehouses[0]);
+    }
   }, [allWarehouses, stockWarehouse]);
 
 
@@ -323,6 +312,15 @@ export default function CatalogPage({
       return () => cancelAnimationFrame(raf);
     }
   }, [hasSavedState, initialCountry, initialCollection, initialSearch]);
+
+  useEffect(() => {
+    if (savedState?.lastViewedProductId && filteredProducts.length > 0) {
+      const idx = filteredProducts.findIndex(p => p.id === savedState.lastViewedProductId);
+      if (idx >= 0 && idx >= visibleCount) {
+        setVisibleCount(Math.ceil((idx + 6) / 12) * 12);
+      }
+    }
+  }, [filteredProducts, savedState?.lastViewedProductId, visibleCount, setVisibleCount]);
 
   useEffect(() => {
     if (!loading && products.length > 0) {

@@ -16,4 +16,5 @@ export {
 export { default as DecklePaperWrapper } from './DecklePaperWrapper';
 export { default as CatalogPetroglyphHero } from './CatalogPetroglyphHero';
 export { default as CatalogGridPetroglyphs } from './CatalogGridPetroglyphs';
+export { useSmartFacets } from './useSmartFacets';
 export * from './types';
