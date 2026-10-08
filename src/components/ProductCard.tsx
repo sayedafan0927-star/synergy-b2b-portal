@@ -1,4 +1,4 @@
-import { useState, memo } from 'react';
+import { useState, useCallback, memo } from 'react';
 import type { Product, PageId, ProductVariant } from '@/types';
 import { parseSizeDimensions } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
@@ -9,9 +9,9 @@ import { useCurrency } from '@/contexts/CurrencyContext';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
 import { filterClientWarehouses } from '@/hooks/useProductData';
 import { isWarehouseVisibleForClient } from '@/lib/warehouseVisibility';
-import { ChevronLeft, ChevronRight, Lock } from 'lucide-react';
-import ProductImage from '@/components/ProductImage';
+import { Lock } from 'lucide-react';
 import ProductCardQuickSizes from '@/components/product/ProductCardQuickSizes';
+import ProductCardCarousel from '@/components/product/ProductCardCarousel';
 import { cacheProduct } from '@/lib/productCache';
 import { useShowroomMode } from '@/contexts/ShowroomModeContext';
 
@@ -26,16 +26,10 @@ interface ProductCardProps {
 
 function getMainWarehouseStock(variant: ProductVariant) {
   const mainHub = variant.warehouses.find(w =>
-    w.warehouse_id === 81 ||
-    w.is_hub ||
-    (w.warehouse_name && (w.warehouse_name.includes('Астана') || w.warehouse_name.toLowerCase().includes('основной')))
+    w.warehouse_id === 81 || w.is_hub || (w.warehouse_name && (w.warehouse_name.includes('Астана') || w.warehouse_name.toLowerCase().includes('основной')))
   );
-  if (mainHub) {
-    if (typeof mainHub.free_stock === 'number') return Math.max(0, mainHub.free_stock);
-    return Math.max(0, mainHub.stock ?? 0);
-  }
-  if (typeof variant.free_stock === 'number') return Math.max(0, variant.free_stock);
-  return Math.max(0, variant.stock ?? 0);
+  if (mainHub) return Math.max(0, typeof mainHub.free_stock === 'number' ? mainHub.free_stock : (mainHub.stock ?? 0));
+  return Math.max(0, typeof variant.free_stock === 'number' ? variant.free_stock : (variant.stock ?? 0));
 }
 
 export function formatProductTitle(product: { name: string; article?: string; color?: string; category?: string; collection: string }, lang: Language | string = 'ru'): string {
@@ -92,18 +86,7 @@ function ProductCard({ product, onNavigate }: ProductCardProps) {
   const validImages = (product.images || []).filter(img => typeof img === 'string' && img.trim().length > 0 && !img.includes('unsplash.com'));
   const allImages = validImages.length > 0 ? validImages : (product.image_thumb ? [product.image_thumb] : []);
   const [currentImgIndex, setCurrentImgIndex] = useState(0);
-
   const activeImage = allImages[currentImgIndex] || allImages[0] || product.image_thumb || '';
-
-  const handlePrevImage = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setCurrentImgIndex(idx => (idx === 0 ? allImages.length - 1 : idx - 1));
-  };
-
-  const handleNextImage = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setCurrentImgIndex(idx => (idx === allImages.length - 1 ? 0 : idx + 1));
-  };
 
   const sizeCount = product.variants.length;
   const pricePerSqm = getMinPricePerSqm(product);
@@ -186,10 +169,10 @@ function ProductCard({ product, onNavigate }: ProductCardProps) {
     prefetchProductPage();
   };
 
-  const handleOpenProduct = () => {
+  const handleOpenProduct = useCallback(() => {
     cacheProduct(product);
     onNavigate('product', product.id);
-  };
+  }, [product, onNavigate]);
 
   return (
     <div
@@ -207,93 +190,19 @@ function ProductCard({ product, onNavigate }: ProductCardProps) {
       }}
       className={`group card relative flex flex-col overflow-visible text-left cursor-pointer transition-shadow hover:shadow-lg active:scale-[0.99] touch-manipulation ${sizesOpen ? 'z-30' : ''}`}
     >
-      {/* Превью фото с возможностью листать */}
-      <div 
-        onClick={handleOpenProduct}
-        className="relative aspect-[4/5] sm:aspect-[3/4] overflow-hidden rounded-t-xl bg-slate-50 p-2 sm:p-2.5 flex items-center justify-center cursor-pointer"
-      >
-        <ProductImage
-          src={activeImage}
-          alt={product.name}
-          loading="lazy"
-          decoding="async"
-          width={600}
-          fit="contain"
-          className="h-full w-full bg-transparent flex items-center justify-center pointer-events-none"
-          imageClassName="transition-transform duration-500 ease-apple group-hover:scale-105"
-        />
-
-        {/* Бейдж наличия */}
-        {hasShowroom && totalShowroomQty > 0 && (
-          <div className="absolute top-2.5 left-2.5 z-10 pointer-events-none">
-            <span className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2 py-0.5 text-[11px] font-bold text-white shadow-sm">
-              🏪 В наличии: {totalShowroomQty} шт
-            </span>
-          </div>
-        )}
-
-        {/* Бейдж для админа: если у товара 0 остаток и он скрыт от клиентов */}
-        {isEffectiveAdmin && isOutOfStock && !isShowroomMode && (
-          <div className="absolute top-2.5 right-2.5 z-10 pointer-events-none">
-            <span className="inline-flex items-center gap-1 rounded-md bg-amber-600 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm" title="Товар с нулевым остатком скрыт от клиентов">
-              ⚠️ 0 шт · Скрыт от клиентов
-            </span>
-          </div>
-        )}
-
-        {/* Кнопки перелистывания фото при наведении (скрыты на мобильных, активны только на десктопе) */}
-        {allImages.length > 1 && (
-          <>
-            <button
-              type="button"
-              onClick={handlePrevImage}
-              aria-label="Предыдущее фото"
-              className="hidden sm:flex absolute left-2 top-1/2 -translate-y-1/2 z-20 h-8 w-8 items-center justify-center rounded-full bg-white text-slate-700 shadow-md border border-slate-200/80 transition-all hover:bg-slate-50 hover:scale-110 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={handleNextImage}
-              aria-label="Следующее фото"
-              className="hidden sm:flex absolute right-2 top-1/2 -translate-y-1/2 z-20 h-8 w-8 items-center justify-center rounded-full bg-white text-slate-700 shadow-md border border-slate-200/80 transition-all hover:bg-slate-50 hover:scale-110 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-
-            {/* Точки-индикаторы снизу (dots) - контейнер не перехватывает клики */}
-            <div className="absolute bottom-2 left-0 right-0 z-20 flex items-center justify-center gap-1 pointer-events-none">
-              {(() => {
-                const MAX_DOTS = 8;
-                const total = allImages.length;
-                const start = total <= MAX_DOTS
-                  ? 0
-                  : Math.min(Math.max(0, currentImgIndex - Math.floor(MAX_DOTS / 2)), total - MAX_DOTS);
-                const end = Math.min(total, start + MAX_DOTS);
-                return allImages.slice(start, end).map((_, i) => {
-                  const idx = start + i;
-                  return (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setCurrentImgIndex(idx);
-                      }}
-                      className={`h-1.5 rounded-full transition-all pointer-events-auto ${
-                        idx === currentImgIndex
-                          ? 'w-3.5 bg-slate-900 shadow'
-                          : 'w-1.5 bg-white/90 border border-slate-300 hover:bg-slate-400'
-                      }`}
-                      aria-label={`Фото ${idx + 1}`}
-                    />
-                  );
-                });
-              })()}
-            </div>
-          </>
-        )}
-      </div>
+      <ProductCardCarousel
+        product={product}
+        allImages={allImages}
+        activeImage={activeImage}
+        currentImgIndex={currentImgIndex}
+        onIndexChange={setCurrentImgIndex}
+        onOpenProduct={handleOpenProduct}
+        hasShowroom={hasShowroom}
+        totalShowroomQty={totalShowroomQty}
+        isEffectiveAdmin={isEffectiveAdmin}
+        isOutOfStock={isOutOfStock}
+        isShowroomMode={isShowroomMode}
+      />
 
       <div className="flex-1 flex flex-col p-3 sm:p-4">
         {/* Название товара: Артикул — Цвет (фиксированная 2-строчная высота для идеального выравнивания) */}
@@ -399,17 +308,7 @@ function ProductCard({ product, onNavigate }: ProductCardProps) {
           >
             <span>
               {sizeCount}{' '}
-              {language === 'kz'
-                ? 'өлшем'
-                : language === 'en'
-                ? (sizeCount === 1 ? 'size' : 'sizes')
-                : language === 'tr'
-                ? 'ebat'
-                : sizeCount === 1
-                ? 'размер'
-                : sizeCount > 1 && sizeCount < 5
-                ? 'размера'
-                : 'размеров'}
+              {language === 'kz' ? 'өлшем' : language === 'en' ? (sizeCount === 1 ? 'size' : 'sizes') : language === 'tr' ? 'ebat' : sizeCount === 1 ? 'размер' : sizeCount > 1 && sizeCount < 5 ? 'размера' : 'размеров'}
             </span>
           </button>
         </div>
