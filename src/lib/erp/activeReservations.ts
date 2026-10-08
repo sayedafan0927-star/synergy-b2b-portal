@@ -1,4 +1,3 @@
-import { supabase } from '@/lib/supabase';
 import { fetchClientOrdersFromErp } from './ordersApi';
 
 export interface ActiveReservationItem {
@@ -163,103 +162,8 @@ export async function fetchActiveReservations(params?: { sku?: string; q?: strin
     console.warn('[fetchActiveReservations] ERP live orders warning:', erpErr);
   }
 
-  // 2. Слияние с заказами Supabase (для локальных/буферизованных заказов)
-  let sbMapped: ActiveReservation[] = [];
-  try {
-    const { data: dbOrders } = await supabase
-      .from('orders')
-      .select(`
-        id,
-        order_number,
-        user_id,
-        placed_by_id,
-        status,
-        warehouse,
-        hold_expires_at,
-        total_amount,
-        total_sqm,
-        total_items,
-        created_at,
-        profiles:user_id (
-          full_name,
-          company_name,
-          phone
-        ),
-        order_items (
-          id,
-          sku,
-          product_name,
-          collection,
-          size,
-          warehouse,
-          quantity,
-          price
-        )
-      `)
-      .in('status', ['pending', 'reserved', 'confirmed', 'processing'])
-      .is('parent_order_id', null)
-      .order('created_at', { ascending: false })
-      .limit(100);
-
-    if (dbOrders && Array.isArray(dbOrders)) {
-      sbMapped = dbOrders.map((o: any) => {
-        const prof = o.profiles || {};
-        const clientName = prof.full_name || prof.company_name || 'Клиент B2B';
-        const clientCompany = prof.company_name || '';
-        const clientPhone = prof.phone || '';
-        const rawItems = Array.isArray(o.order_items) ? o.order_items : [];
-
-        const items: ActiveReservationItem[] = rawItems.map((it: any) => {
-          const qty = Number(it.quantity) || 1;
-          const area = parseSizeArea(it.size);
-          const cleaned = clean1CName(it.product_name || '');
-          return {
-            sku: it.sku || cleaned.sku || '',
-            product_name: cleaned.name || it.product_name || 'Ковер',
-            collection: it.collection || cleaned.collection || '',
-            size: it.size || 'Стандарт',
-            warehouse: it.warehouse || o.warehouse || 'Основной Склад Астана',
-            quantity: qty,
-            area_sqm: area,
-            total_sqm: Math.round(qty * area * 100) / 100,
-          };
-        });
-
-        const calculatedQty = items.reduce((sum, it) => sum + it.quantity, 0);
-        const calculatedSqm = Math.round(items.reduce((sum, it) => sum + it.total_sqm, 0) * 100) / 100;
-
-        let statusLabel = 'Резерв';
-        if (o.status === 'processing') statusLabel = 'На сборке';
-        else if (o.status === 'confirmed') statusLabel = 'Подтвержден';
-        else if (o.status === 'pending') statusLabel = 'Авторезерв';
-
-        return {
-          id: String(o.id),
-          order_number: o.order_number || `ORD-${String(o.id).slice(0, 8)}`,
-          client_name: clientName,
-          client_company: clientCompany || clientName,
-          client_phone: clientPhone,
-          status: o.status === 'processing' ? 'processing' : 'pending',
-          status_label: statusLabel,
-          warehouse: o.warehouse || 'Основной Склад Астана',
-          created_at: o.created_at,
-          hold_expires_at: o.hold_expires_at,
-          total_items: Number(o.total_items) || calculatedQty,
-          total_sqm: Number(o.total_sqm) || calculatedSqm,
-          total_amount: Number(o.total_amount) || 0,
-          currency: 'USD',
-          items,
-        };
-      });
-    }
-  } catch (sbErr) {
-    console.warn('[fetchActiveReservations] Supabase orders fallback notice:', sbErr);
-  }
-
-  // 3. Дедупликация и объединение
-  const knownDocNumbers = new Set(erpMapped.map(m => String(m.order_number).trim().toUpperCase()));
-  const extraSb = sbMapped.filter(sb => !knownDocNumbers.has(String(sb.order_number).trim().toUpperCase()));
-  let combined = [...erpMapped, ...extraSb];
+  // 2. Активные резервы берутся напрямую из ERP
+  let combined = erpMapped;
 
   // 4. Фильтрация по SKU
   if (params?.sku) {
