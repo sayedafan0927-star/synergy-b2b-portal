@@ -288,63 +288,13 @@ export async function submitLeadToErp(payload: LeadPayload): Promise<LeadRespons
   return { success: true, message: 'Заявка успешно принята' };
 }
 
-export interface ActiveReservationItem {
-  sku: string;
-  product_name: string;
-  collection: string;
-  size: string;
-  warehouse: string;
-  quantity: number;
-  area_sqm: number;
-  total_sqm: number;
-}
+export {
+  fetchActiveReservations,
+  parseSizeArea,
+  clean1CName,
+  type ActiveReservation,
+  type ActiveReservationItem,
+  type ActiveReservationsResponse,
+} from './activeReservations';
 
-export interface ActiveReservation {
-  id: string;
-  order_number: string;
-  client_name: string;
-  client_company: string;
-  client_phone: string;
-  status: string;
-  warehouse: string;
-  created_at: string;
-  hold_expires_at?: string;
-  total_items: number;
-  total_sqm: number;
-  total_amount: number;
-  currency?: string;
-  status_label?: string;
-  assembly_progress?: string;
-  items: ActiveReservationItem[];
-}
-
-export interface ActiveReservationsResponse {
-  success: boolean;
-  reservations: ActiveReservation[];
-  summary: {
-    total_reserved_orders: number;
-    total_reserved_pcs: number;
-    total_reserved_sqm: number;
-    clients_count: number;
-  };
-  error?: string;
-}
-
-/**
- * Получить список активных складских резервов с разбивкой по клиентам и позициям
- */
-export async function fetchActiveReservations(params?: { sku?: string; q?: string }): Promise<ActiveReservationsResponse> {
-  const queryParams: Record<string, string> = {};
-  if (params?.sku) queryParams.sku = params.sku;
-  if (params?.q) queryParams.q = params.q;
-
-  const response = await erpFetch('active_reservations', {
-    params: queryParams,
-  });
-  const data = await response.json().catch(() => null);
-  if (!response.ok || !data?.success) {
-    throw new Error(data?.error || `Не удалось загрузить данные резервов (${response.status})`);
-  }
-  return data;
-}
 
