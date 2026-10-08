@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import type { Product } from '@/types';
 import ProductImage from '@/components/ProductImage';
 
@@ -97,6 +98,22 @@ export function ProductCardCarousel({
     touchStartY.current = null;
   }, [allImages.length, currentImgIndex, onIndexChange]);
 
+  const handlePrevImage = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    preventClickUntilRef.current = Date.now() + 600;
+    const nextIdx = currentImgIndex === 0 ? allImages.length - 1 : currentImgIndex - 1;
+    onIndexChange(nextIdx);
+  }, [currentImgIndex, allImages.length, onIndexChange]);
+
+  const handleNextImage = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    preventClickUntilRef.current = Date.now() + 600;
+    const nextIdx = currentImgIndex === allImages.length - 1 ? 0 : currentImgIndex + 1;
+    onIndexChange(nextIdx);
+  }, [currentImgIndex, allImages.length, onIndexChange]);
+
   const handleImageAreaClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     if (isSwiping.current || Date.now() < preventClickUntilRef.current) {
@@ -179,6 +196,30 @@ export function ProductCardCarousel({
             ⚠️ 0 шт · Скрыт от клиентов
           </span>
         </div>
+      )}
+
+      {/* Кнопки перелистывания фото (десктоп при наведении) */}
+      {allImages.length > 1 && (
+        <>
+          <button
+            type="button"
+            onClick={handlePrevImage}
+            onMouseDown={(e) => e.stopPropagation()}
+            aria-label="Предыдущее фото"
+            className="hidden sm:flex absolute left-1.5 sm:left-2 top-1/2 -translate-y-1/2 z-20 h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full bg-white/90 hover:bg-white text-slate-700 hover:text-slate-900 shadow-md border border-slate-200/80 transition-all duration-200 hover:scale-110 active:scale-95 opacity-0 group-hover:opacity-100 cursor-pointer"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={handleNextImage}
+            onMouseDown={(e) => e.stopPropagation()}
+            aria-label="Следующее фото"
+            className="hidden sm:flex absolute right-1.5 sm:right-2 top-1/2 -translate-y-1/2 z-20 h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full bg-white/90 hover:bg-white text-slate-700 hover:text-slate-900 shadow-md border border-slate-200/80 transition-all duration-200 hover:scale-110 active:scale-95 opacity-0 group-hover:opacity-100 cursor-pointer"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </>
       )}
 
       {/* Точки-индикаторы снизу (dots) */}
