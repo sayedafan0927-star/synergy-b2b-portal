@@ -44,6 +44,39 @@ export default function ProductPage({
   const [selectedShape, setSelectedShape] = useState<string>('');
   const [selectedSize, setSelectedSize] = useState<string>('');
 
+  const edgeStartXRef = useRef<number | null>(null);
+  const edgeStartYRef = useRef<number | null>(null);
+
+  const handleBackToCatalog = useCallback(() => {
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      window.history.back();
+    } else {
+      onNavigate('catalog');
+    }
+  }, [onNavigate]);
+
+  const handlePageTouchStart = (e: React.TouchEvent) => {
+    if (e.touches[0].clientX < 55) {
+      edgeStartXRef.current = e.touches[0].clientX;
+      edgeStartYRef.current = e.touches[0].clientY;
+    } else {
+      edgeStartXRef.current = null;
+      edgeStartYRef.current = null;
+    }
+  };
+
+  const handlePageTouchEnd = (e: React.TouchEvent) => {
+    if (edgeStartXRef.current !== null && edgeStartYRef.current !== null) {
+      const dx = e.changedTouches[0].clientX - edgeStartXRef.current;
+      const dy = Math.abs(e.changedTouches[0].clientY - edgeStartYRef.current);
+      if (dx > 55 && dy < 45) {
+        handleBackToCatalog();
+      }
+    }
+    edgeStartXRef.current = null;
+    edgeStartYRef.current = null;
+  };
+
   useEffect(() => {
     if (!product) return;
     const init: Record<string, number> = {};
@@ -94,7 +127,7 @@ export default function ProductPage({
       addItem(
         {
           productId: product.id,
-          item_id: (variant as any).item_id || (Number(variant.id) > 0 ? Number(variant.id) : (Number(product.id) > 0 ? Number(product.id) : undefined)),
+          item_id: (variant as { item_id?: number }).item_id || (Number(variant.id) > 0 ? Number(variant.id) : (Number(product.id) > 0 ? Number(product.id) : undefined)),
           productName: product.name,
           collection: product.collection,
           image: product.images[0] || product.image_thumb || '',
@@ -270,39 +303,6 @@ export default function ProductPage({
 
   const isOutOfStockForClient = product ? !isProductInStockForUser(product, profile, false, true) : false;
   const cleanTitle = formatProductTitle(product, language);
-
-  const edgeStartXRef = useRef<number | null>(null);
-  const edgeStartYRef = useRef<number | null>(null);
-
-  const handleBackToCatalog = useCallback(() => {
-    if (typeof window !== 'undefined' && window.history.length > 1) {
-      window.history.back();
-    } else {
-      onNavigate('catalog');
-    }
-  }, [onNavigate]);
-
-  const handlePageTouchStart = (e: React.TouchEvent) => {
-    if (e.touches[0].clientX < 55) {
-      edgeStartXRef.current = e.touches[0].clientX;
-      edgeStartYRef.current = e.touches[0].clientY;
-    } else {
-      edgeStartXRef.current = null;
-      edgeStartYRef.current = null;
-    }
-  };
-
-  const handlePageTouchEnd = (e: React.TouchEvent) => {
-    if (edgeStartXRef.current !== null && edgeStartYRef.current !== null) {
-      const dx = e.changedTouches[0].clientX - edgeStartXRef.current;
-      const dy = Math.abs(e.changedTouches[0].clientY - edgeStartYRef.current);
-      if (dx > 55 && dy < 45) {
-        handleBackToCatalog();
-      }
-    }
-    edgeStartXRef.current = null;
-    edgeStartYRef.current = null;
-  };
 
   return (
     <section 
