@@ -101,15 +101,7 @@ export function ProductGallery({
     }
   }, []);
 
-  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-    if (touchStartX.current !== null && touchStartY.current !== null && imageCount > 1) {
-      const deltaX = e.changedTouches[0].clientX - touchStartX.current;
-      const deltaY = Math.abs(e.changedTouches[0].clientY - touchStartY.current);
-      if (Math.abs(deltaX) > 30 && Math.abs(deltaX) > deltaY) {
-        if (deltaX < 0) nextImage();
-        else prevImage();
-      }
-    }
+  const handleTouchEnd = useCallback(() => {
     if (isSwiping.current) {
       setTimeout(() => {
         isSwiping.current = false;
@@ -117,7 +109,7 @@ export function ProductGallery({
     }
     touchStartX.current = null;
     touchStartY.current = null;
-  }, [imageCount, nextImage, prevImage]);
+  }, []);
 
   const handleMobileScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     const container = e.currentTarget;
@@ -261,12 +253,15 @@ export function ProductGallery({
               onTouchMove={handleTouchMove}
               onTouchEnd={handleTouchEnd}
               className="w-full h-full flex overflow-x-auto snap-x snap-mandatory no-scrollbar"
-              style={{ WebkitOverflowScrolling: 'touch' }}
+              style={{
+                WebkitOverflowScrolling: 'touch',
+                overscrollBehaviorX: 'contain',
+              }}
             >
               {validImages.map((img, idx) => (
                 <div
                   key={idx}
-                  className="w-full h-full shrink-0 snap-center p-3 flex items-center justify-center relative select-none"
+                  className="w-full h-full shrink-0 snap-start snap-always p-3 flex items-center justify-center relative select-none"
                 >
                   {!failedImages[idx] ? (
                     <img

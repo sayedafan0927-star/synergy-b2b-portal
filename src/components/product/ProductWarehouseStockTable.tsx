@@ -118,6 +118,14 @@ export function ProductWarehouseStockTable({
           const pricePerSqm = pricing.getPricePerSqm(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
           const rows = filterClientWarehouses(variant.warehouses, myShowroomId, myShowroomName, clientContext, displaySettings);
 
+          const showroomQty = isShowroomVisible
+            ? (myShowroomId
+                ? (variant.warehouses.find(w => w.warehouse_id === myShowroomId)?.stock || 0)
+                : (variant.dealer_stock?.in_showroom_qty || 0))
+            : 0;
+          const inTransitQty = isShowroomVisible ? (variant.dealer_stock?.in_transit_qty || 0) : 0;
+          const hasPartnerStatus = showroomQty > 0 || inTransitQty > 0;
+
           return (
             <div key={variant.sku || variant.size} className="card p-4">
               <div className="flex items-center justify-between mb-1">
@@ -142,24 +150,18 @@ export function ProductWarehouseStockTable({
                 </p>
               )}
 
-              {(hasDealerStock || isHubVisible) && (
+              {hasPartnerStatus && (
                 <div className="mb-3 rounded-lg bg-slate-50 p-2 border border-slate-200/60 text-[11px] space-y-1">
-                  {isShowroomVisible && (
+                  {showroomQty > 0 && (
                     <div className="flex items-center justify-between text-emerald-800 font-medium">
                       <span>🏪 В магазине:</span>
-                      <span className="font-bold">{myShowroomId ? (variant.warehouses.find(w => w.warehouse_id === myShowroomId)?.stock || 0) : (variant.dealer_stock?.in_showroom_qty || 0)} шт</span>
+                      <span className="font-bold">{showroomQty} шт</span>
                     </div>
                   )}
-                  {isShowroomVisible && variant.dealer_stock?.in_transit_qty ? (
+                  {inTransitQty > 0 && (
                     <div className="flex items-center justify-between text-indigo-800 font-medium">
                       <span>🚚 В пути:</span>
-                      <span className="font-bold">{variant.dealer_stock.in_transit_qty} шт</span>
-                    </div>
-                  ) : null}
-                  {isHubVisible && (
-                    <div className="flex items-center justify-between text-slate-600">
-                      <span>🏢 Основной Склад Астана:</span>
-                      <span>{variant.warehouses.find(w => w.warehouse_id === 81 || w.is_hub || (w.warehouse_name && w.warehouse_name.includes('Астана')))?.stock || variant.dealer_stock?.available_hub_qty || 0} шт</span>
+                      <span className="font-bold">{inTransitQty} шт</span>
                     </div>
                   )}
                 </div>
@@ -239,6 +241,14 @@ export function ProductWarehouseStockTable({
                 const pricePerSqm = pricing.getPricePerSqm(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
 
                 const rows = filterClientWarehouses(variant.warehouses, myShowroomId, myShowroomName, clientContext, displaySettings);
+                const showroomQty = isShowroomVisible
+                  ? (myShowroomId
+                      ? (variant.warehouses.find(w => w.warehouse_id === myShowroomId)?.stock || 0)
+                      : (variant.dealer_stock?.in_showroom_qty || 0))
+                  : 0;
+                const inTransitQty = isShowroomVisible ? (variant.dealer_stock?.in_transit_qty || 0) : 0;
+                const hasPartnerStatus = showroomQty > 0 || inTransitQty > 0;
+
                 if (rows.length === 0) {
                   return (
                     <tr key={variant.sku || variant.size} className="group hover:bg-slate-25 transition-colors opacity-80">
@@ -299,21 +309,16 @@ export function ProductWarehouseStockTable({
                                 <span>Арт: <span className="text-slate-600 font-medium">{variant.article || product.article}</span></span>
                               )}
                             </div>
-                            {(hasDealerStock || isHubVisible) && (
+                            {hasPartnerStatus && (
                               <div className="mt-1 flex flex-col gap-0.5 text-[11px]">
-                                {isShowroomVisible && (
+                                {showroomQty > 0 && (
                                   <span className="inline-flex items-center gap-1 font-medium text-emerald-700">
-                                    🏪 В магазине: {myShowroomId ? (variant.warehouses.find(w => w.warehouse_id === myShowroomId)?.stock || 0) : (variant.dealer_stock?.in_showroom_qty || 0)} шт
+                                    🏪 В магазине: {showroomQty} шт
                                   </span>
                                 )}
-                                {isShowroomVisible && variant.dealer_stock && variant.dealer_stock.in_transit_qty > 0 && (
+                                {inTransitQty > 0 && (
                                   <span className="inline-flex items-center gap-1 font-medium text-indigo-700">
-                                    🚚 В пути: {variant.dealer_stock.in_transit_qty} шт
-                                  </span>
-                                )}
-                                {isHubVisible && (
-                                  <span className="inline-flex items-center gap-1 text-slate-500">
-                                    🏢 Основной Склад Астана: {variant.warehouses.find(w => w.warehouse_id === 81 || w.is_hub || (w.warehouse_name && w.warehouse_name.includes('Астана')))?.stock || 0} шт
+                                    🚚 В пути: {inTransitQty} шт
                                   </span>
                                 )}
                               </div>

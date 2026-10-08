@@ -1,6 +1,5 @@
 import React, { useRef, useEffect, useCallback } from 'react';
 import type { Product } from '@/types';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
 import ProductImage from '@/components/ProductImage';
 
 interface ProductCardCarouselProps {
@@ -54,20 +53,6 @@ export function ProductCardCarousel({
     }
   }, [onIndexChange]);
 
-  const handlePrevImage = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    preventClickUntilRef.current = Date.now() + 600;
-    const nextIdx = currentImgIndex === 0 ? allImages.length - 1 : currentImgIndex - 1;
-    scrollToIndex(nextIdx);
-  }, [currentImgIndex, allImages.length, scrollToIndex]);
-
-  const handleNextImage = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    preventClickUntilRef.current = Date.now() + 600;
-    const nextIdx = currentImgIndex === allImages.length - 1 ? 0 : currentImgIndex + 1;
-    scrollToIndex(nextIdx);
-  }, [currentImgIndex, allImages.length, scrollToIndex]);
-
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
@@ -84,34 +69,18 @@ export function ProductCardCarousel({
     }
   }, []);
 
-  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-    if (touchStartX.current !== null && touchStartY.current !== null && allImages.length > 1) {
-      const deltaX = e.changedTouches[0].clientX - touchStartX.current;
-      const deltaY = Math.abs(e.changedTouches[0].clientY - touchStartY.current);
-      if (Math.abs(deltaX) > 28 && Math.abs(deltaX) > deltaY) {
-        preventClickUntilRef.current = Date.now() + 800;
-        isSwiping.current = true;
-        if (deltaX < 0) {
-          const nextIdx = currentImgIndex === allImages.length - 1 ? 0 : currentImgIndex + 1;
-          scrollToIndex(nextIdx);
-        } else {
-          const nextIdx = currentImgIndex === 0 ? allImages.length - 1 : currentImgIndex - 1;
-          scrollToIndex(nextIdx);
-        }
-      }
-    }
+  const handleTouchEnd = useCallback(() => {
     if (isSwiping.current) {
-      preventClickUntilRef.current = Date.now() + 800;
+      preventClickUntilRef.current = Date.now() + 600;
       setTimeout(() => {
         isSwiping.current = false;
-      }, 350);
+      }, 250);
     }
     touchStartX.current = null;
     touchStartY.current = null;
-  }, [allImages.length, currentImgIndex, scrollToIndex]);
+  }, []);
 
   const handleCarouselScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    preventClickUntilRef.current = Date.now() + 600;
     const el = e.currentTarget;
     if (!el || el.clientWidth === 0) return;
     const idx = Math.round(el.scrollLeft / el.clientWidth);
@@ -142,12 +111,15 @@ export function ProductCardCarousel({
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
           className="w-full h-full flex overflow-x-auto snap-x snap-mandatory no-scrollbar"
-          style={{ WebkitOverflowScrolling: 'touch' }}
+          style={{
+            WebkitOverflowScrolling: 'touch',
+            overscrollBehaviorX: 'contain',
+          }}
         >
           {allImages.map((img, idx) => (
             <div
               key={idx}
-              className="w-full h-full shrink-0 snap-center flex items-center justify-center p-2 sm:p-2.5"
+              className="w-full h-full shrink-0 snap-start snap-always flex items-center justify-center p-2 sm:p-2.5"
             >
               <ProductImage
                 src={img}
@@ -157,7 +129,7 @@ export function ProductCardCarousel({
                 width={600}
                 fit="contain"
                 className="h-full w-full bg-transparent flex items-center justify-center pointer-events-none"
-                imageClassName="transition-transform duration-500 ease-apple group-hover:scale-105"
+                imageClassName="transition-transform duration-500 ease-apple sm:group-hover:scale-105"
               />
             </div>
           ))}
@@ -195,28 +167,9 @@ export function ProductCardCarousel({
         </div>
       )}
 
-      {/* Кнопки перелистывания фото (десктоп при наведении) */}
+      {/* Точки-индикаторы снизу (dots) */}
       {allImages.length > 1 && (
-        <>
-          <button
-            type="button"
-            onClick={handlePrevImage}
-            aria-label="Предыдущее фото"
-            className="flex absolute left-1 sm:left-2 top-1/2 -translate-y-1/2 z-20 h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full bg-white/90 sm:bg-white text-slate-700 shadow-md border border-slate-200/80 transition-all hover:bg-slate-50 hover:scale-110 opacity-70 sm:opacity-0 sm:group-hover:opacity-100 cursor-pointer active:scale-95"
-          >
-            <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={handleNextImage}
-            aria-label="Следующее фото"
-            className="flex absolute right-1 sm:right-2 top-1/2 -translate-y-1/2 z-20 h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-full bg-white/90 sm:bg-white text-slate-700 shadow-md border border-slate-200/80 transition-all hover:bg-slate-50 hover:scale-110 opacity-70 sm:opacity-0 sm:group-hover:opacity-100 cursor-pointer active:scale-95"
-          >
-            <ChevronRight className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-          </button>
-
-          {/* Точки-индикаторы снизу (dots) */}
-          <div className="absolute bottom-2 left-0 right-0 z-20 flex items-center justify-center pointer-events-none">
+        <div className="absolute bottom-2 left-0 right-0 z-20 flex items-center justify-center pointer-events-none">
             <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-slate-900/40 backdrop-blur-xs pointer-events-auto">
               {(() => {
                 const MAX_DOTS = 8;
@@ -247,10 +200,9 @@ export function ProductCardCarousel({
               })()}
             </div>
           </div>
-        </>
-      )}
-    </div>
-  );
+        )}
+      </div>
+    );
 }
 
 export default ProductCardCarousel;
