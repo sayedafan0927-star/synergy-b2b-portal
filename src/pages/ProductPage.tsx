@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { ChevronRight, ArrowLeft, PackageSearch, Loader2, Lock } from 'lucide-react';
 import type { PageId, ProductVariant, Warehouse } from '@/types';
 import { parseSizeDimensions } from '@/types';

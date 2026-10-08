@@ -1,4 +1,4 @@
-import { useState, useCallback, memo } from 'react';
+import { useState, useCallback, useRef, memo } from 'react';
 import type { Product, PageId, ProductVariant } from '@/types';
 import { parseSizeDimensions } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
