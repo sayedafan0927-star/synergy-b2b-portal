@@ -32,6 +32,11 @@ export interface CreateOrderContext {
 }
 
 import { triggerImmediateOutboxSync, dispatchErpCheckoutWithFallback } from './orderDispatcher';
+import {
+  checkAndAcquireIdempotency,
+  saveIdempotencyCompleted,
+  releaseIdempotencyLock,
+} from '../../lib/redisIdempotency';
 
 export { triggerImmediateOutboxSync };
 
@@ -45,8 +50,30 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
     req.query.idempotency_key
   ) as string | undefined;
 
-  // 1. Проверка идемпотентности
+  // 1. Проверка идемпотентности (Двухуровневая: L2 Redis + L3 PostgreSQL)
   if (incomingIdempotencyKey) {
+    // 1.1. Суб-миллисекундный распределенный захват в Redis
+    const redisCheck = await checkAndAcquireIdempotency(incomingIdempotencyKey);
+    if (redisCheck.isCompleted && redisCheck.cachedResponse) {
+      logger.info('[Order] Returning existing order via Redis Idempotency HIT', {
+        idempotencyKey: incomingIdempotencyKey,
+      });
+      res.status(200).json(redisCheck.cachedResponse);
+      return;
+    }
+    if (redisCheck.isLocked) {
+      logger.warn('[Order] Concurrent order creation blocked by Redis Idempotency Guard', {
+        idempotencyKey: incomingIdempotencyKey,
+      });
+      res.status(409).json({
+        success: false,
+        code: 'CONCURRENT_REQUEST',
+        error: 'Заказ с данным ключом идемпотентности уже обрабатывается. Пожалуйста, подождите завершения.',
+      });
+      return;
+    }
+
+    // 1.2. Fallback на PostgreSQL orders
     try {
       const { data: existingOrder } = await supabase
         .from('orders')
@@ -59,7 +86,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
           orderId: existingOrder.id,
           idempotencyKey: incomingIdempotencyKey,
         });
-        res.status(200).json({
+        const cachedPayload = {
           success: true,
           is_idempotent_replay: true,
           order_number: existingOrder.order_number,
@@ -67,7 +94,9 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
           status: existingOrder.status,
           total_amount: existingOrder.total_amount,
           message: 'Заказ уже был успешно зарегистрирован ранее (Idempotency Key HIT).',
-        });
+        };
+        saveIdempotencyCompleted(incomingIdempotencyKey, cachedPayload).catch(() => {});
+        res.status(200).json(cachedPayload);
         return;
       }
     } catch (idempErr) {
@@ -77,6 +106,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
 
   // 1.5. B2B Multi-Role Guard: Бухгалтер не может создавать заказы
   if (callerAuth.role === 'client' && callerAuth.b2bRole === 'accountant') {
+    await releaseIdempotencyLock(incomingIdempotencyKey);
     logger.warn('[Order] Accountant attempted to submit order', { userId: callerAuth.userId, correlationId });
     res.status(403).json({ success: false, code: 'ACCOUNTANT_CANNOT_ORDER', error: 'Учетная запись бухгалтера не имеет прав на оформление заказов.' });
     return;
@@ -87,6 +117,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
   const pricingResult = await validateOrderPricing(rawPayload, userPriceType);
 
   if (!pricingResult.valid) {
+    await releaseIdempotencyLock(incomingIdempotencyKey);
     logger.warn('[Order] Pricing validation failed', {
       error: pricingResult.error,
       tamperDetected: pricingResult.tamperDetected,
@@ -113,6 +144,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
   ]);
 
   if (exposureCheck.blocked) {
+    await releaseIdempotencyLock(incomingIdempotencyKey);
     res.status(exposureCheck.statusCode || 403).json({
       success: false,
       code: exposureCheck.blockCode,
@@ -127,6 +159,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
     for (const it of pricingResult.items) {
       const whId = resolveWarehouseId(it.warehouse_id, it.warehouse);
       if (forbiddenWhs.includes(whId)) {
+        await releaseIdempotencyLock(incomingIdempotencyKey);
         res.status(403).json({
           success: false,
           error: `Заказ со склада "${it.warehouse || whId}" недоступен для вашей учетной записи.`,

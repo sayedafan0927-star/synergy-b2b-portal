@@ -8,6 +8,7 @@ import { decrementCachedCatalogStock } from './stockCacheUpdater';
 import type { SplitOrderSummary } from './orderSplitter';
 import { isFatalBusinessError, dispatchDlqEmergencyAlert } from '../../outbox/outboxUtils';
 import { enqueueOutboxOrder } from '../../lib/queueBroker';
+import { saveIdempotencyCompleted } from '../../lib/redisIdempotency';
 
 /**
  * Неблокирующий вызов воркера Outbox для мгновенного сброса заказа в ERP (sub-second sync)
@@ -370,6 +371,9 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
           };
         });
       }
+      if (incomingIdempotencyKey) {
+        saveIdempotencyCompleted(incomingIdempotencyKey, jsonData).catch(() => {});
+      }
       res.status(200).json(jsonData);
       return;
     }
@@ -381,7 +385,7 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
     });
     decrementCachedCatalogStock(reservedSkuItems, 'catalog_global', supabase).catch(() => {});
     triggerImmediateOutboxSync(req, correlationId, { orderId: outboxOrderId, orderDoc: outboxOrderDoc });
-    res.status(200).json({
+    const outboxQueuedResponse = {
       success: true,
       outbox_queued: true,
       is_buffered_offline: true,
@@ -389,7 +393,11 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
       order_id: outboxOrderId,
       split_orders: createdSplitOrders,
       message: 'Заказ успешно зарегистрирован и поставлен в очередь асинхронной отправки в ERP.',
-    });
+    };
+    if (incomingIdempotencyKey) {
+      saveIdempotencyCompleted(incomingIdempotencyKey, outboxQueuedResponse).catch(() => {});
+    }
+    res.status(200).json(outboxQueuedResponse);
   } catch (err: any) {
     clearTimeout(erpTimeoutId);
     await recordFailure('erp_gateway');
@@ -401,7 +409,7 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
 
     decrementCachedCatalogStock(reservedSkuItems, 'catalog_global', supabase).catch(() => {});
     triggerImmediateOutboxSync(req, correlationId, { orderId: outboxOrderId, orderDoc: outboxOrderDoc });
-    res.status(200).json({
+    const offlineFallbackResponse = {
       success: true,
       outbox_queued: true,
       is_buffered_offline: true,
@@ -409,6 +417,10 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
       order_id: outboxOrderId,
       split_orders: createdSplitOrders,
       message: 'Заказ принят и надежно сохранен в базе данных. Синхронизация с ERP выполняется в фоновом режиме.',
-    });
+    };
+    if (incomingIdempotencyKey) {
+      saveIdempotencyCompleted(incomingIdempotencyKey, offlineFallbackResponse).catch(() => {});
+    }
+    res.status(200).json(offlineFallbackResponse);
   }
 }
