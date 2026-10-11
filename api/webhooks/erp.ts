@@ -14,6 +14,7 @@ import {
 } from './handlers/clientLifecycleHandler';
 import { handleDiscountRulesUpdated } from './handlers/discountRulesHandler';
 import { handleCurrencyRateUpdated } from './handlers/currencyRateHandler';
+import { getRedisClient, isRedisConfigured } from '../lib/redis';
 
 function getAllowedKeys(): Set<string> {
   return new Set([
@@ -185,32 +186,55 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       '',
     ).trim();
 
-    // T-18: Дедупликация входящих вебхуков через PostgreSQL
-    if (incomingEventId && supabaseServer) {
-      try {
-        const { data: existingEvent } = await supabaseServer
-          .from('webhook_events')
-          .select('event_id')
-          .eq('event_id', incomingEventId)
-          .maybeSingle();
-
-        if (existingEvent) {
-          console.log(`[Webhook ERP] Duplicate event ignored (deduplicated): ${incomingEventId}`);
-          return res.status(200).json({
-            success: true,
-            deduplicated: true,
-            event_id: incomingEventId,
-            message: 'Webhook event already processed previously.',
+    // T-18: Распределенная дедупликация входящих вебхуков через Redis (L2) + PostgreSQL (L3)
+    if (incomingEventId) {
+      const redis = getRedisClient();
+      if (redis && isRedisConfigured()) {
+        try {
+          const acquired = await redis.set(`idempotency:webhook:${incomingEventId}`, '1', {
+            nx: true,
+            ex: 86400, // 24 часа
           });
+          if (!acquired) {
+            console.log(`[Webhook ERP] Duplicate event ignored via Redis deduplication: ${incomingEventId}`);
+            return res.status(200).json({
+              success: true,
+              deduplicated: true,
+              event_id: incomingEventId,
+              message: 'Webhook event already processed previously (Redis HIT).',
+            });
+          }
+        } catch (rErr) {
+          // Graceful fallback to PostgreSQL check
         }
+      }
 
-        await supabaseServer.from('webhook_events').insert({
-          event_id: incomingEventId,
-          event_type: String(event),
-          processed_at: new Date().toISOString(),
-        });
-      } catch (dedupErr) {
-        console.warn('[Webhook ERP] Deduplication check notice:', dedupErr);
+      if (supabaseServer) {
+        try {
+          const { data: existingEvent } = await supabaseServer
+            .from('webhook_events')
+            .select('event_id')
+            .eq('event_id', incomingEventId)
+            .maybeSingle();
+
+          if (existingEvent) {
+            console.log(`[Webhook ERP] Duplicate event ignored (deduplicated): ${incomingEventId}`);
+            return res.status(200).json({
+              success: true,
+              deduplicated: true,
+              event_id: incomingEventId,
+              message: 'Webhook event already processed previously.',
+            });
+          }
+
+          await supabaseServer.from('webhook_events').insert({
+            event_id: incomingEventId,
+            event_type: String(event),
+            processed_at: new Date().toISOString(),
+          });
+        } catch (dedupErr) {
+          console.warn('[Webhook ERP] Deduplication check notice:', dedupErr);
+        }
       }
     }
 
