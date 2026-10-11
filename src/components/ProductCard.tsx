@@ -192,7 +192,8 @@ function ProductCard({ product, onNavigate }: ProductCardProps) {
           handleOpenProduct();
         }
       }}
-      className={`group card relative flex flex-col overflow-visible text-left cursor-pointer transition-shadow hover:shadow-lg active:scale-[0.99] touch-manipulation ${sizesOpen ? 'z-30' : ''}`}
+      className={`group card relative flex flex-col overflow-visible text-left cursor-pointer transition-shadow hover:shadow-lg active:scale-[0.99] touch-manipulation ${sizesOpen ? 'z-50 isolate' : 'z-0'}`}
+      style={sizesOpen ? { zIndex: 60, position: 'relative', transform: 'translate3d(0, 0, 0)' } : undefined}
     >
       <ProductCardCarousel
         product={product}

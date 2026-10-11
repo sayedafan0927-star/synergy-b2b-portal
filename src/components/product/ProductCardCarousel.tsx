@@ -191,8 +191,8 @@ export function ProductCardCarousel({
 
       {/* Бейдж для админа: если у товара 0 остаток и он скрыт от клиентов */}
       {isEffectiveAdmin && isOutOfStock && !isShowroomMode && (
-        <div className="absolute top-2.5 right-2.5 z-10 pointer-events-none">
-          <span className="inline-flex items-center gap-1 rounded-md bg-amber-600 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm" title="Товар с нулевым остатком скрыт от клиентов">
+        <div className="absolute top-2.5 right-2.5 z-10 pointer-events-none max-w-[calc(100%-1.25rem)]">
+          <span className="inline-flex items-center gap-1 rounded-md bg-amber-600 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm truncate" title="Товар с нулевым остатком скрыт от клиентов">
             ⚠️ 0 шт · Скрыт от клиентов
           </span>
         </div>
