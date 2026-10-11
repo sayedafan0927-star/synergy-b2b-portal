@@ -322,7 +322,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
     }
 
     if (hasZeroPriceItems) {
-      setSubmitError('В корзине есть позиции с неустановленной ценой (0 ₸ / $0). Обратитесь к менеджеру или удалите их для оформления заказа.');
+      setSubmitError('В корзине есть позиции с неустановленной ценой (0 у.е.). Обратитесь к менеджеру или удалите их для оформления заказа.');
       return;
     }
 
@@ -348,7 +348,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
 
     const whSummaryTag = hasMultipleWarehouses
       ? ` [МУЛЬТИСКЛАД: ${Array.from(warehousesInCart.entries())
-          .map(([w, d]) => `${w} (${d.count} шт, $${d.totalAmount.toFixed(0)})`)
+          .map(([w, d]) => `${w} (${d.count} шт, ${d.totalAmount.toFixed(0)} у.е.)`)
           .join(', ')}]`
       : '';
     const managerTag = isManagerSelfOrder

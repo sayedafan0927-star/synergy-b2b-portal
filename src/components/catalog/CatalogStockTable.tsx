@@ -26,7 +26,7 @@ export function CatalogStockTable({
   const { t } = useLanguage();
   const { addItem, items } = useCart();
   const { user } = useAuth();
-  const { currency, formatPrice } = useCurrency();
+  const { currency, formatPrice, currencyUnitLabel } = useCurrency();
   const pricing = useUserPricing();
   const { settings } = useDisplaySettings();
   const [quantities, setQuantities] = useState<Record<string, number>>({});
@@ -181,7 +181,7 @@ export function CatalogStockTable({
                     </th>
                     {settings.show_price && (
                       <th className="py-2.5 px-2 text-center font-semibold text-slate-500 uppercase tracking-wide whitespace-nowrap">
-                        {currency === 'KZT' ? '₸/м²' : '$/м²'}
+                        {currencyUnitLabel}/м²
                       </th>
                     )}
                     {allSizes.map(size => (

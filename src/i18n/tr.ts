@@ -337,7 +337,7 @@ export const tr: TranslationDictionary = {
   'footer.sunday': 'Paz: Kapalı',
   'footer.rights': 'Tüm hakları saklıdır.',
   'footer.privacy_policy': 'Gizlilik Politikası',
-  'footer.public_offer': 'Kullanım Koşulları',
+  'footer.public_offer': 'B2B Tedarik Koşulları (Teklif Değildir)',
   'footer.delivery_payment': 'Teslimat ve Ödeme',
   'footer.returns_refunds': 'İade ve Değişim (14 Gün)',
 

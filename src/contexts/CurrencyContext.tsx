@@ -9,19 +9,25 @@ interface CurrencyContextType {
   exchangeRate: number;
   formatPrice: (amountUsd: number) => string;
   formatDual: (amountUsd: number) => string;
+  canViewRawDollar: boolean;
+  currencyUnitLabel: string;
 }
 
 const CurrencyContext = createContext<CurrencyContextType>({
   currency: 'USD',
   setCurrency: () => {},
   exchangeRate: DEFAULT_USD_KZT_RATE,
-  formatPrice: (amount) => formatCurrency(amount, 'USD'),
-  formatDual: (amount) => formatDualCurrency(amount),
+  formatPrice: (amount) => formatCurrency(amount, 'USD', DEFAULT_USD_KZT_RATE, false),
+  formatDual: (amount) => formatDualCurrency(amount, DEFAULT_USD_KZT_RATE, false),
+  canViewRawDollar: false,
+  currencyUnitLabel: 'у.е.',
 });
 
 export const CurrencyProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isAdmin, isImpersonating } = useAuth();
-  const isEffectiveAdmin = Boolean(isAdmin && !isImpersonating);
+  const { isAdmin, isSupplier, isImpersonating } = useAuth();
+  // Реальный знак доллара ($) виден строго администраторам и прямым поставщикам (фабрикам ВЭД)
+  // Для дилеров, клиентов и гостей в РК отображается «у.е.» во избежание юридических рисков
+  const canViewRawDollar = Boolean((isAdmin || isSupplier) && !isImpersonating);
 
   const [currency, setCurrencyState] = useState<CurrencyCode>(() => {
     try {
@@ -76,39 +82,35 @@ export const CurrencyProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
   }, []);
 
-  // Если пользователь не админ, принудительно переключаем на USD и очищаем KZT из localStorage
-  useEffect(() => {
-    if (!isEffectiveAdmin && currency !== 'USD') {
-      setCurrencyState('USD');
-      try {
-        localStorage.setItem('synergy_preferred_currency', 'USD');
-      } catch {}
-    }
-  }, [isEffectiveAdmin, currency]);
-
   const setCurrency = (c: CurrencyCode) => {
-    // Пользователям без прав админа запрещено переключаться на KZT
-    if (!isEffectiveAdmin && c === 'KZT') {
-      return;
-    }
     setCurrencyState(c);
     try {
       localStorage.setItem('synergy_preferred_currency', c);
     } catch {}
   };
 
-  const activeCurrency: CurrencyCode = isEffectiveAdmin ? currency : 'USD';
+  const activeCurrency: CurrencyCode = currency;
 
   const formatPrice = (amountUsd: number) => {
-    return formatCurrency(amountUsd, activeCurrency, exchangeRate);
+    return formatCurrency(amountUsd, activeCurrency, exchangeRate, canViewRawDollar);
   };
 
   const formatDual = (amountUsd: number) => {
-    return formatDualCurrency(amountUsd, exchangeRate);
+    return formatDualCurrency(amountUsd, exchangeRate, canViewRawDollar);
   };
 
+  const currencyUnitLabel = activeCurrency === 'KZT' ? '₸' : (canViewRawDollar ? '$' : 'у.е.');
+
   return (
-    <CurrencyContext.Provider value={{ currency: activeCurrency, setCurrency, exchangeRate, formatPrice, formatDual }}>
+    <CurrencyContext.Provider value={{
+      currency: activeCurrency,
+      setCurrency,
+      exchangeRate,
+      formatPrice,
+      formatDual,
+      canViewRawDollar,
+      currencyUnitLabel,
+    }}>
       {children}
     </CurrencyContext.Provider>
   );

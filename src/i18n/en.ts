@@ -337,7 +337,7 @@ export const en: TranslationDictionary = {
   'footer.sunday': 'Sun: Closed',
   'footer.rights': 'All rights reserved.',
   'footer.privacy_policy': 'Privacy Policy',
-  'footer.public_offer': 'Public Terms',
+  'footer.public_offer': 'B2B Supply Terms (Non-Offer)',
   'footer.delivery_payment': 'Shipping & Payment',
   'footer.returns_refunds': 'Returns & Refunds (14 days)',
 

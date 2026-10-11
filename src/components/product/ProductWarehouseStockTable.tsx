@@ -2,6 +2,7 @@ import { ShoppingCart, Check, Minus, Plus, Ruler } from 'lucide-react';
 import type { Product, ProductVariant, Warehouse } from '@/types';
 import { filterClientWarehouses } from '@/hooks/useProductData';
 import { rowKey } from './types';
+import { useCurrency } from '@/contexts/CurrencyContext';
 
 interface ProductWarehouseStockTableProps {
   product: Product;
@@ -52,6 +53,8 @@ export function ProductWarehouseStockTable({
   t,
   isMobile = false,
 }: ProductWarehouseStockTableProps) {
+  const { currencyUnitLabel } = useCurrency();
+
   function CartButton({ variant, wh }: { variant: ProductVariant; wh: Warehouse }) {
     const whLabel = wh.warehouse_name || wh.city;
     const key = rowKey(variant.sku, whLabel);
@@ -229,7 +232,7 @@ export function ProductWarehouseStockTable({
                 <th className="py-3 pl-5 pr-3 font-semibold">{t('product.sizes')}</th>
                 <th className="py-3 pr-3 font-semibold">{t('cart.table_warehouse')}</th>
                 <th className="py-3 pr-3 font-semibold">{t('product.in_stock')}</th>
-                {user && <th className="py-3 pr-3 font-semibold">{currency === 'KZT' ? '₸/м²' : '$/м²'}</th>}
+                {user && <th className="py-3 pr-3 font-semibold">{currencyUnitLabel}/м²</th>}
                 {user && <th className="py-3 pr-3 font-semibold">{t('cart.table_price')}</th>}
                 <th className="py-3 pr-3 font-semibold">{t('cart.table_qty')}</th>
                 <th className="py-3 pr-5 font-semibold sr-only">{t('cart.table_actions')}</th>

@@ -347,7 +347,7 @@ export default function App() {
       delivery: 'Условия доставки и оплаты — Synergy-Group',
       returns: 'Политика возврата и обмена (14 дней) — Synergy-Group',
       privacy: 'Политика конфиденциальности — Synergy-Group',
-      terms: 'Публичная оферта — Synergy-Group',
+      terms: 'Условия B2B-поставки (не оферта) — Synergy-Group',
     };
     document.title = titles[page] || titles.home;
   }, [page]);

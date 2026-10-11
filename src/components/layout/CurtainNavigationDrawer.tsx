@@ -150,7 +150,7 @@ export default function CurtainNavigationDrawer({
               onClick={() => handleLinkClick('terms')}
               className="hover:text-amber-300 transition-colors cursor-pointer"
             >
-              Оферта и реквизиты
+              Условия B2B (не оферта)
             </button>
           </div>
         </nav>

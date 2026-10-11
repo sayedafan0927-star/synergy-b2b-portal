@@ -135,32 +135,40 @@ export function calculateContractPrice(basePrice: number, rawPriceType?: string 
 
 export type CurrencyCode = 'USD' | 'KZT';
 
-export const DEFAULT_USD_KZT_RATE = 500; // Индикативный курс USD/KZT для рынка РК
+export const DEFAULT_USD_KZT_RATE = 520; // Индикативный курс USD/KZT для рынка РК
 
 /**
- * Форматирование цены в USD или KZT
+ * Форматирование цены:
+ * - В KZT: сумма в тенге со знаком ₸
+ * - В USD:
+ *   - для поставщиков (ВЭД) и администраторов: $ 45.00
+ *   - для дилеров, клиентов и публичного просмотра в РК: 45.00 у.е. (во избежание нарушения ст. 193 КоАП РК)
  */
 export function formatCurrency(
   amount: number,
   currency: CurrencyCode = 'USD',
-  exchangeRate: number = DEFAULT_USD_KZT_RATE
+  exchangeRate: number = DEFAULT_USD_KZT_RATE,
+  allowRawDollar: boolean = false
 ): string {
   const safeAmount = Number(amount) || 0;
   if (currency === 'KZT') {
     const kzt = Math.round(safeAmount * exchangeRate);
     return `${kzt.toLocaleString('ru-RU')} ₸`;
   }
-  return `$${safeAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (allowRawDollar) {
+    return `$${safeAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+  return `${safeAmount.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} у.е.`;
 }
 
-/**
- * Двойное отображение валюты для оптовиков РК ($ и ₸)
- */
 export function formatDualCurrency(
   amountUsd: number,
-  exchangeRate: number = DEFAULT_USD_KZT_RATE
+  _exchangeRate: number = DEFAULT_USD_KZT_RATE,
+  allowRawDollar: boolean = false
 ): string {
   const safeAmount = Number(amountUsd) || 0;
-  const kzt = Math.round(safeAmount * exchangeRate);
-  return `$${safeAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (${kzt.toLocaleString('ru-RU')} ₸)`;
+  if (allowRawDollar) {
+    return `$${safeAmount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+  return `${safeAmount.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} у.е.`;
 }

@@ -337,7 +337,7 @@ export const kz: TranslationDictionary = {
   'footer.sunday': 'Жс: Демалыс',
   'footer.rights': 'Барлық құқықтар қорғалған.',
   'footer.privacy_policy': 'Құпиялылық саясаты',
-  'footer.public_offer': 'Көпшілік офертасы',
+  'footer.public_offer': 'B2B жеткізу шарттары (оферта емес)',
   'footer.delivery_payment': 'Жеткізу және төлеу',
   'footer.returns_refunds': 'Қайтару және айырбастау (14 күн)',
 

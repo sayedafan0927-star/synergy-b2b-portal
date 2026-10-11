@@ -1,6 +1,7 @@
 import { FileText, X, RefreshCw, Printer } from 'lucide-react';
 import type { Profile } from '@/contexts/AuthContext';
 import { Portal } from '@/components/common/Portal';
+import { useCurrency } from '@/contexts/CurrencyContext';
 
 export interface ReconciliationModalProps {
   isOpen: boolean;
@@ -21,6 +22,8 @@ export function ReconciliationModal({
   loading,
   data,
 }: ReconciliationModalProps) {
+  const { canViewRawDollar, currencyUnitLabel } = useCurrency();
+
   if (!isOpen) return null;
 
   return (
@@ -96,19 +99,27 @@ export function ReconciliationModal({
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                 <div className="card p-3 bg-slate-50">
                   <span className="text-[10px] text-slate-400 uppercase font-semibold">Входящее сальдо</span>
-                  <p className="text-sm font-bold text-slate-800 mt-0.5">${data.initial_balance ?? '0.00'}</p>
+                  <p className="text-sm font-bold text-slate-800 mt-0.5">
+                    {canViewRawDollar ? `$${data.initial_balance ?? '0.00'}` : `${data.initial_balance ?? '0.00'} у.е.`}
+                  </p>
                 </div>
                 <div className="card p-3 bg-slate-50">
                   <span className="text-[10px] text-slate-400 uppercase font-semibold">Отгрузки (Дебет)</span>
-                  <p className="text-sm font-bold text-red-600 mt-0.5">${data.total_debit ?? '0.00'}</p>
+                  <p className="text-sm font-bold text-red-600 mt-0.5">
+                    {canViewRawDollar ? `$${data.total_debit ?? '0.00'}` : `${data.total_debit ?? '0.00'} у.е.`}
+                  </p>
                 </div>
                 <div className="card p-3 bg-slate-50">
                   <span className="text-[10px] text-slate-400 uppercase font-semibold">Оплаты (Кредит)</span>
-                  <p className="text-sm font-bold text-emerald-600 mt-0.5">${data.total_credit ?? '0.00'}</p>
+                  <p className="text-sm font-bold text-emerald-600 mt-0.5">
+                    {canViewRawDollar ? `$${data.total_credit ?? '0.00'}` : `${data.total_credit ?? '0.00'} у.е.`}
+                  </p>
                 </div>
                 <div className="card p-3 bg-slate-50">
                   <span className="text-[10px] text-slate-400 uppercase font-semibold">Конечное сальдо</span>
-                  <p className="text-sm font-bold text-slate-900 mt-0.5">${data.final_balance ?? '0.00'}</p>
+                  <p className="text-sm font-bold text-slate-900 mt-0.5">
+                    {canViewRawDollar ? `$${data.final_balance ?? '0.00'}` : `${data.final_balance ?? '0.00'} у.е.`}
+                  </p>
                 </div>
               </div>
 
@@ -120,8 +131,8 @@ export function ReconciliationModal({
                       <th className="py-2 px-3 text-left">Дата</th>
                       <th className="py-2 px-3 text-left">Документ</th>
                       <th className="py-2 px-3 text-left">Номер</th>
-                      <th className="py-2 px-3 text-right">Отгрузка ($)</th>
-                      <th className="py-2 px-3 text-right">Оплата ($)</th>
+                      <th className="py-2 px-3 text-right">Отгрузка ({currencyUnitLabel})</th>
+                      <th className="py-2 px-3 text-right">Оплата ({currencyUnitLabel})</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -132,10 +143,14 @@ export function ReconciliationModal({
                           <td className="py-2 px-3 font-medium text-slate-800">{tx.doc_type}</td>
                           <td className="py-2 px-3 font-mono text-slate-500">{tx.doc_number}</td>
                           <td className="py-2 px-3 text-right font-semibold text-slate-900">
-                            {tx.debit > 0 ? `$${Number(tx.debit).toFixed(2)}` : '—'}
+                            {tx.debit > 0
+                              ? (canViewRawDollar ? `$${Number(tx.debit).toFixed(2)}` : `${Number(tx.debit).toFixed(2)} у.е.`)
+                              : '—'}
                           </td>
                           <td className="py-2 px-3 text-right font-semibold text-emerald-600">
-                            {tx.credit > 0 ? `$${Number(tx.credit).toFixed(2)}` : '—'}
+                            {tx.credit > 0
+                              ? (canViewRawDollar ? `$${Number(tx.credit).toFixed(2)}` : `${Number(tx.credit).toFixed(2)} у.е.`)
+                              : '—'}
                           </td>
                         </tr>
                       ))

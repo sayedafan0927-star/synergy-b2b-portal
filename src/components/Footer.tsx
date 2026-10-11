@@ -122,7 +122,14 @@ export default function Footer({ onNavigate }: FooterProps) {
           </div>
         </div>
 
-        <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-slate-800 pt-8 lg:flex-row">
+        {/* B2B Legal Non-Offer Disclaimer for Republic of Kazakhstan */}
+        <div className="mt-8 pt-6 border-t border-slate-800/80 text-[11px] text-slate-400/90 leading-relaxed text-center sm:text-left">
+          <p>
+            Все представленные на сайте сведения о ценах, характеристиках и наличии товаров носят информационный характер и <strong className="text-amber-400/90">не являются публичной офертой</strong> (ст. 395 ГК РК). Все цены указаны в у.е. (условных единицах). Портал предназначен для субъектов предпринимательской деятельности (ТОО, ИП).
+          </p>
+        </div>
+
+        <div className="mt-8 flex flex-col items-center justify-between gap-4 border-t border-slate-800/60 pt-6 lg:flex-row">
           <p className="text-xs text-slate-500 text-center lg:text-left">
             &copy; 2025 ТОО «Синэнергия Груп» (БИН 250140013808). {t('footer.rights')}
           </p>

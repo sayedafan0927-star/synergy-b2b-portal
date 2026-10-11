@@ -337,7 +337,7 @@ export const ru: TranslationDictionary = {
   'footer.sunday': 'Вс: Выходной',
   'footer.rights': 'Все права защищены.',
   'footer.privacy_policy': 'Политика конфиденциальности',
-  'footer.public_offer': 'Публичная оферта',
+  'footer.public_offer': 'Условия B2B-поставки (не оферта)',
   'footer.delivery_payment': 'Доставка и оплата',
   'footer.returns_refunds': 'Возврат и обмен (14 дней)',
 

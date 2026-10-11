@@ -191,6 +191,10 @@ export function CartCheckoutForm({
             <span>Прямое резервирование на складах в 1С:ERP...</span>
           </div>
         )}
+
+        <p className="text-[10px] text-slate-400 text-center leading-tight">
+          * Не является публичной офертой (ст. 395 ГК РК). Цены указаны в у.е.
+        </p>
       </div>
 
       {/* ─── 3. Компактные предупреждения и статусы ─── */}

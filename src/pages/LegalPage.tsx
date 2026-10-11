@@ -35,7 +35,7 @@ export default function LegalPage({ initialDoc = 'returns', onNavigate }: LegalP
     { id: 'returns', label: 'Возврат и обмен (14 дней)', icon: RotateCcw },
     { id: 'delivery', label: 'Доставка и оплата', icon: Truck },
     { id: 'privacy', label: 'Конфиденциальность и Cookies', icon: ShieldCheck },
-    { id: 'terms', label: 'Публичная оферта', icon: FileText },
+    { id: 'terms', label: 'Условия B2B-поставки (не оферта)', icon: FileText },
   ];
 
   return (
@@ -232,29 +232,36 @@ export default function LegalPage({ initialDoc = 'returns', onNavigate }: LegalP
           {activeDoc === 'terms' && (
             <article className="space-y-6 text-slate-700">
               <div className="border-b border-slate-100 pb-5">
-                <span className="text-xs font-bold uppercase tracking-wider text-brand-700">Юридический договор</span>
-                <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1">Публичная оферта на поставку ковровых изделий</h1>
-                <p className="text-sm text-slate-500 mt-1">Условия поставки ковровых покрытий юридическим лицам и индивидуальным предпринимателям</p>
+                <span className="text-xs font-bold uppercase tracking-wider text-amber-700">Регламент B2B-взаимодействия (Не оферта)</span>
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mt-1">Регламент оптовой поставки и правила взаиморасчетов</h1>
+                <p className="text-sm text-slate-500 mt-1">Правила сотрудничества с юридическими лицами и индивидуальными предпринимателями</p>
+              </div>
+
+              <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4 text-xs text-amber-950 leading-relaxed space-y-1.5">
+                <p className="font-bold">Правовой статус портала и отказ от публичной оферты:</p>
+                <p>
+                  B2B-портал {COMPANY_INFO.name} (БИН {COMPANY_INFO.bin}) предназначен исключительно для субъектов предпринимательской деятельности (ТОО, ИП). Представленные на сайте сведения о товарах, складских остатках и расчетных ценах носят сугубо ознакомительный характер и <strong>ни при каких условиях не являются публичной офертой</strong> (ст. 395 ГК РК). Заказ на портале является предварительной коммерческой заявкой Покупателя.
+                </p>
               </div>
 
               <section className="space-y-3">
-                <h2 className="text-lg font-bold text-slate-900">1. Предмет договора</h2>
+                <h2 className="text-lg font-bold text-slate-900">1. Валюта цен и условные единицы (у.е.)</h2>
                 <p className="text-sm text-slate-600 leading-relaxed">
-                  Поставщик ({COMPANY_INFO.name}) обязуется поставить, а Покупатель — принять и оплатить ковровые изделия в ассортименте, количестве и по ценам, зафиксированным в оформленном заказе на портале либо в договоре поставки или счете на оплату.
+                  Все цены на портале приведены в у.е. (условных единицах). Окончательная стоимость и условия фиксируются в счете на оплату.
                 </p>
               </section>
 
               <section className="space-y-3">
-                <h2 className="text-lg font-bold text-slate-900">2. Момент заключения договора</h2>
+                <h2 className="text-lg font-bold text-slate-900">2. Оформление заказа</h2>
                 <p className="text-sm text-slate-600 leading-relaxed">
-                  Акцептом настоящей публичной оферты является подтверждение заказа покупателем через B2B-портал либо оплата выставленного счета на оплату.
+                  Оформление заявки через корзину портала инициирует бронирование складских остатков. Обязательства по поставке возникают после подтверждения заявки региональным менеджером и выставления счета на оплату.
                 </p>
               </section>
 
               <section className="space-y-3">
                 <h2 className="text-lg font-bold text-slate-900">3. Качество и приёмка товара</h2>
                 <p className="text-sm text-slate-600 leading-relaxed">
-                  Качество поставляемой продукции соответствует стандартам заводов-изготовителей. Приёмка по количеству и качеству производится в момент получения товара на складе Поставщика либо в терминале транспортной компании.
+                  Качество поставляемой продукции соответствует стандартам заводов-изготовителей. Приёмка по количеству и качеству производится в момент получения товара на складе либо на терминале транспортной компании.
                 </p>
               </section>
             </article>
