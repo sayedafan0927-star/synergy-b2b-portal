@@ -181,7 +181,51 @@ export async function submitOrderToErp(payload: CreateOrderPayload): Promise<Erp
       (err as any).details = details;
       throw err;
     }
-    throw new Error(data.error || `Ошибка сервера (${lastResponse.status})`);
+    throw new Error(data.error || (data as any)?.message || `Ошибка сервера (${lastResponse.status})`);
+  }
+
+  // Normalize order response when ERP accepts into processing buffer (HTTP 202 or ingest_uuid)
+  const isBuffered = Boolean(
+    data.status === 'accepted' ||
+    lastResponse.status === 202 ||
+    (data as any).http_code === 202 ||
+    data.ingest_uuid ||
+    data.is_buffered ||
+    data.order?.is_buffered
+  );
+
+  const rawIngestUuid = data.ingest_uuid;
+  const shortUuid = rawIngestUuid ? String(rawIngestUuid).replace(/^ingest_/, '').slice(0, 8).toUpperCase() : '';
+  const resolvedDocNumber =
+    data.order?.doc_number ||
+    (data as any).doc_number ||
+    data.order_number ||
+    (data as any).order_id ||
+    (shortUuid ? `ORD-BUF-${shortUuid}` : undefined) ||
+    `ORD-${Date.now().toString(36).toUpperCase()}`;
+
+  data.order_number = data.order_number || resolvedDocNumber;
+  data.is_buffered = isBuffered;
+
+  if (!data.order) {
+    data.order = {
+      order_id: Number((data as any).order_id) || Date.now(),
+      doc_number: resolvedDocNumber,
+      client_id: Number(payload.client_id) || 0,
+      warehouse_id: payload.warehouse_id || defaultWarehouseId,
+      total_amount: payload.items.reduce((sum, it) => sum + (Number(it.price || 0) * Number(it.quantity || 1)), 0),
+      currency: (payload as any).currency || 'USD',
+      status: isBuffered ? 'accepted' : (data.status || 'pending'),
+      items_count: payload.items.length,
+      is_buffered: isBuffered,
+    };
+  } else {
+    if (!data.order.doc_number) {
+      data.order.doc_number = resolvedDocNumber;
+    }
+    if (isBuffered) {
+      data.order.is_buffered = true;
+    }
   }
 
   return data;

@@ -418,43 +418,23 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
     try {
       const data = await submitOrderToErp(orderPayload);
 
-      if (data.success && (data.order?.doc_number || data.split_orders?.length)) {
-        const docNum = data.order?.doc_number || data.split_orders?.[0]?.doc_number || 'ORD-NEW';
+      const docNum = data.order?.doc_number || (data as any)?.doc_number || data.order_number || data.split_orders?.[0]?.doc_number || ((data as any)?.ingest_uuid ? `ORD-BUF-${String((data as any).ingest_uuid).replace(/^ingest_/, '').slice(0, 8).toUpperCase()}` : null) || 'ORD-NEW';
+      const isOrderSuccess = Boolean(data.success && (docNum || data.order?.doc_number || data.split_orders?.length || data.status === 'accepted' || (data as any)?.ingest_uuid));
+
+      if (isOrderSuccess) {
         const receivedSplits = data.split_orders || data.order?.split_orders || null;
-        if (receivedSplits && receivedSplits.length > 1) {
-          setSplitOrders(receivedSplits);
-        } else {
-          setSplitOrders(null);
-        }
-        const buffered = Boolean(
-          data.order?.is_buffered ||
-            (data as any)?.is_buffered ||
-            (data as any)?.is_buffered_offline,
-        );
-        setIsServerBuffered(buffered);
+        setSplitOrders(receivedSplits && receivedSplits.length > 1 ? receivedSplits : null);
+        setIsServerBuffered(Boolean(data.order?.is_buffered || (data as any)?.is_buffered || (data as any)?.is_buffered_offline || data.status === 'accepted' || (data as any)?.ingest_uuid));
         setIsOfflineQueued(false);
-
-        const isApprovalRequired =
-          !isAdmin && (
-            requiresApproval ||
-            Boolean((data.order as any)?.requires_approval) ||
-            Boolean((data as any)?.requires_approval)
-          );
-        setIsWaitingApproval(isApprovalRequired);
-
-        const isPartial = Boolean(
-          data.is_partially_confirmed ||
-          data.status === 'partially_confirmed' ||
-          (receivedSplits && receivedSplits.some((s: any) => s.status === 'failed' || s.status === 'cancelled' || s.success === false))
-        );
-        setIsPartiallyConfirmed(isPartial);
+        setIsWaitingApproval(!isAdmin && (requiresApproval || Boolean((data.order as any)?.requires_approval)));
+        setIsPartiallyConfirmed(Boolean(data.is_partially_confirmed || data.status === 'partially_confirmed' || (receivedSplits && receivedSplits.some((s: any) => s.status === 'failed' || s.status === 'cancelled' || s.success === false))));
 
         clearCart();
         setOrderDocNumber(docNum);
         setStockConflictDetails(null);
         window.scrollTo({ top: 0, behavior: 'smooth' });
       } else {
-        throw new Error(data.error || 'Не удалось создать заказ');
+        throw new Error(data.error || (data as any)?.message || 'Не удалось создать заказ');
       }
     } catch (err: any) {
       const isNetworkIssue =

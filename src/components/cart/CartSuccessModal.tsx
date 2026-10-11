@@ -35,7 +35,7 @@ export function CartSuccessModal({
               : isPartiallyConfirmed
               ? 'bg-amber-50 text-amber-600'
               : isServerBuffered
-              ? 'bg-amber-50 text-amber-600'
+              ? 'bg-emerald-50 text-emerald-600'
               : isWaitingApproval
               ? 'bg-amber-50 text-amber-600'
               : 'bg-emerald-50 text-emerald-600'
@@ -46,7 +46,7 @@ export function CartSuccessModal({
           ) : isPartiallyConfirmed ? (
             <AlertTriangle className="h-10 w-10" />
           ) : isServerBuffered ? (
-            <AlertTriangle className="h-10 w-10" />
+            <CheckCircle2 className="h-10 w-10" />
           ) : isWaitingApproval ? (
             <AlertTriangle className="h-10 w-10" />
           ) : (
@@ -59,14 +59,14 @@ export function CartSuccessModal({
             : isPartiallyConfirmed
             ? 'Заказ частично подтвержден'
             : isServerBuffered
-            ? 'Заказ зарезервирован и отправлен в буфер'
+            ? 'Заказ принят и зарезервирован'
             : isWaitingApproval
             ? 'Заказ отправлен на согласование'
             : t('cart.order_success_title')}
         </h1>
         <div className="mt-4 rounded-xl border border-slate-200 bg-white px-6 py-4 shadow-sm">
           <p className="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-1">
-            {isOfflineQueued ? 'Номер в локальной очереди' : isServerBuffered ? 'Номер брони в буфере' : t('cart.order_number')}
+            {isOfflineQueued ? 'Номер в локальной очереди' : isServerBuffered ? 'Номер заказа / брони' : t('cart.order_number')}
           </p>
           <p
             className={`text-2xl font-bold font-mono ${
@@ -75,7 +75,7 @@ export function CartSuccessModal({
                 : isPartiallyConfirmed
                 ? 'text-amber-800'
                 : isServerBuffered
-                ? 'text-amber-800'
+                ? 'text-emerald-800'
                 : isWaitingApproval
                 ? 'text-amber-800'
                 : 'text-emerald-800'
@@ -133,7 +133,7 @@ export function CartSuccessModal({
             : isPartiallyConfirmed
             ? 'Часть товаров успешно зарезервирована на доступных складах. Позиции со складов с исчерпанным остатком отклонены и не включены в итоговый счет.'
             : isServerBuffered
-            ? 'Шлюз ERP временно недоступен или на регламентном обслуживании. Товар надежно зарезервирован на складе портала и будет автоматически синхронизирован с ERP сервисом Outbox в течение нескольких минут.'
+            ? 'Заказ успешно принят шлюзом ERP в очередь проведения. Товар зарезервирован на складе Synergy.'
             : isWaitingApproval
             ? 'Запрос на согласование условий отгрузки отправлен вашему региональному менеджеру в WhatsApp. Как только заказ будет одобрен, вам придет подтверждающее сообщение в WhatsApp.'
             : 'Наш менеджер свяжется с вами для подтверждения заказа.'}

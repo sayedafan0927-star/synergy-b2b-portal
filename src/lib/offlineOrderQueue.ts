@@ -137,7 +137,7 @@ export async function processOfflineOrderQueue(): Promise<{ synced: number; fail
     try {
       const res = await submitOrderToErp(order.payload);
 
-      const resolvedDocNumber = res.order?.doc_number || res.order_number || res.split_orders?.[0]?.doc_number;
+      const resolvedDocNumber = res.order?.doc_number || res.order_number || (res as any)?.doc_number || (res as any)?.ingest_uuid || res.split_orders?.[0]?.doc_number;
       if (res.success && resolvedDocNumber) {
         order.status = 'synced';
         order.docNumber = resolvedDocNumber;
@@ -146,7 +146,7 @@ export async function processOfflineOrderQueue(): Promise<{ synced: number; fail
         synced++;
         console.log(`[OfflineQueue] Successfully synced order ${order.id} -> ${order.docNumber}`);
       } else {
-        throw new Error(res.error || 'ERP rejected order sync');
+        throw new Error(res.error || (res as any)?.message || 'ERP rejected order sync');
       }
     } catch (err: any) {
       order.status = 'failed';

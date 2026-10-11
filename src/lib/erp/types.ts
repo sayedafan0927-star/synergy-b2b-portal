@@ -68,6 +68,10 @@ export interface ErpOrderResponse {
   status?: string;
   is_partially_confirmed?: boolean;
   is_idempotent_replay?: boolean;
+  ingest_uuid?: string;
+  poll_url?: string;
+  http_code?: number;
+  is_buffered?: boolean;
   order?: {
     order_id: number;
     doc_number: string;
