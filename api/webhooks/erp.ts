@@ -19,13 +19,20 @@ import { getRedisClient, isRedisConfigured } from '../lib/redis';
 function getAllowedKeys(): Set<string> {
   return new Set([
     process.env.PORTAL_SECRET_KEY?.trim(),
+    process.env.SITE_WEBHOOK_SECRET?.trim(),
+    process.env.ERP_WEBHOOK_SECRET?.trim(),
     process.env.ERP_API_KEY?.trim(),
     process.env.ERP_PORTAL_SECRET?.trim(),
     getErpApiKey(),
   ].filter(Boolean) as string[]);
 }
 
-const SECRET_KEY = process.env.PORTAL_SECRET_KEY || process.env.ERP_PORTAL_SECRET || '';
+const SECRET_KEY =
+  process.env.SITE_WEBHOOK_SECRET ||
+  process.env.ERP_WEBHOOK_SECRET ||
+  process.env.PORTAL_SECRET_KEY ||
+  process.env.ERP_PORTAL_SECRET ||
+  '';
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
 
@@ -173,11 +180,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  const eventId = (req.headers['x-webhook-event-id'] || req.headers['X-Webhook-Event-ID']) as string | undefined;
+  const eventId = (
+    req.headers['x-webhook-delivery-id'] ||
+    req.headers['X-Webhook-Delivery-Id'] ||
+    req.headers['x-webhook-event-id'] ||
+    req.headers['X-Webhook-Event-ID']
+  ) as string | undefined;
 
   try {
     const payload = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-    const { event } = payload || {};
+    const event =
+      payload?.event ||
+      (req.headers['x-webhook-event'] as string) ||
+      (req.headers['X-Webhook-Event'] as string) ||
+      '';
 
     if (!event) {
       await recordAuditLog({
@@ -186,19 +202,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         status: 'error',
         statusCode: 400,
         source: 'ERP Webhook',
-        errorMessage: 'Missing required field: "event" in payload',
+        errorMessage: 'Missing required field: "event" in payload or X-Webhook-Event header',
         payload: { rawBody: String(req.body).slice(0, 500) },
       }).catch(() => {});
 
       return res.status(400).json({
         success: false,
-        error: 'Missing required field: "event" is required in payload.',
+        error: 'Missing required field: "event" is required in payload or X-Webhook-Event header.',
       });
     }
 
     const incomingEventId = String(
+      req.headers['x-webhook-delivery-id'] ||
+      req.headers['X-Webhook-Delivery-Id'] ||
       req.headers['x-webhook-event-id'] ||
       req.headers['X-Webhook-Event-ID'] ||
+      payload.delivery_id ||
       payload.event_id ||
       payload.id ||
       '',
@@ -217,6 +236,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             console.log(`[Webhook ERP] Duplicate event ignored via Redis deduplication: ${incomingEventId}`);
             return res.status(200).json({
               success: true,
+              received: true,
+              idempotent: true,
               deduplicated: true,
               event_id: incomingEventId,
               message: 'Webhook event already processed previously (Redis HIT).',
@@ -239,6 +260,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             console.log(`[Webhook ERP] Duplicate event ignored (deduplicated): ${incomingEventId}`);
             return res.status(200).json({
               success: true,
+              received: true,
+              idempotent: true,
               deduplicated: true,
               event_id: incomingEventId,
               message: 'Webhook event already processed previously.',
