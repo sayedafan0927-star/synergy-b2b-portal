@@ -152,11 +152,11 @@ export function AdminErpSyncTab({ isAdmin = true }: AdminErpSyncTabProps) {
     }
   };
 
-  const runSync = async () => {
+  const runSync = async (forceRefresh = false) => {
     setLoading(true);
     setError(null);
     try {
-      const rep = await syncAllErpData();
+      const rep = await syncAllErpData(forceRefresh);
       setReport(rep);
       triggerCatalogReload();
     } catch (err) {
@@ -168,7 +168,7 @@ export function AdminErpSyncTab({ isAdmin = true }: AdminErpSyncTabProps) {
   };
 
   useEffect(() => {
-    runSync();
+    runSync(false);
   }, []);
 
   const handleCopyJson = () => {
@@ -201,7 +201,7 @@ export function AdminErpSyncTab({ isAdmin = true }: AdminErpSyncTabProps) {
             {t('admin.erp_reset_outbox', 'Сброс буфера Outbox')}
           </button>
           <button
-            onClick={runSync}
+            onClick={() => runSync(true)}
             disabled={loading}
             className="btn-primary flex items-center gap-1.5 text-xs py-1.5 px-3 cursor-pointer"
           >
@@ -366,7 +366,7 @@ export function AdminErpSyncTab({ isAdmin = true }: AdminErpSyncTabProps) {
           {activeSubTab === 'counterparties' && (
             <AdminCounterpartiesSubTab
               counterparties={counterparties}
-              onRefreshCounterparties={runSync}
+              onRefreshCounterparties={() => runSync(true)}
             />
           )}
 

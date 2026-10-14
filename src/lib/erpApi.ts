@@ -48,6 +48,7 @@ export {
   fetchPaginatedCatalogFromErp,
   syncAllErpData,
   fetchSyncBundleFromErp,
+  invalidateClientCatalogCache,
 } from './erp/catalogApi';
 
 export {

@@ -8,7 +8,8 @@ const supabase = (SUPABASE_URL && SUPABASE_KEY)
   ? createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })
   : null as any;
 
-const CACHE_FRESH_TTL_MS = 60 * 1000;
+// Server-side L1 cache TTL reduced to 20s (15-30s standard) as ERP serves from Redis (<5ms, 90s TTL)
+const CACHE_FRESH_TTL_MS = 20 * 1000;
 
 interface MemoryCacheEntry {
   data: any;

@@ -3,6 +3,7 @@ import {
   fetchCatalogFromErp,
   fetchSingleProductFromErp,
   fetchPaginatedCatalogFromErp,
+  invalidateClientCatalogCache,
   type PaginatedCatalogParams,
 } from '@/lib/erpApi';
 import { AuthContext, type Profile } from '@/contexts/AuthContext';
@@ -52,6 +53,7 @@ export function useProducts(customDealerId?: string | number) {
 
   useEffect(() => {
     const handler = () => {
+      invalidateClientCatalogCache();
       if (globalProductsCache.length === 0) {
         setLoading(true);
       }
@@ -125,6 +127,7 @@ export function useProducts(customDealerId?: string | number) {
     const channel = supabase
       .channel('portal_live_updates')
       .on('broadcast', { event: 'stock_changed' }, (payload: any) => {
+        invalidateClientCatalogCache();
         const rawItems = payload?.payload?.items || payload?.items;
         if (Array.isArray(rawItems) && rawItems.length > 0) {
           const itemMap = new Map<string, any>();

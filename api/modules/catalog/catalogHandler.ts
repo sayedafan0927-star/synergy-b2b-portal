@@ -5,10 +5,12 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { getCachedCatalog, saveCachedCatalog } from '../../lib/catalogCache';
+import { getCachedCatalog, saveCachedCatalog, invalidateCatalogCache } from '../../lib/catalogCache';
 import { sanitizePostgrestFilter } from '../../lib/security';
 import { getErpApiKey } from '../../lib/erpKey';
-import { fetchUpstreamCatalogSingleflight } from './catalogSingleflight';
+import { fetchUpstreamCatalogSingleflight, fetchErpCatalog } from './catalogSingleflight';
+
+export { fetchErpCatalog };
 
 function normalizeImageUrl(url: any): string {
   if (typeof url !== 'string' || !url) return '';
@@ -71,11 +73,22 @@ export async function handleCatalogRequests(
   serverErpKey?: string,
   correlationId?: string
 ): Promise<boolean> {
-  // 1. Быстрый ответ из L1/L2 кэша для полного каталога (Singleflight + Stale-While-Revalidate)
+  // 1. Быстрый ответ из L1/L2 кэша для полного каталога (Singleflight + Stale-While-Revalidate + Cache Bypass ?refresh=1)
   if ((action === 'catalog' || action === 'catalog_normalized') && req.method === 'GET') {
-    const isRefresh = req.query.refresh === 'true' || req.query.refresh === '1';
+    const isRefresh =
+      req.query.refresh === 'true' ||
+      req.query.refresh === '1' ||
+      req.query.nocache === 'true' ||
+      req.query.nocache === '1';
+    const dealerId = req.query.dealer_id ? String(req.query.dealer_id).trim() : undefined;
+    const cacheKey = dealerId ? `catalog_dealer_${dealerId}` : 'catalog_global';
+
     try {
-      const cached = await getCachedCatalog('catalog_global');
+      if (isRefresh) {
+        await invalidateCatalogCache(cacheKey);
+      }
+
+      const cached = isRefresh ? null : await getCachedCatalog(cacheKey);
 
       // 1.1. Fresh HIT: свежий кэш отдается мгновенно
       if (cached && cached.isFresh && !isRefresh) {
@@ -100,6 +113,7 @@ export async function handleCatalogRequests(
           fallbackErpUrl,
           serverErpKey,
           correlationId,
+          dealerId,
         }).catch(err => {
           console.warn('[Catalog Handler] Background SWR refresh notice:', err?.message);
         });
@@ -111,17 +125,27 @@ export async function handleCatalogRequests(
         return true;
       }
 
-      // 1.3. Cold Start / Manual Refresh: единый Singleflight запрос в 1C (все параллельные ждут один промис)
+      // 1.3. Cold Start / Manual Refresh (?refresh=1): единый Singleflight запрос в Synergy ERP
       const freshData = await fetchUpstreamCatalogSingleflight({
         targetErpUrl,
         fallbackErpUrl,
         serverErpKey,
         correlationId,
         forceRefresh: isRefresh,
+        dealerId,
       });
 
       if (freshData) {
-        res.setHeader('X-Cache', isRefresh ? 'REFRESHED' : 'MISS_SINGLEFLIGHT');
+        const upstreamXCache = (freshData as any)._xCache;
+        if (upstreamXCache && upstreamXCache !== 'UNKNOWN') {
+          res.setHeader('X-ERP-Cache', upstreamXCache);
+        }
+        res.setHeader(
+          'X-Cache',
+          upstreamXCache === 'HIT' || upstreamXCache === 'MISS'
+            ? upstreamXCache
+            : (isRefresh ? 'REFRESHED' : 'MISS_SINGLEFLIGHT')
+        );
         const payloadToSend = compactCatalogPayload(freshData);
         res.status(200).json(payloadToSend);
         return true;

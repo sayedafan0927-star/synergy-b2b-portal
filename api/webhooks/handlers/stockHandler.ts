@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { patchCachedCatalogStock } from '../../lib/catalogCache';
+import { patchCachedCatalogStock, invalidateCatalogCache } from '../../lib/catalogCache';
+import { fetchUpstreamCatalogSingleflight } from '../../modules/catalog/catalogSingleflight';
 import { recordAuditLog } from '../../audit/logs';
 
 export async function handleStockChanged(
@@ -37,6 +38,24 @@ export async function handleStockChanged(
     console.warn('[Webhook ERP] Error materializing stock updates:', patchErr);
   }
 
+  // Сбрасываем локальный кэш портала (L1 RAM + L2 Redis) и запускаем фоновый прогрев каталога из ERP (?action=catalog&refresh=1)
+  try {
+    await invalidateCatalogCache();
+    const warmupPromise = fetchUpstreamCatalogSingleflight({
+      forceRefresh: true,
+      correlationId: eventId || `stock-changed-${Date.now()}`,
+    }).catch(err => {
+      console.warn('[Webhook ERP: stock_changed] Background catalog refresh=1 warmup notice:', err?.message);
+    });
+
+    const waitUntilFn = (globalThis as any).waitUntil;
+    if (typeof waitUntilFn === 'function') {
+      waitUntilFn(warmupPromise);
+    }
+  } catch (invErr) {
+    console.warn('[Webhook ERP: stock_changed] Cache invalidation notice:', invErr);
+  }
+
   // Сквозная трансляция в Realtime-шину браузеров
   await broadcastLiveUpdate('stock_changed', {
     items,
@@ -54,6 +73,7 @@ export async function handleStockChanged(
       items_count: items.length,
       db_updated: dbUpdated,
       cache_patched: cachePatched,
+      cache_invalidated: true,
       reason: payload.reason || 'manual',
     },
   });
@@ -65,7 +85,8 @@ export async function handleStockChanged(
     items_processed: items.length,
     items_saved_to_db: dbUpdated,
     catalog_cache_updated: cachePatched,
-    message: `Successfully processed stock update for ${items.length} item(s) (DB: ${dbUpdated}, Cache: ${cachePatched}).`,
+    catalog_cache_invalidated: true,
+    message: `Successfully processed stock update for ${items.length} item(s) (DB: ${dbUpdated}, Cache Reset & Warmup: true).`,
     processed_at: new Date().toISOString(),
   };
 }

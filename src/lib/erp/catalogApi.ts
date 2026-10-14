@@ -2,13 +2,17 @@ import { erpFetch, deduplicateRequest, pingErp } from './core';
 import { fetchCounterpartiesFromErp, fetchRegionalManagersFromErp } from './counterpartiesApi';
 import type { PaginatedCatalogParams, PaginatedCatalogResult, ErpSyncReport } from './types';
 
-// ─── Stale-While-Revalidate Catalog Cache (60s TTL) ───
-const CATALOG_TTL_MS = 60 * 1000;
+// ─── Stale-While-Revalidate Catalog Cache (20s TTL; ERP Redis serves < 5ms with 90s TTL) ───
+const CATALOG_TTL_MS = 20 * 1000;
 const catalogMemoryCache = new Map<string, { timestamp: number; data: any }>();
+
+export function invalidateClientCatalogCache(): void {
+  catalogMemoryCache.clear();
+}
 
 /**
  * Получение актуального каталога и остатков по складам из ERP.
- * Использует Stale-While-Revalidate (SWR) кэширование и дедупликацию параллельных запросов.
+ * Использует Stale-While-Revalidate (SWR) кэширование, поддержку ?refresh=1 и дедупликацию параллельных запросов.
  */
 export async function fetchCatalogFromErp(dealerId?: string | number, priceType?: string, bypassCache = false) {
   const cacheKey = `catalog_${dealerId || 'public'}_${priceType || 'default'}`;
@@ -19,23 +23,27 @@ export async function fetchCatalogFromErp(dealerId?: string | number, priceType?
     if (cached && Date.now() - cached.timestamp < CATALOG_TTL_MS) {
       return cached.data;
     }
+  } else {
+    catalogMemoryCache.delete(cacheKey);
   }
 
+  const requestKey = bypassCache ? `${cacheKey}_refresh` : cacheKey;
+
   // 2. Дедупликация параллельных запросов
-  return deduplicateRequest(cacheKey, async () => {
+  return deduplicateRequest(requestKey, async () => {
     const response = await erpFetch('catalog', {
       method: 'GET',
       params: {
         dealer_id: dealerId ? String(dealerId) : undefined,
         price_type: priceType || undefined,
-        refresh: bypassCache ? 'true' : undefined,
+        refresh: bypassCache ? '1' : undefined,
       },
     });
 
-    const xCache = response.headers.get('x-cache');
+    const xCache = response.headers.get('x-cache') || response.headers.get('x-erp-cache');
     const xAge = response.headers.get('x-cache-age-ms');
     if (xCache) {
-      console.log(`[Catalog Gateway] Status: ${xCache}${xAge ? ` (${xAge}ms)` : ''}`);
+      console.log(`[Catalog Gateway] X-Cache: ${xCache}${xAge ? ` (${xAge}ms)` : ''}`);
     }
 
     if (!response.ok) {
@@ -43,6 +51,9 @@ export async function fetchCatalogFromErp(dealerId?: string | number, priceType?
     }
 
     const data = await response.json();
+    if (data && typeof data === 'object' && xCache) {
+      data._xCache = xCache;
+    }
     if (data && data.success) {
       catalogMemoryCache.set(cacheKey, { timestamp: Date.now(), data });
     }
@@ -132,10 +143,10 @@ export async function fetchPaginatedCatalogFromErp(params: PaginatedCatalogParam
 /**
  * Полная синхронизация и диагностический опрос всех узлов ERP.
  */
-export async function syncAllErpData(): Promise<ErpSyncReport> {
+export async function syncAllErpData(forceRefresh = false): Promise<ErpSyncReport> {
   const [pingRes, catalogRes, counterpartiesRes, managersRes] = await Promise.all([
     pingErp(),
-    fetchCatalogFromErp(),
+    fetchCatalogFromErp(undefined, undefined, forceRefresh),
     fetchCounterpartiesFromErp({ limit: 300, includeArchived: true }).catch(err => ({ success: false, error: err.message, counterparties: [] })),
     fetchRegionalManagersFromErp().catch(err => ({ success: false, error: err.message, managers: [] })),
   ]);

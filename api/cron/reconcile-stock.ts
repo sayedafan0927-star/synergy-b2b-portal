@@ -40,8 +40,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const startTime = Date.now();
 
   try {
-    // 1. Загрузка каталога с остатками из ERP
-    const erpUrl = `${TARGET_ERP_URL}?action=catalog`;
+    // 1. Загрузка свежего каталога с остатками из ERP с принудительным обходом Redis-кеша (?refresh=1)
+    const erpUrl = `${TARGET_ERP_URL}?action=catalog&refresh=1`;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 20000);
 
@@ -51,6 +51,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         'Accept': 'application/json',
         'X-Correlation-ID': correlationId,
       },
+      cache: 'no-store',
       signal: controller.signal,
     }).finally(() => clearTimeout(timeout));
 
@@ -58,6 +59,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       throw new Error(`ERP catalog fetch failed with status ${erpRes.status}`);
     }
 
+    const erpXCache = erpRes.headers.get('x-cache') || erpRes.headers.get('X-Cache') || 'UNKNOWN';
     const erpData: any = await erpRes.json();
     const erpProducts = Array.isArray(erpData?.products) ? erpData.products : [];
 
@@ -396,6 +398,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         phantom_reservations_fixed: phantomReservationsFixed,
         auto_retried_dlq_count: autoRetriedDlqCount,
         chunk_hashes_verified: chunkHashesCount,
+        erp_x_cache: erpXCache,
         sample_drifted_skus: driftedSkus.slice(0, 20),
       },
     });
@@ -408,6 +411,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       phantom_reservations_fixed: phantomReservationsFixed,
       auto_retried_dlq_orders: autoRetriedDlqCount,
       chunk_hashes_verified: chunkHashesCount,
+      erp_x_cache: erpXCache,
       sample_drifted: driftedSkus.slice(0, 10),
       duration_ms: Date.now() - startTime,
       correlation_id: correlationId,

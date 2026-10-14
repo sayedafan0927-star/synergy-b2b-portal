@@ -94,6 +94,12 @@ export async function handleGenericErpProxy(
 
     // Собираем Query параметры
     const queryParams = new URLSearchParams();
+    const isForceRefresh =
+      req.query.refresh === 'true' ||
+      req.query.refresh === '1' ||
+      req.query.nocache === 'true' ||
+      req.query.nocache === '1';
+
     for (const [key, val] of Object.entries(req.query)) {
       if (key === 'supplier_id' && (val === '0' || val === 'all' || val === '' || val === 'undefined' || val === 'null')) {
         continue;
@@ -106,6 +112,10 @@ export async function handleGenericErpProxy(
       } else if (val !== undefined && val !== null && val !== '') {
         queryParams.set(key, String(val));
       }
+    }
+
+    if (isForceRefresh && (action === 'catalog' || action === 'catalog_normalized')) {
+      queryParams.set('refresh', '1');
     }
 
     const targetUrl = `${TARGET_ERP_URL}?${queryParams.toString()}`;
@@ -168,6 +178,7 @@ export async function handleGenericErpProxy(
     let fetchOptions: RequestInit = {
       method: req.method,
       headers,
+      cache: isForceRefresh ? 'no-store' : 'default',
     };
 
     if (req.method === 'POST') {
@@ -280,6 +291,11 @@ export async function handleGenericErpProxy(
 
     res.status(erpResponse.status);
     res.setHeader('Content-Type', contentType);
+    const upstreamXCache = erpResponse.headers.get('x-cache') || erpResponse.headers.get('X-Cache');
+    if (upstreamXCache) {
+      res.setHeader('X-Cache', upstreamXCache);
+      res.setHeader('X-ERP-Cache', upstreamXCache);
+    }
 
     try {
       const jsonData = JSON.parse(textData);
@@ -289,7 +305,7 @@ export async function handleGenericErpProxy(
 
         if (Array.isArray(jsonData.products)) {
           saveCachedCatalog(jsonData, 'catalog_global').catch(e => console.warn('[API Proxy ERP] Cache save error:', e));
-          res.setHeader('X-Cache', 'MISS');
+          res.setHeader('X-Cache', upstreamXCache || 'MISS');
         }
       }
 

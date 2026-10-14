@@ -5,7 +5,7 @@
 
 import { getRedisClient } from './redis';
 
-const DEFAULT_CATALOG_REDIS_TTL = 180; // 3 minutes
+const DEFAULT_CATALOG_REDIS_TTL = 25; // 25s (15-30s portal cache window; ERP Redis is authoritative)
 
 export async function getRedisCatalogCache(cacheKey: string): Promise<any | null> {
   const redis = getRedisClient();

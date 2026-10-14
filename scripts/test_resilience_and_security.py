@@ -2122,7 +2122,39 @@ with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "cancelOrderHandler
 test_assert("allCancelled" in can_master and "partially_confirmed" in can_master and "newTotal" in can_master, "cancelOrderHandler.ts synchronizes master order status and recalculates total_amount upon suborder cancellations")
 
 # ------------------------------------------------------------------------------
-# 65. Summary Report
+# 65. Stage 41: ERP Redis Catalog Cache, X-Cache Diagnostics & Cache Bypass (?refresh=1)
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 65. STAGE 41: ERP REDIS CATALOG CACHE, X-CACHE & ?refresh=1 BYPASS ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "catalog", "catalogSingleflight.ts"), "r", encoding="utf-8") as fp:
+    cs_s41 = fp.read()
+test_assert("fetchErpCatalog" in cs_s41 and "refresh', '1'" in cs_s41, "catalogSingleflight.ts exports fetchErpCatalog and supports ?refresh=1 cache bypass")
+test_assert("x-cache" in cs_s41.lower() and "_xCache" in cs_s41, "catalogSingleflight.ts captures and logs X-Cache (HIT/MISS) from ERP response")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "catalog", "catalogHandler.ts"), "r", encoding="utf-8") as fp:
+    ch_s41 = fp.read()
+test_assert("nocache" in ch_s41 and "X-ERP-Cache" in ch_s41, "catalogHandler.ts supports refresh=1/nocache=1 and forwards X-Cache / X-ERP-Cache headers")
+
+with open(os.path.join(ROOT_DIR, "api", "lib", "catalogCache.ts"), "r", encoding="utf-8") as fp:
+    cc_s41 = fp.read()
+test_assert("CACHE_FRESH_TTL_MS = 20 * 1000" in cc_s41, "catalogCache.ts reduces server L1 TTL to 20s (within 15-30s target)")
+
+with open(os.path.join(ROOT_DIR, "api", "lib", "catalogDistributedCache.ts"), "r", encoding="utf-8") as fp:
+    cdc_s41 = fp.read()
+test_assert("DEFAULT_CATALOG_REDIS_TTL = 25" in cdc_s41, "catalogDistributedCache.ts reduces L2 Redis TTL to 25s (within 15-30s target)")
+
+with open(os.path.join(ROOT_DIR, "api", "webhooks", "erp.ts"), "r", encoding="utf-8") as fp:
+    wh_s41 = fp.read()
+test_assert("verifyErpWebhookSignature" in wh_s41 and "timingSafeEqual" in wh_s41, "api/webhooks/erp.ts exports timing-safe verifyErpWebhookSignature")
+
+test_assert(os.path.exists(os.path.join(ROOT_DIR, "api", "webhooks", "events.ts")), "api/webhooks/events.ts endpoint exists for POST /api/webhooks/events")
+
+with open(os.path.join(ROOT_DIR, "api", "webhooks", "handlers", "stockHandler.ts"), "r", encoding="utf-8") as fp:
+    sh_s41 = fp.read()
+test_assert("invalidateCatalogCache()" in sh_s41 and "forceRefresh: true" in sh_s41, "stockHandler.ts invalidates local catalog cache and triggers ?refresh=1 warmup on stock_changed")
+
+# ------------------------------------------------------------------------------
+# 66. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests
@@ -2134,5 +2166,6 @@ else:
 print(f"{BOLD}{BLUE}===================================================================={RESET}\n")
 
 sys.exit(0 if failed_tests == 0 else 1)
+
 
 

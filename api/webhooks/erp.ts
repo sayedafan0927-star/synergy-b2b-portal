@@ -29,6 +29,18 @@ const SECRET_KEY = process.env.PORTAL_SECRET_KEY || process.env.ERP_PORTAL_SECRE
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
 
+/**
+ * Верификация HMAC-SHA256 подписи входящего вебхука от ERP (timing-safe).
+ */
+export function verifyErpWebhookSignature(rawBody: string, signatureHeader: string | null, secretKeyOverride?: string): boolean {
+  const key = secretKeyOverride || SECRET_KEY || getErpApiKey();
+  if (!signatureHeader || !key) return false;
+  const expected = crypto.createHmac('sha256', key).update(rawBody, 'utf8').digest('hex');
+  const a = Buffer.from(expected.toLowerCase(), 'utf8');
+  const b = Buffer.from(signatureHeader.trim().toLowerCase(), 'utf8');
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
 const supabaseServer = (SUPABASE_URL && SUPABASE_KEY)
   ? createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })
   : null as any;
@@ -119,7 +131,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (canonicalPayload !== rawBuffer) candidateSigs.push(computeHmac(key, canonicalPayload).toLowerCase());
     }
 
-    const sigMatched = candidateSigs.includes(receivedSig.toLowerCase());
+    const timingSafeVerified =
+      verifyErpWebhookSignature(String(rawBuffer), receivedSig, SECRET_KEY) ||
+      verifyErpWebhookSignature(String(rawBuffer), receivedSig, portalKey) ||
+      verifyErpWebhookSignature(String(rawBody), receivedSig, SECRET_KEY) ||
+      verifyErpWebhookSignature(String(rawBody), receivedSig, portalKey);
+
+    const sigMatched = timingSafeVerified || candidateSigs.includes(receivedSig.toLowerCase());
 
     if (!sigMatched) {
       if (isProd) {
