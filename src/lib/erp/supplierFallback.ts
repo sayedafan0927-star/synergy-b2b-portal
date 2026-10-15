@@ -93,6 +93,35 @@ export function normalizeReleasesPayload(
   };
 }
 
+export function normalizeStockPayload(
+  data: any,
+  supplierId: number | string
+): SupplierNetworkStockResponse & SupplierReleasesReport {
+  const items: any[] = Array.isArray(data?.items) ? data.items : [];
+  items.forEach((item: any) => {
+    if (Array.isArray(item.distribution)) {
+      item.distribution.forEach((dist: any) => {
+        if (
+          Number(dist.warehouse_id) === 81 ||
+          (dist.warehouse_name && String(dist.warehouse_name).includes('Астана')) ||
+          dist.type === 'central_hub'
+        ) {
+          dist.city = 'Астана';
+          if (!dist.warehouse_name || String(dist.warehouse_name).includes('Алматы')) {
+            dist.warehouse_name = 'Основной Склад Астана';
+          }
+        }
+      });
+    }
+  });
+  return {
+    ...data,
+    success: true,
+    supplier_id: Number(supplierId) || 0,
+    items,
+  };
+}
+
 export async function buildSupplierStockFromCatalog(
   supplierId: number,
   suppliersList: SupplierInfo[]

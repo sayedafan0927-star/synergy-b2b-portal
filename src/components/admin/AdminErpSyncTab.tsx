@@ -385,9 +385,13 @@ export function AdminErpSyncTab({ isAdmin = true }: AdminErpSyncTabProps) {
                       </div>
                     </div>
                     <span className={`badge text-[10px] font-semibold shrink-0 ${
-                      m.role === 'manager_lm' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-sky-50 text-sky-700 border border-sky-200'
+                      m.role === 'lm' || m.role === 'manager_lm'
+                        ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                        : m.role === 'admin'
+                          ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                          : 'bg-sky-50 text-sky-700 border border-sky-200'
                     }`}>
-                      {m.role === 'manager_lm' ? 'ЛМ (Логист)' : 'РМ (Регионал)'}
+                      {m.role_title || (m.role === 'lm' || m.role === 'manager_lm' ? 'Логист (ЛМ)' : m.role === 'admin' ? 'Администратор / РМ' : 'Региональный менеджер (РМ)')}
                     </span>
                   </div>
                   <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[11px] text-slate-500">

@@ -1,5 +1,5 @@
 import { erpFetch, getAuthHeaders } from './core';
-import { buildSupplierStockFromCatalog, normalizeReleasesPayload } from './supplierFallback';
+import { buildSupplierStockFromCatalog, normalizeReleasesPayload, normalizeStockPayload } from './supplierFallback';
 import type {
   SupplierNetworkStockResponse,
   SupplierReleasesReport,
@@ -39,7 +39,7 @@ export async function fetchSupplierNetworkStock(
           if (subAction === 'releases') {
             return normalizeReleasesPayload(data, numSupplierId, params);
           }
-          return data;
+          return normalizeStockPayload(data, numSupplierId);
         }
       }
     } catch (err) {
