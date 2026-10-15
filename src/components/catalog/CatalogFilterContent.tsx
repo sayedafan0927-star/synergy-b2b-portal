@@ -59,8 +59,8 @@ export function CatalogFilterContent({
   };
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 no-scrollbar">
+    <div className="flex flex-col min-h-0 flex-1 h-full">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 thin-scrollbar">
         <div className="py-4 border-b border-slate-100">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
