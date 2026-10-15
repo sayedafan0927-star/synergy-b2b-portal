@@ -373,19 +373,29 @@ export function AdminErpSyncTab({ isAdmin = true }: AdminErpSyncTabProps) {
           {activeSubTab === 'managers' && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {managers.map((m: any) => (
-                <div key={m.id || m.name} className="card p-4 space-y-2">
-                  <div className="flex items-center gap-2.5">
-                    <div className="h-8 w-8 rounded-full bg-brand-50 text-brand-700 font-bold flex items-center justify-center text-xs">
-                      {m.name.charAt(0)}
+                <div key={m.id || m.name} className="card p-4 space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="h-9 w-9 shrink-0 rounded-full bg-brand-50 text-brand-700 font-bold flex items-center justify-center text-xs">
+                        {(m.name || 'М').charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="text-xs font-bold text-slate-900 truncate">{m.name}</h4>
+                        <p className="text-[11px] text-slate-500 font-mono">{m.phone || 'Телефон не указан'}</p>
+                      </div>
                     </div>
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-900">{m.name}</h4>
-                      <p className="text-[11px] text-slate-400">{m.phone || 'Телефон не указан'}</p>
-                    </div>
+                    <span className={`badge text-[10px] font-semibold shrink-0 ${
+                      m.role === 'manager_lm' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-sky-50 text-sky-700 border border-sky-200'
+                    }`}>
+                      {m.role === 'manager_lm' ? 'ЛМ (Логист)' : 'РМ (Регионал)'}
+                    </span>
                   </div>
-                  {m.city && (
-                    <span className="badge bg-slate-100 text-slate-600 text-[10px]">{m.city}</span>
-                  )}
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[11px] text-slate-500">
+                    <span className="badge bg-slate-100 text-slate-600 text-[10px]">{m.city || 'Астана / РК'}</span>
+                    {typeof m.clients_count === 'number' && m.clients_count > 0 && (
+                      <span className="font-medium text-slate-600">Контрагентов: <strong>{m.clients_count}</strong></span>
+                    )}
+                  </div>
                 </div>
               ))}
               {managers.length === 0 && (

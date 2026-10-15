@@ -3,15 +3,59 @@ import type { ErpClientAuthResult, ClientDebtReport } from './types';
 
 /**
  * Получение списка активных региональных менеджеров (РМ) и логистов (ЛМ).
+ * При ошибке SQL (500 SQLSTATE[42P10]) на стороне api_portal.php автоматически
+ * восстанавливает список менеджеров из рабочего эндпоинта action=sync_bundle.
  */
 export async function fetchRegionalManagersFromErp() {
-  const response = await erpFetch('regional_managers', { method: 'GET' });
-
-  if (!response.ok) {
-    throw new Error(`Ошибка загрузки регионалов (${response.status})`);
+  try {
+    const response = await erpFetch('regional_managers', { method: 'GET' });
+    if (response.ok) {
+      const data = await response.json();
+      if (data && data.success && Array.isArray(data.managers)) {
+        return data;
+      }
+    }
+  } catch (err) {
+    console.warn('[fetchRegionalManagersFromErp] Primary endpoint failed, falling back to sync_bundle:', err);
   }
 
-  return await response.json();
+  // Self-Healing Fallback: получаем менеджеров из живого пакета синхронизации ERP (action=sync_bundle)
+  const bundleResp = await erpFetch('sync_bundle', { method: 'GET' });
+  if (!bundleResp.ok) {
+    throw new Error(`Ошибка загрузки регионалов (${bundleResp.status})`);
+  }
+
+  const bundle = await bundleResp.json();
+  const rawManagers: any[] = Array.isArray(bundle?.managers) ? bundle.managers : [];
+  const rawCounterparties: any[] = Array.isArray(bundle?.counterparties) ? bundle.counterparties : [];
+
+  // Обогащаем менеджеров городами и количеством закрепленных дилеров из справочника контрагентов
+  const managers = rawManagers.map((m: any) => {
+    const mId = Number(m.id);
+    const assignedClients = rawCounterparties.filter((c: any) => {
+      const rmId = Number(c.regional_manager?.id ?? c.manager_id ?? -1);
+      return (mId > 0 && rmId === mId) || (c.regional_manager?.name && c.regional_manager.name === m.name);
+    });
+    const cities = Array.from(
+      new Set(assignedClients.map((c: any) => c.city).filter((city: any) => city && !String(city).toLowerCase().includes('заполним')))
+    );
+
+    return {
+      id: m.id,
+      name: m.name || m.username || 'Менеджер ERP',
+      username: m.username || m.name,
+      phone: m.phone || '',
+      role: m.role || 'manager_rm',
+      city: m.city || (cities.length > 0 ? cities.slice(0, 3).join(', ') : 'Астана / РК'),
+      clients_count: assignedClients.length,
+    };
+  });
+
+  return {
+    success: true,
+    count: managers.length,
+    managers,
+  };
 }
 
 /**

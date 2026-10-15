@@ -67,7 +67,7 @@ export function SupplierReleasesTab({
   };
 
   useEffect(() => {
-    if (!selectedSupplierId || Number(selectedSupplierId) <= 0) {
+    if (selectedSupplierId === undefined || selectedSupplierId === null || Number(selectedSupplierId) < 0) {
       setLoadingReleases(false);
       return;
     }

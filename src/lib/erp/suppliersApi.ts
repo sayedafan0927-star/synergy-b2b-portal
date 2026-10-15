@@ -1,4 +1,5 @@
 import { erpFetch, getAuthHeaders } from './core';
+import { buildSupplierStockFromCatalog, normalizeReleasesPayload } from './supplierFallback';
 import type {
   SupplierNetworkStockResponse,
   SupplierReleasesReport,
@@ -9,7 +10,7 @@ import type {
 } from './types';
 
 /**
- * Запрос данных личного кабинета фабрики / поставщика (Merinos и др.)
+ * Запрос данных личного кабинета фабрики / поставщика (Merinos, SAYDAM и др.)
  * subAction = 'stock' (география распределения остатков)
  * subAction = 'releases' (отчет о проданных и выпущенных в оплату объемах ковров за период)
  */
@@ -18,21 +19,40 @@ export async function fetchSupplierNetworkStock(
   subAction: 'stock' | 'releases' = 'stock',
   params: { startDate?: string; endDate?: string } = {}
 ): Promise<SupplierNetworkStockResponse & SupplierReleasesReport> {
-  const response = await erpFetch('supplier_network_stock', {
-    method: 'GET',
-    params: {
-      supplier_id: String(supplierId),
-      sub_action: subAction,
-      start_date: params.startDate,
-      end_date: params.endDate,
-    },
-  });
+  const numSupplierId = Number(supplierId) || 0;
 
-  if (!response.ok) {
-    throw new Error(`Ошибка загрузки данных поставщика (${response.status})`);
+  if (numSupplierId > 0) {
+    try {
+      const response = await erpFetch('supplier_network_stock', {
+        method: 'GET',
+        params: {
+          supplier_id: String(numSupplierId),
+          sub_action: subAction,
+          start_date: params.startDate,
+          end_date: params.endDate,
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.success) {
+          if (subAction === 'releases') {
+            return normalizeReleasesPayload(data, numSupplierId, params);
+          }
+          return data;
+        }
+      }
+    } catch (err) {
+      console.warn(`[fetchSupplierNetworkStock] Primary ${subAction} call failed, using fallback:`, err);
+    }
   }
 
-  return await response.json();
+  if (subAction === 'releases') {
+    return normalizeReleasesPayload({ success: true, releases: [] }, numSupplierId, params);
+  }
+
+  const suppliersList = await fetchSuppliersFromErp().catch(() => [] as SupplierInfo[]);
+  return await buildSupplierStockFromCatalog(numSupplierId, suppliersList);
 }
 
 /**

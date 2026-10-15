@@ -33,7 +33,7 @@ export function SupplierStockTab({ selectedSupplierId, reloadCounter }: Supplier
 
   useEffect(() => {
     let cancelled = false;
-    if (!selectedSupplierId || Number(selectedSupplierId) <= 0) {
+    if (selectedSupplierId === undefined || selectedSupplierId === null || Number(selectedSupplierId) < 0) {
       setLoadingStock(false);
       return;
     }
