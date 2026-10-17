@@ -100,7 +100,7 @@ function clean1CName(rawName?: string): { name: string; sku: string; collection:
           price
         )
       `)
-      .in('status', ['pending', 'reserved', 'confirmed', 'processing'])
+      .in('status', ['pending', 'waiting_approval', 'processing_sync', 'reserved', 'confirmed', 'processing'])
       .is('parent_order_id', null)
       .order('created_at', { ascending: false })
       .limit(200);
@@ -132,7 +132,7 @@ function clean1CName(rawName?: string): { name: string; sku: string; collection:
             price
           )
         `)
-        .in('status', ['pending', 'reserved', 'confirmed', 'processing'])
+        .in('status', ['pending', 'waiting_approval', 'processing_sync', 'reserved', 'confirmed', 'processing'])
         .is('parent_order_id', null)
         .order('created_at', { ascending: false })
         .limit(200);
@@ -297,6 +297,23 @@ function clean1CName(rawName?: string): { name: string; sku: string; collection:
     const knownDocNumbers = new Set(erpMapped.map((m: any) => String(m.order_number).trim()));
     const extraSupabase = (mapped || []).filter((sb: any) => !knownDocNumbers.has(String(sb.order_number).trim()));
     let combined = [...erpMapped, ...extraSupabase];
+
+    // Защита коммерческой тайны (Anti-PII Leak): маскируем названия компаний, телефоны и суммы чужих заказов для обычных клиентов
+    if (!isPrivileged) {
+      const callerPhoneDigits = String(callerAuth?.phone || callerAuth?.profile?.phone || '').replace(/\D+/g, '');
+      combined = combined.map((o: any) => {
+        const orderPhoneDigits = String(o.client_phone || '').replace(/\D+/g, '');
+        const isOwnOrder = callerPhoneDigits.length >= 9 && orderPhoneDigits.endsWith(callerPhoneDigits.slice(-9));
+        if (isOwnOrder) return o;
+        return {
+          ...o,
+          client_name: 'Оптовый партнер',
+          client_company: 'Бронь дилера',
+          client_phone: '',
+          total_amount: 0,
+        };
+      });
+    }
 
     // Фильтрация по SKU если запрошено
     if (skuFilter) {

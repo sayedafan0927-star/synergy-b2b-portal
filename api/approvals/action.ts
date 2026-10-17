@@ -195,7 +195,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         console.warn('[Approval Action] Supabase update warning:', dbError.message);
       }
 
-      // При одобрении каскадно подтверждаем мультискладские подзаказы (если мастер уже был в 1С)
+      // При одобрении каскадно подтверждаем мультискладские подзаказы
       if (isApprove && !isBufferedOutbox) {
         try {
           await supabase
@@ -208,6 +208,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         } catch (subApproveErr) {
           console.warn('[Approval Action] Error cascading approval to suborders:', subApproveErr);
         }
+      } else if (isApprove && isBufferedOutbox) {
+        try {
+          await supabase
+            .from('orders')
+            .update({
+              status: 'pending',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('parent_order_id', targetOrderId);
+        } catch {}
       }
 
       // При отклонении заказа каскадно отменяем мультискладские подзаказы
@@ -240,8 +250,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
-      // Всегда синхронизируем статус с 1C:ERP, если заказ существует в 1С
-      if (SERVER_ERP_KEY && (!isBufferedOutbox || existingOrder.is_erp_direct)) {
+      // Всегда синхронизируем статус с 1C:ERP при отклонении или если заказ уже был на WMS-холде в 1С
+      if (SERVER_ERP_KEY && (!isBufferedOutbox || isWaitingApproval || !isApprove || existingOrder.is_erp_direct)) {
         const erpUrl = `${TARGET_ERP_URL}?action=update_order_status`;
         try {
           let numericErpOrderId: number | null = null;

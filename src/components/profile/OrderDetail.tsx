@@ -93,32 +93,44 @@ export function OrderDetail({
 
   const handleStatusChange = async (newStatus: string) => {
     setUpdatingStatus(true);
+    let effectiveStatus = newStatus;
     if (newStatus === 'cancelled') {
+      let portalCancelSucceeded = false;
       try {
-        await cancelOrderViaPortal({
+        const cancelRes = await cancelOrderViaPortal({
           orderId: order.id,
           comment: 'Заказ отменен пользователем/администратором через B2B-портал',
         });
-      } catch (cancelErr) {
+        portalCancelSucceeded = true;
+        if (cancelRes?.status === 'cancellation_pending' || cancelRes?.cancellation_pending) {
+          effectiveStatus = 'cancellation_pending';
+        }
+      } catch (cancelErr: any) {
         console.warn('[OrderDetailModal] cancelOrderViaPortal error:', cancelErr);
+        if (cancelErr?.status && cancelErr.status >= 400 && cancelErr.status < 500) {
+          setUpdatingStatus(false);
+          return;
+        }
       }
-      // Освобождаем зарезервированные остатки (Zero Reservation Leak) и каскадируем статус на parent_order_id.eq.
-      try {
-        await supabase.rpc('release_order_reservations', { p_order_id: order.id });
-      } catch (relErr) {
-        console.warn('[OrderDetail] release_order_reservations notice:', relErr);
-      }
-      try {
-        await supabase
-          .from('orders')
-          .update({
-            status: newStatus,
-            reservations_released: true,
-            updated_at: new Date().toISOString(),
-          })
-          .or(`id.eq.${order.id},parent_order_id.eq.${order.id}`);
-      } catch {
-        // safe fallback
+      if (!portalCancelSucceeded) {
+        // Освобождаем зарезервированные остатки (Zero Reservation Leak) и каскадируем статус на parent_order_id.eq.
+        try {
+          await supabase.rpc('release_order_reservations', { p_order_id: order.id });
+        } catch (relErr) {
+          console.warn('[OrderDetail] release_order_reservations notice:', relErr);
+        }
+        try {
+          await supabase
+            .from('orders')
+            .update({
+              status: newStatus,
+              reservations_released: true,
+              updated_at: new Date().toISOString(),
+            })
+            .or(`id.eq.${order.id},parent_order_id.eq.${order.id}`);
+        } catch {
+          // safe fallback
+        }
       }
     } else {
       // Синхронизируем статус в ERP
@@ -144,12 +156,12 @@ export function OrderDetail({
       }
     }
 
-    const meta = ORDER_STATUS_MAP[newStatus] || { label: newStatus, color: 'bg-slate-100 text-slate-600 border-slate-200' };
-    setStatus(newStatus);
+    const meta = ORDER_STATUS_MAP[effectiveStatus] || { label: effectiveStatus, color: 'bg-slate-100 text-slate-600 border-slate-200' };
+    setStatus(effectiveStatus);
     onUpdateOrder?.({
       ...order,
       status: meta.label,
-      statusRaw: newStatus,
+      statusRaw: effectiveStatus,
       statusColor: meta.color,
     });
     setUpdatingStatus(false);

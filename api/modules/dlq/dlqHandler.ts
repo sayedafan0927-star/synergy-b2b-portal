@@ -45,6 +45,48 @@ export async function handleRetryDlqOrder(
     return res.status(400).json({ success: false, error: 'Параметр order_id обязателен.' });
   }
 
+  const { data: dlqOrder } = await supabase
+    .from('orders')
+    .select('id, order_number, reservations_released')
+    .eq('id', orderId)
+    .eq('status', 'failed_dlq')
+    .maybeSingle();
+
+  if (!dlqOrder) {
+    return res.status(404).json({ success: false, error: 'Заказ не найден в очереди DLQ.' });
+  }
+
+  // Повторное резервирование остатков на складе, если при попадании в DLQ бронь была снята
+  if (dlqOrder.reservations_released !== false) {
+    const { data: oItems } = await supabase
+      .from('order_items')
+      .select('sku, quantity, warehouse_id')
+      .eq('order_id', orderId);
+
+    const reservedNow: Array<{ sku: string; qty: number; wh: number }> = [];
+    if (oItems && oItems.length > 0) {
+      for (const it of oItems) {
+        const whId = Number(it.warehouse_id || 81);
+        const { data: isRes } = await supabase.rpc('reserve_stock', {
+          p_sku: it.sku,
+          p_qty: it.quantity,
+          p_warehouse_id: whId,
+        });
+        if (isRes === false) {
+          for (const r of reservedNow) {
+            await supabase.rpc('release_stock', { p_sku: r.sku, p_qty: r.qty, p_warehouse_id: r.wh });
+          }
+          return res.status(409).json({
+            success: false,
+            code: 'INSUFFICIENT_STOCK',
+            error: `Невозможно перезапустить заказ из DLQ: недостаточно свободного остатка для артикула "${it.sku}".`,
+          });
+        }
+        reservedNow.push({ sku: it.sku, qty: it.quantity, wh: whId });
+      }
+    }
+  }
+
   const retryNotes = `[Ручной перезапуск администратором: ${auth.fullName || auth.userId}]`;
   const nowIso = new Date().toISOString();
 
@@ -52,6 +94,7 @@ export async function handleRetryDlqOrder(
     .from('orders')
     .update({
       status: 'pending',
+      reservations_released: false,
       retry_count: 0,
       next_retry_at: nowIso,
       notes: retryNotes,
@@ -72,6 +115,7 @@ export async function handleRetryDlqOrder(
       .from('orders')
       .update({
         status: 'pending',
+        reservations_released: false,
         retry_count: 0,
         next_retry_at: nowIso,
         notes: retryNotes,
@@ -114,6 +158,7 @@ export async function handleRetryAllDlqOrders(
     .from('orders')
     .update({
       status: 'pending',
+      reservations_released: false,
       retry_count: 0,
       next_retry_at: new Date().toISOString(),
       notes: `[Пакетный перезапуск администратором: ${auth.fullName || auth.userId}]`,

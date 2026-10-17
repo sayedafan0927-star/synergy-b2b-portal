@@ -99,12 +99,16 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
     supabase,
   } = params;
 
+  const isApprovalRequired = Boolean(outboundPayload?.requires_approval || outboundPayload?.hold_wms);
+
   // 0. Circuit Breaker Fast-Fail to persistent outbox buffer (Graceful Degradation)
   const circuit = await checkCircuit('erp_gateway');
   if (!circuit.permitted) {
     logger.warn('[Order Dispatcher] Circuit OPEN for erp_gateway. Fast-failing immediately to outbox buffer', { orderDoc: outboxOrderDoc, correlationId });
     decrementCachedCatalogStock(reservedSkuItems, 'catalog_global', supabase).catch(() => {});
-    triggerImmediateOutboxSync(req, correlationId, { orderId: outboxOrderId, orderDoc: outboxOrderDoc });
+    if (!isApprovalRequired) {
+      triggerImmediateOutboxSync(req, correlationId, { orderId: outboxOrderId, orderDoc: outboxOrderDoc });
+    }
     res.status(200).json({
       success: true,
       outbox_queued: true,
@@ -389,7 +393,9 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
       orderDoc: outboxOrderDoc,
     });
     decrementCachedCatalogStock(reservedSkuItems, 'catalog_global', supabase).catch(() => {});
-    triggerImmediateOutboxSync(req, correlationId, { orderId: outboxOrderId, orderDoc: outboxOrderDoc });
+    if (!isApprovalRequired) {
+      triggerImmediateOutboxSync(req, correlationId, { orderId: outboxOrderId, orderDoc: outboxOrderDoc });
+    }
     const outboxQueuedResponse = {
       success: true,
       outbox_queued: true,
@@ -413,7 +419,9 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
     });
 
     decrementCachedCatalogStock(reservedSkuItems, 'catalog_global', supabase).catch(() => {});
-    triggerImmediateOutboxSync(req, correlationId, { orderId: outboxOrderId, orderDoc: outboxOrderDoc });
+    if (!isApprovalRequired) {
+      triggerImmediateOutboxSync(req, correlationId, { orderId: outboxOrderId, orderDoc: outboxOrderDoc });
+    }
     const offlineFallbackResponse = {
       success: true,
       outbox_queued: true,

@@ -16,7 +16,7 @@ import { releaseAllReservedStock, ReservedStockItem } from '../../lib/saga';
 import { logger } from '../../lib/logger';
 import { dispatchApprovalRequest } from '../../approvals/whatsapp';
 import { recordFailure, recordSuccess } from '../../lib/circuitBreaker';
-import { validateClientCreditExposure } from './exposureValidator';
+import { validateClientCreditExposure, resolveTargetPartnerPriceType } from './exposureValidator';
 import { buildSplitOrdersPayload, insertSequentialSplitOrders, SplitOrderSummary } from './orderSplitter';
 import { preloadInventoryBalancesForOrder, verifyItemsStockAvailability } from './stockPreloader';
 
@@ -117,15 +117,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
   const safeContractId = typeof rawPayload.contract_id === 'string' && UUID_REGEX.test(rawPayload.contract_id.trim())
     ? rawPayload.contract_id.trim()
     : null;
-  let userPriceType = callerAuth.priceType || 'wholesale';
-  if (safeContractId && callerAuth.role === 'client') {
-    try {
-      const { data: contractData } = await supabase.from('contracts').select('price_type, partner_id, status').eq('id', safeContractId).maybeSingle();
-      if (contractData?.price_type && (!callerAuth.partnerId || String(contractData.partner_id) === String(callerAuth.partnerId))) {
-        userPriceType = String(contractData.price_type);
-      }
-    } catch {}
-  }
+  const userPriceType = await resolveTargetPartnerPriceType(callerAuth, rawPayload, safeContractId, supabase);
   const pricingResult = await validateOrderPricing(rawPayload, userPriceType);
 
   if (!pricingResult.valid) {
@@ -148,7 +140,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
   const finalTotalSqm = Math.round(pricingResult.items.reduce((s, it) => s + (it.area_sqm > 0 ? it.area_sqm * it.quantity : (it.price_per_sqm > 0 ? (it.price / it.price_per_sqm) * it.quantity : 0)), 0) * 100) / 100;
 
   const [exposureCheck, clientRulesResult, dispSettingsResult] = await Promise.all([
-    validateClientCreditExposure(callerAuth, finalTotalAmount, supabase, safeContractId),
+    validateClientCreditExposure(callerAuth, finalTotalAmount, supabase, safeContractId, rawPayload.partner_id || rawPayload.client_id),
     callerAuth.role === 'client'
       ? supabase.from('display_settings').select('hidden_warehouses').eq('target_role', 'client').maybeSingle()
       : Promise.resolve({ data: null, error: null } as any),
@@ -380,6 +372,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
           rawPayload.comment,
           authoritativeRate,
           effectivePartnerId,
+          (serverRequiresApproval || Boolean(rawPayload.requires_approval)) ? 'waiting_approval' : 'pending',
         );
       } else {
         createdSplitOrders = [{ doc_number: outboxOrderDoc, warehouse: distinctWarehouses[0] || 'Основной Склад Астана', amount: finalTotalAmount, items_count: finalTotalItems }];

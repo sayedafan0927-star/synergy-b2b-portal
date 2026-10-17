@@ -121,7 +121,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             if (!erpItem) continue;
 
             const erpDebt = Math.max(0, Number(erpItem.total_debt_usd ?? erpItem.debt_usd ?? 0));
-            const erpCreditLimit = Number(erpItem.credit_limit_usd ?? client.credit_limit_usd ?? 0);
+            const erpFirstContract = Array.isArray(erpItem.contracts) && erpItem.contracts.length > 0 ? erpItem.contracts[0] : null;
+            const erpCreditLimit = Number(erpItem.credit_limit_usd ?? erpFirstContract?.credit_limit_usd ?? erpFirstContract?.credit_limit ?? client.credit_limit_usd ?? 0);
             const erpBalance = Number(
               erpItem.balance_usd !== undefined
                 ? Math.max(0, Number(erpItem.balance_usd))
@@ -231,7 +232,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           }
 
           const erpDebt = Math.max(0, Number(debtData.financials?.total_debt_usd ?? debtData.debt_usd ?? 0));
-          const erpCreditLimit = Number(debtData.client?.credit_limit_usd ?? debtData.credit_limit_usd ?? client.credit_limit_usd ?? 0);
+          const debtFirstContract = Array.isArray(debtData.contracts) && debtData.contracts.length > 0 ? debtData.contracts[0] : null;
+          const erpCreditLimit = Number(debtData.client?.credit_limit_usd ?? debtData.credit_limit_usd ?? debtFirstContract?.credit_limit_usd ?? debtFirstContract?.credit_limit ?? client.credit_limit_usd ?? 0);
           const erpBalance = Number(
             debtData.financials?.balance_usd !== undefined
               ? Math.max(0, Number(debtData.financials.balance_usd))

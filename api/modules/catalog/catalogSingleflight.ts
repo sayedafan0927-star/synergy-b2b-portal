@@ -214,6 +214,66 @@ export async function fetchUpstreamCatalogSingleflight(
 
     if (parsedJson?.success) {
       normalizeErpDesigns(parsedJson);
+
+      // Защита от затирания активных локальных резервов (pending / processing_sync / waiting_approval) при SWR-обновлении каждые 20с
+      try {
+        const sbUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+        const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
+        if (sbUrl && sbKey && Array.isArray(parsedJson.products)) {
+          const { createClient } = await import('@supabase/supabase-js');
+          const sb = createClient(sbUrl, sbKey, { auth: { persistSession: false } });
+          const { data: holdItems } = await sb
+            .from('order_items')
+            .select('sku, warehouse_id, quantity, orders!inner(status, reservations_released, parent_order_id)')
+            .is('orders.parent_order_id', null)
+            .in('orders.status', ['pending', 'processing_sync', 'waiting_approval'])
+            .or('reservations_released.is.null,reservations_released.eq.false', { foreignTable: 'orders' })
+            .limit(1000);
+
+          if (holdItems && holdItems.length > 0) {
+            const holdBySkuWh = new Map<string, number>();
+            const holdBySku = new Map<string, number>();
+            for (const hi of holdItems) {
+              const s = String(hi.sku || '').trim().toUpperCase();
+              const w = Number(hi.warehouse_id || 81);
+              const q = Number(hi.quantity || 0);
+              if (s && q > 0) {
+                holdBySkuWh.set(`${s}::${w}`, (holdBySkuWh.get(`${s}::${w}`) || 0) + q);
+                holdBySku.set(s, (holdBySku.get(s) || 0) + q);
+              }
+            }
+            for (const prod of parsedJson.products) {
+              if (!Array.isArray(prod.variants)) continue;
+              for (const v of prod.variants) {
+                const vSku = String(v.sku || '').trim().toUpperCase();
+                const totalHold = holdBySku.get(vSku) || 0;
+                if (totalHold > 0) {
+                  if (Array.isArray(v.warehouses) && v.warehouses.length > 0) {
+                    for (const wh of v.warehouses) {
+                      const whHold = holdBySkuWh.get(`${vSku}::${Number(wh.warehouse_id || 81)}`) || 0;
+                      if (whHold > 0) {
+                        wh.free_stock = Math.max(0, Number(wh.free_stock ?? wh.stock ?? 0) - whHold);
+                        wh.stock = wh.free_stock;
+                        wh.reserved_stock = Number(wh.reserved_stock || 0) + whHold;
+                      }
+                    }
+                    v.free_stock = v.warehouses.reduce((acc: number, w: any) => acc + Number(w.free_stock ?? w.stock ?? 0), 0);
+                    v.stock = v.free_stock;
+                    v.reserved_stock = v.warehouses.reduce((acc: number, w: any) => acc + Number(w.reserved_stock || 0), 0);
+                  } else {
+                    v.free_stock = Math.max(0, Number(v.free_stock ?? v.stock ?? 0) - totalHold);
+                    v.stock = v.free_stock;
+                    v.reserved_stock = Number(v.reserved_stock || 0) + totalHold;
+                  }
+                }
+              }
+            }
+          }
+        }
+      } catch (overlayErr) {
+        logger.debug('[Catalog Singleflight] In-flight hold overlay notice:', { error: (overlayErr as Error)?.message });
+      }
+
       const targetCacheKey = options.dealerId ? `catalog_dealer_${options.dealerId}` : 'catalog_global';
       // Асинхронно сохраняем в L1 Memory, L2 Redis и L2 PostgreSQL
       saveCachedCatalog(parsedJson, targetCacheKey).catch(e => {

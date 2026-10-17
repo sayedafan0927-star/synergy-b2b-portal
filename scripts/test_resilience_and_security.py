@@ -2220,7 +2220,40 @@ with open(os.path.join(ROOT_DIR, "api", "webhooks", "handlers", "orderStatusHand
 test_assert("waiting_approval: 1" in osh_s43 and "partially_confirmed: 2" in osh_s43 and "completed: 5" in osh_s43, "orderStatusHandler.ts defines complete STATUS_HIERARCHY including waiting_approval, partially_confirmed, picking, and completed")
 
 # ------------------------------------------------------------------------------
-# 68. Summary Report
+# 68. Stage 44: Pass 3 Deep Architectural Audit Remediation
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 68. STAGE 44: PASS 3 DEEP ARCHITECTURAL AUDIT REMEDIATION ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "exposureValidator.ts"), "r", encoding="utf-8") as fp:
+    ev_s44 = fp.read()
+test_assert("resolveTargetPartnerPriceType" in ev_s44 and "FORBIDDEN_COUNTERPARTY_SCOPE" in ev_s44 and "effectivePartnerId" in ev_s44, "exposureValidator.ts resolves counterparty price_type and enforces credit limit & Anti-BOLA on manager-placed orders")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "orderDispatcher.ts"), "r", encoding="utf-8") as fp:
+    od_s44 = fp.read()
+test_assert("isApprovalRequired" in od_s44 and "if (!isApprovalRequired)" in od_s44, "orderDispatcher.ts prevents premature Outbox enqueue for orders awaiting manager approval")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "catalog", "catalogSingleflight.ts"), "r", encoding="utf-8") as fp:
+    cs_s44 = fp.read()
+test_assert("holdBySkuWh" in cs_s44 and "'waiting_approval'" in cs_s44, "catalogSingleflight.ts overlays active buffered holds (pending/processing_sync/waiting_approval) before saving fresh ERP catalog to cache")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "dlq", "dlqHandler.ts"), "r", encoding="utf-8") as fp:
+    dlq_s44 = fp.read()
+test_assert("reserve_stock" in dlq_s44 and "reservations_released: false" in dlq_s44, "dlqHandler.ts re-reserves stock and resets reservations_released: false when retrying DLQ orders")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "financial", "refreshBalanceHandler.ts"), "r", encoding="utf-8") as fp:
+    rbh_s44 = fp.read()
+test_assert("canonicalDebt" in rbh_s44 and "profileRow?.debt_usd" in rbh_s44, "refreshBalanceHandler.ts cross-checks profiles.debt_usd in stale_cache_fallback preventing false 0 debt")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "activeReservationsHandler.ts"), "r", encoding="utf-8") as fp:
+    arh_s44 = fp.read()
+test_assert("Оптовый партнер" in arh_s44 and "'waiting_approval'" in arh_s44, "activeReservationsHandler.ts masks competitor PII for non-privileged clients and includes waiting_approval orders")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "profile", "OrderDetail.tsx"), "r", encoding="utf-8") as fp:
+    od_ui_s44 = fp.read()
+test_assert("portalCancelSucceeded" in od_ui_s44 and "cancellation_pending" in od_ui_s44, "OrderDetail.tsx respects 4xx cancellation rejections and server cancellation_pending status")
+
+# ------------------------------------------------------------------------------
+# 69. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

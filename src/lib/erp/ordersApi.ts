@@ -287,7 +287,7 @@ export async function updateOrderStatusInErp(params: UpdateOrderStatusParams): P
 export async function cancelOrderViaPortal(params: {
   orderId: string;
   comment?: string;
-}): Promise<{ success: boolean; message?: string }> {
+}): Promise<{ success: boolean; status?: string; cancellation_pending?: boolean; message?: string }> {
   const response = await erpFetch('cancel_order', {
     method: 'POST',
     body: {
@@ -298,7 +298,10 @@ export async function cancelOrderViaPortal(params: {
 
   const data = await response.json().catch(() => null);
   if (!response.ok || !data?.success) {
-    throw new Error(data?.error || `Ошибка отмены заказа (${response.status})`);
+    const err = new Error(data?.error || `Ошибка отмены заказа (${response.status})`);
+    (err as any).status = response.status;
+    (err as any).code = data?.code;
+    throw err;
   }
   return data;
 }

@@ -63,6 +63,7 @@ export async function insertSequentialSplitOrders(
   rawComment: string | undefined,
   authoritativeRate?: number,
   partnerId?: string | null,
+  initialStatus = 'pending',
 ): Promise<SplitOrderSummary[]> {
   const createdSplitOrders: SplitOrderSummary[] = [];
   let splitIdx = 1;
@@ -86,7 +87,7 @@ export async function insertSequentialSplitOrders(
         total_amount: whAmount,
         total_items: whItemsCount,
         total_sqm: whSqm,
-        status: 'pending',
+        status: initialStatus,
         idempotency_key: incomingIdempotencyKey ? `${incomingIdempotencyKey}-wh-${splitIdx}` : null,
         currency,
         applied_exchange_rate: authoritativeRate !== undefined && authoritativeRate > 0 ? authoritativeRate : 1,

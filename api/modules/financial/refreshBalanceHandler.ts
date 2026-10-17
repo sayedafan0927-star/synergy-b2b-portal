@@ -127,13 +127,20 @@ export async function handleRefreshClientBalance(ctx: RefreshBalanceContext): Pr
           last_synced_at: refreshedAt,
         }, { onConflict: 'partner_id' });
 
-      // 2. Также обновляем поле debt_usd в профиле клиента для быстрого UI-селектора
+      // 2. Также обновляем поле debt_usd, overdue_days и credit_limit_usd (из contracts[0]) в профиле контрагента
+      const firstContract = Array.isArray(jsonData.contracts) && jsonData.contracts.length > 0 ? jsonData.contracts[0] : null;
+      const erpCreditLimit = jsonData.client?.credit_limit_usd ?? jsonData.credit_limit_usd ?? firstContract?.credit_limit_usd ?? firstContract?.credit_limit;
+      const profileUpdate: Record<string, any> = {
+        debt_usd: totalDebtUsd,
+        overdue_days: overdueDays,
+        updated_at: refreshedAt,
+      };
+      if (erpCreditLimit !== undefined && !isNaN(Number(erpCreditLimit))) {
+        profileUpdate.credit_limit_usd = Number(erpCreditLimit);
+      }
       await supabase
         .from('profiles')
-        .update({
-          debt_usd: totalDebtUsd,
-          updated_at: refreshedAt,
-        })
+        .update(profileUpdate)
         .eq('partner_id', effectivePartnerId);
     }
 
@@ -164,24 +171,29 @@ export async function handleRefreshClientBalance(ctx: RefreshBalanceContext): Pr
       error: err?.message,
     });
 
-    // Graceful fallback на локальный кэш
+    // Graceful fallback на локальный кэш (partner_balances + profiles.debt_usd)
     let cachedBal: any = null;
+    let profileRow: any = null;
     if (supabase) {
-      const { data } = await supabase
-        .from('partner_balances')
-        .select('*')
-        .eq('partner_id', effectivePartnerId)
-        .maybeSingle();
-      cachedBal = data;
+      const [balRes, profRes] = await Promise.all([
+        supabase.from('partner_balances').select('*').eq('partner_id', effectivePartnerId).maybeSingle(),
+        supabase.from('profiles').select('debt_usd, credit_limit_usd, overdue_days').eq('partner_id', effectivePartnerId).limit(1).maybeSingle(),
+      ]);
+      cachedBal = balRes.data;
+      profileRow = profRes.data;
     }
+
+    const rawBal = Number(cachedBal?.balance || 0);
+    const canonicalDebt = Math.max(Number(profileRow?.debt_usd || 0), Math.max(0, -rawBal));
 
     res.status(200).json({
       success: true,
       partner_id: effectivePartnerId,
-      balance_usd: Number(cachedBal?.balance || 0),
-      total_debt_usd: Math.max(0, -Number(cachedBal?.balance || 0)),
-      is_overdue: Boolean(cachedBal?.is_overdue),
-      overdue_days: Number(cachedBal?.overdue_days || 0),
+      balance_usd: Math.max(0, rawBal),
+      total_debt_usd: canonicalDebt,
+      credit_limit_usd: Number(profileRow?.credit_limit_usd || 0),
+      is_overdue: Boolean(cachedBal?.is_overdue || Number(profileRow?.overdue_days || 0) > 0),
+      overdue_days: Math.max(Number(cachedBal?.overdue_days || 0), Number(profileRow?.overdue_days || 0)),
       refreshed_at: cachedBal?.last_synced_at || new Date().toISOString(),
       source: 'stale_cache_fallback',
       warning: 'Шлюз 1С временно недоступен; возвращены актуальные данные локального кэша.',

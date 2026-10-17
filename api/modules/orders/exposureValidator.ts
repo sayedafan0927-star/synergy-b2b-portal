@@ -10,23 +10,85 @@ export interface ExposureCheckResult {
   complianceReason?: string;
 }
 
+export async function resolveTargetPartnerPriceType(
+  callerAuth: any,
+  rawPayload: any,
+  safeContractId: string | null,
+  supabase: SupabaseClient,
+): Promise<string> {
+  let userPriceType = callerAuth.priceType || 'wholesale';
+  const targetPartnerId = callerAuth.role === 'client'
+    ? callerAuth.partnerId
+    : (rawPayload?.partner_id || rawPayload?.client_id || callerAuth.partnerId);
+
+  if (callerAuth.role !== 'client' && targetPartnerId) {
+    try {
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('price_type')
+        .eq('partner_id', String(targetPartnerId))
+        .limit(1)
+        .maybeSingle();
+      if (prof?.price_type) {
+        userPriceType = String(prof.price_type);
+      }
+    } catch {}
+  }
+
+  if (safeContractId) {
+    try {
+      const { data: contractData } = await supabase
+        .from('contracts')
+        .select('price_type, partner_id, status')
+        .eq('id', safeContractId)
+        .maybeSingle();
+      if (contractData?.price_type && (!targetPartnerId || String(contractData.partner_id) === String(targetPartnerId))) {
+        userPriceType = String(contractData.price_type);
+      }
+    } catch {}
+  }
+
+  return userPriceType;
+}
+
 export async function validateClientCreditExposure(
   callerAuth: any,
   finalTotalAmount: number,
   supabase: SupabaseClient,
   contractId?: string | null,
+  rawPartnerId?: string | number | null,
 ): Promise<ExposureCheckResult> {
-  if (callerAuth.role !== 'client') {
+  const effectivePartnerId = callerAuth.role === 'client'
+    ? callerAuth.partnerId
+    : (rawPartnerId || callerAuth.partnerId);
+
+  if (callerAuth.role !== 'client' && !effectivePartnerId) {
     return { blocked: false };
   }
 
   try {
     const { data: userProfile } = await supabase
       .from('profiles')
-      .select('credit_limit_usd, debt_usd, is_blocked_for_orders, overdue_days, impersonation_enabled, status')
-      .eq('partner_id', callerAuth.partnerId)
+      .select('credit_limit_usd, debt_usd, is_blocked_for_orders, overdue_days, impersonation_enabled, status, manager_id')
+      .eq('partner_id', String(effectivePartnerId))
       .limit(1)
       .maybeSingle();
+
+    // Anti-BOLA: Менеджер филиала может оформлять заказы только за закрепленных за ним контрагентов
+    if (
+      (callerAuth.role === 'manager_rm' || callerAuth.role === 'manager_lm') &&
+      !callerAuth.isServer &&
+      callerAuth.userId &&
+      userProfile?.manager_id &&
+      String(userProfile.manager_id) !== String(callerAuth.userId)
+    ) {
+      return {
+        blocked: true,
+        statusCode: 403,
+        blockCode: 'FORBIDDEN_COUNTERPARTY_SCOPE',
+        blockError: 'Доступ запрещен: данный контрагент закреплен за другим региональным менеджером (Anti-BOLA).',
+      };
+    }
 
     if (userProfile?.impersonation_enabled === false || userProfile?.status === 'inactive') {
       return {
@@ -69,11 +131,11 @@ export async function validateClientCreditExposure(
     }
 
     let currentDebt = Math.max(0, Number((userProfile as any)?.debt_usd || 0));
-    if (!currentDebt && callerAuth.partnerId) {
+    if (!currentDebt && effectivePartnerId) {
       const { data: pBal } = await supabase
         .from('partner_balances')
         .select('balance')
-        .eq('partner_id', String(callerAuth.partnerId))
+        .eq('partner_id', String(effectivePartnerId))
         .maybeSingle();
       if (pBal && typeof pBal.balance === 'number' && pBal.balance < 0) {
         currentDebt = Math.abs(pBal.balance);
@@ -82,7 +144,7 @@ export async function validateClientCreditExposure(
 
     // 4. Подсчет суммы незавершенных заказов («в пути»), включая ожидающие согласования (waiting_approval)
     let inFlightOrdersSum = 0;
-    const partnerKey = callerAuth.partnerId ? String(callerAuth.partnerId).trim() : null;
+    const partnerKey = effectivePartnerId ? String(effectivePartnerId).trim() : null;
     if (partnerKey || callerAuth.userId) {
       try {
         let q = supabase

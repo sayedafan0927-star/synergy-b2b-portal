@@ -242,7 +242,7 @@ export async function patchCachedCatalogStock(
               .from('order_items')
               .select('sku, warehouse_id, quantity, orders!inner(status, reservations_released, parent_order_id)')
               .is('orders.parent_order_id', null)
-              .in('orders.status', ['pending', 'processing_sync'])
+              .in('orders.status', ['pending', 'processing_sync', 'waiting_approval'])
               .or('reservations_released.is.null,reservations_released.eq.false', { foreignTable: 'orders' })
               .in('sku', chunk);
             if (data) pendingItems.push(...data);
