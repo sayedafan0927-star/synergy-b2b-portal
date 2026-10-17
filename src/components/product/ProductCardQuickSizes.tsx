@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import type { Product, ProductVariant } from '@/types';
-import { formatProductionEta } from '@/types';
 import { Check, ShoppingCart } from 'lucide-react';
 
 interface ProductCardQuickSizesProps {
@@ -53,7 +52,6 @@ export default function ProductCardQuickSizes({
             const inProdQty = Number(variant.in_production_qty ?? 0);
             const isPreorder = freeStock <= 0 && inProdQty > 0;
             const stock = isPreorder ? inProdQty : freeStock;
-            const etaStr = formatProductionEta(variant.production_eta || product.production_eta);
             const quantity = quantities[variant.sku] ?? 1;
             const isAdded = addedSku === variant.sku;
 
@@ -68,7 +66,11 @@ export default function ProductCardQuickSizes({
                     {variant.is_runner && (
                       <span className="text-[9px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1 py-0.2 rounded">Дорожка</span>
                     )}
-                    {!isPreorder && (
+                    {isPreorder ? (
+                      <span className="text-[10px] sm:text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200/80 rounded px-1.5 py-0.2 whitespace-nowrap">
+                        🏭 {stock} шт
+                      </span>
+                    ) : (
                       <span className="text-[10px] sm:text-[11px] text-slate-400 font-normal whitespace-nowrap">({stock} шт)</span>
                     )}
                   </div>
@@ -121,11 +123,6 @@ export default function ProductCardQuickSizes({
                     </button>
                   </div>
                 </div>
-                {isPreorder && (
-                  <div className="text-[10px] font-medium text-amber-800 bg-amber-50 border border-amber-200/80 rounded px-1.5 py-0.5 leading-tight">
-                    🏭 В производстве: доступно {inProdQty} шт.{etaStr ? ` (Выход с фабрики: ~${etaStr})` : ''}
-                  </div>
-                )}
               </div>
             );
           })

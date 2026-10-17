@@ -1,6 +1,5 @@
 import { ShoppingCart, Check, Minus, Plus, Ruler } from 'lucide-react';
 import type { Product, ProductVariant, Warehouse } from '@/types';
-import { formatProductionEta } from '@/types';
 import { filterClientWarehouses } from '@/hooks/useProductData';
 import { rowKey } from './types';
 import { useCurrency } from '@/contexts/CurrencyContext';
@@ -97,7 +96,6 @@ export function ProductWarehouseStockTable({
           const pricePerSqm = pricing.getPricePerSqm(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
           const rows = filterClientWarehouses(variant.warehouses, myShowroomId, myShowroomName, clientContext, displaySettings);
           const inProdQty = Number(variant.in_production_qty ?? 0);
-          const etaFormatted = formatProductionEta(variant.production_eta || product.production_eta);
 
           const showroomQty = isShowroomVisible
             ? (myShowroomId ? (variant.warehouses.find(w => w.warehouse_id === myShowroomId)?.stock || 0) : (variant.dealer_stock?.in_showroom_qty || 0))
@@ -152,9 +150,10 @@ export function ProductWarehouseStockTable({
 
                   return (
                     <div className="border-t border-slate-100 pt-3">
-                      <div className="mb-2.5">
-                        <span className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold bg-amber-50 text-amber-900 border border-amber-200/90 leading-snug">
-                          🏭 В производстве: доступно {inProdQty} шт.{etaFormatted ? ` (Выход с фабрики: ~${etaFormatted})` : ''}
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm text-slate-700 font-medium">{preorderWh.warehouse_name}</span>
+                        <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold bg-amber-50 text-amber-900 border border-amber-200/80 shrink-0">
+                          🏭 {inProdQty} шт.
                         </span>
                       </div>
                       <div className="flex items-center gap-3">
@@ -245,7 +244,6 @@ export function ProductWarehouseStockTable({
                 const variantPrice = pricing.getVariantPrice(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
                 const pricePerSqm = pricing.getPricePerSqm(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
                 const inProdQty = Number(variant.in_production_qty ?? 0);
-                const etaFormatted = formatProductionEta(variant.production_eta || product.production_eta);
 
                 const rows = filterClientWarehouses(variant.warehouses, myShowroomId, myShowroomName, clientContext, displaySettings);
                 const showroomQty = isShowroomVisible
@@ -287,9 +285,9 @@ export function ProductWarehouseStockTable({
                           </div>
                         </td>
                         <td className="py-3 pr-3 text-sm text-slate-600 whitespace-nowrap">{whLabel}</td>
-                        <td className="py-3 pr-3">
-                          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold bg-amber-50 text-amber-900 border border-amber-200/80">
-                            🏭 В производстве: доступно {inProdQty} шт.{etaFormatted ? ` (Выход с фабрики: ~${etaFormatted})` : ''}
+                        <td className="py-3 pr-3 whitespace-nowrap">
+                          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold bg-amber-50 text-amber-900 border border-amber-200/80">
+                            🏭 {inProdQty} шт.
                           </span>
                         </td>
                         {user && (

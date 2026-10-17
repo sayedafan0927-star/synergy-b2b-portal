@@ -14,10 +14,22 @@ interface ProductImageProps {
   onError?: () => void;
 }
 
-export function CarpetPlaceholderIcon({ className = "w-full h-full" }: { className?: string }) {
+export function CarpetPlaceholderIcon({ className = "w-full h-full", compact = false }: { className?: string; compact?: boolean }) {
+  const isSmallThumbnail = compact || /\b(h-(?:[6-9]|1[0-6])|w-(?:[6-9]|1[0-6]))\b/.test(className);
+
+  if (isSmallThumbnail) {
+    return (
+      <div className={`overflow-hidden flex items-center justify-center bg-slate-100 text-slate-400 select-none ${className}`}>
+        <div className="flex flex-col items-center justify-center w-full h-full rounded border border-dashed border-slate-300 bg-white/80 p-0.5">
+          <span className="text-[7px] uppercase tracking-tight font-bold text-slate-400 leading-none">Ковер</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className={`flex flex-col items-center justify-center bg-gradient-to-b from-slate-50 via-slate-100 to-slate-200 text-slate-400 select-none p-4 ${className}`}>
-      <div className="relative flex flex-col items-center justify-center w-20 h-28 sm:w-24 sm:h-32 rounded border-2 border-dashed border-slate-300 bg-white/80 shadow-inner p-2">
+    <div className={`overflow-hidden flex flex-col items-center justify-center bg-gradient-to-b from-slate-50 via-slate-100 to-slate-200 text-slate-400 select-none p-4 ${className}`}>
+      <div className="relative flex flex-col items-center justify-center w-20 h-28 sm:w-24 sm:h-32 max-w-full max-h-full rounded border-2 border-dashed border-slate-300 bg-white/80 shadow-inner p-2">
         {/* Top fringe */}
         <div className="flex justify-between w-full h-1 border-b border-slate-200 opacity-60 mb-1">
           {[...Array(8)].map((_, i) => (
@@ -74,7 +86,7 @@ export default function ProductImage({
 
   // Если фото нет или произошла ошибка загрузки — показываем стандартную UI-заглушку ковра с логотипом
   if (!src || !src.trim() || hasError) {
-    return <CarpetPlaceholderIcon className={className} />;
+    return <CarpetPlaceholderIcon className={className} compact={Boolean(width && width <= 80)} />;
   }
 
   const optimizedSrc = getOptimizedImageUrl(src, { width, quality });

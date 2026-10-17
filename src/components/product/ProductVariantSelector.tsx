@@ -255,29 +255,26 @@ export function ProductVariantSelector({
           })}
         </div>
 
-        {activeVariant && (() => {
-          const activeFreeStock = filterClientWarehouses(activeVariant.warehouses, myShowroomId, myShowroomName, clientContext, displaySettings).reduce((sum, w) => sum + w.stock, 0);
-          const activeInProdQty = Number(activeVariant.in_production_qty ?? 0);
-          const etaFormatted = formatProductionEta(activeVariant.production_eta || product.production_eta);
-          if (activeFreeStock === 0 && activeInProdQty > 0) {
-            return (
-              <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/90 px-3.5 py-2.5 text-xs font-semibold text-amber-900 flex items-center gap-2 shadow-2xs">
-                <span>
-                  🏭 В производстве: доступно {activeInProdQty} шт.{etaFormatted ? ` (Выход с фабрики: ~${etaFormatted})` : ''}
-                </span>
-              </div>
-            );
-          }
-          return null;
-        })()}
-
-        {/* Артикул выбранного размера */}
+        {/* Артикул выбранного размера и дата выхода с фабрики */}
         {activeVariant && (
           <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500">
-            <div className="flex flex-wrap gap-x-3 gap-y-1">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               {(activeVariant.article || product.article) && (
                 <span>{t('product.article')}: <strong className="text-slate-800">{activeVariant.article || product.article}</strong></span>
               )}
+              {(() => {
+                const activeFreeStock = filterClientWarehouses(activeVariant.warehouses, myShowroomId, myShowroomName, clientContext, displaySettings).reduce((sum, w) => sum + w.stock, 0);
+                const activeInProdQty = Number(activeVariant.in_production_qty ?? 0);
+                const etaFormatted = formatProductionEta(activeVariant.production_eta || product.production_eta);
+                if (activeFreeStock === 0 && activeInProdQty > 0 && etaFormatted) {
+                  return (
+                    <span className="text-amber-800 font-semibold">
+                      🏭 Выход с фабрики: ~{etaFormatted}
+                    </span>
+                  );
+                }
+                return null;
+              })()}
             </div>
             <button
               type="button"

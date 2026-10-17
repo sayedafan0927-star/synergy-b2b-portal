@@ -243,10 +243,21 @@ function ProductCard({ product, onNavigate }: ProductCardProps) {
 
         {/* Склады: свой склад (если привязан) + центральный склад Астана или статус В производстве */}
         {totalStockForCard === 0 && totalInProductionQty > 0 ? (
-          <div className="mt-2 flex flex-col gap-1 border-t border-slate-100 pt-2 min-h-[38px] justify-center">
-            <div className="rounded-lg bg-amber-50 border border-amber-200/80 px-2 py-1 text-[10px] sm:text-[11px] font-semibold text-amber-900 leading-snug">
-              🏭 В производстве: доступно {totalInProductionQty} шт.{cardProductionEta ? ` (Выход с фабрики: ~${cardProductionEta})` : ''}
+          <div className="mt-2 flex flex-col gap-0.5 border-t border-slate-100 pt-2 min-h-[38px] justify-center text-xs">
+            <div className="flex items-center justify-between gap-1">
+              <span className="inline-flex items-center gap-1 font-semibold text-amber-800 truncate">
+                🏭 В производстве:
+              </span>
+              <span className="font-bold text-amber-900 shrink-0">
+                {totalInProductionQty} {t('common.pcs')}
+              </span>
             </div>
+            {cardProductionEta && (
+              <div className="flex items-center justify-between text-[11px] text-amber-700 gap-1">
+                <span className="truncate">Выход с фабрики:</span>
+                <span className="font-medium shrink-0">~{cardProductionEta}</span>
+              </div>
+            )}
           </div>
         ) : user ? (
           <div className="mt-2 flex flex-col gap-1 border-t border-slate-100 pt-2 min-h-[38px] justify-center">
