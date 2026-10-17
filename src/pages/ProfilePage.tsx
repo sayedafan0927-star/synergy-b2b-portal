@@ -21,6 +21,7 @@ import {
 } from '@/lib/erpApi';
 import { useShowroomMode } from '@/contexts/ShowroomModeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { formatPriceType } from '@/lib/pricingEngine';
 import SupplierCabinet from '@/components/SupplierCabinet';
 import LoginPage from './LoginPage';
 import { AdminDisplaySettingsTab, AdminUsersTab, AdminErpSyncTab } from '@/components/admin';
@@ -254,7 +255,7 @@ export default function ProfilePage({
               {profile.price_type && profile.role === 'client' && !isShowroomMode && (
                 <div className="flex items-center gap-2">
                   <DollarSign className="h-3.5 w-3.5 text-slate-400" />
-                  <span>{t('profile.price_type_label')} <strong className="text-slate-700">{profile.price_type === 'optom_1' ? 'Опт 1' : profile.price_type === 'optom_2' ? 'Опт 2' : profile.price_type === 'optom_3' ? 'Опт 3' : profile.price_type === 'wholesale' ? 'Базовый опт' : profile.price_type}</strong></span>
+                  <span>{t('profile.price_type_label')} <strong className="text-slate-700">{formatPriceType(profile.price_type)}</strong></span>
                 </div>
               )}
             </div>

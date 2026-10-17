@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Search, Power } from 'lucide-react';
 import { updateClientAccessInErp, broadcastClientDeactivated, isCounterpartyArchivedOrMailing } from '@/lib/erpApi';
+import { formatPriceType } from '@/lib/pricingEngine';
 
 export interface AdminCounterpartiesSubTabProps {
   counterparties: any[];
@@ -227,9 +228,17 @@ export function AdminCounterpartiesSubTab({
                       )}
                     </td>
                     <td className="py-2 px-3">
-                      <span className="badge bg-brand-50 text-brand-700 font-mono text-[10px]">
-                        {contract?.price_type || c.price_type || 'standard'}
-                      </span>
+                      {(() => {
+                        const rawType = contract?.price_type || c.price_type || 'standard';
+                        return (
+                          <span
+                            className="badge bg-brand-50 text-brand-700 font-medium text-[10px] whitespace-nowrap"
+                            title={`Системный код 1С: ${rawType}`}
+                          >
+                            {formatPriceType(rawType)}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="py-2 px-3 text-center">
                       {isDeactivated ? (

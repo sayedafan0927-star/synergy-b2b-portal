@@ -172,3 +172,54 @@ export function formatDualCurrency(
   }
   return `${safeAmount.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} у.е.`;
 }
+
+/**
+ * Перевод системных идентификаторов типов цен (1С:ERP / БД) на понятный русский язык
+ */
+export function formatPriceType(rawPriceType?: string | null): string {
+  if (!rawPriceType) return '—';
+  const str = rawPriceType.toLowerCase().trim();
+
+  const directMap: Record<string, string> = {
+    price_deferred: 'С отсрочкой',
+    deferred: 'С отсрочкой',
+    deferred_14: 'Отсрочка 14 дн.',
+    deferred_30: 'Отсрочка 30 дн.',
+    deferred_60: 'Отсрочка 60 дн.',
+    prepayment: 'Предоплата',
+    consignment: 'Под реализацию',
+    price_wholesale: 'Оптовая',
+    wholesale: 'Оптовая',
+    price_cash: 'По факту',
+    cash: 'По факту',
+    price_opt: 'Оптовая',
+    optom_1: 'Опт 1',
+    optom_2: 'Опт 2',
+    optom_3: 'Опт 3',
+    opt1: 'Опт 1',
+    opt2: 'Опт 2',
+    opt3: 'Опт 3',
+    retail: 'Розничная',
+    commission: 'Комиссионная',
+    dealer: 'Дилерская',
+    standard: 'Базовая',
+    vip: 'VIP',
+    price_vip: 'VIP',
+  };
+
+  if (directMap[str]) {
+    return directMap[str];
+  }
+
+  // Эвристический поиск по ключевым подстрокам
+  if (str.includes('deferred') || str.includes('отсроч')) return 'С отсрочкой';
+  if (str.includes('wholesale') || str.includes('опт')) return 'Оптовая';
+  if (str.includes('cash') || str.includes('факт') || str.includes('налич')) return 'По факту';
+  if (str.includes('retail') || str.includes('розниц')) return 'Розничная';
+  if (str.includes('dealer') || str.includes('дилер')) return 'Дилерская';
+  if (str.includes('commission') || str.includes('комисс')) return 'Комиссионная';
+  if (str.includes('vip') || str.includes('вип')) return 'VIP';
+
+  return rawPriceType;
+}
+

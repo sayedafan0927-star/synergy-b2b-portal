@@ -19,6 +19,7 @@ import {
   isCounterpartyArchivedOrMailing,
 } from '@/lib/erpApi';
 import { getClientWarehouseSettings } from '@/lib/warehouseVisibility';
+import { formatPriceType } from '@/lib/pricingEngine';
 import { ClientWarehouseModal } from './ClientWarehouseModal';
 import { ClientDemoPanel } from './ClientDemoPanel';
 
@@ -215,7 +216,11 @@ export function AdminUsersTab({ onNavigate }: AdminUsersTabProps) {
                 <p className="text-xs text-slate-500 truncate">{u.company_name || 'Компания не указана'}</p>
                 <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400 mt-0.5">
                   {u.phone && <span className="font-mono">{u.phone}</span>}
-                  {u.price_type && <span className="text-brand-600 font-medium">Прайс: {u.price_type}</span>}
+                  {u.price_type && (
+                    <span className="text-brand-600 font-medium" title={`Системный код 1С: ${u.price_type}`}>
+                      Прайс: {formatPriceType(u.price_type)}
+                    </span>
+                  )}
                   {u.partner_id && <span className="font-mono">ID: {u.partner_id}</span>}
                   {(() => {
                     const s = getClientWarehouseSettings(u.partner_id || u.id);

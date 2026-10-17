@@ -8,6 +8,7 @@ import { checkSystemHealth } from '@/lib/erpApi';
 import { getQueuedOfflineOrders, processOfflineOrderQueue, onOfflineQueueChange } from '@/lib/offlineOrderQueue';
 import CurtainNavigationDrawer from '@/components/layout/CurtainNavigationDrawer';
 import { CommandPalette } from '@/components/search';
+import { formatPriceType } from '@/lib/pricingEngine';
 import type { PageId } from '@/types';
 
 interface HeaderProps {
@@ -115,8 +116,11 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
                 <span className="hidden md:inline text-amber-100"> ({profile.company_name})</span>
               )}
               {profile.price_type && (
-                <span className="ml-1.5 bg-amber-600/90 text-amber-100 px-1.5 py-0.5 rounded text-[10px] font-mono shrink-0">
-                  {profile.price_type}
+                <span
+                  className="ml-1.5 bg-amber-600/90 text-amber-100 px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0"
+                  title={`Системный код 1С: ${profile.price_type}`}
+                >
+                  {formatPriceType(profile.price_type)}
                 </span>
               )}
             </span>
