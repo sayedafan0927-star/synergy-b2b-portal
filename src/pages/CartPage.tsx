@@ -145,7 +145,14 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
       const latestPrice = getVariantPrice(prod.collection, variant.size, variant.base_price, variant.price_per_sqm);
       const latestSqmPrice = getPricePerSqm(prod.collection, variant.size, variant.base_price, variant.price_per_sqm);
       const wh = variant.warehouses.find(w => (w.warehouse_name || w.city) === item.warehouse || w.warehouse_id === item.warehouse_id);
-      const latestStock = wh ? (typeof wh.free_stock === 'number' ? wh.free_stock : wh.stock ?? 0) : undefined;
+      const isPreorderItem = Boolean(
+        item.is_preorder ||
+        item.warehouse === 'Предзаказ (Фабрика)' ||
+        ((variant.free_stock ?? 0) === 0 && Number(variant.in_production_qty ?? 0) > 0)
+      );
+      const latestStock = isPreorderItem
+        ? Number(variant.in_production_qty ?? item.maxStock ?? 0)
+        : (wh ? (typeof wh.free_stock === 'number' ? wh.free_stock : wh.stock ?? 0) : undefined);
 
       return {
         price: latestPrice,
@@ -363,6 +370,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
     }`;
 
     const effectiveWarehouseId = items.find(it => (it as any).warehouse_id)?.warehouse_id || 81;
+    const hasPreorderItems = items.some(it => Boolean(it.is_preorder || it.warehouse === 'Предзаказ (Фабрика)'));
 
     const orderPayload = {
       user_id: effectiveProfile?.id,
@@ -370,6 +378,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
       partner_id: clientId,
       warehouse_id: effectiveWarehouseId,
       currency: currency || 'USD',
+      is_preorder: hasPreorderItems ? true : undefined,
       buyer: {
         name: clientCompany.trim() || clientName.trim(),
         phone: clientPhone.trim(),
@@ -384,18 +393,23 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
       is_held: requiresApproval,
       hold_wms: requiresApproval,
       status: requiresApproval ? 'waiting_approval' : 'pending',
-      items: items.map(item => ({
-        item_id: item.item_id,
-        productId: item.productId,
-        size: item.size,
-        sku: item.sku,
-        warehouse: item.warehouse || 'Основной Склад Астана',
-        warehouse_id: (item as any).warehouse_id || effectiveWarehouseId,
-        price: item.price,
-        price_per_sqm: item.price_per_sqm,
-        area_sqm: item.area_sqm,
-        quantity: item.quantity,
-      })),
+      items: items.map(item => {
+        const itemIsPreorder = Boolean(item.is_preorder || item.warehouse === 'Предзаказ (Фабрика)');
+        return {
+          item_id: item.item_id,
+          productId: item.productId,
+          size: item.size,
+          sku: item.sku,
+          warehouse: item.warehouse || 'Основной Склад Астана',
+          warehouse_id: (item as any).warehouse_id || effectiveWarehouseId,
+          price: item.price,
+          price_per_sqm: item.price_per_sqm,
+          area_sqm: item.area_sqm,
+          quantity: item.quantity,
+          qty: item.quantity,
+          is_preorder: itemIsPreorder ? true : undefined,
+        };
+      }),
     };
 
     if (hasDepletedItems) {

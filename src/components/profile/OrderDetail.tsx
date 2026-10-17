@@ -232,6 +232,20 @@ export function OrderDetail({
       {/* WMS Hold TTL (24ч) Countdown Timer */}
       <OrderHoldCountdown rawDate={order.rawDate || order.date} status={status} />
 
+      {status === 'awaiting_supply' && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50/90 p-3.5 flex items-start gap-3">
+          <div className="p-1.5 rounded-lg bg-amber-100 text-amber-800 shrink-0 mt-0.5 text-sm leading-none">
+            🏭
+          </div>
+          <div className="text-xs">
+            <p className="font-bold text-amber-950">🏭 Предзаказ забронирован (Ожидает поступления с фабрики)</p>
+            <p className="text-amber-800 mt-0.5">
+              Квота из производственного плана фабрики закреплена за вашим заказом. Как только партия поступит на склад, заказ автоматически перейдёт на сборку.
+            </p>
+          </div>
+        </div>
+      )}
+
       {status === 'cancelled' && (order.notes?.toLowerCase().includes('hold ttl') || order.notes?.toLowerCase().includes('брони')) && (
         <div className="rounded-xl border border-rose-200 bg-rose-50/80 p-3.5 flex items-start gap-3">
           <div className="p-1.5 rounded-lg bg-rose-100 text-rose-700 shrink-0 mt-0.5">

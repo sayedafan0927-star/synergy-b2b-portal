@@ -38,6 +38,8 @@ export interface FilterDrawerProps {
   toggleSize: (v: string) => void;
   selectedClusters: Set<string>;
   toggleCluster: (v: string) => void;
+  onlyInProduction?: boolean;
+  setOnlyInProduction?: (v: boolean | ((prev: boolean) => boolean)) => void;
   activeFilterCount: number;
   resetFilters: () => void;
   allCollections: string[];

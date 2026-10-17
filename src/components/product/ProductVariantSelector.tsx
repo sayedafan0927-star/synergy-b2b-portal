@@ -1,5 +1,6 @@
 import { Ruler, Lock } from 'lucide-react';
 import type { Product, ProductVariant } from '@/types';
+import { formatProductionEta } from '@/types';
 import { filterClientWarehouses } from '@/hooks/useProductData';
 import { useShowroomMode } from '@/contexts/ShowroomModeContext';
 import { getVariantShape } from './types';
@@ -218,6 +219,7 @@ export function ProductVariantSelector({
           {variantsForShape.map(v => {
             const isSelected = v.size === activeVariant?.size;
             const vStock = filterClientWarehouses(v.warehouses, myShowroomId, myShowroomName, clientContext, displaySettings).reduce((sum, w) => sum + w.stock, 0);
+            const vInProd = Number(v.in_production_qty ?? 0);
 
             return (
               <button
@@ -231,7 +233,7 @@ export function ProductVariantSelector({
                 }`}
               >
                 <span>{v.size}</span>
-                {vStock > 0 && (
+                {vStock > 0 ? (
                   <span
                     className={`rounded-full px-1.5 py-0.2 text-[10px] font-bold ${
                       isSelected ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800'
@@ -239,11 +241,35 @@ export function ProductVariantSelector({
                   >
                     {vStock} {t('common.pcs')}
                   </span>
-                )}
+                ) : vInProd > 0 ? (
+                  <span
+                    className={`rounded-full px-1.5 py-0.2 text-[10px] font-bold ${
+                      isSelected ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-900'
+                    }`}
+                  >
+                    🏭 {vInProd} {t('common.pcs')}
+                  </span>
+                ) : null}
               </button>
             );
           })}
         </div>
+
+        {activeVariant && (() => {
+          const activeFreeStock = filterClientWarehouses(activeVariant.warehouses, myShowroomId, myShowroomName, clientContext, displaySettings).reduce((sum, w) => sum + w.stock, 0);
+          const activeInProdQty = Number(activeVariant.in_production_qty ?? 0);
+          const etaFormatted = formatProductionEta(activeVariant.production_eta || product.production_eta);
+          if (activeFreeStock === 0 && activeInProdQty > 0) {
+            return (
+              <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/90 px-3.5 py-2.5 text-xs font-semibold text-amber-900 flex items-center gap-2 shadow-2xs">
+                <span>
+                  🏭 В производстве: доступно {activeInProdQty} шт.{etaFormatted ? ` (Выход с фабрики: ~${etaFormatted})` : ''}
+                </span>
+              </div>
+            );
+          }
+          return null;
+        })()}
 
         {/* Артикул выбранного размера */}
         {activeVariant && (

@@ -189,6 +189,9 @@ export async function verifyItemsStockAvailability(
   }
 
   for (const item of items) {
+    if (item.is_preorder) {
+      continue;
+    }
     const targetSku = String(item.sku || '').trim().toUpperCase();
     const reqQty = Number(item.quantity || 1);
     const whId = resolveWarehouseId(item.warehouse_id, item.warehouse);
@@ -200,10 +203,11 @@ export async function verifyItemsStockAvailability(
         const vSku = String(v.sku || '').trim().toUpperCase();
         if (vSku === targetSku) {
           const wh = (v.warehouses || []).find((w: any) => Number(w.warehouse_id) === whId);
+          const inProd = Number(v.in_production_qty ?? 0);
           if (wh) {
-            actualFreeStock = Number(wh.free_stock ?? wh.stock ?? 0);
+            actualFreeStock = Math.max(Number(wh.free_stock ?? wh.stock ?? 0), inProd);
           } else {
-            actualFreeStock = Number(v.free_stock ?? v.stock ?? 0);
+            actualFreeStock = Math.max(Number(v.free_stock ?? v.stock ?? 0), inProd);
           }
           break;
         }

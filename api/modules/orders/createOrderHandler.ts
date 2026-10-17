@@ -427,6 +427,8 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
     }
   }
 
+  const hasPreorderItems = Boolean(rawPayload.is_preorder || pricingResult.items.some(it => it.is_preorder));
+
   const outboundPayload = {
     ...rawPayload,
     idempotency_key: incomingIdempotencyKey || null,
@@ -438,11 +440,13 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
     requires_approval: serverRequiresApproval || Boolean(rawPayload.requires_approval),
     hold_wms: serverRequiresApproval || Boolean(rawPayload.requires_approval) || Boolean(rawPayload.hold_wms),
     status: (serverRequiresApproval || Boolean(rawPayload.requires_approval)) ? 'waiting_approval' : 'pending',
+    ...(hasPreorderItems ? { is_preorder: true } : {}),
     items: pricingResult.items.map(it => {
       const itemObj: Record<string, any> = {
         item_id: it.item_id, sku: it.sku, width: it.width, length: it.length, area_sqm: it.area_sqm,
-        quantity: it.quantity, price: it.price, total_line: it.total_line, warehouse: it.warehouse,
+        quantity: it.quantity, qty: it.quantity, price: it.price, total_line: it.total_line, warehouse: it.warehouse,
         warehouse_id: it.warehouse_id || primaryWarehouseId,
+        ...(it.is_preorder ? { is_preorder: true } : {}),
       };
       delete itemObj.cell; delete itemObj.cell_code; delete itemObj.rack; delete itemObj.location;
       return itemObj;

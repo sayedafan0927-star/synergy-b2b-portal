@@ -26,6 +26,8 @@ export function CatalogFilterContent({
   toggleSize,
   selectedClusters,
   toggleCluster,
+  onlyInProduction = false,
+  setOnlyInProduction,
   activeFilterCount,
   resetFilters,
   allCollections,
@@ -72,6 +74,15 @@ export function CatalogFilterContent({
               className="input-field pl-9 text-sm"
             />
           </div>
+          {setOnlyInProduction && (
+            <div className="mt-3">
+              <CheckItem
+                label="🏭 В производстве (Доступно к предзаказу)"
+                checked={Boolean(onlyInProduction)}
+                onToggle={() => setOnlyInProduction(prev => !prev)}
+              />
+            </div>
+          )}
         </div>
 
         {/* КЛАСТЕРЫ РАЗМЕРОВ */}

@@ -36,7 +36,8 @@ export function useOrdersList({ isAdmin, isManager }: UseOrdersListOptions) {
         const erpData = await fetchClientOrdersFromErp(params);
         if (erpData && erpData.success && Array.isArray(erpData.orders)) {
           mappedErp = erpData.orders.map((o) => {
-            const st = o.status_code || 'pending';
+            const isAwaitingSupply = o.status_code === 'awaiting_supply' || o.status === 'awaiting_supply' || (o as any).is_preorder === true && (!o.status_code || o.status_code === 'awaiting_supply');
+            const st = isAwaitingSupply ? 'awaiting_supply' : (o.status_code || (o.status && ORDER_STATUS_MAP[o.status] ? o.status : 'pending'));
             const meta = ORDER_STATUS_MAP[st] || { label: o.status || st, color: 'bg-amber-50 text-amber-700 border-amber-200' };
             const d = o.date ? new Date(o.date) : new Date();
             const dateStr = d.toLocaleDateString('ru-RU', {
@@ -65,7 +66,7 @@ export function useOrdersList({ isAdmin, isManager }: UseOrdersListOptions) {
               userId: String(o.client_id || ''),
               date: dateStr,
               rawDate: o.date || (o as any).created_at || new Date().toISOString(),
-              status: o.status || meta.label,
+              status: (st === 'awaiting_supply' || !o.status || Boolean(ORDER_STATUS_MAP[o.status])) ? meta.label : o.status,
               statusRaw: st,
               statusColor: meta.color,
               warehouse: o.warehouse_name || 'Основной Склад Астана',

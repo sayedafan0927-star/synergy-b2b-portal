@@ -42,16 +42,24 @@ export function compactCatalogPayload(data: any): any {
     // Ссылки на фото весят ~60 байт — держим всю галерею (до 12), чтобы карточка каталога совпадала со страницей товара
     images: (Array.isArray(p.images) ? p.images.slice(0, 12) : (p.image ? [p.image] : [])).map(normalizeImageUrl).filter(Boolean),
     image_thumb: p.image_thumb ? normalizeImageUrl(p.image_thumb) : undefined,
-    variants: (p.variants || []).map((v: any) => ({
-      id: v.id,
+    has_preorder: Boolean(p.has_preorder || (p.variants || []).some((v: any) => Number(v.in_production_qty || 0) > 0)),
+    in_production_total_qty: Number(p.in_production_total_qty || (p.variants || []).reduce((s: number, v: any) => s + Number(v.in_production_qty || 0), 0)),
+    production_eta: p.production_eta || null,
+    variants: (p.variants || p.sizes || []).map((v: any) => ({
+      id: v.id ?? v.item_id,
+      item_id: v.item_id ?? v.id,
       size: v.size,
       sku: v.sku,
       base_price: Number(v.base_price || 0),
       price_per_sqm: Number(v.price_per_sqm || 0),
       area_sqm: Number(v.area_sqm || 0),
-      free_stock: Number(v.free_stock ?? v.stock ?? 0),
+      free_stock: Number(v.free_stock ?? v.stock_free ?? v.stock ?? 0),
       reserved_stock: Number(v.reserved_stock ?? 0),
-      total_stock: Number(v.total_stock ?? (v.free_stock ?? 0)),
+      total_stock: Number(v.total_stock ?? (v.free_stock ?? v.stock_free ?? 0)),
+      stock_status: v.stock_status,
+      in_production_qty: Number(v.in_production_qty ?? 0),
+      production_eta: v.production_eta ?? p.production_eta ?? null,
+      is_preorder_available: Boolean(v.is_preorder_available || Number(v.in_production_qty ?? 0) > 0),
       warehouses: v.warehouses,
     })),
   }));

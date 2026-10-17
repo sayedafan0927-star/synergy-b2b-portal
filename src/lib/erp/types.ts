@@ -31,6 +31,7 @@ export interface CreateOrderPayload {
   manager_id?: number;
   price_type?: string;
   currency?: string;
+  is_preorder?: boolean;
   items: Array<{
     item_id?: number;
     productId?: string;
@@ -41,6 +42,8 @@ export interface CreateOrderPayload {
     price: number;
     price_per_sqm?: number;
     quantity: number;
+    qty?: number;
+    is_preorder?: boolean;
     width?: number;
     length?: number;
     area_sqm?: number;
@@ -312,7 +315,7 @@ export interface ErpClientOrder {
   total_sqm: number;
   currency: string;
   is_posted: boolean;
-  status_code: 'pending' | 'reserved' | 'picking' | 'shipped' | 'delivered' | 'cancelled';
+  status_code: 'awaiting_supply' | 'pending' | 'reserved' | 'picking' | 'shipped' | 'delivered' | 'cancelled' | string;
   status: string;
   comment: string;
   items_count: number;

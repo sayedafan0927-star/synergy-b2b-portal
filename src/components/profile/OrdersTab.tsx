@@ -15,6 +15,7 @@ export interface OrdersTabProps {
 
 const FILTER_TABS = [
   { id: 'all', label: 'Все' },
+  { id: 'awaiting_supply', label: '🏭 Предзаказ (В производстве)' },
   { id: 'pending', label: 'В авторезерве' },
   { id: 'processing', label: 'На сборке' },
   { id: 'assembled', label: 'Готов к отгрузке' },

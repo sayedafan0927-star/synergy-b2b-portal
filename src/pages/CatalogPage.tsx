@@ -38,38 +38,14 @@ export default function CatalogPage({
   const myShowroomName = profile?.showroom_warehouse_name || 'В моем магазине';
 
   const {
-    viewMode,
-    setViewMode,
-    searchQuery,
-    setSearchQuery,
-    sortBy,
-    setSortBy,
-    visibleCount,
-    setVisibleCount,
-    selectedCategory,
-    setSelectedCategory,
-    selectedCollections,
-    setSelectedCollections,
-    selectedManufacturers,
-    setSelectedManufacturers,
-    selectedCountries,
-    setSelectedCountries,
-    selectedClusters,
-    setSelectedClusters,
-    selectedWarehouses,
-    setSelectedWarehouses,
-    selectedSizes,
-    setSelectedSizes,
-    activeClusterQuickFilter,
-    adminStockFilter,
-    setAdminStockFilter,
-    toggle,
-    activeFilterCount,
-    resetFilters,
-    saveCatalogSnapshot,
-    attemptScrollRestoration,
-    hasSavedState,
-    savedState,
+    viewMode, setViewMode, searchQuery, setSearchQuery, sortBy, setSortBy,
+    visibleCount, setVisibleCount, selectedCategory, setSelectedCategory,
+    onlyInProduction, setOnlyInProduction, selectedCollections, setSelectedCollections,
+    selectedManufacturers, setSelectedManufacturers, selectedCountries, setSelectedCountries,
+    selectedClusters, setSelectedClusters, selectedWarehouses, setSelectedWarehouses,
+    selectedSizes, setSelectedSizes, activeClusterQuickFilter, adminStockFilter,
+    setAdminStockFilter, toggle, activeFilterCount, resetFilters, saveCatalogSnapshot,
+    attemptScrollRestoration, hasSavedState, savedState,
   } = useCatalogStatePersistence({ initialCollection, initialCountry, initialSearch });
 
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -95,31 +71,17 @@ export default function CatalogPage({
 
   const baseProducts = useMemo(() => {
     if (isEffectiveAdmin) {
-      if (adminStockFilter === 'in_stock') {
-        return products.filter(p => isProductInStockForUser(p, profile, false, true));
-      }
-      if (adminStockFilter === 'out_of_stock') {
-        return products.filter(p => !isProductInStockForUser(p, profile, false, true));
-      }
+      if (adminStockFilter === 'in_stock') return products.filter(p => isProductInStockForUser(p, profile, false, true));
+      if (adminStockFilter === 'out_of_stock') return products.filter(p => !isProductInStockForUser(p, profile, false, true));
       return products;
     }
-    // Для клиента: фильтруем товары с нулевым остатком
     return products.filter(p => isProductInStockForUser(p, profile, false, hideOutOfStockSetting));
   }, [products, isEffectiveAdmin, adminStockFilter, profile, hideOutOfStockSetting]);
 
   const { allCollections, allCountries, allSizes, allManufacturers, allWarehouses } = useSmartFacets({
-    baseProducts,
-    selectedCategory,
-    activeClusterQuickFilter,
-    selectedClusters,
-    selectedCollections,
-    selectedManufacturers,
-    selectedCountries,
-    selectedWarehouses,
-    selectedSizes,
-    isEffectiveAdmin,
-    profile,
-    myShowroomName,
+    baseProducts, selectedCategory, activeClusterQuickFilter, selectedClusters,
+    selectedCollections, selectedManufacturers, selectedCountries, selectedWarehouses,
+    selectedSizes, isEffectiveAdmin, profile, myShowroomName,
   });
 
   useEffect(() => {
@@ -128,9 +90,17 @@ export default function CatalogPage({
     }
   }, [allWarehouses, stockWarehouse]);
 
+  const inProductionCount = useMemo(
+    () => baseProducts.filter(p => p.variants.some(v => (v.in_production_qty ?? 0) > 0)).length,
+    [baseProducts],
+  );
 
   const filteredProducts = useMemo(() => {
     let result = [...baseProducts];
+
+    if (onlyInProduction) {
+      result = result.filter(p => p.variants.some(v => (v.in_production_qty ?? 0) > 0));
+    }
 
     if (selectedCategory !== 'all') {
       result = result.filter(
@@ -213,18 +183,9 @@ export default function CatalogPage({
     }
     return result;
   }, [
-    baseProducts,
-    selectedCategory,
-    activeClusterQuickFilter,
-    selectedClusters,
-    selectedCollections,
-    selectedManufacturers,
-    selectedCountries,
-    selectedWarehouses,
-    selectedSizes,
-    searchQuery,
-    sortBy,
-    pricing,
+    baseProducts, onlyInProduction, selectedCategory, activeClusterQuickFilter,
+    selectedClusters, selectedCollections, selectedManufacturers, selectedCountries,
+    selectedWarehouses, selectedSizes, searchQuery, sortBy, pricing,
   ]);
 
   const currentSummary: StockSummary = useMemo(() => {
@@ -371,6 +332,8 @@ export default function CatalogPage({
     toggleSize: (v: string) => setSelectedSizes(s => toggle(s, v)),
     selectedClusters,
     toggleCluster: (v: string) => setSelectedClusters(s => toggle(s, v)),
+    onlyInProduction,
+    setOnlyInProduction,
     activeFilterCount,
     resetFilters,
     allCollections,
@@ -408,7 +371,7 @@ export default function CatalogPage({
                 type="button"
                 onClick={() => setSelectedCategory(cat)}
                 className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                  selectedCategory === cat
+                  selectedCategory === cat && !onlyInProduction
                     ? 'bg-brand-700 text-white shadow-xs font-bold'
                     : 'bg-white border border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50'
                 }`}
@@ -417,6 +380,17 @@ export default function CatalogPage({
               </button>
             );
           })}
+          <button
+            type="button"
+            onClick={() => setOnlyInProduction(prev => !prev)}
+            className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              onlyInProduction
+                ? 'bg-amber-600 text-white shadow-xs font-bold ring-2 ring-amber-400/40'
+                : 'bg-amber-50/90 border border-amber-200 text-amber-900 hover:border-amber-300 hover:bg-amber-100/80'
+            }`}
+          >
+            🏭 В производстве (Доступно к предзаказу){inProductionCount > 0 ? ` (${inProductionCount})` : ''}
+          </button>
         </div>
       </CatalogPetroglyphHero>
 
@@ -458,6 +432,7 @@ export default function CatalogPage({
         <ActiveFilterChips
           searchQuery={searchQuery}
           selectedCategory={selectedCategory}
+          onlyInProduction={onlyInProduction}
           selectedCollections={selectedCollections}
           selectedCountries={selectedCountries}
           selectedManufacturers={selectedManufacturers}
@@ -466,6 +441,7 @@ export default function CatalogPage({
           selectedClusters={selectedClusters}
           onClearSearch={() => setSearchQuery('')}
           onClearCategory={() => setSelectedCategory('all')}
+          onClearInProduction={() => setOnlyInProduction(false)}
           onRemoveCollection={val => setSelectedCollections(s => toggle(s, val))}
           onRemoveCountry={val => setSelectedCountries(s => toggle(s, val))}
           onRemoveManufacturer={val => setSelectedManufacturers(s => toggle(s, val))}

@@ -231,5 +231,10 @@ export function isProductInStockForUser(
     return false;
   }
 
-  return product.variants.some(v => getVariantStockForUser(v, clientProfile, false) > 0);
+  return product.variants.some(
+    v =>
+      getVariantStockForUser(v, clientProfile, false) > 0 ||
+      (v.in_production_qty ?? 0) > 0 ||
+      v.stock_status === 'in_production'
+  );
 }

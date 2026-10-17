@@ -15,6 +15,8 @@ export interface OrderItemInput {
   productId?: string;
   size?: string;
   quantity: number;
+  qty?: number;
+  is_preorder?: boolean;
   price?: number;
   price_per_sqm?: number;
   width?: number;
@@ -34,6 +36,8 @@ export interface ValidatedItem {
   item_id?: number;
   size: string;
   quantity: number;
+  qty?: number;
+  is_preorder?: boolean;
   price: number;
   price_per_sqm: number;
   width: number;
@@ -265,7 +269,7 @@ export async function validateAndPriceOrder(
   const validatedItems: ValidatedItem[] = [];
 
   for (const raw of rawItems) {
-    const qty = Number(raw.quantity);
+    const qty = Number(raw.quantity ?? raw.qty);
     if (isNaN(qty) || qty <= 0 || !Number.isInteger(qty)) {
       return {
         valid: false,
@@ -328,6 +332,8 @@ export async function validateAndPriceOrder(
       item_id: resolvedItemId,
       size,
       quantity: qty,
+      qty,
+      is_preorder: Boolean(raw.is_preorder) || undefined,
       price: authoritativePrice,
       price_per_sqm: pricePerSqm,
       width,

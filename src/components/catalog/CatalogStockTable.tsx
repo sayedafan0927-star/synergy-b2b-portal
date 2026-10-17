@@ -64,7 +64,7 @@ export function CatalogStockTable({
   }, []);
 
   const handleAdd = useCallback(
-    (product: Product, variant: ProductVariant, wh: Warehouse) => {
+    (product: Product, variant: ProductVariant, wh: Warehouse, isPreorder = false) => {
       const whLabel = wh.warehouse_name || wh.city;
       const key = cellKey(product.id, variant.sku, whLabel);
       const qty = quantities[key] ?? 0;
@@ -86,6 +86,8 @@ export function CatalogStockTable({
           price_per_sqm: pricePerSqm,
           area_sqm: variant.area_sqm,
           maxStock: wh.stock,
+          is_preorder: isPreorder || undefined,
+          production_eta: isPreorder ? (variant.production_eta ?? product.production_eta ?? null) : undefined,
         },
         qty,
       );
@@ -258,7 +260,21 @@ export function CatalogStockTable({
                             );
                           }
                           const wh = variant.warehouses.find(w => (w.warehouse_name || w.city) === selectedWarehouse);
-                          if (!wh || wh.stock === 0) {
+                          const inProdQty = Number(variant.in_production_qty ?? 0);
+                          const isPreorderCell = (!wh || wh.stock === 0) && inProdQty > 0;
+                          const effectiveWh: Warehouse | undefined = wh && wh.stock > 0
+                            ? wh
+                            : isPreorderCell
+                            ? {
+                                warehouse_id: 81,
+                                warehouse_name: 'Предзаказ (Фабрика)',
+                                city: 'Предзаказ (Фабрика)',
+                                stock: inProdQty,
+                                free_stock: inProdQty,
+                              }
+                            : undefined;
+
+                          if (!effectiveWh || effectiveWh.stock === 0) {
                             const totalForSize = variant.warehouses.reduce((s, w) => s + w.stock, 0);
                             return (
                               <td key={size} className="py-2 px-2 text-center border-l border-slate-50">
@@ -273,7 +289,7 @@ export function CatalogStockTable({
                             );
                           }
 
-                          const whLabel = wh.warehouse_name || wh.city;
+                          const whLabel = effectiveWh.warehouse_name || effectiveWh.city;
                           const key = cellKey(product.id, variant.sku, whLabel);
                           const qty = quantities[key] ?? 0;
                           const added = addedKeys[key];
@@ -284,7 +300,14 @@ export function CatalogStockTable({
                             <td key={size} className="py-1.5 px-1.5 border-l border-slate-50">
                               <div className="flex flex-col items-center gap-1">
                                 {settings.show_stock && (
-                                  <span className="text-[10px] text-emerald-600 font-medium">{wh.stock}</span>
+                                  <span
+                                    className={`text-[10px] font-medium ${
+                                      isPreorderCell ? 'text-amber-600' : 'text-emerald-600'
+                                    }`}
+                                    title={isPreorderCell ? 'В производстве (Предзаказ)' : undefined}
+                                  >
+                                    {isPreorderCell ? `🏭 ${effectiveWh.stock}` : effectiveWh.stock}
+                                  </span>
                                 )}
                                 <div className="flex items-center">
                                   <button
@@ -297,12 +320,12 @@ export function CatalogStockTable({
                                   <input
                                     type="number"
                                     value={qty}
-                                    onChange={e => setQty(key, parseInt(e.target.value, 10) || 0)}
+                                    onChange={e => setQty(key, Math.min(effectiveWh.stock, parseInt(e.target.value, 10) || 0))}
                                     className="h-6 w-8 border-y border-slate-200 bg-white text-center text-[11px] text-slate-900 outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                   />
                                   <button
                                     type="button"
-                                    onClick={() => setQty(key, qty + 1)}
+                                    onClick={() => setQty(key, Math.min(effectiveWh.stock, qty + 1))}
                                     className="flex h-6 w-5 items-center justify-center rounded-r border border-slate-200 bg-slate-50 text-slate-400 hover:bg-slate-100 cursor-pointer"
                                   >
                                     <Plus className="h-2.5 w-2.5" />
@@ -310,7 +333,7 @@ export function CatalogStockTable({
                                 </div>
                                 <button
                                   type="button"
-                                  onClick={() => handleAdd(product, variant, wh)}
+                                  onClick={() => handleAdd(product, variant, effectiveWh, isPreorderCell)}
                                   disabled={qty < 1}
                                   className={`flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-medium transition-all cursor-pointer ${
                                     added

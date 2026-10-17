@@ -186,7 +186,11 @@ export function useSmartFacets({
     for (const p of matching) {
       for (const v of p.variants) {
         if (v.size) {
-          const hasStock = isEffectiveAdmin || (v.total_stock ?? v.stock ?? 0) > 0 || (v.warehouses && v.warehouses.some(w => ((w.stock || 0) > 0 || (w.free_stock || 0) > 0)));
+          const hasStock =
+            isEffectiveAdmin ||
+            (v.total_stock ?? v.stock ?? 0) > 0 ||
+            (v.in_production_qty ?? 0) > 0 ||
+            (v.warehouses && v.warehouses.some(w => (w.stock || 0) > 0 || (w.free_stock || 0) > 0));
           if (hasStock) set.add(v.size);
         }
       }

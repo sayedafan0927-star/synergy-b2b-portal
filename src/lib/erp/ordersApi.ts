@@ -54,13 +54,15 @@ export async function submitOrderToErp(payload: CreateOrderPayload): Promise<Erp
   const numClientId = rawClientId ? (Number(String(rawClientId).replace(/\D+/g, '')) || Number(rawClientId)) : undefined;
 
   const defaultWarehouseId = payload.warehouse_id || (payload.items?.[0] as any)?.warehouse_id || 81;
+  const hasPreorder = Boolean(payload.is_preorder || payload.items?.some(it => it.is_preorder));
 
-  const normalizedPayload = {
+  const normalizedPayload: Record<string, any> = {
     idempotency_key: idempotencyKey,
     user_id: payload.user_id,
     partner_id: (payload as any).partner_id || numClientId || payload.client_id,
     client_id: numClientId || payload.client_id,
     warehouse_id: defaultWarehouseId,
+    ...(hasPreorder ? { is_preorder: true } : {}),
     buyer: payload.buyer || {
       name: payload.client_company || payload.client_name || '',
       phone: payload.client_phone || '',
@@ -75,18 +77,21 @@ export async function submitOrderToErp(payload: CreateOrderPayload): Promise<Erp
       const width = item.width ?? dims.width;
       const length = item.length ?? dims.length;
       const area_sqm = item.area_sqm ?? dims.area_sqm;
+      const resolvedQty = item.quantity ?? item.qty ?? 1;
       const itemObj: Record<string, any> = {
         item_id: item.item_id || (Number(item.productId) > 0 ? Number(item.productId) : undefined),
         sku: item.sku,
         size: item.size,
         warehouse: item.warehouse || 'Основной Склад Астана',
         warehouse_id: item.warehouse_id || defaultWarehouseId,
-        quantity: item.quantity,
+        quantity: resolvedQty,
+        qty: resolvedQty,
         price: item.price,
         price_per_sqm: item.price_per_sqm,
         width,
         length,
         area_sqm,
+        ...(item.is_preorder ? { is_preorder: true } : {}),
       };
       // WMS Address Storage: No cell/rack/location stubs from site
       delete itemObj.cell;

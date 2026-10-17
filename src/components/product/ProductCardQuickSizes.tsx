@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import type { Product, ProductVariant } from '@/types';
+import { formatProductionEta } from '@/types';
 import { Check, ShoppingCart } from 'lucide-react';
 
 interface ProductCardQuickSizesProps {
@@ -23,7 +24,9 @@ export default function ProductCardQuickSizes({
 }: ProductCardQuickSizesProps) {
   const popoverRef = useRef<HTMLDivElement>(null);
   const [alignRight, setAlignRight] = useState(false);
-  const availableVariants = product.variants.filter(v => getVariantStock(v) > 0);
+  const availableVariants = product.variants.filter(
+    v => getVariantStock(v) > 0 || Number(v.in_production_qty ?? 0) > 0
+  );
 
   useEffect(() => {
     if (popoverRef.current) {
@@ -37,7 +40,7 @@ export default function ProductCardQuickSizes({
   return (
     <div
       ref={popoverRef}
-      className={`absolute top-full z-50 -mt-1 rounded-xl bg-white p-3 shadow-2xl ring-1 ring-slate-200/80 border border-slate-100 w-[280px] max-w-[calc(100vw-1.5rem)] sm:w-auto sm:min-w-[290px] ${
+      className={`absolute top-full z-50 -mt-1 rounded-xl bg-white p-3 shadow-2xl ring-1 ring-slate-200/80 border border-slate-100 w-[290px] max-w-[calc(100vw-1.5rem)] sm:w-auto sm:min-w-[310px] ${
         alignRight ? 'right-0 left-auto sm:-right-3 sm:left-auto' : 'left-0 sm:-left-3 right-auto'
       }`}
       style={{ zIndex: 70, transform: 'translate3d(0, 0, 0)' }}
@@ -46,70 +49,83 @@ export default function ProductCardQuickSizes({
       <div className="space-y-1.5 max-h-60 overflow-y-auto overflow-x-hidden pr-0.5 select-none">
         {availableVariants.length > 0 ? (
           availableVariants.map(variant => {
-            const stock = getVariantStock(variant);
+            const freeStock = getVariantStock(variant);
+            const inProdQty = Number(variant.in_production_qty ?? 0);
+            const isPreorder = freeStock <= 0 && inProdQty > 0;
+            const stock = isPreorder ? inProdQty : freeStock;
+            const etaStr = formatProductionEta(variant.production_eta || product.production_eta);
             const quantity = quantities[variant.sku] ?? 1;
             const isAdded = addedSku === variant.sku;
 
             return (
               <div
                 key={variant.sku}
-                className="flex items-center justify-between py-1.5 border-b border-slate-100 last:border-b-0 gap-2"
+                className="flex flex-col py-1.5 border-b border-slate-100 last:border-b-0 gap-1"
               >
-                <div className="flex items-baseline gap-1.5 whitespace-nowrap shrink-0" data-size-cluster={variant.size_cluster}>
-                  <span className="font-semibold text-slate-800 text-xs sm:text-sm whitespace-nowrap">{variant.size}</span>
-                  {variant.is_runner && (
-                    <span className="text-[9px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1 py-0.2 rounded">Дорожка</span>
-                  )}
-                  <span className="text-[10px] sm:text-[11px] text-slate-400 font-normal whitespace-nowrap">({stock} шт)</span>
-                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-baseline gap-1.5 whitespace-nowrap shrink-0" data-size-cluster={variant.size_cluster}>
+                    <span className="font-semibold text-slate-800 text-xs sm:text-sm whitespace-nowrap">{variant.size}</span>
+                    {variant.is_runner && (
+                      <span className="text-[9px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1 py-0.2 rounded">Дорожка</span>
+                    )}
+                    {!isPreorder && (
+                      <span className="text-[10px] sm:text-[11px] text-slate-400 font-normal whitespace-nowrap">({stock} шт)</span>
+                    )}
+                  </div>
 
-                <div className="flex items-center gap-1.5 ml-auto shrink-0">
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSetQuantity(variant.sku, Math.max(1, (quantities[variant.sku] ?? 1) - 1));
-                    }}
-                    className="h-7 w-7 shrink-0 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-700 hover:bg-slate-100 active:scale-95 transition-all text-xs font-bold cursor-pointer"
-                  >
-                    -
-                  </button>
-                  <input
-                    type="number"
-                    min="1"
-                    max={stock}
-                    value={quantity}
-                    onChange={event => {
-                      const val = Number(event.target.value);
-                      onSetQuantity(variant.sku, Math.max(1, Math.min(stock, val || 1)));
-                    }}
-                    onClick={event => event.stopPropagation()}
-                    className="h-7 w-9 shrink-0 rounded-lg border border-slate-200 text-center text-xs font-semibold text-slate-800 outline-none focus:border-brand-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSetQuantity(variant.sku, Math.min(stock, (quantities[variant.sku] ?? 1) + 1));
-                    }}
-                    className="h-7 w-7 shrink-0 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-700 hover:bg-slate-100 active:scale-95 transition-all text-xs font-bold cursor-pointer"
-                  >
-                    +
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onAdd(variant);
-                    }}
-                    className={`h-7 w-8 shrink-0 rounded-lg flex items-center justify-center text-white transition-all active:scale-95 cursor-pointer ${
-                      isAdded ? 'bg-emerald-600 shadow-sm' : 'bg-brand-700 hover:bg-brand-800 shadow-sm'
-                    }`}
-                    title="Добавить в корзину"
-                  >
-                    {isAdded ? <Check className="h-3.5 w-3.5 shrink-0" /> : <ShoppingCart className="h-3.5 w-3.5 shrink-0" />}
-                  </button>
+                  <div className="flex items-center gap-1.5 ml-auto shrink-0">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSetQuantity(variant.sku, Math.max(1, (quantities[variant.sku] ?? 1) - 1));
+                      }}
+                      className="h-7 w-7 shrink-0 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-700 hover:bg-slate-100 active:scale-95 transition-all text-xs font-bold cursor-pointer"
+                    >
+                      -
+                    </button>
+                    <input
+                      type="number"
+                      min="1"
+                      max={stock}
+                      value={quantity}
+                      onChange={event => {
+                        const val = Number(event.target.value);
+                        onSetQuantity(variant.sku, Math.max(1, Math.min(stock, val || 1)));
+                      }}
+                      onClick={event => event.stopPropagation()}
+                      className="h-7 w-9 shrink-0 rounded-lg border border-slate-200 text-center text-xs font-semibold text-slate-800 outline-none focus:border-brand-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSetQuantity(variant.sku, Math.min(stock, (quantities[variant.sku] ?? 1) + 1));
+                      }}
+                      className="h-7 w-7 shrink-0 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center text-slate-700 hover:bg-slate-100 active:scale-95 transition-all text-xs font-bold cursor-pointer"
+                    >
+                      +
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAdd(variant);
+                      }}
+                      className={`h-7 w-8 shrink-0 rounded-lg flex items-center justify-center text-white transition-all active:scale-95 cursor-pointer ${
+                        isAdded ? 'bg-emerald-600 shadow-sm' : 'bg-brand-700 hover:bg-brand-800 shadow-sm'
+                      }`}
+                      title="Добавить в корзину"
+                    >
+                      {isAdded ? <Check className="h-3.5 w-3.5 shrink-0" /> : <ShoppingCart className="h-3.5 w-3.5 shrink-0" />}
+                    </button>
+                  </div>
                 </div>
+                {isPreorder && (
+                  <div className="text-[10px] font-medium text-amber-800 bg-amber-50 border border-amber-200/80 rounded px-1.5 py-0.5 leading-tight">
+                    🏭 В производстве: доступно {inProdQty} шт.{etaStr ? ` (Выход с фабрики: ~${etaStr})` : ''}
+                  </div>
+                )}
               </div>
             );
           })

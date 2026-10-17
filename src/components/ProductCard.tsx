@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, memo } from 'react';
 import type { Product, PageId, ProductVariant } from '@/types';
-import { parseSizeDimensions } from '@/types';
+import { parseSizeDimensions, formatProductionEta } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/contexts/CartContext';
 import { useUserPricing } from '@/hooks/usePricing';
@@ -110,15 +110,17 @@ function ProductCard({ product, onNavigate }: ProductCardProps) {
 
   const handleAdd = (variant: ProductVariant) => {
     const warehouse = getVariantClientWarehouse(variant);
-    if (!warehouse) return;
-
     const stock = getVariantClientStock(variant);
-    if (stock <= 0) {
+    const inProdQty = Number(variant.in_production_qty ?? 0);
+    const isPreorder = stock <= 0 && inProdQty > 0;
+    const availableQty = isPreorder ? inProdQty : stock;
+
+    if (availableQty <= 0) {
       alert('Данного размера нет в наличии на доступных складах');
       return;
     }
 
-    const quantity = Math.min(quantities[variant.sku] ?? 1, stock);
+    const quantity = Math.min(quantities[variant.sku] ?? 1, availableQty);
     const price = getVariantPrice(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
     const itemSqmPrice = getPricePerSqm(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
 
@@ -130,12 +132,14 @@ function ProductCard({ product, onNavigate }: ProductCardProps) {
       image: activeImage,
       size: variant.size,
       sku: variant.sku,
-      warehouse: warehouse.warehouse_name || warehouse.city,
-      warehouse_id: warehouse.warehouse_id || 81,
+      warehouse: isPreorder ? 'Предзаказ (Фабрика)' : (warehouse?.warehouse_name || warehouse?.city || 'Основной Склад Астана'),
+      warehouse_id: warehouse?.warehouse_id || 81,
       price,
       price_per_sqm: itemSqmPrice,
       area_sqm: variant.area_sqm,
-      maxStock: stock,
+      maxStock: availableQty,
+      is_preorder: isPreorder || undefined,
+      production_eta: isPreorder ? (variant.production_eta ?? product.production_eta ?? null) : undefined,
     }, quantity);
     setAddedSku(variant.sku);
     window.setTimeout(() => setAddedSku(current => current === variant.sku ? null : current), 1400);
@@ -162,7 +166,9 @@ function ProductCard({ product, onNavigate }: ProductCardProps) {
   const totalHubQty = showHub ? product.variants.reduce((sum, v) => sum + getMainWarehouseStock(v), 0) : 0;
 
   const totalStockForCard = product.variants.reduce((sum, v) => sum + getVariantClientStock(v), 0);
-  const isOutOfStock = totalStockForCard <= 0;
+  const totalInProductionQty = product.variants.reduce((sum, v) => sum + Number(v.in_production_qty ?? 0), 0);
+  const cardProductionEta = formatProductionEta(product.production_eta || product.variants.find(v => v.production_eta)?.production_eta);
+  const isOutOfStock = totalStockForCard <= 0 && totalInProductionQty <= 0;
 
   const handleCardPrefetch = () => {
     cacheProduct(product);
@@ -235,8 +241,14 @@ function ProductCard({ product, onNavigate }: ProductCardProps) {
           </button>
         </div>
 
-        {/* Склады: свой склад (если привязан) + центральный склад Астана */}
-        {user && (
+        {/* Склады: свой склад (если привязан) + центральный склад Астана или статус В производстве */}
+        {totalStockForCard === 0 && totalInProductionQty > 0 ? (
+          <div className="mt-2 flex flex-col gap-1 border-t border-slate-100 pt-2 min-h-[38px] justify-center">
+            <div className="rounded-lg bg-amber-50 border border-amber-200/80 px-2 py-1 text-[10px] sm:text-[11px] font-semibold text-amber-900 leading-snug">
+              🏭 В производстве: доступно {totalInProductionQty} шт.{cardProductionEta ? ` (Выход с фабрики: ~${cardProductionEta})` : ''}
+            </div>
+          </div>
+        ) : user ? (
           <div className="mt-2 flex flex-col gap-1 border-t border-slate-100 pt-2 min-h-[38px] justify-center">
             {hasShowroom && totalShowroomQty > 0 && (
               <div className="flex items-center justify-between text-xs gap-1">
@@ -269,7 +281,7 @@ function ProductCard({ product, onNavigate }: ProductCardProps) {
               </div>
             )}
           </div>
-        )}
+        ) : null}
 
         {/* Блок цены и размера ВСЕГДА зафиксирован по единой нижней линии (mt-auto) */}
         <div className="mt-auto border-t border-slate-100 pt-2.5 flex items-center justify-between">

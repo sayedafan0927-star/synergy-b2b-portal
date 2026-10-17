@@ -85,6 +85,9 @@ export default function ProductPage({
         const whLabel = wh.warehouse_name || wh.city;
         init[rowKey(v.sku, whLabel)] = 0;
       });
+      if (Number(v.in_production_qty ?? 0) > 0) {
+        init[rowKey(v.sku, 'Предзаказ (Фабрика)')] = 0;
+      }
     });
     setQuantities(init);
     setAddedKeys({});
@@ -122,6 +125,9 @@ export default function ProductPage({
       const qty = quantities[key] ?? 0;
       if (qty < 1 || wh.stock < 1) return;
 
+      const isPreorder =
+        whLabel === 'Предзаказ (Фабрика)' ||
+        ((variant.free_stock ?? 0) === 0 && Number(variant.in_production_qty ?? 0) > 0);
       const price = pricing.getVariantPrice(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
       const pricePerSqm = pricing.getPricePerSqm(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
       addItem(
@@ -139,8 +145,10 @@ export default function ProductPage({
           price_per_sqm: pricePerSqm,
           area_sqm: variant.area_sqm,
           maxStock: wh.stock,
+          is_preorder: isPreorder || undefined,
+          production_eta: isPreorder ? (variant.production_eta ?? product.production_eta ?? null) : undefined,
         },
-        qty,
+        Math.min(qty, wh.stock),
       );
 
       setAddedKeys(prev => ({ ...prev, [key]: true }));

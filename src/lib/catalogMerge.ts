@@ -86,9 +86,10 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
             || (v.warehouses || []).find(w => (w.warehouse_name && w.warehouse_name.includes('Астана')) || (w.city && w.city.includes('Астана')))
             || (v.warehouses || []).find(w => w.is_hub && ((w.free_stock ?? w.stock ?? 0) > 0));
 
+          const rawFree = v.free_stock !== undefined ? Number(v.free_stock) : (v.stock_free !== undefined ? Number(v.stock_free) : undefined);
           const freeStock = hubWh?.free_stock !== undefined
             ? Number(hubWh.free_stock)
-            : (v.free_stock !== undefined ? Number(v.free_stock) : Number(hubWh?.stock ?? v.stock ?? 0));
+            : (rawFree !== undefined ? rawFree : Number(hubWh?.stock ?? v.stock ?? 0));
           const hubStock = freeStock;
 
           // Партнерские шоурумы сохраняем только с реальным ненулевым остатком
@@ -137,6 +138,12 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
           const oldPrice = v.old_price ? Number(v.old_price) : null;
           const oldPricePerSqm = v.old_price_per_sqm ? Number(v.old_price_per_sqm) : null;
 
+          const cleanStock = cleanedWarehouses.reduce((sum, w) => sum + w.stock, 0);
+          const cleanFreeStock = cleanedWarehouses.reduce((sum, w) => sum + (w.free_stock ?? w.stock), 0);
+          const inProdQty = Number(v.in_production_qty ?? 0);
+          const prodEta = v.production_eta ?? raw.production_eta ?? null;
+          const stockStatus = v.stock_status || (cleanFreeStock > 0 ? 'in_stock' : (inProdQty > 0 ? 'in_production' : 'out_of_stock'));
+
           return {
             ...v,
             size: s,
@@ -154,8 +161,15 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
             old_price_per_sqm: oldPricePerSqm,
             is_on_sale: isOnSale,
             warehouses: cleanedWarehouses,
-            stock: cleanedWarehouses.reduce((sum, w) => sum + w.stock, 0),
-            free_stock: cleanedWarehouses.reduce((sum, w) => sum + (w.free_stock ?? w.stock), 0),
+            stock: cleanStock,
+            free_stock: cleanFreeStock,
+            stock_status: stockStatus,
+            in_production_qty: inProdQty,
+            planned_qty: v.planned_qty !== undefined ? Number(v.planned_qty) : undefined,
+            preordered_qty: v.preordered_qty !== undefined ? Number(v.preordered_qty) : undefined,
+            production_eta: prodEta,
+            production_order_no: v.production_order_no ?? null,
+            is_preorder_available: Boolean(v.is_preorder_available || inProdQty > 0),
             dealer_stock: v.dealer_stock ? {
               in_showroom_qty: Number(v.dealer_stock.in_showroom_qty || 0),
               in_showroom_sqm: Number(v.dealer_stock.in_showroom_sqm || 0),
@@ -262,6 +276,16 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
                 }
               }
             }
+            if ((v.in_production_qty ?? 0) > (targetVariant.in_production_qty ?? 0)) {
+              targetVariant.in_production_qty = v.in_production_qty;
+              targetVariant.is_preorder_available = true;
+            }
+            if (!targetVariant.production_eta && v.production_eta) {
+              targetVariant.production_eta = v.production_eta;
+            }
+            if ((targetVariant.free_stock ?? 0) === 0 && (targetVariant.in_production_qty ?? 0) > 0) {
+              targetVariant.stock_status = 'in_production';
+            }
             if (v.dealer_stock) {
               if (!targetVariant.dealer_stock) {
                 targetVariant.dealer_stock = { ...v.dealer_stock };
@@ -310,6 +334,9 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
           };
         });
     }
+    prod.in_production_total_qty = prod.variants.reduce((sum, v) => sum + (Number(v.in_production_qty) || 0), 0);
+    prod.has_preorder = Boolean(prod.has_preorder || prod.in_production_total_qty > 0);
+    prod.production_eta = prod.variants.find(v => v.production_eta)?.production_eta || prod.production_eta || null;
     result.push(prod);
   }
 

@@ -71,6 +71,10 @@ export interface Order {
 }
 
 export const ORDER_STATUS_MAP: Record<string, { label: string; color: string }> = {
+  awaiting_supply: {
+    label: '🏭 Предзаказ забронирован (Ожидает поступления с фабрики)',
+    color: 'bg-amber-50 text-amber-900 border-amber-300',
+  },
   pending: { label: 'В авторезерве', color: 'bg-amber-50 text-amber-700 border-amber-200' },
   reserved: { label: 'В авторезерве', color: 'bg-amber-50 text-amber-700 border-amber-200' },
   confirmed: { label: 'В авторезерве', color: 'bg-amber-50 text-amber-700 border-amber-200' },

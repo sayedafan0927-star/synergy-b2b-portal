@@ -68,6 +68,13 @@ export interface ProductVariant {
   to_ship_sqm?: number;
   total_stock?: number;
   stock?: number;
+  stock_status?: 'in_stock' | 'in_production' | 'out_of_stock' | string;
+  in_production_qty?: number;
+  planned_qty?: number;
+  preordered_qty?: number;
+  production_eta?: string | null;
+  production_order_no?: string | null;
+  is_preorder_available?: boolean;
   showroom_qty?: number;
   showroom_sqm?: number;
   warehouses: Warehouse[];
@@ -345,6 +352,9 @@ export interface Product {
   images: string[];
   image_thumb?: string;
   supplier_id?: number | null;
+  has_preorder?: boolean;
+  in_production_total_qty?: number;
+  production_eta?: string | null;
   characteristics?: ProductCharacteristic[];
   variants: ProductVariant[];
 }
@@ -364,6 +374,8 @@ export interface CartItem {
   area_sqm?: number;
   quantity: number;
   maxStock?: number;
+  is_preorder?: boolean;
+  production_eta?: string | null;
 }
 
 export type PageId =
@@ -435,6 +447,16 @@ export function calcPricePerSqm(size: string, price: number): number {
 export function calcPriceFromSqm(size: string, pricePerSqm: number): number {
   const { w, h } = parseSizeDimensions(size);
   return w * h * pricePerSqm;
+}
+
+export function formatProductionEta(eta?: string | null): string {
+  if (!eta) return '';
+  const trimmed = String(eta).trim();
+  const m = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) {
+    return `${m[3]}.${m[2]}.${m[1]}`;
+  }
+  return trimmed;
 }
 
 export interface SupplierInfo {

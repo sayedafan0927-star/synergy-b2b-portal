@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Trash2, Plus, Minus, ArrowUpDown, Filter, AlertTriangle, AlertCircle, LayoutGrid, Table } from 'lucide-react';
 import type { CartItem } from '@/types';
-import { calcSqm } from '@/types';
+import { calcSqm, formatProductionEta } from '@/types';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import ProductImage from '@/components/ProductImage';
@@ -173,9 +173,22 @@ export function CartItemsTable({
 
                     {/* Склад */}
                     <td className="py-2 px-2.5 whitespace-nowrap">
-                      <p className="text-xs font-semibold text-slate-800 truncate max-w-[120px]" title={item.warehouse}>
-                        {item.warehouse}
-                      </p>
+                      {item.is_preorder || item.warehouse === 'Предзаказ (Фабрика)' ? (
+                        <div>
+                          <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 border border-amber-200 px-1.5 py-0.5 text-[10px] font-bold text-amber-900">
+                            🏭 В производстве
+                          </span>
+                          {item.production_eta && (
+                            <p className="text-[10px] text-amber-800 mt-0.5">
+                              Выход: ~{formatProductionEta(item.production_eta)}
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-xs font-semibold text-slate-800 truncate max-w-[120px]" title={item.warehouse}>
+                          {item.warehouse}
+                        </p>
+                      )}
                       {item.maxStock !== undefined && (
                         <p className="text-[10px] text-slate-500 font-medium">
                           {t('cart.free_qty')} <strong className="text-slate-700">{item.maxStock} {t('common.pcs')}</strong>

@@ -15,6 +15,7 @@ export interface CatalogPersistedState {
   selectedClusters: string[];
   selectedWarehouses: string[];
   selectedSizes: string[];
+  onlyInProduction?: boolean;
   visibleCount: number;
   scrollY: number;
   lastViewedProductId?: string | null;
@@ -167,6 +168,10 @@ export function useCatalogStatePersistence(options: UseCatalogStatePersistenceOp
     () => new Set(savedState?.selectedSizes || []),
   );
 
+  const [onlyInProduction, setOnlyInProduction] = useState<boolean>(
+    () => Boolean(savedState?.onlyInProduction),
+  );
+
   const [activeClusterQuickFilter, setActiveClusterQuickFilter] = useState<
     'all' | 'small' | 'medium' | 'large' | 'oversize' | 'runner'
   >('all');
@@ -186,6 +191,7 @@ export function useCatalogStatePersistence(options: UseCatalogStatePersistenceOp
     setVisibleCount(12);
   }, [
     selectedCategory,
+    onlyInProduction,
     activeClusterQuickFilter,
     selectedClusters,
     selectedCollections,
@@ -207,6 +213,7 @@ export function useCatalogStatePersistence(options: UseCatalogStatePersistenceOp
 
   const activeFilterCount =
     (selectedCategory !== 'all' ? 1 : 0) +
+    (onlyInProduction ? 1 : 0) +
     (activeClusterQuickFilter !== 'all' ? 1 : 0) +
     selectedCollections.size +
     selectedManufacturers.size +
@@ -218,6 +225,7 @@ export function useCatalogStatePersistence(options: UseCatalogStatePersistenceOp
   const resetFilters = useCallback(() => {
     setSearchQuery('');
     setSelectedCategory('all');
+    setOnlyInProduction(false);
     setSelectedClusters(new Set());
     setSelectedCollections(new Set());
     setSelectedManufacturers(new Set());
@@ -238,6 +246,7 @@ export function useCatalogStatePersistence(options: UseCatalogStatePersistenceOp
       sortBy,
       viewMode,
       selectedCategory,
+      onlyInProduction,
       selectedCollections: Array.from(selectedCollections),
       selectedManufacturers: Array.from(selectedManufacturers),
       selectedCountries: Array.from(selectedCountries),
@@ -253,6 +262,7 @@ export function useCatalogStatePersistence(options: UseCatalogStatePersistenceOp
     sortBy,
     viewMode,
     selectedCategory,
+    onlyInProduction,
     selectedCollections,
     selectedManufacturers,
     selectedCountries,
@@ -302,6 +312,8 @@ export function useCatalogStatePersistence(options: UseCatalogStatePersistenceOp
     setVisibleCount,
     selectedCategory,
     setSelectedCategory,
+    onlyInProduction,
+    setOnlyInProduction,
     selectedCollections,
     setSelectedCollections,
     selectedManufacturers,

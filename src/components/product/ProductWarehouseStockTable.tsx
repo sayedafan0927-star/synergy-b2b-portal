@@ -1,5 +1,6 @@
 import { ShoppingCart, Check, Minus, Plus, Ruler } from 'lucide-react';
 import type { Product, ProductVariant, Warehouse } from '@/types';
+import { formatProductionEta } from '@/types';
 import { filterClientWarehouses } from '@/hooks/useProductData';
 import { rowKey } from './types';
 import { useCurrency } from '@/contexts/CurrencyContext';
@@ -55,7 +56,7 @@ export function ProductWarehouseStockTable({
 }: ProductWarehouseStockTableProps) {
   const { currencyUnitLabel } = useCurrency();
 
-  function CartButton({ variant, wh }: { variant: ProductVariant; wh: Warehouse }) {
+  function CartButton({ variant, wh, mobile = false }: { variant: ProductVariant; wh: Warehouse; mobile?: boolean }) {
     const whLabel = wh.warehouse_name || wh.city;
     const key = rowKey(variant.sku, whLabel);
     const qty = quantities[key] ?? 0;
@@ -68,45 +69,20 @@ export function ProductWarehouseStockTable({
         type="button"
         onClick={() => onAddToCart(variant, wh)}
         disabled={!inStock || qty < 1}
-        className={`btn-primary relative inline-flex items-center gap-1.5 text-xs px-3 py-1.5 whitespace-nowrap transition-all cursor-pointer ${
-          added ? '!bg-emerald-600 !ring-emerald-600' : !inStock || qty < 1 ? 'opacity-40 cursor-not-allowed' : ''
-        }`}
+        className={`btn-primary relative inline-flex items-center gap-1.5 transition-all cursor-pointer ${
+          mobile ? 'flex-1 justify-center text-sm h-10' : 'text-xs px-3 py-1.5 whitespace-nowrap'
+        } ${added ? '!bg-emerald-600 !ring-emerald-600' : !inStock || qty < 1 ? 'opacity-40 cursor-not-allowed' : ''}`}
       >
         {added ? (
-          <><Check className="h-3.5 w-3.5" /> {t('product.added')}</>
+          <><Check className={mobile ? 'h-4 w-4' : 'h-3.5 w-3.5'} /> {t('product.added')}</>
         ) : (
           <>
-            <ShoppingCart className="h-3.5 w-3.5" /> {t('product.add_to_cart')}
-            {inCart > 0 && <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-white/30 px-1 text-[9px] font-bold">{inCart}</span>}
-          </>
-        )}
-      </button>
-    );
-  }
-
-  function MobileCartButton({ variant, wh }: { variant: ProductVariant; wh: Warehouse }) {
-    const whLabel = wh.warehouse_name || wh.city;
-    const key = rowKey(variant.sku, whLabel);
-    const qty = quantities[key] ?? 0;
-    const added = addedKeys[key];
-    const inStock = wh.stock > 0;
-    const inCart = cartCountByKey[key] ?? 0;
-
-    return (
-      <button
-        type="button"
-        onClick={() => onAddToCart(variant, wh)}
-        disabled={!inStock || qty < 1}
-        className={`btn-primary flex-1 relative inline-flex items-center justify-center gap-1.5 text-sm h-10 transition-all cursor-pointer ${
-          added ? '!bg-emerald-600 !ring-emerald-600' : !inStock || qty < 1 ? 'opacity-40 cursor-not-allowed' : ''
-        }`}
-      >
-        {added ? (
-          <><Check className="h-4 w-4" /> {t('product.added')}</>
-        ) : (
-          <>
-            <ShoppingCart className="h-4 w-4" /> {t('product.add_to_cart')}
-            {inCart > 0 && <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-white/30 px-1.5 text-[10px] font-bold">{inCart}</span>}
+            <ShoppingCart className={mobile ? 'h-4 w-4' : 'h-3.5 w-3.5'} /> {t('product.add_to_cart')}
+            {inCart > 0 && (
+              <span className={`flex items-center justify-center rounded-full bg-white/30 font-bold ${mobile ? 'h-5 min-w-5 px-1.5 text-[10px]' : 'h-4 min-w-4 px-1 text-[9px]'}`}>
+                {inCart}
+              </span>
+            )}
           </>
         )}
       </button>
@@ -120,11 +96,11 @@ export function ProductWarehouseStockTable({
           const variantPrice = pricing.getVariantPrice(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
           const pricePerSqm = pricing.getPricePerSqm(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
           const rows = filterClientWarehouses(variant.warehouses, myShowroomId, myShowroomName, clientContext, displaySettings);
+          const inProdQty = Number(variant.in_production_qty ?? 0);
+          const etaFormatted = formatProductionEta(variant.production_eta || product.production_eta);
 
           const showroomQty = isShowroomVisible
-            ? (myShowroomId
-                ? (variant.warehouses.find(w => w.warehouse_id === myShowroomId)?.stock || 0)
-                : (variant.dealer_stock?.in_showroom_qty || 0))
+            ? (myShowroomId ? (variant.warehouses.find(w => w.warehouse_id === myShowroomId)?.stock || 0) : (variant.dealer_stock?.in_showroom_qty || 0))
             : 0;
           const inTransitQty = isShowroomVisible ? (variant.dealer_stock?.in_transit_qty || 0) : 0;
           const hasPartnerStatus = showroomQty > 0 || inTransitQty > 0;
@@ -135,49 +111,75 @@ export function ProductWarehouseStockTable({
                 <div>
                   <div className="flex items-center gap-1.5 flex-wrap" data-size-cluster={variant.size_cluster}>
                     <span className="text-sm font-bold text-slate-900">{variant.size}</span>
-                    {variant.is_runner && (
-                      <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 uppercase">Дорожка</span>
-                    )}
+                    {variant.is_runner && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 uppercase">Дорожка</span>}
                   </div>
-                  <div className="mt-0.5 flex flex-wrap gap-x-2 text-[11px] text-slate-500 font-normal">
-                    {(variant.article || product.article) && (
+                  {(variant.article || product.article) && (
+                    <div className="mt-0.5 flex flex-wrap gap-x-2 text-[11px] text-slate-500 font-normal">
                       <span>Арт: <strong className="text-slate-800 font-medium">{variant.article || product.article}</strong></span>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
                 {user && <span className="text-base font-bold text-slate-900">{fmtPrice(variantPrice)}</span>}
               </div>
-              {user && pricePerSqm > 0 && (
-                <p className="text-xs text-slate-400 mb-2 text-right">
-                  {fmtPrice(pricePerSqm)} / м²
-                </p>
-              )}
+              {user && pricePerSqm > 0 && <p className="text-xs text-slate-400 mb-2 text-right">{fmtPrice(pricePerSqm)} / м²</p>}
 
               {hasPartnerStatus && (
                 <div className="mb-3 rounded-lg bg-slate-50 p-2 border border-slate-200/60 text-[11px] space-y-1">
                   {showroomQty > 0 && (
                     <div className="flex items-center justify-between text-emerald-800 font-medium">
-                      <span>🏪 В магазине:</span>
-                      <span className="font-bold">{showroomQty} шт</span>
+                      <span>🏪 В магазине:</span><span className="font-bold">{showroomQty} шт</span>
                     </div>
                   )}
                   {inTransitQty > 0 && (
                     <div className="flex items-center justify-between text-indigo-800 font-medium">
-                      <span>🚚 В пути:</span>
-                      <span className="font-bold">{inTransitQty} шт</span>
+                      <span>🚚 В пути:</span><span className="font-bold">{inTransitQty} шт</span>
                     </div>
                   )}
                 </div>
               )}
 
               {rows.length === 0 ? (
-                <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-2.5">
-                  <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold bg-slate-100 text-slate-500">
-                    <span className="inline-block h-1.5 w-1.5 rounded-full bg-slate-400" />
-                    Нет на складах
-                  </span>
-                  <span className="text-xs text-slate-400 italic">Под заказ</span>
-                </div>
+                inProdQty > 0 ? (() => {
+                  const preorderWh: Warehouse = {
+                    warehouse_id: 81,
+                    warehouse_name: 'Предзаказ (Фабрика)',
+                    city: 'Предзаказ (Фабрика)',
+                    stock: inProdQty,
+                    free_stock: inProdQty,
+                  };
+                  const key = rowKey(variant.sku, preorderWh.warehouse_name);
+                  const qty = quantities[key] ?? 0;
+
+                  return (
+                    <div className="border-t border-slate-100 pt-3">
+                      <div className="mb-2.5">
+                        <span className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold bg-amber-50 text-amber-900 border border-amber-200/90 leading-snug">
+                          🏭 В производстве: доступно {inProdQty} шт.{etaFormatted ? ` (Выход с фабрики: ~${etaFormatted})` : ''}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="inline-flex items-center">
+                          <button onClick={() => onDecQty(key)} className="flex h-10 w-10 items-center justify-center rounded-l-md border border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors cursor-pointer">
+                            <Minus className="h-4 w-4" />
+                          </button>
+                          <input type="number" min={0} max={inProdQty} value={qty} onChange={e => onSetQty(key, Math.min(inProdQty, parseInt(e.target.value, 10) || 0))} className="h-10 w-14 border-y border-slate-200 bg-white text-center text-sm text-slate-900 outline-none focus:border-brand-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                          <button onClick={() => onSetQty(key, Math.min(inProdQty, qty + 1))} className="flex h-10 w-10 items-center justify-center rounded-r-md border border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors cursor-pointer">
+                            <Plus className="h-4 w-4" />
+                          </button>
+                        </div>
+                        <CartButton variant={variant} wh={preorderWh} mobile />
+                      </div>
+                    </div>
+                  );
+                })() : (
+                  <div className="mt-2 flex items-center justify-between border-t border-slate-100 pt-2.5">
+                    <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold bg-slate-100 text-slate-500">
+                      <span className="inline-block h-1.5 w-1.5 rounded-full bg-slate-400" />
+                      Нет на складах
+                    </span>
+                    <span className="text-xs text-slate-400 italic">Под заказ</span>
+                  </div>
+                )
               ) : (
                 <div className="flex flex-col gap-3">
                   {rows.map(wh => {
@@ -204,7 +206,7 @@ export function ProductWarehouseStockTable({
                               <Plus className="h-4 w-4" />
                             </button>
                           </div>
-                          <MobileCartButton variant={variant} wh={wh} />
+                          <CartButton variant={variant} wh={wh} mobile />
                         </div>
                       </div>
                     );
@@ -242,6 +244,8 @@ export function ProductWarehouseStockTable({
               {variants.map(variant => {
                 const variantPrice = pricing.getVariantPrice(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
                 const pricePerSqm = pricing.getPricePerSqm(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
+                const inProdQty = Number(variant.in_production_qty ?? 0);
+                const etaFormatted = formatProductionEta(variant.production_eta || product.production_eta);
 
                 const rows = filterClientWarehouses(variant.warehouses, myShowroomId, myShowroomName, clientContext, displaySettings);
                 const showroomQty = isShowroomVisible
@@ -253,6 +257,69 @@ export function ProductWarehouseStockTable({
                 const hasPartnerStatus = showroomQty > 0 || inTransitQty > 0;
 
                 if (rows.length === 0) {
+                  if (inProdQty > 0) {
+                    const preorderWh: Warehouse = {
+                      warehouse_id: 81,
+                      warehouse_name: 'Предзаказ (Фабрика)',
+                      city: 'Предзаказ (Фабрика)',
+                      stock: inProdQty,
+                      free_stock: inProdQty,
+                    };
+                    const whLabel = preorderWh.warehouse_name;
+                    const key = rowKey(variant.sku, whLabel);
+                    const qty = quantities[key] ?? 0;
+
+                    return (
+                      <tr key={variant.sku || variant.size} className="group hover:bg-slate-25 transition-colors">
+                        <td className="py-3 pl-5 pr-3 text-sm font-medium text-slate-900 whitespace-nowrap">
+                          <div>
+                            <div className="flex items-center gap-1.5 flex-wrap" data-size-cluster={variant.size_cluster}>
+                              <span className="font-semibold text-slate-900">{variant.size}</span>
+                              {variant.is_runner && (
+                                <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800 uppercase">Дорожка</span>
+                              )}
+                            </div>
+                            <div className="mt-0.5 flex flex-wrap gap-x-2 text-[11px] text-slate-400 font-normal">
+                              {(variant.article || product.article) && (
+                                <span>Арт: <span className="text-slate-600 font-medium">{variant.article || product.article}</span></span>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 pr-3 text-sm text-slate-600 whitespace-nowrap">{whLabel}</td>
+                        <td className="py-3 pr-3">
+                          <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold bg-amber-50 text-amber-900 border border-amber-200/80">
+                            🏭 В производстве: доступно {inProdQty} шт.{etaFormatted ? ` (Выход с фабрики: ~${etaFormatted})` : ''}
+                          </span>
+                        </td>
+                        {user && (
+                          <td className="py-3 pr-3 text-sm text-slate-500 whitespace-nowrap">
+                            {pricePerSqm > 0 ? fmtPrice(pricePerSqm) : '—'}
+                          </td>
+                        )}
+                        {user && (
+                          <td className="py-3 pr-3 font-bold text-slate-900 whitespace-nowrap">
+                            {fmtPrice(variantPrice)}
+                          </td>
+                        )}
+                        <td className="py-3 pr-3">
+                          <div className="inline-flex items-center">
+                            <button onClick={() => onDecQty(key)} className="flex h-8 w-8 items-center justify-center rounded-l-md border border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors cursor-pointer">
+                              <Minus className="h-3.5 w-3.5" />
+                            </button>
+                            <input type="number" min={0} max={inProdQty} value={qty} onChange={e => onSetQty(key, Math.min(inProdQty, parseInt(e.target.value, 10) || 0))} className="h-8 w-12 border-y border-slate-200 bg-white text-center text-sm text-slate-900 outline-none focus:border-brand-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                            <button onClick={() => onSetQty(key, Math.min(inProdQty, qty + 1))} className="flex h-8 w-8 items-center justify-center rounded-r-md border border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors cursor-pointer">
+                              <Plus className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                        <td className="py-3 pr-5">
+                          <CartButton variant={variant} wh={preorderWh} />
+                        </td>
+                      </tr>
+                    );
+                  }
+
                   return (
                     <tr key={variant.sku || variant.size} className="group hover:bg-slate-25 transition-colors opacity-80">
                       <td className="py-3 pl-5 pr-3 text-sm font-medium text-slate-900 whitespace-nowrap">

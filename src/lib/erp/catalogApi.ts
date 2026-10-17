@@ -31,14 +31,22 @@ export async function fetchCatalogFromErp(dealerId?: string | number, priceType?
 
   // 2. Дедупликация параллельных запросов
   return deduplicateRequest(requestKey, async () => {
-    const response = await erpFetch('catalog', {
-      method: 'GET',
-      params: {
-        dealer_id: dealerId ? String(dealerId) : undefined,
-        price_type: priceType || undefined,
-        refresh: bypassCache ? '1' : undefined,
-      },
-    });
+    const queryParams = {
+      dealer_id: dealerId ? String(dealerId) : undefined,
+      price_type: priceType || undefined,
+      refresh: bypassCache ? '1' : undefined,
+    };
+
+    const [response, normResponse] = await Promise.all([
+      erpFetch('catalog', {
+        method: 'GET',
+        params: queryParams,
+      }),
+      erpFetch('catalog_normalized', {
+        method: 'GET',
+        params: queryParams,
+      }).catch(() => null),
+    ]);
 
     const xCache = response.headers.get('x-cache') || response.headers.get('x-erp-cache');
     const xAge = response.headers.get('x-cache-age-ms');
@@ -51,6 +59,110 @@ export async function fetchCatalogFromErp(dealerId?: string | number, priceType?
     }
 
     const data = await response.json();
+
+    // Обогащаем каталог данными предзаказа и производства из catalog_normalized (in_production_qty, production_eta, stock_status)
+    let normData: any = null;
+    if (normResponse && normResponse.ok) {
+      try {
+        normData = await normResponse.json();
+      } catch {
+        normData = null;
+      }
+    }
+
+    const normVariantMap = new Map<string, any>();
+    const normDesigns = normData?.designs || normData?.products || (Array.isArray(data?.designs) ? data.designs : []);
+    if (Array.isArray(normDesigns)) {
+      for (const d of normDesigns) {
+        const dColl = String(d.collection || '').trim().toUpperCase();
+        const dArt = String(d.article || '').trim().toUpperCase();
+        const rawVars = d.variants || d.sizes || [];
+        for (const sv of rawVars) {
+          const enrichedSv = {
+            ...sv,
+            _designEta: d.production_eta || null,
+          };
+          const vId = String(sv.item_id ?? sv.id ?? '').trim();
+          const vSku = String(sv.sku ?? '').trim();
+          const vSizeNorm = String(sv.size || '').replace(/[\s*xXхХ×]+/g, 'x').toLowerCase();
+          if (vId) normVariantMap.set(`id:${vId}`, enrichedSv);
+          if (vSku) normVariantMap.set(`sku:${vSku}`, enrichedSv);
+          if (dColl && vSizeNorm) normVariantMap.set(`key:${dColl}__${dArt}__${vSizeNorm}`, enrichedSv);
+        }
+      }
+    }
+
+    // Если основной ответ вернул designs[] вместо products[] (например, при прямом вызове catalog_normalized)
+    if (data && !Array.isArray(data.products) && Array.isArray(data.designs)) {
+      data.products = data.designs.map((d: any) => ({
+        ...d,
+        id: String(d.design_id || d.id || `design-${d.article}`),
+        variants: (d.variants || d.sizes || []).map((sv: any) => ({
+          ...sv,
+          id: String(sv.id ?? sv.item_id ?? `var-${sv.sku || sv.size}`),
+          free_stock: Number(sv.free_stock ?? sv.stock_free ?? sv.stock ?? 0),
+          stock: Number(sv.free_stock ?? sv.stock_free ?? sv.stock ?? 0),
+        })),
+      }));
+    }
+
+    if (data && Array.isArray(data.products)) {
+      for (const p of data.products) {
+        const pColl = String(p.collection || '').trim().toUpperCase();
+        const pArt = String(p.article || '').trim().toUpperCase();
+        const rawVars = p.variants || p.sizes || [];
+        p.variants = rawVars.map((v: any) => {
+          const vId = String(v.item_id ?? v.id ?? '').trim();
+          const vSku = String(v.sku ?? '').trim();
+          const vSizeNorm = String(v.size || '').replace(/[\s*xXхХ×]+/g, 'x').toLowerCase();
+          const sv =
+            (vId && normVariantMap.get(`id:${vId}`)) ||
+            (vSku && normVariantMap.get(`sku:${vSku}`)) ||
+            normVariantMap.get(`key:${pColl}__${pArt}__${vSizeNorm}`) ||
+            null;
+
+          const inProdQty = Number(sv?.in_production_qty ?? v.in_production_qty ?? 0);
+          const prodEta = sv?.production_eta ?? v.production_eta ?? sv?._designEta ?? p.production_eta ?? null;
+          const freeStockVal =
+            v.free_stock !== undefined
+              ? Number(v.free_stock)
+              : v.stock_free !== undefined
+              ? Number(v.stock_free)
+              : sv?.stock_free !== undefined
+              ? Number(sv.stock_free)
+              : sv?.free_stock !== undefined
+              ? Number(sv.free_stock)
+              : Number(v.stock ?? 0);
+
+          const stockStatus =
+            sv?.stock_status ||
+            v.stock_status ||
+            (freeStockVal > 0 ? 'in_stock' : inProdQty > 0 ? 'in_production' : 'out_of_stock');
+
+          return {
+            ...v,
+            item_id: v.item_id ?? sv?.item_id ?? (Number(v.id) || undefined),
+            free_stock: freeStockVal,
+            stock_status: stockStatus,
+            in_production_qty: inProdQty,
+            planned_qty: sv?.planned_qty !== undefined ? Number(sv.planned_qty) : v.planned_qty,
+            preordered_qty: sv?.preordered_qty !== undefined ? Number(sv.preordered_qty) : v.preordered_qty,
+            production_eta: prodEta,
+            production_order_no: sv?.production_order_no ?? v.production_order_no ?? null,
+            is_preorder_available: Boolean(sv?.is_preorder_available ?? v.is_preorder_available ?? inProdQty > 0),
+          };
+        });
+
+        p.in_production_total_qty = p.variants.reduce(
+          (sum: number, iv: any) => sum + (Number(iv.in_production_qty) || 0),
+          0
+        );
+        p.has_preorder = Boolean(p.has_preorder || p.in_production_total_qty > 0);
+        p.production_eta =
+          p.production_eta || p.variants.find((iv: any) => iv.production_eta)?.production_eta || null;
+      }
+    }
+
     if (data && typeof data === 'object' && xCache) {
       data._xCache = xCache;
     }

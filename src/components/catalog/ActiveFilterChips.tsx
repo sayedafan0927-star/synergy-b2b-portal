@@ -4,6 +4,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 export interface ActiveFilterChipsProps {
   searchQuery: string;
   selectedCategory: string;
+  onlyInProduction?: boolean;
   selectedCollections: Set<string>;
   selectedCountries: Set<string>;
   selectedManufacturers: Set<string>;
@@ -12,6 +13,7 @@ export interface ActiveFilterChipsProps {
   selectedClusters: Set<string>;
   onClearSearch: () => void;
   onClearCategory: () => void;
+  onClearInProduction?: () => void;
   onRemoveCollection: (val: string) => void;
   onRemoveCountry: (val: string) => void;
   onRemoveManufacturer: (val: string) => void;
@@ -24,6 +26,7 @@ export interface ActiveFilterChipsProps {
 export function ActiveFilterChips({
   searchQuery,
   selectedCategory,
+  onlyInProduction = false,
   selectedCollections,
   selectedCountries,
   selectedManufacturers,
@@ -32,6 +35,7 @@ export function ActiveFilterChips({
   selectedClusters,
   onClearSearch,
   onClearCategory,
+  onClearInProduction,
   onRemoveCollection,
   onRemoveCountry,
   onRemoveManufacturer,
@@ -44,6 +48,7 @@ export function ActiveFilterChips({
   const hasActiveFilters =
     Boolean(searchQuery.trim()) ||
     selectedCategory !== 'all' ||
+    onlyInProduction ||
     selectedCollections.size > 0 ||
     selectedCountries.size > 0 ||
     selectedManufacturers.size > 0 ||
@@ -70,6 +75,22 @@ export function ActiveFilterChips({
           >
             <X className="h-3 w-3" />
           </button>
+        </span>
+      )}
+
+      {onlyInProduction && (
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 text-amber-900 font-semibold shrink-0 border border-amber-300">
+          <span>🏭 В производстве (Доступно к предзаказу)</span>
+          {onClearInProduction && (
+            <button
+              type="button"
+              onClick={onClearInProduction}
+              className="hover:text-rose-600 p-0.5 rounded cursor-pointer"
+              aria-label="Сбросить фильтр В производстве"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
         </span>
       )}
 
