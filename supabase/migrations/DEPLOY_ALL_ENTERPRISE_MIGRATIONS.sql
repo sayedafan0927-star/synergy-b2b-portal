@@ -678,7 +678,7 @@ CREATE POLICY "admin_manage_contracts" ON contracts
     EXISTS (
       SELECT 1 FROM profiles
       WHERE profiles.id = auth.uid()
-        AND profiles.role IN ('admin', 'manager_rm')
+        AND profiles.role IN ('admin', 'manager_rm', 'manager_lm')
     )
   );
 
@@ -1712,6 +1712,9 @@ BEGIN
   END IF;
 
   IF v_partner_id IS NOT NULL AND v_partner_id <> '' THEN
+    -- Сериализация параллельных чекаутов одного контрагента (защита от мульти-вкладочной гонки кредитного лимита)
+    PERFORM pg_advisory_xact_lock(hashtext(v_partner_id));
+
     SELECT overdue_days, is_blocked_for_orders, impersonation_enabled, status
     INTO v_overdue_days, v_is_blocked, v_impersonation, v_status
     FROM public.profiles
@@ -1804,7 +1807,7 @@ BEGIN
     COALESCE((p_order->>'total_amount')::numeric, 0),
     COALESCE((p_order->>'total_items')::integer, 1),
     COALESCE((p_order->>'total_sqm')::numeric, 0),
-    'pending',
+    CASE WHEN COALESCE(p_order->>'status', '') = 'waiting_approval' THEN 'waiting_approval' ELSE 'pending' END,
     p_order->>'idempotency_key',
     COALESCE(p_order->>'currency', 'USD'),
     v_exchange_rate,
@@ -1881,7 +1884,7 @@ BEGIN
         COALESCE((v_split_elem->>'amount')::numeric, 0),
         COALESCE((v_split_elem->>'items_count')::integer, 1),
         COALESCE((v_split_elem->>'sqm')::numeric, 0),
-        'pending',
+        CASE WHEN COALESCE(p_order->>'status', '') = 'waiting_approval' THEN 'waiting_approval' ELSE 'pending' END,
         v_split_elem->>'idempotency_key',
         COALESCE(p_order->>'currency', 'USD'),
         v_exchange_rate,
@@ -1935,7 +1938,7 @@ BEGIN
     'success', true,
     'order_id', v_order_id,
     'order_number', v_order_number,
-    'status', 'pending',
+    'status', CASE WHEN COALESCE(p_order->>'status', '') = 'waiting_approval' THEN 'waiting_approval' ELSE 'pending' END,
     'partner_id', v_partner_id,
     'exchange_rate', v_exchange_rate,
     'split_orders', v_created_sub_orders,

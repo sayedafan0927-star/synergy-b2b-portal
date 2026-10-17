@@ -31,12 +31,12 @@ export async function preloadInventoryBalancesForOrder(
       existingMap.set(`${String(row.sku).toUpperCase()}::${row.warehouse_id}`, Number(row.free_stock || 0));
     }
 
-    // 2. Находим позиции, которых нет в БД или у которых свободный остаток < запрошенного
+    // 2. Находим позиции, которых еще нет в БД inventory_balances (никогда не перезаписываем существующие строки с активными резервами!)
     const itemsNeedingStock = items.filter(it => {
       const whId = resolveWarehouseId(it.warehouse_id, it.warehouse);
       const key = `${String(it.sku).toUpperCase()}::${whId}`;
       const existingStock = existingMap.get(key);
-      return existingStock === undefined || existingStock < it.quantity;
+      return existingStock === undefined;
     });
 
     if (itemsNeedingStock.length === 0) {
@@ -121,12 +121,12 @@ export async function preloadInventoryBalancesForOrder(
     if (upsertRows.length > 0) {
       const { error: upsertErr } = await supabase
         .from('inventory_balances')
-        .upsert(upsertRows, { onConflict: 'sku,warehouse_id' });
+        .upsert(upsertRows, { onConflict: 'sku,warehouse_id', ignoreDuplicates: true });
 
       if (upsertErr) {
         logger.warn('[StockPreloader] Upsert notice:', { error: upsertErr.message, correlationId });
       } else {
-        logger.info('[StockPreloader] Successfully pre-seeded inventory_balances from ERP catalog:', {
+        logger.info('[StockPreloader] Successfully pre-seeded missing inventory_balances from ERP catalog:', {
           count: upsertRows.length,
           skus: upsertRows.map(r => `${r.sku} (${r.free_stock} шт)`),
           correlationId,
@@ -203,11 +203,10 @@ export async function verifyItemsStockAvailability(
         const vSku = String(v.sku || '').trim().toUpperCase();
         if (vSku === targetSku) {
           const wh = (v.warehouses || []).find((w: any) => Number(w.warehouse_id) === whId);
-          const inProd = Number(v.in_production_qty ?? 0);
           if (wh) {
-            actualFreeStock = Math.max(Number(wh.free_stock ?? wh.stock ?? 0), inProd);
+            actualFreeStock = Number(wh.free_stock ?? wh.stock ?? 0);
           } else {
-            actualFreeStock = Math.max(Number(v.free_stock ?? v.stock ?? 0), inProd);
+            actualFreeStock = Number(v.free_stock ?? v.stock ?? 0);
           }
           break;
         }

@@ -1248,7 +1248,7 @@ test_assert("s.warehouse_id === 82" in sh_s10 and "s.warehouse_id === 83" in sh_
 
 with open(os.path.join(ROOT_DIR, "api", "warehouse-rules.ts"), "r", encoding="utf-8") as fp:
     wr_s10 = fp.read()
-test_assert("'manager_rm'" in wr_s10 and "requiredRoles: ['admin', 'manager_rm']" in wr_s10, "api/warehouse-rules.ts permits regional managers to configure warehouse rules")
+test_assert("'manager_rm'" in wr_s10 and "'manager_lm'" in wr_s10 and "requiredRoles: ['admin', 'manager_rm'" in wr_s10, "api/warehouse-rules.ts permits regional and local managers to configure warehouse rules")
 
 # ------------------------------------------------------------------------------
 # 35. Verifying Stage 11 Redis Unblock, Warehouse 81 Fallbacks, Realtime FX & Orders List Profiles...
@@ -2154,7 +2154,36 @@ with open(os.path.join(ROOT_DIR, "api", "webhooks", "handlers", "stockHandler.ts
 test_assert("invalidateCatalogCache()" in sh_s41 and "forceRefresh: true" in sh_s41, "stockHandler.ts invalidates local catalog cache and triggers ?refresh=1 warmup on stock_changed")
 
 # ------------------------------------------------------------------------------
-# 66. Summary Report
+# 66. Stage 42: End-to-End CTO Architectural Audit Remediation
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 66. STAGE 42: END-TO-END CTO ARCHITECTURAL AUDIT REMEDIATION ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "api", "auth", "session.ts"), "r", encoding="utf-8") as fp:
+    sess_s42 = fp.read()
+test_assert("b2b_role: b2bRole" in sess_s42 and "callerAuth.priceType || 'wholesale'" in sess_s42, "api/auth/session.ts locks price_type and b2b_role for client sessions preventing self-granted VIP discounts and accountant escalation")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "stockPreloader.ts"), "r", encoding="utf-8") as fp:
+    sp_s42 = fp.read()
+test_assert("return existingStock === undefined;" in sp_s42 and "ignoreDuplicates: true" in sp_s42, "stockPreloader.ts only seeds missing rows and never overwrites active reservations in inventory_balances")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "exposureValidator.ts"), "r", encoding="utf-8") as fp:
+    ev_s42 = fp.read()
+test_assert("'waiting_approval'" in ev_s42 and "debt_usd" in ev_s42 and ".limit(1)" in ev_s42, "exposureValidator.ts includes waiting_approval orders in credit exposure, selects debt_usd, and uses .limit(1)")
+
+with open(os.path.join(ROOT_DIR, "api", "webhooks", "handlers", "paymentHandler.ts"), "r", encoding="utf-8") as fp:
+    ph_s42 = fp.read()
+test_assert("hasAuthoritativeDebt" in ph_s42 and "prevDebt - amount" in ph_s42, "paymentHandler.ts prevents false debt zeroing on partial payments without explicit new_total_debt_usd")
+
+with open(os.path.join(ROOT_DIR, "api", "lib", "cors.ts"), "r", encoding="utf-8") as fp:
+    cors_s42 = fp.read()
+test_assert("https://synergy-group.kz" in cors_s42, "api/lib/cors.ts whitelists production domain https://synergy-group.kz")
+
+with open(os.path.join(ROOT_DIR, "supabase", "migrations", "DEPLOY_ALL_ENTERPRISE_MIGRATIONS.sql"), "r", encoding="utf-8") as fp:
+    sql_s42 = fp.read()
+test_assert("pg_advisory_xact_lock(hashtext(v_partner_id))" in sql_s42, "create_order_atomic acquires pg_advisory_xact_lock(hashtext(v_partner_id)) serializing concurrent multi-tab checkouts")
+
+# ------------------------------------------------------------------------------
+# 67. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

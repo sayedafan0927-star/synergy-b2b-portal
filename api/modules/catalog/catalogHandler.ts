@@ -26,6 +26,7 @@ function normalizeImageUrl(url: any): string {
  */
 export function compactCatalogPayload(data: any): any {
   if (!data || typeof data !== 'object') return data;
+  if (data.is_compacted === true && Array.isArray(data.products)) return data;
   const rawList = Array.isArray(data.products) ? data.products : (Array.isArray(data.items) ? data.items : null);
   if (!rawList) return data;
 

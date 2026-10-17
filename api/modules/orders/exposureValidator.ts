@@ -14,6 +14,7 @@ export async function validateClientCreditExposure(
   callerAuth: any,
   finalTotalAmount: number,
   supabase: SupabaseClient,
+  contractId?: string | null,
 ): Promise<ExposureCheckResult> {
   if (callerAuth.role !== 'client') {
     return { blocked: false };
@@ -22,8 +23,9 @@ export async function validateClientCreditExposure(
   try {
     const { data: userProfile } = await supabase
       .from('profiles')
-      .select('credit_limit_usd, is_blocked_for_orders, overdue_days, impersonation_enabled, status')
+      .select('credit_limit_usd, debt_usd, is_blocked_for_orders, overdue_days, impersonation_enabled, status')
       .eq('partner_id', callerAuth.partnerId)
+      .limit(1)
       .maybeSingle();
 
     if (userProfile?.impersonation_enabled === false || userProfile?.status === 'inactive') {
@@ -52,7 +54,20 @@ export async function validateClientCreditExposure(
       };
     }
 
-    const clientCreditLimit = Number(userProfile?.credit_limit_usd || 0);
+    let clientCreditLimit = Number(userProfile?.credit_limit_usd || 0);
+    if (contractId) {
+      try {
+        const { data: contractRow } = await supabase
+          .from('contracts')
+          .select('credit_limit_usd, status')
+          .eq('id', contractId)
+          .maybeSingle();
+        if (contractRow && Number(contractRow.credit_limit_usd) > 0) {
+          clientCreditLimit = Number(contractRow.credit_limit_usd);
+        }
+      } catch {}
+    }
+
     let currentDebt = Math.max(0, Number((userProfile as any)?.debt_usd || 0));
     if (!currentDebt && callerAuth.partnerId) {
       const { data: pBal } = await supabase
@@ -65,7 +80,7 @@ export async function validateClientCreditExposure(
       }
     }
 
-    // 4. Подсчет суммы незавершенных заказов («в пути»), не проведенных в 1C
+    // 4. Подсчет суммы незавершенных заказов («в пути»), включая ожидающие согласования (waiting_approval)
     let inFlightOrdersSum = 0;
     const partnerKey = callerAuth.partnerId ? String(callerAuth.partnerId).trim() : null;
     if (partnerKey || callerAuth.userId) {
@@ -73,7 +88,7 @@ export async function validateClientCreditExposure(
         let q = supabase
           .from('orders')
           .select('total_amount')
-          .in('status', ['pending', 'processing_sync', 'confirmed', 'processing'])
+          .in('status', ['pending', 'processing_sync', 'waiting_approval', 'confirmed', 'processing'])
           .is('parent_order_id', null);
 
         if (partnerKey) {
@@ -101,7 +116,12 @@ export async function validateClientCreditExposure(
       };
     }
   } catch (profErr) {
-    logger.warn('[Order] Compliance check notice:', profErr as Error);
+    logger.warn('[Order] Compliance check notice (activating fail-safe approval):', profErr as Error);
+    return {
+      blocked: false,
+      requiresApproval: true,
+      complianceReason: 'Требуется согласование менеджера (резервная проверка кредитного лимита)',
+    };
   }
 
   return { blocked: false };

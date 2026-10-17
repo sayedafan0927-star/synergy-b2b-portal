@@ -76,12 +76,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       callerAuth.fullName ||
       (effectiveRole === 'admin' ? 'Администратор портала' : 'Пользователь портала')
     );
-    // Для клиентов фиксируем partnerId исключительно из подтвержденной сессии
+    // Для клиентов фиксируем partnerId, priceType и b2b_role исключительно из подтвержденной сессии (Anti-Privilege Escalation)
     const partnerId = (!callerAuth.isServer && callerAuth.role === 'client')
       ? (callerAuth.partnerId || null)
       : (profile?.partner_id ? String(profile.partner_id) : (callerAuth.partnerId || null));
     const phone = String(profile?.phone || user?.phone || callerAuth.phone || '');
-    const priceType = String(profile?.price_type || callerAuth.priceType || 'wholesale');
+    const priceType = (!callerAuth.isServer && callerAuth.role === 'client')
+      ? String(callerAuth.priceType || 'wholesale')
+      : String(profile?.price_type || callerAuth.priceType || 'wholesale');
+    const b2bRole = (!callerAuth.isServer && callerAuth.role === 'client')
+      ? (callerAuth.b2bRole || 'director')
+      : (profile?.b2b_role || callerAuth.b2bRole || 'director');
 
     const sessionData = {
       user: {
@@ -92,6 +97,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       profile: {
         id: userId,
         role: effectiveRole,
+        b2b_role: b2bRole,
         partner_id: partnerId,
         full_name: fullName,
         company_name: profile?.company_name || callerAuth.companyName || 'ТОО «Kilem Khan Synergy»',

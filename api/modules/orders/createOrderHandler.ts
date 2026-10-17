@@ -113,7 +113,19 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
   }
 
   // 2. Валидация цен и защита от подделки (Anti-Tamper Pricing Guard)
-  const userPriceType = callerAuth.priceType || 'wholesale';
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const safeContractId = typeof rawPayload.contract_id === 'string' && UUID_REGEX.test(rawPayload.contract_id.trim())
+    ? rawPayload.contract_id.trim()
+    : null;
+  let userPriceType = callerAuth.priceType || 'wholesale';
+  if (safeContractId && callerAuth.role === 'client') {
+    try {
+      const { data: contractData } = await supabase.from('contracts').select('price_type, partner_id, status').eq('id', safeContractId).maybeSingle();
+      if (contractData?.price_type && (!callerAuth.partnerId || String(contractData.partner_id) === String(callerAuth.partnerId))) {
+        userPriceType = String(contractData.price_type);
+      }
+    } catch {}
+  }
   const pricingResult = await validateOrderPricing(rawPayload, userPriceType);
 
   if (!pricingResult.valid) {
@@ -136,7 +148,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
   const finalTotalSqm = Math.round(pricingResult.items.reduce((s, it) => s + (it.area_sqm > 0 ? it.area_sqm * it.quantity : (it.price_per_sqm > 0 ? (it.price / it.price_per_sqm) * it.quantity : 0)), 0) * 100) / 100;
 
   const [exposureCheck, clientRulesResult, dispSettingsResult] = await Promise.all([
-    validateClientCreditExposure(callerAuth, finalTotalAmount, supabase),
+    validateClientCreditExposure(callerAuth, finalTotalAmount, supabase, safeContractId),
     callerAuth.role === 'client'
       ? supabase.from('display_settings').select('hidden_warehouses').eq('target_role', 'client').maybeSingle()
       : Promise.resolve({ data: null, error: null } as any),
@@ -185,7 +197,6 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
 
   const distinctWarehouses = Array.from(new Set(pricingResult.items.map(it => it.warehouse || 'Основной Склад Астана')));
   const isMultiWarehouse = distinctWarehouses.length > 1;
-  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const isManagerOrAdmin = callerAuth.role === 'admin' || callerAuth.role === 'manager_rm' || callerAuth.role === 'manager_lm';
   const rawTargetId = isManagerOrAdmin && rawPayload.user_id ? rawPayload.user_id : (callerAuth.userId || rawPayload.user_id);
   const resolvedUserId = (typeof rawTargetId === 'string' && UUID_REGEX.test(rawTargetId.trim()))
@@ -198,10 +209,6 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
     const whId = resolveWarehouseId(it.warehouse_id, it.warehouse);
     if (itemSku) reservedSkuItems.push({ sku: itemSku, qty: itemQty, whId });
   }
-
-  const safeContractId = typeof rawPayload.contract_id === 'string' && UUID_REGEX.test(rawPayload.contract_id.trim())
-    ? rawPayload.contract_id.trim()
-    : null;
 
   const effectivePartnerId = String(
     (callerAuth.role === 'client' ? callerAuth.partnerId : (rawPayload.partner_id || callerAuth.partnerId)) || ''
@@ -218,6 +225,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
       total_amount: finalTotalAmount,
       total_items: finalTotalItems,
       total_sqm: finalTotalSqm,
+      status: (serverRequiresApproval || Boolean(rawPayload.requires_approval)) ? 'waiting_approval' : 'pending',
       idempotency_key: incomingIdempotencyKey || null,
       currency: rawPayload.currency || 'USD',
       applied_exchange_rate: authoritativeRate,
@@ -251,31 +259,18 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
       }
       if (errMsg.includes('INSUFFICIENT_STOCK')) {
         const stockCheck = await verifyItemsStockAvailability(pricingResult.items, correlationId);
-        if (!stockCheck.allAvailable && stockCheck.conflictingItem) {
-          logger.warn('[Order] Atomic checkout rejected: item is truly depleted in ERP catalog:', {
-            sku: stockCheck.conflictingItem.sku,
-            avail: stockCheck.conflictingItem.available_qty,
-            req: stockCheck.conflictingItem.requested_qty,
-            correlationId,
-          });
+        const hasPreorderLine = pricingResult.items.some(it => it.is_preorder);
+        if (!hasPreorderLine || (!stockCheck.allAvailable && stockCheck.conflictingItem)) {
+          const conflict = stockCheck.conflictingItem || { sku: pricingResult.items[0]?.sku || '', available_qty: 0, requested_qty: pricingResult.items[0]?.quantity || 1 };
+          await releaseIdempotencyLock(incomingIdempotencyKey);
           res.status(409).json({
             success: false,
             code: 'INSUFFICIENT_STOCK',
-            error: `Недостаточно свободного остатка для артикула "${stockCheck.conflictingItem.sku}" (доступно: ${stockCheck.conflictingItem.available_qty}, запрошено: ${stockCheck.conflictingItem.requested_qty}).`,
-            details: {
-              code: 'INSUFFICIENT_STOCK',
-              sku: stockCheck.conflictingItem.sku,
-              available_qty: stockCheck.conflictingItem.available_qty,
-              requested_qty: stockCheck.conflictingItem.requested_qty,
-            },
+            error: `Недостаточно свободного остатка для артикула "${conflict.sku}" (доступно: ${conflict.available_qty}, запрошено: ${conflict.requested_qty}).`,
+            details: { code: 'INSUFFICIENT_STOCK', sku: conflict.sku, available_qty: conflict.available_qty, requested_qty: conflict.requested_qty },
           });
           return;
         }
-
-        logger.warn('[Order] create_order_atomic INSUFFICIENT_STOCK bypassed: ERP catalog has authoritative stock. Proceeding to direct 1C ERP dispatch', {
-          correlationId,
-          skus: pricingResult.items.map(i => i.sku),
-        });
       }
       if (incomingIdempotencyKey && (errMsg.includes('unique') || errMsg.includes('orders_idempotency_key_key') || (atomicErr as any).code === '23505')) {
         const { data: replayOrder } = await supabase.from('orders').select('id, order_number, status, total_amount').eq('idempotency_key', incomingIdempotencyKey).maybeSingle();

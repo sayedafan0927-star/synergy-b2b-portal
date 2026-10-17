@@ -1,6 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 const DEFAULT_ALLOWED_ORIGINS = [
+  'https://synergy-group.kz',
+  'https://www.synergy-group.kz',
   'https://b2b.synergy.kz',
   'https://synergy-b2b-portal.vercel.app',
   'http://localhost:5173',

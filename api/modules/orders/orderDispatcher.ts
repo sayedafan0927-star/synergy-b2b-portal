@@ -31,10 +31,10 @@ export function triggerImmediateOutboxSync(
     }
 
     const rawHost = String(req.headers['host'] || '').trim().toLowerCase();
-    const allowedHosts = new Set(['b2b.synergy.kz', 'synergy-b2b-portal.vercel.app', 'localhost:3000', 'localhost:5173', '127.0.0.1:3000', '127.0.0.1:5173', (process.env.VERCEL_URL || '').toLowerCase().trim()].filter(Boolean));
+    const allowedHosts = new Set(['synergy-group.kz', 'www.synergy-group.kz', 'b2b.synergy.kz', 'synergy-b2b-portal.vercel.app', 'localhost:3000', 'localhost:5173', '127.0.0.1:3000', '127.0.0.1:5173', (process.env.VERCEL_URL || '').toLowerCase().trim()].filter(Boolean));
 
     // Anti-SSRF: Verify host header against whitelist, default to primary production domain or VERCEL_URL
-    const safeHost = allowedHosts.has(rawHost) ? rawHost : (process.env.VERCEL_URL || 'b2b.synergy.kz');
+    const safeHost = allowedHosts.has(rawHost) ? rawHost : (process.env.VERCEL_URL || 'synergy-group.kz');
     const proto = (req.headers['x-forwarded-proto'] as string) || (safeHost.includes('localhost') || safeHost.includes('127.0.0.1') ? 'http' : 'https');
     const workerUrl = `${proto}://${safeHost}/api/outbox/sync`;
     const cronSecret = process.env.CRON_SECRET || process.env.PORTAL_SECRET_KEY || '';
@@ -177,42 +177,47 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
         reason: '1C ERP отклонила заказ по причине нехватки остатка (409 Conflict)',
       });
 
-      // Мгновенная инвалидация кэша остатков и бродкаст во все браузеры дилеров
-      try {
-        const stockUpdates: StockItemUpdate[] = reservedSkuItems.map(it => ({
-          sku: it.sku,
-          free_stock: 0,
-          total_stock: 0,
-        }));
-        await patchCachedCatalogStock(stockUpdates, 'catalog_global', Date.now());
-
-        const channel = supabase.channel('portal_live_updates');
-        await channel.send({
-          type: 'broadcast',
-          event: 'stock_changed',
-          payload: {
-            items: stockUpdates,
-            reason: '409_insufficient_stock_reconciled',
-            timestamp: new Date().toISOString(),
-          },
-        });
-      } catch (patchErr) {
-        logger.warn('[Order] Conflict stock invalidation notice:', patchErr as Error);
-      }
-
       const rawErr = jsonData?.error || '';
       const m1 = rawErr.match(/SKU\s*"?([^"\s]+)"?\s*\(доступно:\s*(\d+),\s*запрошено:\s*(\d+)\)/i);
       const m2 = rawErr.match(/SKU\s*"?([^"\s]+)"?.*?only\s*(\d+)\s*free items,\s*requested\s*(\d+)/i);
       const m3 = rawErr.match(/артикула\s*"?([^"\s]+)"?/i);
-      const parsedSku = jsonData?.details?.sku || (m1 ? m1[1] : m2 ? m2[1] : m3 ? m3[1] : reservedSkuItems[0]?.sku);
+      const parsedSku = jsonData?.details?.sku || (m1 ? m1[1] : m2 ? m2[1] : m3 ? m3[1] : (reservedSkuItems.length === 1 ? reservedSkuItems[0]?.sku : undefined));
       const availQty = typeof jsonData?.details?.available_qty === 'number' ? jsonData.details.available_qty : m1 ? parseInt(m1[2], 10) : m2 ? parseInt(m2[2], 10) : 0;
       const reqQty = typeof jsonData?.details?.requested_qty === 'number' ? jsonData.details.requested_qty : m1 ? parseInt(m1[3], 10) : m2 ? parseInt(m2[3], 10) : undefined;
+
+      // Мгновенная актуализация кэша остатков только для конфликтного SKU (без обнуления остальных позиций корзины)
+      try {
+        const targetConflictItems = parsedSku
+          ? reservedSkuItems.filter(it => it.sku.toUpperCase() === String(parsedSku).toUpperCase())
+          : (reservedSkuItems.length === 1 ? reservedSkuItems : []);
+        const stockUpdates: StockItemUpdate[] = targetConflictItems.map(it => ({
+          sku: it.sku,
+          free_stock: Math.max(0, availQty),
+          total_stock: Math.max(0, availQty),
+        }));
+        if (stockUpdates.length > 0) {
+          await patchCachedCatalogStock(stockUpdates, 'catalog_global', Date.now());
+
+          const channel = supabase.channel('portal_live_updates');
+          await channel.send({
+            type: 'broadcast',
+            event: 'stock_changed',
+            payload: {
+              items: stockUpdates,
+              reason: '409_insufficient_stock_reconciled',
+              timestamp: new Date().toISOString(),
+            },
+          });
+        }
+      } catch (patchErr) {
+        logger.warn('[Order] Conflict stock invalidation notice:', patchErr as Error);
+      }
 
       res.status(409).json({
         success: false,
         code: 'INSUFFICIENT_STOCK',
         error: rawErr || '1C:ERP отклонила заказ: недостаточно товара на складе.',
-        details: { code: 'INSUFFICIENT_STOCK', sku: parsedSku, available_qty: availQty, requested_qty: reqQty, ...(jsonData?.details || {}) },
+        details: { code: 'INSUFFICIENT_STOCK', sku: parsedSku || reservedSkuItems[0]?.sku, available_qty: availQty, requested_qty: reqQty, ...(jsonData?.details || {}) },
       });
       return;
     }

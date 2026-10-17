@@ -36,15 +36,36 @@ export async function handlePaymentReceived(
   let calculatedBalance = 0;
 
   const rawDebt = payload.new_total_debt_usd ?? payload.total_debt_usd ?? payload.debt_usd;
+  const hasExplicitBalance = payload.new_balance_usd !== undefined || payload.balance_usd !== undefined;
+  let hasAuthoritativeDebt = false;
+
   if (rawDebt !== undefined && rawDebt !== null) {
     calculatedDebt = Math.max(0, Number(rawDebt));
-    calculatedBalance = (payload.new_balance_usd !== undefined || payload.balance_usd !== undefined)
+    calculatedBalance = hasExplicitBalance
       ? Number(payload.new_balance_usd ?? payload.balance_usd)
       : -calculatedDebt;
-  } else if (payload.new_balance_usd !== undefined || payload.balance_usd !== undefined) {
+    hasAuthoritativeDebt = true;
+  } else if (hasExplicitBalance) {
     const rawBal = Number(payload.new_balance_usd ?? payload.balance_usd ?? 0);
     calculatedBalance = rawBal;
     calculatedDebt = rawBal < 0 ? Math.abs(rawBal) : 0;
+    hasAuthoritativeDebt = true;
+  } else if (client_id && supabaseServer && amount > 0) {
+    // Частичная оплата без явного поля остатка долга: вычитаем сумму платежа из текущего долга в БД
+    try {
+      const { data: existingProf } = await supabaseServer
+        .from('profiles')
+        .select('debt_usd')
+        .eq('partner_id', String(client_id))
+        .limit(1)
+        .maybeSingle();
+      const prevDebt = Math.max(0, Number(existingProf?.debt_usd || 0));
+      if (prevDebt > 0) {
+        calculatedDebt = Math.max(0, Math.round((prevDebt - amount) * 100) / 100);
+        calculatedBalance = -calculatedDebt;
+        hasAuthoritativeDebt = true;
+      }
+    } catch {}
   }
 
   const balance_usd = calculatedBalance;
@@ -68,20 +89,27 @@ export async function handlePaymentReceived(
   // Сохраняем обновленный баланс в базу данных Supabase
   if (client_id && supabaseServer) {
     try {
-      await supabaseServer
-        .from('partner_balances')
-        .upsert({
-          partner_id: String(client_id),
-          balance: calculatedBalance,
-          currency: currency || 'USD',
-          last_synced_at: new Date().toISOString(),
-        }, { onConflict: 'partner_id' });
+      if (hasAuthoritativeDebt) {
+        await supabaseServer
+          .from('partner_balances')
+          .upsert({
+            partner_id: String(client_id),
+            balance: calculatedBalance,
+            currency: currency || 'USD',
+            last_synced_at: new Date().toISOString(),
+          }, { onConflict: 'partner_id' });
+      }
 
       const profileUpdate: Record<string, any> = {
-        debt_usd: calculatedDebt,
         updated_at: new Date().toISOString(),
       };
-      const shouldUnblock = payload.is_blocked_for_shipment === false || payload.unblock_shipment === true || (calculatedDebt === 0 && payload.is_blocked_for_shipment !== true);
+      if (hasAuthoritativeDebt) {
+        profileUpdate.debt_usd = calculatedDebt;
+      }
+      const shouldUnblock =
+        payload.is_blocked_for_shipment === false ||
+        payload.unblock_shipment === true ||
+        (hasAuthoritativeDebt && calculatedDebt === 0 && payload.is_blocked_for_shipment !== true);
       if (payload.is_blocked_for_shipment !== undefined || shouldUnblock) {
         profileUpdate.is_blocked_for_shipment = !shouldUnblock;
       }

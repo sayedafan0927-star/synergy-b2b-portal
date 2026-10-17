@@ -184,14 +184,17 @@ export async function authenticateRequest(
           .from('profiles')
           .select('id, role, b2b_role, partner_id, erp_id, full_name, company_name, phone, price_type, is_blocked_for_shipment')
           .eq('partner_id', fallbackPartnerId)
+          .limit(1)
           .maybeSingle();
         profile = pByPartner;
       }
     }
 
-    // При использовании HMAC-сессии допускаем валидированные данные профиля
+    // При использовании HMAC-сессии допускаем валидированные данные профиля (не позволяя accountant/buyer повысить права до director)
     const effectiveRole = (profile?.role || fallbackRole || 'client') as any;
-    const effectiveB2bRole = (profile?.b2b_role || hmacProfileB2bRole || 'director') as 'director' | 'buyer' | 'accountant';
+    const effectiveB2bRole = ((hmacProfileB2bRole === 'accountant' || hmacProfileB2bRole === 'buyer')
+      ? hmacProfileB2bRole
+      : (profile?.b2b_role || hmacProfileB2bRole || 'director')) as 'director' | 'buyer' | 'accountant';
     const effectivePartnerId = profile?.partner_id || fallbackPartnerId;
     const effectiveErpId = profile?.erp_id || (effectivePartnerId ? Number(effectivePartnerId) || null : null);
     const effectivePriceType = profile?.price_type || fallbackPriceType || 'wholesale';

@@ -125,9 +125,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
-      // Разрешенные статусы для согласования: только pending или processing
+      // Разрешенные статусы для согласования: только pending или processing (а также waiting_approval)
       const allowedStatuses = ['pending', 'processing'];
-      if (!allowedStatuses.includes(existingOrder.status) && !existingOrder.is_erp_direct && !existingOrder.is_test) {
+      const isWaitingApproval = existingOrder.status === 'waiting_approval';
+      if (!allowedStatuses.includes(existingOrder.status) && !isWaitingApproval && !existingOrder.is_erp_direct && !existingOrder.is_test) {
         const currentStatus = existingOrder.status;
         const msg = currentStatus === 'confirmed'
           ? `Заказ №${existingOrder.order_number || existingOrder.id} уже был ранее одобрен и передан на комплектацию.`
@@ -169,9 +170,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // Определение нового статуса:
-      // Если заказ еще в буфере Outbox (pending) и одобрен, статус 'pending' сохраняется,
+      // Если заказ еще в буфере Outbox (pending / waiting_approval) и одобрен, статус 'pending' сохраняется,
       // добавляется отметка одобрения в notes и немедленно активируется воркер Outbox.
-      const isBufferedOutbox = existingOrder.status === 'pending' && !existingOrder.is_erp_direct;
+      const isBufferedOutbox = (existingOrder.status === 'pending' || isWaitingApproval) && !existingOrder.is_erp_direct;
       const newStatus = !isApprove
         ? 'cancelled'
         : (isBufferedOutbox ? 'pending' : 'confirmed');
