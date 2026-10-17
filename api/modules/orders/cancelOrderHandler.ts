@@ -29,7 +29,7 @@ export async function handleCancelOrder(options: CancelOrderOptions): Promise<vo
   const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const isUuid = UUID_REGEX.test(rawOrderId);
 
-  let query = supabase.from('orders').select('id, order_number, user_id, placed_by_id, status, total_amount, reservations_released, parent_order_id');
+  let query = supabase.from('orders').select('id, order_number, user_id, placed_by_id, partner_id, status, total_amount, reservations_released, parent_order_id');
   if (isUuid) {
     query = query.eq('id', rawOrderId);
   } else {
@@ -45,12 +45,22 @@ export async function handleCancelOrder(options: CancelOrderOptions): Promise<vo
   }
 
   // 2. Проверка прав доступа (Anti-IDOR & Anti-BOLA)
+  if (callerAuth.role === 'client' && callerAuth.b2bRole === 'accountant') {
+    res.status(403).json({
+      success: false,
+      code: 'ACCOUNTANT_CANNOT_CANCEL',
+      error: 'Учетная запись бухгалтера не имеет прав на отмену складских заказов.',
+    });
+    return;
+  }
+
   const isGlobalAdmin = callerAuth.isServer || callerAuth.role === 'admin';
   const isManager = callerAuth.role === 'manager_rm' || callerAuth.role === 'manager_lm';
 
   if (!isGlobalAdmin && !isManager) {
     const isOwner = (order.user_id && String(order.user_id) === String(callerAuth.userId)) ||
-                    (order.placed_by_id && String(order.placed_by_id) === String(callerAuth.userId));
+                    (order.placed_by_id && String(order.placed_by_id) === String(callerAuth.userId)) ||
+                    (order.partner_id && callerAuth.partnerId && String(order.partner_id) === String(callerAuth.partnerId));
     if (!isOwner) {
       logger.warn('[CancelOrder] Unauthorized cancellation attempt', {
         orderId: order.id,
@@ -134,7 +144,7 @@ export async function handleCancelOrder(options: CancelOrderOptions): Promise<vo
     logger.warn('[CancelOrder] Notice notifying 1C ERP:', netErr as Error);
   }
 
-  const isSafeLocalCancel = order.status === 'pending' || erpNotified;
+  const isSafeLocalCancel = order.status === 'pending' || order.status === 'waiting_approval' || erpNotified;
   const nowIso = new Date().toISOString();
 
   if (isSafeLocalCancel) {

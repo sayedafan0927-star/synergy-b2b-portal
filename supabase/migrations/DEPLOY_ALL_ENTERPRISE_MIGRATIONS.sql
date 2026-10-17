@@ -144,7 +144,7 @@ CREATE INDEX IF NOT EXISTS idx_orders_outbox_retry ON orders(status, next_retry_
 
 CREATE INDEX IF NOT EXISTS idx_orders_hold_expiry 
   ON orders (status, hold_expires_at) 
-  WHERE status IN ('pending', 'draft');
+  WHERE status IN ('pending', 'waiting_approval', 'draft');
 
 
 -- ==============================================================================
@@ -166,7 +166,7 @@ BEGIN
   WITH expired_candidates AS (
     SELECT id
     FROM orders
-    WHERE status IN ('pending', 'failed_dlq')
+    WHERE status IN ('pending', 'waiting_approval', 'failed_dlq')
       AND (
         (hold_expires_at IS NOT NULL AND hold_expires_at <= now())
         OR (hold_expires_at IS NULL AND created_at <= now() - INTERVAL '24 hours')

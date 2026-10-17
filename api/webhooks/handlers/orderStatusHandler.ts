@@ -45,11 +45,16 @@ export async function dispatchWhatsAppNotification(params: {
 }
 
 const STATUS_HIERARCHY: Record<string, number> = {
+  waiting_approval: 1,
   pending: 1,
+  processing_sync: 1,
   confirmed: 2,
+  partially_confirmed: 2,
   processing: 3,
+  picking: 3,
   shipped: 4,
   delivered: 5,
+  completed: 5,
 };
 
 export function canTransitionOrderStatus(currentStatus: string, nextStatus: string): boolean {
@@ -57,7 +62,7 @@ export function canTransitionOrderStatus(currentStatus: string, nextStatus: stri
   const normNext = (nextStatus || '').toLowerCase();
 
   if (normCurrent === normNext) return true;
-  if (normCurrent === 'delivered' || normCurrent === 'cancelled') return false;
+  if (normCurrent === 'delivered' || normCurrent === 'completed' || normCurrent === 'cancelled') return false;
 
   if (normNext === 'cancelled') {
     return normCurrent !== 'shipped' && normCurrent !== 'delivered';

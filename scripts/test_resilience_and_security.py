@@ -2183,7 +2183,44 @@ with open(os.path.join(ROOT_DIR, "supabase", "migrations", "DEPLOY_ALL_ENTERPRIS
 test_assert("pg_advisory_xact_lock(hashtext(v_partner_id))" in sql_s42, "create_order_atomic acquires pg_advisory_xact_lock(hashtext(v_partner_id)) serializing concurrent multi-tab checkouts")
 
 # ------------------------------------------------------------------------------
-# 67. Summary Report
+# 67. Stage 43: Pass 2 Deep Architectural & Counterparty Model Audit Remediation
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 67. STAGE 43: PASS 2 DEEP ARCHITECTURAL & COUNTERPARTY AUDIT REMEDIATION ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "src", "contexts", "CartContext.tsx"), "r", encoding="utf-8") as fp:
+    cart_s43 = fp.read()
+test_assert("impersonatedProfile.partner_id || impersonatedProfile.id" in cart_s43, "CartContext.tsx prioritizes partner_id over profile.id during manager impersonation so dealer cart is shared consistently")
+
+with open(os.path.join(ROOT_DIR, "src", "lib", "erp", "counterpartiesApi.ts"), "r", encoding="utf-8") as fp:
+    cp_s43 = fp.read()
+test_assert("b5ea9d36ead0a9326ac1bc5f4eccfe9ca0c2beab0730e1641eefa9eadefc3737" not in cp_s43 and "if (!ssoToken)" in cp_s43, "counterpartiesApi.ts removes client-side MASTER_HASH bypass and requires server ssoToken before establishing session")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "auth", "loginHandler.ts"), "r", encoding="utf-8") as fp:
+    lh_s43 = fp.read()
+test_assert("contracts[0]" in lh_s43 and "creditLimitUsd" in lh_s43, "loginHandler.ts resolves price_type and credit_limit_usd from counterparty_contracts (contracts[0])")
+
+with open(os.path.join(ROOT_DIR, "api", "webhooks", "handlers", "clientLifecycleHandler.ts"), "r", encoding="utf-8") as fp:
+    clh_s43 = fp.read()
+test_assert("release_order_reservations" in clh_s43 and "onConflict: 'partner_id'" in clh_s43 and "contracts[0]" in clh_s43, "clientLifecycleHandler.ts releases stock holds on client_deactivated and upserts new counterparties with contracts[0] fields on client_synced")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "financial", "debtHandler.ts"), "r", encoding="utf-8") as fp:
+    dh_s43 = fp.read()
+test_assert("canonicalDebt" in dh_s43 and "profileRow?.debt_usd" in dh_s43, "debtHandler.ts cross-checks profiles.debt_usd against partner_balances cache preventing false 0 debt during 5-min TTL")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "cancelOrderHandler.ts"), "r", encoding="utf-8") as fp:
+    coh_s43 = fp.read()
+test_assert("ACCOUNTANT_CANNOT_CANCEL" in coh_s43 and "order.status === 'waiting_approval'" in coh_s43 and "String(order.partner_id) === String(callerAuth.partnerId)" in coh_s43, "cancelOrderHandler.ts authorizes by partner_id, blocks accountant from cancelling, and allows immediate local cancel of waiting_approval orders")
+
+with open(os.path.join(ROOT_DIR, "api", "cron", "expire-holds.ts"), "r", encoding="utf-8") as fp:
+    eh_s43 = fp.read()
+test_assert("'waiting_approval'" in eh_s43, "expire-holds.ts includes waiting_approval orders in TTL hold expiration")
+
+with open(os.path.join(ROOT_DIR, "api", "webhooks", "handlers", "orderStatusHandler.ts"), "r", encoding="utf-8") as fp:
+    osh_s43 = fp.read()
+test_assert("waiting_approval: 1" in osh_s43 and "partially_confirmed: 2" in osh_s43 and "completed: 5" in osh_s43, "orderStatusHandler.ts defines complete STATUS_HIERARCHY including waiting_approval, partially_confirmed, picking, and completed")
+
+# ------------------------------------------------------------------------------
+# 68. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

@@ -240,31 +240,15 @@ export async function authenticateClientViaErp(login: string, password: string):
       };
     }
 
-    // Если бэкенд ERP вернул ошибку логина/пароля
+    // Если бэкенд ERP вернул явную ошибку логина/пароля — не пытаемся обходить её на клиенте
     if (data && data.error && !data.error.includes('Неизвестное действие')) {
-      const isPwMismatch = data.error.toLowerCase().includes('неверный пароль') || data.code === 'AUTH_FAILED';
-      if (!isPwMismatch) return { success: false, code: data.code || 'AUTH_FAILED', error: data.error };
-
-      let inputHash = '';
-      try {
-        if (typeof crypto !== 'undefined' && crypto.subtle) {
-          const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(password.trim()));
-          inputHash = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
-        }
-      } catch {}
-
-      const MASTER_HASH = 'b5ea9d36ead0a9326ac1bc5f4eccfe9ca0c2beab0730e1641eefa9eadefc3737';
-      const storedLocalHash = typeof localStorage !== 'undefined' ? localStorage.getItem(`synergy:client_pw_hash_${cleanPhone}`) : null;
-      const isOwnerAccount = cleanPhone.endsWith('7086984543') || cleanLogin.toLowerCase() === 'afan';
-      const isHashValid = Boolean(inputHash && ((isOwnerAccount && inputHash === MASTER_HASH) || (storedLocalHash && inputHash === storedLocalHash)));
-
-      if (!isHashValid) return { success: false, code: 'AUTH_FAILED', error: data.error || 'Неверный пароль.' };
+      return { success: false, code: data.code || 'AUTH_FAILED', error: data.error };
     }
   } catch (err: any) {
     console.warn('[authenticateClientViaErp] Network error calling login:', err);
   }
 
-  // 2. Fallback: поиск клиента среди выгруженных активных контрагентов (Pull Sync)
+  // 2. Fallback: поиск клиента среди выгруженных активных контрагентов (только при наличии серверного SSO-токена)
   try {
     const cpData = await fetchCounterpartiesFromErp({ phone: cleanLogin, limit: 10 });
     const list = cpData?.counterparties || [];
@@ -297,6 +281,14 @@ export async function authenticateClientViaErp(login: string, password: string):
         }
       } catch (ssoErr) {
         console.warn('[authenticateClientViaErp] Error obtaining SSO link token:', ssoErr);
+      }
+
+      if (!ssoToken) {
+        return {
+          success: false,
+          code: 'AUTH_FAILED',
+          error: 'Не удалось подтвердить учетные данные в ERP. Проверьте телефон и пароль.',
+        };
       }
 
       return {

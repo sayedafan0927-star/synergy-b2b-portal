@@ -161,9 +161,11 @@ export async function handleLoginFallback(
     ? dbProfile.id
     : crypto.randomUUID();
   const fName = String(matchedClient.name || 'Оптовый клиент');
-  const priceType = String(matchedClient.price_type || 'wholesale');
-  const debtUsd = typeof matchedClient.financials?.debt_usd === 'number' ? matchedClient.financials.debt_usd : (matchedClient.debt_usd || 0);
-  const balanceUsd = typeof matchedClient.financials?.balance_usd === 'number' ? matchedClient.financials.balance_usd : (matchedClient.balance_usd || 0);
+  const firstContract = Array.isArray(matchedClient.contracts) && matchedClient.contracts.length > 0 ? matchedClient.contracts[0] : null;
+  const priceType = String(matchedClient.price_type || firstContract?.price_type || 'wholesale');
+  const debtUsd = typeof matchedClient.financials?.debt_usd === 'number' ? matchedClient.financials.debt_usd : Number(matchedClient.debt_usd || 0);
+  const balanceUsd = typeof matchedClient.financials?.balance_usd === 'number' ? matchedClient.financials.balance_usd : Number(matchedClient.balance_usd || 0);
+  const creditLimitUsd = Number(matchedClient.credit_limit_usd ?? matchedClient.financials?.credit_limit_usd ?? firstContract?.credit_limit_usd ?? firstContract?.credit_limit ?? 0);
 
   const sessionData = {
     user: {
@@ -186,7 +188,7 @@ export async function handleLoginFallback(
 
   const sessionToken = generateSessionToken(sessionData);
 
-  // Синхронизация профиля в базе
+  // Синхронизация профиля контрагента (включая лимит по договору и долг) в базе
   try {
     await supabase.from('profiles').upsert({
       id: resolvedProfileId,
@@ -196,6 +198,8 @@ export async function handleLoginFallback(
       company_name: fName,
       phone: matchedClient.phone || inputLogin,
       price_type: priceType,
+      credit_limit_usd: creditLimitUsd,
+      debt_usd: Math.max(0, debtUsd),
       role: 'client',
       impersonation_enabled: true,
       updated_at: new Date().toISOString(),

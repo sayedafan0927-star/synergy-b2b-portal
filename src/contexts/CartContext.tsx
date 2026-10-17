@@ -42,9 +42,9 @@ function itemKey(i: Pick<CartItem, 'productId' | 'size' | 'warehouse'>) {
 export function CartProvider({ children }: { children: ReactNode }) {
   const { user, profile, isImpersonating, impersonatedProfile } = useAuth();
 
-  // Изоляция корзины по конкретному дилеру (включая режим имперсонации)
+  // Изоляция корзины по конкретному контрагенту partner_id (включая режим имперсонации)
   const effectiveUserId = isImpersonating && impersonatedProfile
-    ? String(impersonatedProfile.id || impersonatedProfile.partner_id)
+    ? String(impersonatedProfile.partner_id || impersonatedProfile.id)
     : String(profile?.partner_id || profile?.id || user?.id || 'guest');
 
   const storageKey = `synergy-cart:${effectiveUserId}`;

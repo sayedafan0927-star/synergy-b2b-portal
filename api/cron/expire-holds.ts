@@ -58,7 +58,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const { data: pendingOrders, error: fetchErr } = await supabase
         .from('orders')
         .select('id, order_number, user_id, total_amount, created_at, hold_expires_at')
-        .in('status', ['pending', 'failed_dlq'])
+        .in('status', ['pending', 'waiting_approval', 'failed_dlq'])
         .is('parent_order_id', null)
         .or(`hold_expires_at.lte.${new Date().toISOString()},and(hold_expires_at.is.null,created_at.lte.${cutoffTime})`)
         .limit(50);

@@ -60,15 +60,16 @@ export async function handleCachedClientDebt(
 
   if (pId && !isRefresh) {
     try {
-      const { data: cachedBal } = await supabase
-        .from('partner_balances')
-        .select('*')
-        .eq('partner_id', pId)
-        .maybeSingle();
+      const [{ data: cachedBal }, { data: profileRow }] = await Promise.all([
+        supabase.from('partner_balances').select('*').eq('partner_id', pId).maybeSingle(),
+        supabase.from('profiles').select('debt_usd, credit_limit_usd, overdue_days, is_blocked_for_shipment').eq('partner_id', pId).limit(1).maybeSingle(),
+      ]);
 
       if (cachedBal) {
         const syncAgeMs = cachedBal.last_synced_at ? Date.now() - new Date(cachedBal.last_synced_at).getTime() : Infinity;
         const isFresh = syncAgeMs < 5 * 60 * 1000;
+        const rawBal = Number(cachedBal.balance || 0);
+        const canonicalDebt = Math.max(Number(profileRow?.debt_usd || 0), Math.max(0, -rawBal));
         res.setHeader('X-Cache', isFresh ? 'HIT' : 'STALE');
         res.setHeader('X-Cache-Age-Ms', String(syncAgeMs));
         res.status(200).json({
@@ -76,13 +77,15 @@ export async function handleCachedClientDebt(
           found: true,
           client: {
             partner_id: pId,
-            is_overdue: Boolean(cachedBal.is_overdue),
+            credit_limit_usd: Number(profileRow?.credit_limit_usd || 0),
+            is_blocked_for_shipment: Boolean(profileRow?.is_blocked_for_shipment),
+            is_overdue: Boolean(cachedBal.is_overdue || Number(profileRow?.overdue_days || 0) > 0),
           },
           financials: {
-            balance_usd: Number(cachedBal.balance || 0),
-            total_debt_usd: Math.max(0, -Number(cachedBal.balance || 0)),
-            is_overdue: Boolean(cachedBal.is_overdue),
-            overdue_days: Number(cachedBal.overdue_days || 0),
+            balance_usd: rawBal,
+            total_debt_usd: canonicalDebt,
+            is_overdue: Boolean(cachedBal.is_overdue || Number(profileRow?.overdue_days || 0) > 0),
+            overdue_days: Math.max(Number(cachedBal.overdue_days || 0), Number(profileRow?.overdue_days || 0)),
           },
           source: isFresh ? 'cache_partner_balances' : 'stale_partner_balances',
         });
@@ -104,26 +107,29 @@ export async function handleDebtFallbackOnFailure(
   const pId = String(req.query.partner_id || req.query.counterparty_id || req.query.client_id || (req.body && (req.body.partner_id || req.body.counterparty_id || req.body.client_id)) || '').trim();
   if (pId) {
     try {
-      const { data: cachedBal } = await supabase
-        .from('partner_balances')
-        .select('*')
-        .eq('partner_id', pId)
-        .maybeSingle();
+      const [{ data: cachedBal }, { data: profileRow }] = await Promise.all([
+        supabase.from('partner_balances').select('*').eq('partner_id', pId).maybeSingle(),
+        supabase.from('profiles').select('debt_usd, credit_limit_usd, overdue_days, is_blocked_for_shipment').eq('partner_id', pId).limit(1).maybeSingle(),
+      ]);
 
       if (cachedBal) {
+        const rawBal = Number(cachedBal.balance || 0);
+        const canonicalDebt = Math.max(Number(profileRow?.debt_usd || 0), Math.max(0, -rawBal));
         res.setHeader('X-Cache', 'STALE_FALLBACK');
         res.status(200).json({
           success: true,
           found: true,
           client: {
             partner_id: pId,
-            is_overdue: Boolean(cachedBal.is_overdue),
+            credit_limit_usd: Number(profileRow?.credit_limit_usd || 0),
+            is_blocked_for_shipment: Boolean(profileRow?.is_blocked_for_shipment),
+            is_overdue: Boolean(cachedBal.is_overdue || Number(profileRow?.overdue_days || 0) > 0),
           },
           financials: {
-            balance_usd: Number(cachedBal.balance || 0),
-            total_debt_usd: Math.max(0, -Number(cachedBal.balance || 0)),
-            is_overdue: Boolean(cachedBal.is_overdue),
-            overdue_days: Number(cachedBal.overdue_days || 0),
+            balance_usd: rawBal,
+            total_debt_usd: canonicalDebt,
+            is_overdue: Boolean(cachedBal.is_overdue || Number(profileRow?.overdue_days || 0) > 0),
+            overdue_days: Math.max(Number(cachedBal.overdue_days || 0), Number(profileRow?.overdue_days || 0)),
           },
           source: 'stale_db_fallback',
         });
