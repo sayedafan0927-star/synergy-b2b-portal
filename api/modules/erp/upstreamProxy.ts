@@ -50,7 +50,7 @@ export function normalizeErpDesigns(jsonData: any) {
   }
 }
 
-export function handleErpLoginToken(jsonData: any, supabase: SupabaseClient | null) {
+export async function handleErpLoginToken(jsonData: any, supabase: SupabaseClient | null): Promise<boolean> {
   try {
     const SECRET_KEY = process.env.PORTAL_SECRET_KEY || '';
     if (SECRET_KEY) {
@@ -60,8 +60,47 @@ export function handleErpLoginToken(jsonData: any, supabase: SupabaseClient | nu
       const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       const fName = String(jsonData.name || c.name || 'Оптовый клиент');
       const phone = String(jsonData.phone || c.phone || '');
-      const priceType = String(c.price_type || 'wholesale');
-      const resolvedUserId = (typeof c.uuid === 'string' && UUID_REGEX.test(c.uuid)) ? c.uuid : crypto.randomUUID();
+
+      let dbProfile: any = null;
+      if (pId && supabase) {
+        try {
+          const { data: pRow } = await supabase
+            .from('profiles')
+            .select('id, price_type, credit_limit_usd, is_blocked_for_shipment, impersonation_enabled, showroom_warehouse_id')
+            .eq('partner_id', pId)
+            .maybeSingle();
+          dbProfile = pRow;
+        } catch {}
+      }
+
+      if (
+        c.is_active === 0 ||
+        c.portal_access_enabled === false ||
+        c.status === 'inactive' ||
+        dbProfile?.is_blocked_for_shipment === true ||
+        dbProfile?.impersonation_enabled === false
+      ) {
+        jsonData.success = false;
+        jsonData.code = 'CLIENT_DEACTIVATED';
+        jsonData.error = 'Доступ к оптовому порталу заблокирован: учетная запись контрагента деактивирована.';
+        delete jsonData.token;
+        delete jsonData.portal_session_token;
+        return false;
+      }
+
+      const firstContract = Array.isArray(c.contracts) && c.contracts.length > 0 ? c.contracts[0] : null;
+      const priceType = String(c.price_type || firstContract?.price_type || dbProfile?.price_type || 'wholesale');
+      const creditLimitUsd = Number(
+        c.credit_limit_usd ??
+        c.financials?.credit_limit_usd ??
+        firstContract?.credit_limit_usd ??
+        firstContract?.credit_limit ??
+        dbProfile?.credit_limit_usd ??
+        0
+      );
+      const resolvedUserId = (dbProfile?.id && UUID_REGEX.test(dbProfile.id))
+        ? dbProfile.id
+        : ((typeof c.uuid === 'string' && UUID_REGEX.test(c.uuid)) ? c.uuid : crypto.randomUUID());
 
       const sessionData = {
         user: {
@@ -77,7 +116,7 @@ export function handleErpLoginToken(jsonData: any, supabase: SupabaseClient | nu
           phone,
           company_name: fName,
           price_type: priceType,
-          showroom_warehouse_id: c.showroom_warehouse_id ?? null,
+          showroom_warehouse_id: c.showroom_warehouse_id ?? dbProfile?.showroom_warehouse_id ?? null,
         },
         timestamp: Date.now(),
       };
@@ -102,15 +141,17 @@ export function handleErpLoginToken(jsonData: any, supabase: SupabaseClient | nu
               company_name: fName,
               phone,
               price_type: priceType,
+              credit_limit_usd: creditLimitUsd,
               role: 'client',
-              impersonation_enabled: true,
               updated_at: new Date().toISOString(),
             }, { onConflict: 'partner_id' })
         ).catch((e: any) => console.warn('[API Proxy ERP] Profile upsert notice:', e));
       }
     }
+    return true;
   } catch (tokenErr) {
     console.warn('[API Proxy ERP] Error generating login session token:', tokenErr);
+    return true;
   }
 }
 

@@ -340,8 +340,8 @@ export async function handleGenericErpProxy(
       }
 
       if (action === 'supplier_inbound_shipments' && erpResponse.ok && jsonData?.success) {
+        lastKnownInboundShipments = JSON.parse(JSON.stringify(jsonData));
         filterSupplierShipments(jsonData, req.query.supplier_id);
-        lastKnownInboundShipments = jsonData;
       }
 
       if (action === 'supplier_discrepancy_act' && erpResponse.ok && jsonData?.success) {
@@ -353,7 +353,11 @@ export async function handleGenericErpProxy(
 
       if (action === 'login') {
         if (erpResponse.ok && jsonData?.success) {
-          handleErpLoginToken(jsonData, supabase);
+          const allowed = await handleErpLoginToken(jsonData, supabase);
+          if (allowed === false) {
+            res.status(403).json(jsonData);
+            return;
+          }
         } else {
           const handled = await handleErpLoginFallback(req, res, TARGET_ERP_URL, SERVER_ERP_KEY, correlationId, supabase);
           if (handled) return;
@@ -393,10 +397,12 @@ export async function handleGenericErpProxy(
     }
 
     if (action === 'supplier_inbound_shipments' && lastKnownInboundShipments) {
+      const fallbackClone = JSON.parse(JSON.stringify(lastKnownInboundShipments));
+      filterSupplierShipments(fallbackClone, req.query.supplier_id);
       res.status(200);
       res.setHeader('Content-Type', 'application/json');
       res.setHeader('X-Cache', 'STALE_FALLBACK');
-      res.json(lastKnownInboundShipments);
+      res.json(fallbackClone);
       return;
     }
 

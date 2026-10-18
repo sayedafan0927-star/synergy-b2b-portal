@@ -65,21 +65,60 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    let validUserId = (typeof user?.id === 'string' && UUID_REGEX.test(user.id)) ? user.id : null;
+    let existingProfile: any = null;
+    if (supabaseAdmin) {
+      try {
+        const { data: pRow } = await supabaseAdmin
+          .from('profiles')
+          .select('id, price_type, manager_id, is_blocked_for_shipment, impersonation_enabled, showroom_warehouse_id')
+          .eq('partner_id', partnerId)
+          .maybeSingle();
+        existingProfile = pRow;
+      } catch {}
+    }
+
+    if (
+      existingProfile?.is_blocked_for_shipment === true ||
+      existingProfile?.impersonation_enabled === false ||
+      client.is_active === 0 ||
+      client.status === 'inactive'
+    ) {
+      return res.status(403).json({
+        success: false,
+        code: 'CLIENT_DEACTIVATED',
+        error: 'Доступ запрещен: учетная запись контрагента деактивирована или заблокирована.',
+      });
+    }
+
+    if (
+      !authCtx.isServer &&
+      (authCtx.role === 'manager_rm' || authCtx.role === 'manager_lm') &&
+      existingProfile?.manager_id &&
+      authCtx.userId &&
+      String(existingProfile.manager_id) !== String(authCtx.userId)
+    ) {
+      return res.status(403).json({
+        success: false,
+        code: 'FORBIDDEN_COUNTERPARTY_SCOPE',
+        error: 'Forbidden: Контрагент закреплен за другим менеджером ERP (Anti-BOLA).',
+      });
+    }
+
+    let validUserId = (existingProfile?.id && UUID_REGEX.test(existingProfile.id)) ? existingProfile.id : null;
+    if (!validUserId && typeof user?.id === 'string' && UUID_REGEX.test(user.id)) {
+      validUserId = user.id;
+    }
     if (!validUserId && typeof client.id === 'string' && UUID_REGEX.test(client.id)) {
       validUserId = client.id;
-    }
-    if (!validUserId && supabaseAdmin) {
-      try {
-        const { data: pRow } = await supabaseAdmin.from('profiles').select('id').eq('partner_id', partnerId).maybeSingle();
-        if (pRow?.id && UUID_REGEX.test(pRow.id)) validUserId = pRow.id;
-      } catch {}
     }
     if (!validUserId) validUserId = crypto.randomUUID();
     const userId = validUserId;
     const fullName = String(client.full_name || client.name || 'Оптовый клиент');
     const phone = String(client.phone || '');
-    const priceType = String(client.price_type || 'wholesale');
+    const firstContract = Array.isArray(client.contracts) && client.contracts.length > 0 ? client.contracts[0] : null;
+    const priceType = (!authCtx.isServer && authCtx.role === 'client')
+      ? String(existingProfile?.price_type || authCtx.priceType || 'wholesale')
+      : String(client.price_type || firstContract?.price_type || existingProfile?.price_type || 'wholesale');
 
     // Обеспечиваем наличие профиля в PostgreSQL (profiles)
     try {
@@ -92,7 +131,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         phone,
         price_type: priceType,
         role: 'client',
-        impersonation_enabled: true,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'partner_id' });
     } catch (dbErr) {

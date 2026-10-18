@@ -148,7 +148,7 @@ export async function handleOrderStatusChanged(
       // 1. Проверяем текущий статус для защиты от отката (Monotonic Order State Machine)
       const { data: existingOrder } = await supabaseServer
         .from('orders')
-        .select('id, status, order_number')
+        .select('id, status, order_number, parent_order_id')
         .or(matchConditions.join(','))
         .maybeSingle();
 
@@ -214,6 +214,45 @@ export async function handleOrderStatusChanged(
       if (updatedOrders && updatedOrders.length > 0) {
         const masterIds = updatedOrders.map((o: any) => o.id);
         await supabaseServer.from('orders').update(updatePayload).in('parent_order_id', masterIds);
+      }
+
+      // ОБРАТНАЯ СИНХРОНИЗАЦИЯ РОДИТЕЛЬСКОГО МАСТЕР-ЗАКАЗА ПРИ ЧАСТИЧНОЙ ОТМЕНЕ ДОЧЕРНЕГО ПОДЗАКАЗА ИЗ 1С
+      if (existingOrder?.parent_order_id) {
+        try {
+          const { data: siblings } = await supabaseServer
+            .from('orders')
+            .select('id, status, total_amount')
+            .eq('parent_order_id', existingOrder.parent_order_id);
+
+          if (Array.isArray(siblings) && siblings.length > 0) {
+            const allCancelled = siblings.every((s: any) => s.status === 'cancelled');
+            const activeSiblings = siblings.filter((s: any) => s.status !== 'cancelled');
+            const newParentTotal = activeSiblings.reduce((sum: number, s: any) => sum + (Number(s.total_amount) || 0), 0);
+
+            if (allCancelled) {
+              await supabaseServer
+                .from('orders')
+                .update({
+                  status: 'cancelled',
+                  reservations_released: true,
+                  total_amount: 0,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', existingOrder.parent_order_id);
+            } else if (targetStatus === 'cancelled') {
+              await supabaseServer
+                .from('orders')
+                .update({
+                  status: 'partially_confirmed',
+                  total_amount: newParentTotal,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', existingOrder.parent_order_id);
+            }
+          }
+        } catch (parentSyncErr) {
+          console.warn('[Webhook ERP] Parent order partial cancellation sync notice:', parentSyncErr);
+        }
       }
     }
   } catch (dbErr) {

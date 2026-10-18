@@ -34,14 +34,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  // 1. GET: Получить правила (все или по конкретному клиенту)
+  // 1. GET: Получить правила (все для персонала или по конкретному клиенту)
   if (req.method === 'GET') {
     try {
+      const { authenticateRequest } = await import('./lib/authGuard');
+      const authCtx = await authenticateRequest(req, { allowServerKey: true });
       const clientId = req.query.client_id ? String(req.query.client_id).trim() : null;
+      const isStaff = authCtx.isAuthenticated && (authCtx.isServer || authCtx.role === 'admin' || authCtx.role === 'manager_rm' || authCtx.role === 'manager_lm');
 
       let query = supabase.from('client_warehouse_rules').select('*');
-      if (clientId) {
+      if (isStaff) {
+        if (clientId) {
+          query = query.eq('client_id', clientId);
+        }
+      } else if (authCtx.isAuthenticated && authCtx.role === 'client') {
+        const ownKeys = [authCtx.partnerId, authCtx.userId].filter(Boolean).map(String);
+        if (ownKeys.length === 0) {
+          return res.status(200).json({ success: true, rules: {} });
+        }
+        query = query.in('client_id', ownKeys);
+      } else if (clientId) {
         query = query.eq('client_id', clientId);
+      } else {
+        return res.status(200).json({ success: true, rules: {} });
       }
 
       const { data, error } = await query;
@@ -91,6 +106,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (!clientId || !settings) {
         return res.status(400).json({ success: false, error: 'clientId and settings are required' });
+      }
+
+      const targetClientId = String(clientId).trim().replace(/^erp-client-/, '');
+
+      // Anti-BOLA: Менеджер может менять правила только для закрепленного за ним контрагента
+      if (!authCtx.isServer && (authCtx.role === 'manager_rm' || authCtx.role === 'manager_lm') && authCtx.userId && supabase) {
+        const { data: targetProfile } = await supabase
+          .from('profiles')
+          .select('id, manager_id')
+          .or(`partner_id.eq.${targetClientId},id.eq.${targetClientId}`)
+          .maybeSingle();
+
+        if (targetProfile?.manager_id && String(targetProfile.manager_id) !== String(authCtx.userId)) {
+          return res.status(403).json({
+            success: false,
+            code: 'FORBIDDEN_COUNTERPARTY_SCOPE',
+            error: 'Доступ запрещен: данный контрагент закреплен за другим менеджером (Anti-BOLA).',
+          });
+        }
       }
 
       const record: WarehouseRuleRecord = {

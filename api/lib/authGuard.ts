@@ -172,7 +172,7 @@ export async function authenticateRequest(
     if (userId) {
       const { data: dbProfile } = await supabaseAdmin
         .from('profiles')
-        .select('id, role, b2b_role, partner_id, erp_id, full_name, company_name, phone, price_type, is_blocked_for_shipment')
+        .select('id, role, b2b_role, partner_id, erp_id, full_name, company_name, phone, price_type, is_blocked_for_shipment, impersonation_enabled')
         .eq('id', userId)
         .maybeSingle();
       
@@ -182,7 +182,7 @@ export async function authenticateRequest(
       if (!profile && fallbackPartnerId) {
         const { data: pByPartner } = await supabaseAdmin
           .from('profiles')
-          .select('id, role, b2b_role, partner_id, erp_id, full_name, company_name, phone, price_type, is_blocked_for_shipment')
+          .select('id, role, b2b_role, partner_id, erp_id, full_name, company_name, phone, price_type, is_blocked_for_shipment, impersonation_enabled')
           .eq('partner_id', fallbackPartnerId)
           .limit(1)
           .maybeSingle();
@@ -191,6 +191,7 @@ export async function authenticateRequest(
     }
 
     // При использовании HMAC-сессии допускаем валидированные данные профиля (не позволяя accountant/buyer повысить права до director)
+    const effectiveUserId = profile?.id || userId;
     const effectiveRole = (profile?.role || fallbackRole || 'client') as any;
     const effectiveB2bRole = ((hmacProfileB2bRole === 'accountant' || hmacProfileB2bRole === 'buyer')
       ? hmacProfileB2bRole
@@ -218,7 +219,7 @@ export async function authenticateRequest(
         }
       }
 
-      if (profile?.is_blocked_for_shipment === true || profile?.role === 'blocked') {
+      if (profile?.is_blocked_for_shipment === true || profile?.impersonation_enabled === false || profile?.role === 'blocked') {
         return {
           isAuthenticated: false,
           isServer: false,
@@ -233,7 +234,7 @@ export async function authenticateRequest(
         return {
           isAuthenticated: true,
           isServer: false,
-          userId,
+          userId: effectiveUserId,
           role: effectiveRole,
           partnerId: effectivePartnerId,
           error: `Доступ запрещен. Требуется одна из ролей: ${options.requiredRoles.join(', ')}`,
@@ -247,7 +248,7 @@ export async function authenticateRequest(
     return {
       isAuthenticated: true,
       isServer: false,
-      userId,
+      userId: effectiveUserId,
       role: effectiveRole,
       b2bRole: effectiveB2bRole,
       partnerId: effectivePartnerId,

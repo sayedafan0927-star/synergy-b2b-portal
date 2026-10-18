@@ -59,23 +59,41 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Проверка текущего пароля (Anti-Account-Takeover Guard)
-    if (!authCtx.isServer && authCtx.role !== 'admin' && authCtx.userId) {
-      const { data: currentProfile } = await supabaseAdmin
-        .from('profiles')
-        .select('password_hash')
-        .eq('id', authCtx.userId)
-        .maybeSingle();
+    if (!authCtx.isServer && authCtx.role !== 'admin' && (authCtx.userId || authCtx.partnerId)) {
+      let currentProfile: any = null;
+      if (authCtx.userId) {
+        const { data: byId } = await supabaseAdmin
+          .from('profiles')
+          .select('password_hash')
+          .eq('id', authCtx.userId)
+          .maybeSingle();
+        currentProfile = byId;
+      }
+      if (!currentProfile && authCtx.partnerId) {
+        const { data: byPartner } = await supabaseAdmin
+          .from('profiles')
+          .select('password_hash')
+          .eq('partner_id', authCtx.partnerId)
+          .limit(1)
+          .maybeSingle();
+        currentProfile = byPartner;
+      }
 
       if (currentProfile?.password_hash) {
-        if (oldPassword) {
-          const matches = await bcrypt.compare(oldPassword, currentProfile.password_hash);
-          if (!matches) {
-            return res.status(403).json({
-              success: false,
-              error: 'Неверно указан текущий пароль.',
-              code: 'INVALID_CURRENT_PASSWORD',
-            });
-          }
+        if (!oldPassword) {
+          return res.status(403).json({
+            success: false,
+            error: 'Для изменения установленного пароля необходимо указать текущий пароль.',
+            code: 'CURRENT_PASSWORD_REQUIRED',
+          });
+        }
+        const matches = await bcrypt.compare(oldPassword, currentProfile.password_hash);
+        if (!matches) {
+          return res.status(403).json({
+            success: false,
+            error: 'Неверно указан текущий пароль.',
+            code: 'INVALID_CURRENT_PASSWORD',
+          });
         }
       }
     }

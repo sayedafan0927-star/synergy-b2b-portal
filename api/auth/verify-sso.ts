@@ -67,6 +67,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return res.status(401).json({ success: false, error: 'Срок действия сессии SSO истек' });
       }
 
+      const partnerId = parsed.data.profile?.partner_id;
+      if (redis && partnerId) {
+        try {
+          const isPartnerRevoked = await redis.exists(`revoked_partner:${partnerId}`);
+          if (isPartnerRevoked) {
+            return res.status(403).json({
+              success: false,
+              code: 'CLIENT_DEACTIVATED',
+              error: 'Доступ заблокирован: сессия контрагента отозвана по требованию 1С:ERP.',
+            });
+          }
+        } catch {}
+      }
+
       return res.status(200).json({
         success: true,
         user: parsed.data.user,

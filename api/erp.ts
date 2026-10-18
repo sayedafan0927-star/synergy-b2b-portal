@@ -50,7 +50,6 @@ const PUBLIC_ACTIONS = new Set([
   'create_lead',
   'notify_dealer_registration',
   'display_settings',
-  'request_approval',
   'session_token',
 ]);
 

@@ -2253,7 +2253,40 @@ with open(os.path.join(ROOT_DIR, "src", "components", "profile", "OrderDetail.ts
 test_assert("portalCancelSucceeded" in od_ui_s44 and "cancellation_pending" in od_ui_s44, "OrderDetail.tsx respects 4xx cancellation rejections and server cancellation_pending status")
 
 # ------------------------------------------------------------------------------
-# 69. Summary Report
+# 69. Stage 45: Pass 4 Deep Architectural Audit Remediation
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 69. STAGE 45: PASS 4 DEEP ARCHITECTURAL AUDIT REMEDIATION ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "api", "auth", "change-password.ts"), "r", encoding="utf-8") as fp:
+    cpw_s45 = fp.read()
+test_assert("CURRENT_PASSWORD_REQUIRED" in cpw_s45 and "if (!oldPassword)" in cpw_s45 and "authCtx.partnerId" in cpw_s45, "change-password.ts enforces current_password when password_hash is set and supports partner_id profile lookup")
+
+with open(os.path.join(ROOT_DIR, "api", "auth", "client-token.ts"), "r", encoding="utf-8") as fp:
+    ct_s45 = fp.read()
+test_assert("FORBIDDEN_COUNTERPARTY_SCOPE" in ct_s45 and "CLIENT_DEACTIVATED" in ct_s45 and "existingProfile?.price_type || authCtx.priceType" in ct_s45, "client-token.ts blocks price_type spoofing, checks partner deactivation, and enforces manager territory BOLA")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "erp", "upstreamProxy.ts"), "r", encoding="utf-8") as fp:
+    up_s45 = fp.read()
+test_assert("export async function handleErpLoginToken" in up_s45 and "CLIENT_DEACTIVATED" in up_s45 and "firstContract?.credit_limit_usd" in up_s45, "upstreamProxy.ts handleErpLoginToken verifies profile deactivation, reuses canonical profile UUID, and resolves contracts[0]")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "approvals", "approvalHandler.ts"), "r", encoding="utf-8") as fp:
+    aph_s45 = fp.read()
+test_assert("authenticateRequest" in aph_s45 and "targetOrderId" in aph_s45, "approvalHandler.ts requires authenticated caller and valid order_id before generating signed WhatsApp approval links")
+
+with open(os.path.join(ROOT_DIR, "api", "webhooks", "handlers", "orderStatusHandler.ts"), "r", encoding="utf-8") as fp:
+    osh_s45 = fp.read()
+test_assert("existingOrder?.parent_order_id" in osh_s45 and "newParentTotal" in osh_s45, "orderStatusHandler.ts recalculates parent master order total_amount and status when a child suborder is cancelled via 1C webhook")
+
+with open(os.path.join(ROOT_DIR, "api", "warehouse-rules.ts"), "r", encoding="utf-8") as fp:
+    wr_s45 = fp.read()
+test_assert("FORBIDDEN_COUNTERPARTY_SCOPE" in wr_s45 and "ownKeys" in wr_s45, "warehouse-rules.ts scopes GET rules by caller role and enforces manager territory BOLA on POST")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "supplier", "supplierHandler.ts"), "r", encoding="utf-8") as fp:
+    sh_s45 = fp.read()
+test_assert("jsonData.shipments = []" in sh_s45 and "authenticateRequest" in sh_s45, "supplierHandler.ts prevents cross-supplier shipment leak on empty match and restricts POST supplier_defects to staff")
+
+# ------------------------------------------------------------------------------
+# 70. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

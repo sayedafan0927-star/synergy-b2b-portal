@@ -92,7 +92,10 @@ export function filterSupplierShipments(jsonData: any, rawSupplierId: string | s
       jsonData.total_shipments = matched.length;
       jsonData.supplier_id = sId;
     } else {
-      jsonData.filter_notice = 'Показан общий реестр склада Астана';
+      jsonData.shipments = [];
+      jsonData.total_shipments = 0;
+      jsonData.supplier_id = sId;
+      jsonData.filter_notice = 'Поставки для выбранной фабрики не найдены';
     }
   }
 }
@@ -103,6 +106,17 @@ export async function handleSupplierDefects(
   supabase?: any
 ) {
   if (req.method === 'POST') {
+    const { authenticateRequest } = await import('../../lib/authGuard');
+    const authCtx = await authenticateRequest(req, {
+      requiredRoles: ['admin', 'manager_lm', 'manager_rm'],
+      allowServerKey: true,
+    });
+    if (!authCtx.isAuthenticated || authCtx.error) {
+      return res.status(403).json({
+        success: false,
+        error: authCtx.error || 'Forbidden: Создание актов рекламаций доступно только сотрудникам компании.',
+      });
+    }
     const payload = req.body || {};
     if (supabase) {
       try {

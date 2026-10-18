@@ -1,15 +1,32 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { dispatchApprovalRequest } from '../../approvals/whatsapp';
 import { recordAuditLog } from '../../audit/logs';
+import { authenticateRequest } from '../../lib/authGuard';
 
 export async function handleRequestApproval(req: VercelRequest, res: VercelResponse, correlationId: string) {
+  const callerAuth = await authenticateRequest(req, { allowServerKey: true });
+  if (!callerAuth.isAuthenticated) {
+    return res.status(401).json({
+      success: false,
+      error: callerAuth.error || 'Требуется авторизация для отправки запроса на согласование.',
+    });
+  }
+
   try {
     const payload = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+    const targetOrderId = String(payload?.order_id || payload?.orderId || '').trim();
+    if (!targetOrderId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Параметр order_id обязателен для запроса согласования.',
+      });
+    }
+
     const sent = await dispatchApprovalRequest({
-      orderId: payload.order_id || payload.orderId || `tmp-${Date.now()}`,
+      orderId: targetOrderId,
       orderDocNumber: payload.order_doc_number || payload.orderDocNumber,
-      clientName: payload.client_name || payload.clientName || 'Клиент B2B',
-      clientPhone: payload.client_phone || payload.clientPhone,
+      clientName: payload.client_name || payload.clientName || callerAuth.companyName || callerAuth.fullName || 'Клиент B2B',
+      clientPhone: payload.client_phone || payload.clientPhone || callerAuth.phone,
       totalAmount: Number(payload.total_amount || payload.totalAmount || 0),
       totalSqm: Number(payload.total_sqm || payload.totalSqm || 0),
       itemsCount: Number(payload.items_count || payload.itemsCount || 1),
