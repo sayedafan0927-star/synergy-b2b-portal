@@ -124,7 +124,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     if (ADMIN_PHONE) {
-      const alertMsg = `🚨 *SYNERGY B2B INCIDENT ALERT*\n\nСтатус портала: *${report.status.toUpperCase()}*\n• База данных: ${report.database.status === 'healthy' ? '✅ OK' : '❌ СБОЙ (' + report.database.error + ')'} [${report.database.latencyMs}ms]\n• 1C:ERP Шлюз: ${report.erp.status === 'healthy' ? '✅ OK' : '❌ СБОЙ (' + report.erp.error + ')'} [${report.erp.latencyMs}ms]\n\nВремя: ${new Date().toLocaleTimeString('ru-RU')}\nCorrelation: ${correlationId}`;
+      const alertMsg = `🚨 *SYNERGY B2B INCIDENT ALERT*\n\nСтатус портала: *${report.status.toUpperCase()}*\n• База данных: ${report.database.status === 'healthy' ? '✅ OK' : '❌ СБОЙ (' + report.database.error + ')'} [${report.database.latencyMs}ms]\n• Synergy ERP Шлюз: ${report.erp.status === 'healthy' ? '✅ OK' : '❌ СБОЙ (' + report.erp.error + ')'} [${report.erp.latencyMs}ms]\n\nВремя: ${new Date().toLocaleTimeString('ru-RU')}\nCorrelation: ${correlationId}`;
       sendWhatsAppMessage(ADMIN_PHONE, alertMsg).catch(err => {
         logger.warn('[Uptime Incident] Failed to send WhatsApp alert', { correlationId }, err as Error);
       });

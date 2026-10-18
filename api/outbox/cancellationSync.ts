@@ -78,7 +78,7 @@ export async function syncPendingCancellation(options: CancellationSyncOptions):
         })
         .or(`id.eq.${order.id},parent_order_id.eq.${order.id}`);
 
-      return { order_id: order.id, order_number: order.order_number, success: false, error: 'Отмена отклонена 1С: заказ уже отгружен' };
+      return { order_id: order.id, order_number: order.order_number, success: false, error: 'Отмена отклонена Synergy ERP: заказ уже отгружен' };
     }
 
     // Временная ошибка ERP: оставляем в cancellation_pending с бэкоффом

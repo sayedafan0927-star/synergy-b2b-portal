@@ -19,6 +19,7 @@ export interface AuthenticatedContext {
   role?: 'admin' | 'manager_rm' | 'manager_lm' | 'supplier' | 'client';
   b2bRole?: 'director' | 'buyer' | 'accountant';
   partnerId?: string | null;
+  managerId?: string | null;
   erpId?: number | null;
   priceType?: string;
   fullName?: string;
@@ -26,6 +27,28 @@ export interface AuthenticatedContext {
   phone?: string;
   isTwoFactorVerified?: boolean;
   error?: string;
+}
+
+export function normalizePortalRole(rawRole?: string | null): 'admin' | 'manager_rm' | 'manager_lm' | 'supplier' | 'client' {
+  const r = String(rawRole || '').trim().toLowerCase();
+  if (r === 'admin') return 'admin';
+  if (r === 'rm' || r === 'manager_rm') return 'manager_rm';
+  if (r === 'lm' || r === 'manager_lm') return 'manager_lm';
+  if (r === 'supplier') return 'supplier';
+  return 'client';
+}
+
+export function isManagerAssignedToClient(
+  authCtx: { userId?: string; managerId?: string | null; erpId?: number | null },
+  clientManagerId?: string | number | null
+): boolean {
+  if (!clientManagerId) return true;
+  const target = String(clientManagerId).trim();
+  if (!target) return true;
+  if (authCtx.userId && String(authCtx.userId).trim() === target) return true;
+  if (authCtx.managerId && String(authCtx.managerId).trim() === target) return true;
+  if (authCtx.erpId && String(authCtx.erpId).trim() === target) return true;
+  return false;
 }
 
 /**
@@ -109,6 +132,7 @@ export async function authenticateRequest(
     let userId: string | undefined;
     let fallbackRole: 'admin' | 'manager_rm' | 'manager_lm' | 'supplier' | 'client' | undefined;
     let fallbackPartnerId: string | null | undefined;
+    let fallbackManagerId: string | null | undefined;
     let fallbackPhone: string | undefined;
     let fallbackFullName: string | undefined;
     let fallbackPriceType: string | undefined;
@@ -135,8 +159,9 @@ export async function authenticateRequest(
               const u = parsed.data.user || {};
               const p = parsed.data.profile || {};
               userId = String(u.id || p.id || '');
-              fallbackRole = p.role || u.role || 'client';
+              fallbackRole = normalizePortalRole(p.role || u.role || 'client');
               fallbackPartnerId = p.partner_id ? String(p.partner_id) : null;
+              fallbackManagerId = p.manager_id ? String(p.manager_id) : null;
               fallbackPhone = p.phone || u.phone;
               fallbackFullName = p.full_name || u.full_name || u.user_metadata?.full_name;
               fallbackPriceType = p.price_type || 'wholesale';
@@ -172,7 +197,7 @@ export async function authenticateRequest(
     if (userId) {
       const { data: dbProfile } = await supabaseAdmin
         .from('profiles')
-        .select('id, role, b2b_role, partner_id, erp_id, full_name, company_name, phone, price_type, is_blocked_for_shipment, impersonation_enabled')
+        .select('id, role, b2b_role, partner_id, manager_id, erp_id, full_name, company_name, phone, price_type, is_blocked_for_shipment, impersonation_enabled')
         .eq('id', userId)
         .maybeSingle();
       
@@ -182,7 +207,7 @@ export async function authenticateRequest(
       if (!profile && fallbackPartnerId) {
         const { data: pByPartner } = await supabaseAdmin
           .from('profiles')
-          .select('id, role, b2b_role, partner_id, erp_id, full_name, company_name, phone, price_type, is_blocked_for_shipment, impersonation_enabled')
+          .select('id, role, b2b_role, partner_id, manager_id, erp_id, full_name, company_name, phone, price_type, is_blocked_for_shipment, impersonation_enabled')
           .eq('partner_id', fallbackPartnerId)
           .limit(1)
           .maybeSingle();
@@ -192,17 +217,18 @@ export async function authenticateRequest(
 
     // При использовании HMAC-сессии допускаем валидированные данные профиля (не позволяя accountant/buyer повысить права до director)
     const effectiveUserId = profile?.id || userId;
-    const effectiveRole = (profile?.role || fallbackRole || 'client') as any;
+    const effectiveRole = normalizePortalRole(profile?.role || fallbackRole || 'client');
     const effectiveB2bRole = ((hmacProfileB2bRole === 'accountant' || hmacProfileB2bRole === 'buyer')
       ? hmacProfileB2bRole
       : (profile?.b2b_role || hmacProfileB2bRole || 'director')) as 'director' | 'buyer' | 'accountant';
     const effectivePartnerId = profile?.partner_id || fallbackPartnerId;
-    const effectiveErpId = profile?.erp_id || (effectivePartnerId ? Number(effectivePartnerId) || null : null);
+    const effectiveManagerId = profile?.manager_id ? String(profile.manager_id) : (fallbackManagerId || null);
+    const effectiveErpId = profile?.erp_id || (effectivePartnerId ? Number(effectivePartnerId) || null : (effectiveManagerId ? Number(effectiveManagerId) || null : null));
     const effectivePriceType = profile?.price_type || fallbackPriceType || 'wholesale';
     const effectiveFullName = profile?.full_name || fallbackFullName || '';
     const effectivePhone = profile?.phone || fallbackPhone || '';
 
-    // Проверка мгновенной деактивации клиента из 1С:ERP (Redis Blacklist + DB Flag)
+    // Проверка мгновенной деактивации клиента из Synergy ERP (Redis Blacklist + DB Flag)
     if (effectivePartnerId && effectiveRole === 'client') {
       if (redis) {
         try {
@@ -211,7 +237,7 @@ export async function authenticateRequest(
             return {
               isAuthenticated: false,
               isServer: false,
-              error: 'Учетная запись клиента деактивирована администратором 1С:ERP.',
+              error: 'Учетная запись клиента деактивирована администратором Synergy ERP.',
             };
           }
         } catch (pRevErr) {
@@ -237,6 +263,7 @@ export async function authenticateRequest(
           userId: effectiveUserId,
           role: effectiveRole,
           partnerId: effectivePartnerId,
+          managerId: effectiveManagerId,
           error: `Доступ запрещен. Требуется одна из ролей: ${options.requiredRoles.join(', ')}`,
         };
       }
@@ -252,6 +279,7 @@ export async function authenticateRequest(
       role: effectiveRole,
       b2bRole: effectiveB2bRole,
       partnerId: effectivePartnerId,
+      managerId: effectiveManagerId,
       erpId: effectiveErpId,
       priceType: effectivePriceType,
       fullName: effectiveFullName,

@@ -220,7 +220,7 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
       res.status(409).json({
         success: false,
         code: 'INSUFFICIENT_STOCK',
-        error: rawErr || '1C:ERP отклонила заказ: недостаточно товара на складе.',
+        error: rawErr || 'Synergy ERP отклонила заказ: недостаточно товара на складе.',
         details: { code: 'INSUFFICIENT_STOCK', sku: parsedSku || reservedSkuItems[0]?.sku, available_qty: availQty, requested_qty: reqQty, ...(jsonData?.details || {}) },
       });
       return;
@@ -229,7 +229,7 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
     // Обработка фатальных бизнес-ошибок (400, 404, 422, клиент заблокирован) -> немедленный откат Saga и DLQ
     const fatalErrorText = jsonData?.error || jsonData?.message || '';
     if (isFatalBusinessError(erpResponse.status, fatalErrorText)) {
-      logger.error('[Order] 1C:ERP rejected order with fatal business error. Triggering Saga rollback and DLQ', {
+      logger.error('[Order] Synergy ERP rejected order with fatal business error. Triggering Saga rollback and DLQ', {
         orderDoc: outboxOrderDoc,
         status: erpResponse.status,
         error: fatalErrorText,
@@ -263,7 +263,7 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
         correlationId,
         orderId: outboxOrderId || undefined,
         orderNumber: outboxOrderDoc || undefined,
-        reason: `Фатальный отказ 1C:ERP (${erpResponse.status}): ${fatalErrorText}`,
+        reason: `Фатальный отказ Synergy ERP (${erpResponse.status}): ${fatalErrorText}`,
       });
 
       // Тревожный алерт дежурной смене
@@ -279,7 +279,7 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
       res.status(httpStatus).json({
         success: false,
         code: jsonData?.error_code || 'FATAL_BUSINESS_ERROR',
-        error: fatalErrorText || '1C:ERP отклонила оформление заказа по бизнес-причинам.',
+        error: fatalErrorText || 'Synergy ERP отклонила оформление заказа по бизнес-причинам.',
       });
       return;
     }

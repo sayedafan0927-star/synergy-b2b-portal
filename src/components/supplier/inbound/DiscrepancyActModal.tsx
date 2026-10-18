@@ -191,7 +191,7 @@ export function DiscrepancyActModal({
           {loading ? (
             <div className="py-20 text-center">
               <RefreshCw className="h-8 w-8 animate-spin text-brand-600 mx-auto mb-3" />
-              <p className="text-sm font-medium text-slate-700">Загрузка акта расхождений из 1С:ERP...</p>
+              <p className="text-sm font-medium text-slate-700">Загрузка акта расхождений из Synergy ERP...</p>
               <p className="text-xs text-slate-400 mt-1">Опрос электронного реестра приёмки склада</p>
             </div>
           ) : error ? (
@@ -394,7 +394,7 @@ export function DiscrepancyActModal({
         {/* Подвал модального окна */}
         <div className="px-4 py-3 sm:px-6 sm:py-3.5 border-t border-slate-200 bg-slate-50 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
           <p className="text-[11px] text-slate-500 text-center sm:text-left">
-            Акт заверен подписями комиссии склада и готов к экспорту в 1С:ERP
+            Акт заверен подписями комиссии склада и готов к экспорту в Synergy ERP
           </p>
           <div className="flex items-center justify-end gap-2">
             <button

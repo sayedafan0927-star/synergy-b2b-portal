@@ -75,7 +75,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             return res.status(403).json({
               success: false,
               code: 'CLIENT_DEACTIVATED',
-              error: 'Доступ заблокирован: сессия контрагента отозвана по требованию 1С:ERP.',
+              error: 'Доступ заблокирован: сессия контрагента отозвана по требованию Synergy ERP.',
             });
           }
         } catch {}

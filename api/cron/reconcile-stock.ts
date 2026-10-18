@@ -180,6 +180,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Подсчитываем реальные активные брони по заказам клиентов (Zero Ghost Reservation)
         // Пагинация для гарантированной вычитки всех активных позиций без срезки PostgREST в 1000 строк
         const actualActiveOrderReservations = new Map<string, number>();
+        const unconfirmedPortalHolds = new Map<string, number>();
+        const UNCONFIRMED_HOLD_STATUSES = new Set(['pending', 'processing_sync', 'waiting_approval']);
         let itemOffset = 0;
         const CHUNK_SIZE = 1000;
         let hasMoreItems = true;
@@ -198,10 +200,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               const sku = String(item.sku || '').trim().toUpperCase();
               const wh = Number(item.warehouse_id || 81);
               const qty = Number(item.quantity || 0);
+              const ordObj = Array.isArray((item as any).orders) ? (item as any).orders[0] : (item as any).orders;
+              const ordStatus = String(ordObj?.status || '').toLowerCase();
               if (sku && qty > 0) {
                 const key = `${sku}::${wh}`;
                 actualActiveOrderReservations.set(key, (actualActiveOrderReservations.get(key) || 0) + qty);
                 actualActiveOrderReservations.set(sku, (actualActiveOrderReservations.get(sku) || 0) + qty);
+                if (UNCONFIRMED_HOLD_STATUSES.has(ordStatus)) {
+                  unconfirmedPortalHolds.set(key, (unconfirmedPortalHolds.get(key) || 0) + qty);
+                  unconfirmedPortalHolds.set(sku, (unconfirmedPortalHolds.get(sku) || 0) + qty);
+                }
               }
             }
             itemOffset += chunkItems.length;
@@ -256,7 +264,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
               // Self-Healing: устраняем фантомные резервы, не подтвержденные активными заказами
               const realReserved = actualActiveOrderReservations.get(key) || 0;
-              const effectiveReserved = Math.min(resStock, realReserved);
+              const portalUnconfirmedHold = unconfirmedPortalHolds.get(key) || 0;
+              const effectiveReserved = Math.min(resStock, portalUnconfirmedHold);
 
               if (resStock > realReserved) {
                 phantomReservationsFixed++;
@@ -269,9 +278,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                   .catch(() => {});
               }
 
-              // Точная привязка броней к конкретному складу (Zero Cross-Warehouse Contamination)
-              localReservedMap.set(`${skuUpper}::${bWh}`, (localReservedMap.get(`${skuUpper}::${bWh}`) || 0) + effectiveReserved);
-              localReservedMap.set(skuUpper, (localReservedMap.get(skuUpper) || 0) + effectiveReserved);
+              // Точная привязка неподтвержденных в Synergy ERP броней к конкретному складу (Zero Double-Deduction)
+              if (effectiveReserved > 0) {
+                localReservedMap.set(`${skuUpper}::${bWh}`, (localReservedMap.get(`${skuUpper}::${bWh}`) || 0) + effectiveReserved);
+                localReservedMap.set(skuUpper, (localReservedMap.get(skuUpper) || 0) + effectiveReserved);
+              }
             }
           }
         }

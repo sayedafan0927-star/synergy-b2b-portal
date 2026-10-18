@@ -46,7 +46,7 @@ export function getPricingTier(rawPriceType?: string | null): ContractPricingTie
   ) {
     return {
       code: 'standard',
-      label: 'Оптовая цена 1С',
+      label: 'Оптовая цена ERP',
       discountPercent: 0,
       badgeColor: 'bg-slate-100 text-slate-700',
     };

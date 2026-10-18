@@ -315,7 +315,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const successMessage = isApprove
         ? `Заказ №${targetOrderNumber} успешно ОДОБРЕН и передан в WMS на комплектацию склада (статус: На сборке WMS).`
-        : `Заказ №${targetOrderNumber} успешно ОТКЛОНЕН. Резервирование товаров аннулировано в 1С:ERP и WMS.`;
+        : `Заказ №${targetOrderNumber} успешно ОТКЛОНЕН. Резервирование товаров аннулировано в Synergy ERP и WMS.`;
 
       return res.status(200).send(renderHtmlResult(true, successMessage, statusLabel, statusColor, String(targetOrderNumber)));
     } catch (err: any) {

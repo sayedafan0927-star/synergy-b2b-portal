@@ -80,7 +80,8 @@ export async function validateClientCreditExposure(
       !callerAuth.isServer &&
       callerAuth.userId &&
       userProfile?.manager_id &&
-      String(userProfile.manager_id) !== String(callerAuth.userId)
+      String(userProfile.manager_id) !== String(callerAuth.userId) &&
+      (!callerAuth.managerId || String(userProfile.manager_id) !== String(callerAuth.managerId))
     ) {
       return {
         blocked: true,

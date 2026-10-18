@@ -163,8 +163,8 @@ export function CartCheckoutForm({
                 {submitPhase === 0
                   ? t('cart.submitting_step1', 'Проверка цен и остатков...')
                   : submitPhase === 1
-                  ? t('cart.submitting_step2', 'Резервирование в 1С:ERP...')
-                  : t('cart.submitting_step3', 'Оформление наряда в 1С...')}
+                  ? t('cart.submitting_step2', 'Резервирование в Synergy ERP...')
+                  : t('cart.submitting_step3', 'Оформление наряда в Synergy ERP...')}
               </span>
             </>
           ) : isAccountant ? (
@@ -188,7 +188,7 @@ export function CartCheckoutForm({
         {submitting && (
           <div className="flex items-center justify-center gap-1.5 pt-0.5 text-[11px] text-brand-800 animate-pulse font-medium">
             <span className="h-1.5 w-1.5 rounded-full bg-brand-600 animate-ping shrink-0" />
-            <span>Прямое резервирование на складах в 1С:ERP...</span>
+            <span>Прямое резервирование на складах в Synergy ERP...</span>
           </div>
         )}
 

@@ -15,6 +15,7 @@ import {
   normalizeErpDesigns,
   handleErpLoginToken,
   handleErpLoginFallback,
+  enrichOrdersWithBufferedLocalOrders,
 } from './upstreamProxy';
 import { handleDebtFallbackOnFailure, extractAuthoritativeClientFinancials } from '../financial/debtHandler';
 
@@ -78,7 +79,7 @@ export async function handleGenericErpProxy(
           console.warn('[Proxy download_discrepancy_act] ERP returned status', erpResp.status);
           res.status(erpResp.status).json({
             success: false,
-            error: `Ошибка выгрузки файла акта из 1С:ERP (HTTP ${erpResp.status})`,
+            error: `Ошибка выгрузки файла акта из Synergy ERP (HTTP ${erpResp.status})`,
           });
           return;
         }
@@ -141,7 +142,7 @@ export async function handleGenericErpProxy(
       headers['X-Idempotency-Key'] = String(idempotencyKey);
     }
 
-    // Circuit Breaker: Проверка состояния внешнего шлюза 1C:ERP
+    // Circuit Breaker: Проверка состояния внешнего шлюза Synergy ERP
     const circuit = await checkCircuit('erp_gateway');
     if (!circuit.permitted) {
       console.warn(`[CircuitBreaker] Request to ERP suppressed for action '${action}'. Circuit state: ${circuit.state}`);
@@ -171,7 +172,7 @@ export async function handleGenericErpProxy(
       res.status(503).json({
         success: false,
         code: 'CIRCUIT_BREAKER_OPEN',
-        error: 'Шлюз 1C:ERP временно недоступен (активирован защитный контур Circuit Breaker). Повторите попытку через 30 секунд.',
+        error: 'Шлюз Synergy ERP временно недоступен (активирован защитный контур Circuit Breaker). Повторите попытку через 30 секунд.',
       });
       return;
     }
@@ -373,6 +374,10 @@ export async function handleGenericErpProxy(
         if (receiptId) {
           jsonData.excel_download_url = `/api/erp?action=download_discrepancy_act&receipt_id=${receiptId}`;
         }
+      }
+
+      if (action === 'orders' && erpResponse.ok && jsonData?.success) {
+        await enrichOrdersWithBufferedLocalOrders(jsonData, req.query, supabase);
       }
 
       if (action === 'login') {

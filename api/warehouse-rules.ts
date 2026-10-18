@@ -118,7 +118,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .or(`partner_id.eq.${targetClientId},id.eq.${targetClientId}`)
           .maybeSingle();
 
-        if (targetProfile?.manager_id && String(targetProfile.manager_id) !== String(authCtx.userId)) {
+        if (
+          targetProfile?.manager_id &&
+          String(targetProfile.manager_id) !== String(authCtx.userId) &&
+          (!authCtx.managerId || String(targetProfile.manager_id) !== String(authCtx.managerId))
+        ) {
           return res.status(403).json({
             success: false,
             code: 'FORBIDDEN_COUNTERPARTY_SCOPE',

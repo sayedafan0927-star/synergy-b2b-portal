@@ -52,7 +52,11 @@ export function filterSupplierShipments(jsonData: any, rawSupplierId: string | s
   if (rawSupplierId && rawSupplierId !== '0' && rawSupplierId !== 'all') {
     const sId = Number(rawSupplierId);
     const matched = jsonData.shipments.filter((s: any) => {
-      if (s.supplier_id === sId) return true;
+      const existingSupId = Number(s.supplier_id || 0);
+      if (existingSupId === sId) return true;
+      // Эвристика по наименованию применяется только для нераспределенных поставок (без явного supplier_id другой фабрики)
+      const isUnassignedOrPlaceholder = !existingSupId || existingSupId === 2984 || existingSupId === 2957;
+      if (!isUnassignedOrPlaceholder) return false;
       return (
         Array.isArray(s.items) &&
         s.items.some((it: any) => {

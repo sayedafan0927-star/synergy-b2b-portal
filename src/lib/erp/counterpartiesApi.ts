@@ -196,6 +196,8 @@ export async function authenticateClientViaErp(login: string, password: string):
     if (response.ok && data?.success) {
       if (data.user_type === 'employee' || data.employee) {
         const emp = data.employee || data;
+        const rawEmpRole = String(emp.role || 'manager_rm').toLowerCase().trim();
+        const normalizedEmpRole = rawEmpRole === 'lm' ? 'manager_lm' : (rawEmpRole === 'admin' ? 'admin' : 'manager_rm');
         return {
           success: true,
           token: data.token || data.portal_session_token,
@@ -203,7 +205,7 @@ export async function authenticateClientViaErp(login: string, password: string):
           employee: {
             id: Number(emp.id || emp.manager_id),
             name: emp.name || emp.username || 'Сотрудник ERP',
-            role: emp.role || 'manager_rm',
+            role: normalizedEmpRole,
             phone: emp.phone || login,
           },
         };

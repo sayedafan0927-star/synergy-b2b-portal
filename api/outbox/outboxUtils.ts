@@ -19,11 +19,11 @@ export interface DlqAlertParams {
  */
 export async function dispatchDlqEmergencyAlert(params: DlqAlertParams): Promise<void> {
   const alertPhone = process.env.ADMIN_WHATSAPP_PHONE || process.env.MANAGER_WHATSAPP_PHONE || process.env.WHATSAPP_MANAGER_PHONE || '';
-  const text = `🚨 *КРИТИЧЕСКИЙ СБОЙ OUTBOX / 1C:ERP*\n\n` +
+  const text = `🚨 *КРИТИЧЕСКИЙ СБОЙ OUTBOX / SYNERGY ERP*\n\n` +
     `Заказ *№${params.orderNumber}* переведен в *Dead Letter Queue (DLQ)* после ${params.retries} неудачных попыток синхронизации!\n\n` +
     `💰 Сумма заказа: $${params.amount}\n` +
     `❌ Ошибка: ${params.error}\n\n` +
-    `_Требуется ручное вмешательство дежурного инженера или проверка доступности 1С._`;
+    `_Требуется ручное вмешательство дежурного инженера или проверка доступности Synergy ERP._`;
 
   logger.error(`[DLQ Alert] Order ${params.orderNumber} placed in DLQ after ${params.retries} retries`, {
     orderId: params.orderId,
@@ -146,7 +146,7 @@ export function buildOutboxErpPayload(order: any, dbItems: any[] | null) {
 }
 
 /**
- * Проверка, является ли ошибка 1С фатальной бизнес-ошибкой (Poison Pill).
+ * Проверка, является ли ошибка ERP фатальной бизнес-ошибкой (Poison Pill).
  * Для фатальных ошибок (400, 404, 422, некорректный артикул, заблокированный клиент)
  * повторные ретраи бессмысленны — заказ должен сразу перемещаться в DLQ.
  */
@@ -193,7 +193,7 @@ export interface CategorizedError {
 }
 
 /**
- * Парсинг сырого текста ошибки 1С в структурированную категорию с рекомендацией инженеру
+ * Парсинг сырого текста ошибки ERP в структурированную категорию с рекомендацией инженеру
  */
 export function categorizeDlqError(errorText?: string | null): CategorizedError {
   const err = String(errorText || '').toLowerCase();
@@ -201,8 +201,8 @@ export function categorizeDlqError(errorText?: string | null): CategorizedError 
   if (err.includes('timeout') || err.includes('таймаут') || err.includes('aborterror')) {
     return {
       category: 'ERP_TIMEOUT',
-      label: 'Таймаут 1C',
-      recommendedAction: 'Повторить отправку (шлюз 1С перегружен)',
+      label: 'Таймаут ERP',
+      recommendedAction: 'Повторить отправку (шлюз Synergy ERP перегружен)',
       badgeColor: 'bg-amber-100 text-amber-800 border-amber-200',
     };
   }
@@ -220,7 +220,7 @@ export function categorizeDlqError(errorText?: string | null): CategorizedError 
     return {
       category: 'AUTH_FAILED',
       label: 'Ошибка авторизации',
-      recommendedAction: 'Проверить X-Portal-Key в настройках 1С',
+      recommendedAction: 'Проверить X-Portal-Key в настройках Synergy ERP',
       badgeColor: 'bg-purple-100 text-purple-800 border-purple-200',
     };
   }
@@ -237,8 +237,8 @@ export function categorizeDlqError(errorText?: string | null): CategorizedError 
   if (err.includes('500') || err.includes('502') || err.includes('503') || err.includes('bad gateway') || err.includes('сервер')) {
     return {
       category: 'ERP_SERVER_ERROR',
-      label: 'Сбой сервера 1C',
-      recommendedAction: 'Проверить доступность базы 1С у администратора',
+      label: 'Сбой сервера ERP',
+      recommendedAction: 'Проверить доступность базы Synergy ERP у администратора',
       badgeColor: 'bg-red-100 text-red-800 border-red-200',
     };
   }
@@ -286,7 +286,7 @@ export async function dispatchDlqAlert(
   // 2. Внешний webhook (Telegram / Slack / Monitoring), если задан в переменных окружения
   const alertPhone = process.env.ADMIN_WHATSAPP_PHONE || process.env.MANAGER_WHATSAPP_PHONE || process.env.WHATSAPP_MANAGER_PHONE || '';
   if (alertPhone) {
-    const waText = `🚨 *КРИТИЧЕСКИЙ СБОЙ OUTBOX / 1C:ERP*\n\n` +
+    const waText = `🚨 *КРИТИЧЕСКИЙ СБОЙ OUTBOX / SYNERGY ERP*\n\n` +
       `Заказ *№${order.order_number}* переведен в *DLQ*!\n` +
       `Категория: *${category.label}*\n` +
       `Ошибка: ${errorMessage}\n` +

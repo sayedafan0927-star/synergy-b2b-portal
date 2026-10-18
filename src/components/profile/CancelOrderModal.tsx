@@ -38,7 +38,7 @@ export function CancelOrderModal({
           </div>
 
           <div className="bg-rose-50/70 border border-rose-100 rounded-xl p-3 text-xs text-rose-800 leading-relaxed">
-            Данное действие необратимо. Статус накладной будет синхронизирован с 1С:ERP.
+            Данное действие необратимо. Статус накладной будет синхронизирован с Synergy ERP.
           </div>
 
           <div className="flex items-center justify-end gap-3 pt-2">

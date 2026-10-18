@@ -100,12 +100,16 @@ export function useOrdersList({ isAdmin, isManager }: UseOrdersListOptions) {
         }
         let { data: dbOrders, error: qErr } = await q;
         if (qErr) {
-          const fallback = await supabase
+          let fbQ = supabase
             .from('orders')
             .select('*, order_items(*)')
             .is('parent_order_id', null)
             .order('created_at', { ascending: false })
             .limit(50);
+          if (!isAdmin && !isManager && profile?.id) {
+            fbQ = fbQ.eq('user_id', profile.id);
+          }
+          const fallback = await fbQ;
           dbOrders = fallback.data;
         }
         if (Array.isArray(dbOrders) && dbOrders.length > 0) {

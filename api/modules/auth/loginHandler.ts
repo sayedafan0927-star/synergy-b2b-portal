@@ -177,6 +177,7 @@ export async function handleLoginFallback(
     ? contractsLimitSum
     : Number(matchedClient.credit_limit_usd || matchedClient.financials?.credit_limit_usd || firstContract?.credit_limit_usd || firstContract?.credit_limit || dbProfile?.credit_limit_usd || 0);
 
+  const assignedManagerId = String(matchedClient.regional_manager?.id || matchedClient.manager_id || '').trim() || null;
   const sessionData = {
     user: {
       id: resolvedProfileId,
@@ -187,6 +188,7 @@ export async function handleLoginFallback(
       id: resolvedProfileId,
       role: 'client',
       partner_id: pId,
+      manager_id: assignedManagerId,
       full_name: fName,
       phone: matchedClient.phone || inputLogin,
       company_name: fName,
@@ -201,18 +203,10 @@ export async function handleLoginFallback(
   // Синхронизация профиля контрагента (включая лимит по договору и долг) в базе
   try {
     await supabase.from('profiles').upsert({
-      id: resolvedProfileId,
-      partner_id: pId,
-      erp_id: Number(pId) || null,
-      full_name: fName,
-      company_name: fName,
-      phone: matchedClient.phone || inputLogin,
-      price_type: priceType,
-      credit_limit_usd: creditLimitUsd,
-      debt_usd: Math.max(0, debtUsd),
-      role: 'client',
-      impersonation_enabled: true,
-      updated_at: new Date().toISOString(),
+      id: resolvedProfileId, partner_id: pId, erp_id: Number(pId) || null, manager_id: assignedManagerId,
+      full_name: fName, company_name: fName, phone: matchedClient.phone || inputLogin, price_type: priceType,
+      credit_limit_usd: creditLimitUsd, debt_usd: Math.max(0, debtUsd), role: 'client',
+      impersonation_enabled: true, updated_at: new Date().toISOString(),
     }, { onConflict: 'partner_id' });
   } catch (e) {
     logger.warn('[Auth] Profile upsert notice:', e as Error);

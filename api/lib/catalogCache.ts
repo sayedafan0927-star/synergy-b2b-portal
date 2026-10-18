@@ -258,7 +258,8 @@ export async function patchCachedCatalogStock(
               const k = `${r.sku.toUpperCase()}::${r.warehouse_id}`;
               const holdQty = pendingMap.get(k) || 0;
               if (holdQty > 0) {
-                r.free_stock = Math.max(0, r.free_stock - holdQty);
+                const unaccountedHold = Math.max(0, holdQty - r.reserved_stock);
+                r.free_stock = Math.max(0, r.free_stock - unaccountedHold);
                 r.reserved_stock = Math.max(r.reserved_stock, holdQty);
               }
             }

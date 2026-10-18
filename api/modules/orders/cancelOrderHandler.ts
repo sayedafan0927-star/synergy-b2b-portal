@@ -80,7 +80,11 @@ export async function handleCancelOrder(options: CancelOrderOptions): Promise<vo
       .eq('id', order.user_id)
       .maybeSingle();
 
-    const isClientAssigned = clientProfile?.manager_id && String(clientProfile.manager_id) === String(callerAuth.userId);
+    const isClientAssigned = Boolean(
+      clientProfile?.manager_id &&
+      (String(clientProfile.manager_id) === String(callerAuth.userId) ||
+        (callerAuth.managerId && String(clientProfile.manager_id) === String(callerAuth.managerId)))
+    );
     const isOrderPlacedByManager = order.placed_by_id && String(order.placed_by_id) === String(callerAuth.userId);
 
     if (!isClientAssigned && !isOrderPlacedByManager) {
@@ -175,7 +179,7 @@ export async function handleCancelOrder(options: CancelOrderOptions): Promise<vo
         status: 'cancellation_pending',
         reservations_released: false,
         last_error: 'pending_erp_cancel',
-        notes: `${comment} [Ожидает подтверждения отмены от 1C:ERP: ${nowIso}]`,
+        notes: `${comment} [Ожидает подтверждения отмены от Synergy ERP: ${nowIso}]`,
         updated_at: nowIso,
       })
       .or(`id.eq.${order.id},parent_order_id.eq.${order.id}`);
@@ -263,6 +267,6 @@ export async function handleCancelOrder(options: CancelOrderOptions): Promise<vo
     erp_notified: erpNotified,
     message: isSafeLocalCancel
       ? 'Заказ успешно отменен. Зарезервированные остатки возвращены в свободную продажу.'
-      : 'Запрос на отмену зарегистрирован и передан в 1C:ERP. Складской резерв удерживается до подтверждения отмены учетной системой.',
+      : 'Запрос на отмену зарегистрирован и передан в Synergy ERP. Складской резерв удерживается до подтверждения отмены учетной системой.',
   });
 }

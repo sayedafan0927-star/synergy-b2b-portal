@@ -127,11 +127,12 @@ export async function handleCachedClientDebt(
   // Multi-Tenancy Scoping: Менеджеры могут просматривать только прикрепленных контрагентов
   if (callerAuth && (callerAuth.role === 'manager_rm' || callerAuth.role === 'manager_lm') && !callerAuth.isServer) {
     if (pId && callerAuth.userId) {
+      const allowedMgrIds = [String(callerAuth.userId), callerAuth.managerId ? String(callerAuth.managerId) : ''].filter(Boolean);
       const { data: clientManaged } = await supabase
         .from('profiles')
-        .select('id')
+        .select('id, manager_id')
         .eq('partner_id', pId)
-        .eq('manager_id', callerAuth.userId)
+        .in('manager_id', allowedMgrIds)
         .maybeSingle();
 
       if (!clientManaged) {

@@ -52,7 +52,7 @@ export async function handleNotifyDealerRegistration(
       (phone ? `📞 *Телефон:* ${phone}\n` : '') +
       (city ? `📍 *Город:* ${city}\n` : '') +
       `⏱️ *Время:* ${new Date().toLocaleString('ru-RU', { timeZone: 'Asia/Almaty' })}\n\n` +
-      `_Необходимо проверить карточку в 1С / админ-панели и назначить категорию оптовых цен._`;
+      `_Необходимо проверить карточку в Synergy ERP / админ-панели и назначить категорию оптовых цен._`;
 
     sendWhatsAppMessage(managerPhone, waMsg, {
       eventType: 'dealer_registration',

@@ -162,7 +162,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
     });
 
     if (count > 0) {
-      toastInfo(`Цены и доступные остатки для ${count} поз. в корзине актуализированы по прайсу 1С`, 'Синхронизация цен');
+      toastInfo(`Цены и доступные остатки для ${count} поз. в корзине актуализированы по прайсу Synergy ERP`, 'Синхронизация цен');
     }
   }, [products, items, syncItemPrices, getVariantPrice, getPricePerSqm, toastInfo]);
 

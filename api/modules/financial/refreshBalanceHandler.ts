@@ -57,11 +57,12 @@ export async function handleRefreshClientBalance(ctx: RefreshBalanceContext): Pr
   // Multi-Tenancy Scoping: Менеджеры могут обновлять баланс только прикрепленных контрагентов своего региона
   if (callerAuth && (callerAuth.role === 'manager_rm' || callerAuth.role === 'manager_lm') && !callerAuth.isServer) {
     if (effectivePartnerId && callerAuth.userId) {
+      const allowedMgrIds = [String(callerAuth.userId), callerAuth.managerId ? String(callerAuth.managerId) : ''].filter(Boolean);
       const { data: clientManaged } = await supabase
         .from('profiles')
-        .select('id')
+        .select('id, manager_id')
         .eq('partner_id', effectivePartnerId)
-        .eq('manager_id', callerAuth.userId)
+        .in('manager_id', allowedMgrIds)
         .maybeSingle();
 
       if (!clientManaged) {
@@ -97,7 +98,7 @@ export async function handleRefreshClientBalance(ctx: RefreshBalanceContext): Pr
 
     const jsonData = await erpRes.json().catch(() => null);
     if (!jsonData || !jsonData.success) {
-      throw new Error(jsonData?.error || 'Некорректный ответ шлюза 1С');
+      throw new Error(jsonData?.error || 'Некорректный ответ шлюза Synergy ERP');
     }
 
     const fin = jsonData.financials || {};
@@ -195,7 +196,7 @@ export async function handleRefreshClientBalance(ctx: RefreshBalanceContext): Pr
       overdue_days: Math.max(Number(cachedBal?.overdue_days || 0), Number(profileRow?.overdue_days || 0)),
       refreshed_at: cachedBal?.last_synced_at || new Date().toISOString(),
       source: 'stale_cache_fallback',
-      warning: 'Шлюз 1С временно недоступен; возвращены актуальные данные локального кэша.',
+      warning: 'Шлюз Synergy ERP временно недоступен; возвращены актуальные данные локального кэша.',
     });
   }
 }

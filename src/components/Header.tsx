@@ -118,7 +118,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
               {profile.price_type && (
                 <span
                   className="ml-1.5 bg-amber-600/90 text-amber-100 px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0"
-                  title={`Системный код 1С: ${profile.price_type}`}
+                  title={`Системный код ERP: ${profile.price_type}`}
                 >
                   {formatPriceType(profile.price_type)}
                 </span>

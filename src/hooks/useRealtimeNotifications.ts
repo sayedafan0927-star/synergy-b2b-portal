@@ -47,7 +47,7 @@ export function useRealtimeNotifications() {
           lastEventRef.current[eventKey] = now;
 
           if (newOrder.status === 'confirmed' || newOrder.status === 'assembling') {
-            toast.success(`Заказ передан на комплектацию и сборку в 1С:ERP`, `Заказ №${orderNum}`);
+            toast.success(`Заказ передан на комплектацию и сборку в Synergy ERP`, `Заказ №${orderNum}`);
           } else if (newOrder.status === 'shipped') {
             toast.info(`Заказ отгружен со склада и передан в доставку`, `Заказ №${orderNum}`);
           } else if (newOrder.status === 'delivered') {
@@ -75,7 +75,7 @@ export function useRealtimeNotifications() {
 
           toast.info(
             `Установлен актуальный курс: 1 USD = ${Number(rate).toFixed(2)} ₸. Цены каталога пересчитаны.`,
-            'Курс валют 1С обновлен'
+            'Курс валют ERP обновлен'
           );
         }
       )

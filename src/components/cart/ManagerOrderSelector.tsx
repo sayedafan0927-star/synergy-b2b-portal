@@ -202,12 +202,12 @@ export function ManagerOrderSelector({
           </div>
 
           <p className="text-[11px] text-slate-600 leading-tight">
-            Выберите <strong>реальный заказ из 1С:ERP</strong> для отправки боевого запроса на телефон. При одобрении статус в 1С изменится на <em>«На сборке WMS» (picking)</em> и заказ поступит в ТСД склада. При отклонении — бронь аннулируется.
+            Выберите <strong>реальный заказ из Synergy ERP</strong> для отправки боевого запроса на телефон. При одобрении статус в ERP изменится на <em>«На сборке WMS» (picking)</em> и заказ поступит в ТСД склада. При отклонении — бронь аннулируется.
           </p>
 
           <div className="space-y-1">
             <div className="flex items-center justify-between text-[11px]">
-              <label className="font-semibold text-slate-700">Заказ в базе 1С:ERP:</label>
+              <label className="font-semibold text-slate-700">Заказ в базе Synergy ERP:</label>
               <button
                 type="button"
                 onClick={loadRecentOrders}
@@ -312,7 +312,7 @@ export function ManagerOrderSelector({
           <div className="leading-tight">
             <strong className="text-slate-900 font-bold">Служебный заказ под учетной записью {managerName || 'менеджера'}.</strong>
             <p className="mt-0.5 text-slate-600">
-              Товары будут зарезервированы на складе без привязки к лимитам дилеров. В 1C:ERP оператор или менеджер сможет перебросить заказ на нужного контрагента перед отгрузкой.
+              Товары будут зарезервированы на складе без привязки к лимитам дилеров. В Synergy ERP оператор или менеджер сможет перебросить заказ на нужного контрагента перед отгрузкой.
             </p>
           </div>
         </div>

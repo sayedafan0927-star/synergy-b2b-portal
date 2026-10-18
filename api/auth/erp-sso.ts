@@ -42,7 +42,20 @@ export interface ErpSsoPayload {
 }
 
 /**
- * Валидация криптографического токена из 1С / ERP
+ * Нормализация ролей из Synergy ERP ('rm' -> 'manager_rm', 'lm' -> 'manager_lm')
+ */
+function normalizeSsoRole(raw?: string): 'admin' | 'manager_rm' | 'manager_lm' | 'supplier' | 'client' {
+  const r = String(raw || '').trim().toLowerCase();
+  if (r === 'admin') return 'admin';
+  if (r === 'rm' || r === 'manager_rm') return 'manager_rm';
+  if (r === 'lm' || r === 'manager_lm') return 'manager_lm';
+  if (r === 'supplier') return 'supplier';
+  if (r === 'client') return 'client';
+  return 'manager_rm';
+}
+
+/**
+ * Валидация криптографического токена из Synergy ERP
  */
 function verifyErpToken(tokenStr: string, queryParams?: Record<string, any>): { valid: boolean; payload?: ErpSsoPayload; error?: string } {
   if (!SECRET_KEY) {
@@ -52,12 +65,13 @@ function verifyErpToken(tokenStr: string, queryParams?: Record<string, any>): { 
   // 1. Проверка спецификации ERP_INTEGRATION_SPEC.md (HMAC-SHA256 подпись: "{manager_id}:{role}:{timestamp}")
   if (queryParams && queryParams.manager_id && queryParams.timestamp) {
     const managerId = String(queryParams.manager_id).trim();
-    const role = String(queryParams.role || 'manager_rm').trim() as any;
+    const rawRole = String(queryParams.role || 'manager_rm').trim();
+    const role = normalizeSsoRole(rawRole);
     const timestamp = Number(queryParams.timestamp);
     const phone = String(queryParams.phone || '').trim();
-    const name = String(queryParams.name || 'Сотрудник 1С').trim();
+    const name = String(queryParams.name || 'Сотрудник Synergy ERP').trim();
 
-    const payloadToSign = `${managerId}:${role}:${timestamp}`;
+    const payloadToSign = `${managerId}:${rawRole}:${timestamp}`;
     const expectedSig = crypto.createHmac('sha256', SECRET_KEY).update(payloadToSign).digest('hex');
 
     const sigBuf = Buffer.from(tokenStr.toLowerCase(), 'utf8');
@@ -67,7 +81,7 @@ function verifyErpToken(tokenStr: string, queryParams?: Record<string, any>): { 
       // Проверка срока жизни ссылки (15 минут по спецификации)
       const nowSec = Math.floor(Date.now() / 1000);
       if (Math.abs(nowSec - timestamp) > 900) {
-        return { valid: false, error: 'Срок действия одноразовой ссылки из 1С истек (TTL 15 мин)' };
+        return { valid: false, error: 'Срок действия одноразовой ссылки из Synergy ERP истек (TTL 15 мин)' };
       }
 
       return {
@@ -100,8 +114,9 @@ function verifyErpToken(tokenStr: string, queryParams?: Record<string, any>): { 
     }
 
     const payload = data as ErpSsoPayload;
+    payload.role = normalizeSsoRole(payload.role);
     if (Date.now() > payload.exp) {
-      return { valid: false, error: 'Срок действия одноразовой ссылки из 1С истек' };
+      return { valid: false, error: 'Срок действия одноразовой ссылки из Synergy ERP истек' };
     }
 
     return { valid: true, payload };
@@ -135,10 +150,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       correlationId,
       errorMessage: result.error,
     });
-    return res.status(401).send(`Ошибка авторизации из 1С: ${result.error}`);
+    return res.status(401).send(`Ошибка авторизации из Synergy ERP: ${result.error}`);
   }
 
     const p = result.payload;
+    const isEmployeeRole = p.role === 'admin' || p.role === 'manager_rm' || p.role === 'manager_lm';
     const targetEmail = p.email || `${p.phone.replace(/\D+/g, '') || p.sub}@synergy-portal.kz`;
 
     // Защита от Replay-атак (One-Time Token Consumption)
@@ -175,19 +191,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
   try {
-    // Синхронизируем профиль в БД Supabase
-    let profileQuery = supabase.from('profiles').select('id, role, partner_id, is_blocked_for_shipment');
-    if (p.phone && p.phone.trim().length > 0) {
+    // Синхронизируем профиль в БД Supabase (разделяя сотрудников по manager_id и клиентов по partner_id)
+    let profileQuery = supabase.from('profiles').select('id, role, partner_id, manager_id, is_blocked_for_shipment');
+    if (isEmployeeRole) {
+      if (p.phone && p.phone.trim().length > 0) {
+        profileQuery = profileQuery.eq('phone', p.phone).in('role', ['admin', 'manager_rm', 'manager_lm']);
+      } else {
+        profileQuery = profileQuery.eq('manager_id', String(p.sub)).in('role', ['admin', 'manager_rm', 'manager_lm']);
+      }
+    } else if (p.phone && p.phone.trim().length > 0) {
       profileQuery = profileQuery.eq('phone', p.phone);
     } else {
       profileQuery = profileQuery.eq('partner_id', String(p.sub));
     }
-    const { data: existingProfile } = await profileQuery.maybeSingle();
+    const { data: existingProfile } = await profileQuery.limit(1).maybeSingle();
 
-    const effectivePartnerId = String(existingProfile?.partner_id || p.partner_id || p.sub || '').trim();
+    const effectivePartnerId = isEmployeeRole
+      ? ''
+      : String(existingProfile?.partner_id || p.partner_id || p.sub || '').trim();
 
-    // Проверка блокировки / деактивации клиента в 1С:ERP
-    if (existingProfile?.is_blocked_for_shipment) {
+    // Проверка блокировки / деактивации клиента в Synergy ERP
+    if (!isEmployeeRole && existingProfile?.is_blocked_for_shipment) {
       await recordAuditLog({
         eventType: 'sso_auth_blocked',
         direction: 'inbound',
@@ -196,10 +220,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         correlationId,
         errorMessage: `Клиент ${effectivePartnerId} заблокирован для отгрузок (is_blocked_for_shipment)`,
       });
-      return res.status(403).send('Доступ заблокирован: учетная запись контрагента деактивирована в 1С:ERP.');
+      return res.status(403).send('Доступ заблокирован: учетная запись контрагента деактивирована в Synergy ERP.');
     }
 
-    if (redis && effectivePartnerId) {
+    if (!isEmployeeRole && redis && effectivePartnerId) {
       try {
         const isRevoked = await redis.get(`revoked_partner:${effectivePartnerId}`);
         if (isRevoked) {
@@ -211,7 +235,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             correlationId,
             errorMessage: `Клиент ${effectivePartnerId} отозван по вебхуку деактивации`,
           });
-          return res.status(403).send('Доступ заблокирован: сессия партнера отозвана по требованию 1С:ERP.');
+          return res.status(403).send('Доступ заблокирован: сессия партнера отозвана по требованию Synergy ERP.');
         }
       } catch (redisCheckErr) {
         console.warn('[SSO Gateway] Redis partner revocation check warning:', redisCheckErr);
@@ -221,24 +245,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let targetUserId = existingProfile?.id;
 
     if (!targetUserId) {
-      // Создаем/обновляем профиль
+      // Создаем профиль (для сотрудника — с manager_id и partner_id: null, чтобы не затереть клиента!)
       const newUuid = crypto.randomUUID();
       targetUserId = newUuid;
-      await supabase.from('profiles').upsert({
+      await supabase.from('profiles').insert({
         id: newUuid,
         role: p.role,
         full_name: p.name,
         company_name: 'Synergy Group (ERP)',
         phone: p.phone || '',
-        partner_id: p.partner_id || String(p.sub) || null,
+        partner_id: isEmployeeRole ? null : (p.partner_id || String(p.sub) || null),
+        manager_id: isEmployeeRole ? String(p.sub) : null,
         updated_at: new Date().toISOString(),
       });
     } else {
-      await supabase.from('profiles').update({
+      const updPayload: Record<string, any> = {
         role: p.role,
         full_name: p.name,
         updated_at: new Date().toISOString(),
-      }).eq('id', targetUserId);
+      };
+      if (isEmployeeRole) updPayload.manager_id = String(p.sub);
+      await supabase.from('profiles').update(updPayload).eq('id', targetUserId);
     }
 
     // Формируем безопасный криптографически подписанный сессионный токен для браузера
@@ -253,7 +280,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         role: p.role,
         full_name: p.name,
         phone: p.phone,
-        partner_id: p.partner_id || null,
+        partner_id: isEmployeeRole ? null : (p.partner_id || String(p.sub) || null),
+        manager_id: isEmployeeRole ? String(p.sub) : null,
         company_name: 'Synergy Group (ERP)',
         price_type: 'wholesale',
       },

@@ -95,7 +95,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       (authCtx.role === 'manager_rm' || authCtx.role === 'manager_lm') &&
       existingProfile?.manager_id &&
       authCtx.userId &&
-      String(existingProfile.manager_id) !== String(authCtx.userId)
+      String(existingProfile.manager_id) !== String(authCtx.userId) &&
+      (!authCtx.managerId || String(existingProfile.manager_id) !== String(authCtx.managerId))
     ) {
       return res.status(403).json({
         success: false,

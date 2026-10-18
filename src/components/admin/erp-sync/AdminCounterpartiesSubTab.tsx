@@ -233,7 +233,7 @@ export function AdminCounterpartiesSubTab({
                         return (
                           <span
                             className="badge bg-brand-50 text-brand-700 font-medium text-[10px] whitespace-nowrap"
-                            title={`Системный код 1С: ${rawType}`}
+                            title={`Системный код ERP: ${rawType}`}
                           >
                             {formatPriceType(rawType)}
                           </span>

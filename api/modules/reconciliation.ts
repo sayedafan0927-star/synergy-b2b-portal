@@ -41,11 +41,12 @@ export async function handleReconciliationReport(
       return res.status(400).json({ success: false, error: 'Параметр partner_id обязателен для формирования акта сверки.' });
     }
     if ((authCtx.role === 'manager_rm' || authCtx.role === 'manager_lm') && supabaseServer && authCtx.userId) {
+      const allowedMgrIds = [String(authCtx.userId), authCtx.managerId ? String(authCtx.managerId) : ''].filter(Boolean);
       const { data: managedProfile } = await supabaseServer
         .from('profiles')
-        .select('id')
+        .select('id, manager_id')
         .eq('partner_id', partnerId)
-        .eq('manager_id', authCtx.userId)
+        .in('manager_id', allowedMgrIds)
         .maybeSingle();
 
       if (!managedProfile) {

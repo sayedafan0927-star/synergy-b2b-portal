@@ -2315,7 +2315,44 @@ with open(os.path.join(ROOT_DIR, "src", "pages", "ProfilePage.tsx"), "r", encodi
 test_assert("client_contracts" not in pp_s46 and "clientDebt?.contracts" in pp_s46 and "data.report || data" in pp_s46, "ProfilePage.tsx uses live ERP clientDebt.contracts instead of dead client_contracts table and supports normalized reconciliation report")
 
 # ------------------------------------------------------------------------------
-# 71. Summary Report
+# 71. Stage 47: Pass 6 Deep Cross-Module & Custom Synergy ERP Audit
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 71. STAGE 47: PASS 6 DEEP CROSS-MODULE & CUSTOM SYNERGY ERP AUDIT ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "api", "lib", "authGuard.ts"), "r", encoding="utf-8") as fp:
+    ag_s47 = fp.read()
+test_assert("normalizePortalRole" in ag_s47 and "isManagerAssignedToClient" in ag_s47 and "managerId?: string | null" in ag_s47, "authGuard.ts normalizes Synergy ERP 'rm'/'lm' roles and exposes managerId + isManagerAssignedToClient")
+
+with open(os.path.join(ROOT_DIR, "api", "auth", "erp-sso.ts"), "r", encoding="utf-8") as fp:
+    sso_s47 = fp.read()
+test_assert("normalizeSsoRole" in sso_s47 and ".eq('manager_id', String(p.sub))" in sso_s47 and "1С" not in sso_s47, "erp-sso.ts verifies HMAC with raw 'rm'/'lm' role and isolates employee SSO profiles by manager_id without colliding with client partner_id")
+
+with open(os.path.join(ROOT_DIR, "api", "erp.ts"), "r", encoding="utf-8") as fp:
+    erp_s47 = fp.read()
+test_assert("const erpMgrId = verifiedAuth.managerId" in erp_s47, "api/erp.ts scopes manager queries to Synergy ERP using numeric managerId")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "profile", "useOrdersList.ts"), "r", encoding="utf-8") as fp:
+    uol_s47 = fp.read()
+test_assert("fbQ = fbQ.eq('user_id', profile.id)" in uol_s47, "useOrdersList.ts preserves user_id filter in fallback Supabase orders query preventing BOLA leak")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "erp", "upstreamProxy.ts"), "r", encoding="utf-8") as fp:
+    up_s47 = fp.read()
+test_assert("enrichOrdersWithBufferedLocalOrders" in up_s47 and "assignedManagerId" in up_s47, "upstreamProxy.ts enriches orders response with buffered local orders and persists assignedManagerId on login")
+
+with open(os.path.join(ROOT_DIR, "api", "cron", "reconcile-stock.ts"), "r", encoding="utf-8") as fp:
+    rs_s47 = fp.read()
+test_assert("unconfirmedPortalHolds" in rs_s47 and "UNCONFIRMED_HOLD_STATUSES" in rs_s47, "reconcile-stock.ts subtracts only unconfirmed portal holds from Synergy ERP free_stock preventing double-deduction")
+
+with open(os.path.join(ROOT_DIR, "api", "lib", "catalogCache.ts"), "r", encoding="utf-8") as fp:
+    cc_s47 = fp.read()
+test_assert("unaccountedHold = Math.max(0, holdQty - r.reserved_stock)" in cc_s47, "catalogCache.ts prevents double-deduction of in-flight holds when reserved_stock is already populated")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "supplier", "supplierHandler.ts"), "r", encoding="utf-8") as fp:
+    sh_s47 = fp.read()
+test_assert("isUnassignedOrPlaceholder" in sh_s47, "supplierHandler.ts only applies item-name heuristic to unassigned/placeholder supplier_id shipments")
+
+# ------------------------------------------------------------------------------
+# 72. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

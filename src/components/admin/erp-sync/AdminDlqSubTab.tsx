@@ -16,10 +16,10 @@ export interface AdminDlqSubTabProps {
 const CATEGORIES = [
   { id: 'ALL', label: 'Все сбои' },
   { id: 'STOCK_UNAVAILABLE', label: 'Нехватка остатка' },
-  { id: 'ERP_TIMEOUT', label: 'Таймаут 1C' },
+  { id: 'ERP_TIMEOUT', label: 'Таймаут ERP' },
   { id: 'INVALID_PAYLOAD', label: 'Валидация' },
   { id: 'AUTH_FAILED', label: 'Авторизация' },
-  { id: 'ERP_SERVER_ERROR', label: 'Сбой 1C' },
+  { id: 'ERP_SERVER_ERROR', label: 'Сбой ERP' },
   { id: 'NETWORK_ERROR', label: 'Сетевой сбой' },
 ];
 

@@ -54,10 +54,60 @@ export async function handleErpLoginToken(jsonData: any, supabase: SupabaseClien
   try {
     const SECRET_KEY = process.env.PORTAL_SECRET_KEY || '';
     if (SECRET_KEY) {
+      const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+      if (jsonData.user_type === 'employee' || jsonData.employee) {
+        const emp = jsonData.employee || jsonData;
+        const empId = String(emp.id || emp.manager_id || '');
+        const rawRole = String(emp.role || jsonData.role || 'manager_rm').toLowerCase().trim();
+        const empRole = rawRole === 'lm' ? 'manager_lm' : (rawRole === 'admin' ? 'admin' : 'manager_rm');
+        const empName = String(emp.name || jsonData.name || 'Сотрудник ERP');
+        const empPhone = String(emp.phone || jsonData.phone || '');
+        let empProfileId = crypto.randomUUID();
+
+        if (supabase && empId) {
+          try {
+            const { data: eRow } = await supabase
+              .from('profiles')
+              .select('id')
+              .eq('manager_id', empId)
+              .in('role', ['admin', 'manager_rm', 'manager_lm'])
+              .maybeSingle();
+            if (eRow?.id && UUID_REGEX.test(eRow.id)) empProfileId = eRow.id;
+          } catch {}
+        }
+
+        const empSessionData = {
+          user: {
+            id: empProfileId,
+            email: `${empPhone.replace(/\D+/g, '') || empId}@synergy-portal.kz`,
+            user_metadata: { full_name: empName, erp_emp_id: `erp-employee-${empId}` },
+          },
+          profile: {
+            id: empProfileId,
+            role: empRole,
+            partner_id: null,
+            full_name: empName,
+            phone: empPhone,
+            company_name: 'Synergy Group (ERP)',
+            manager_id: empId,
+            price_type: 'wholesale',
+            impersonation_enabled: true,
+          },
+          timestamp: Date.now(),
+        };
+        const sig = crypto.createHmac('sha256', SECRET_KEY).update(JSON.stringify(empSessionData)).digest('hex');
+        const sessionToken = Buffer.from(JSON.stringify({ data: empSessionData, sig })).toString('base64url');
+        jsonData.role = empRole;
+        if (jsonData.employee) jsonData.employee.role = empRole;
+        jsonData.token = sessionToken;
+        jsonData.portal_session_token = sessionToken;
+        return true;
+      }
+
       const c = jsonData.client || {};
       const pId = String(c.id || jsonData.client_id || '');
       const uId = `erp-client-${pId}`;
-      const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       const fName = String(jsonData.name || c.name || 'Оптовый клиент');
       const phone = String(jsonData.phone || c.phone || '');
 
@@ -66,7 +116,7 @@ export async function handleErpLoginToken(jsonData: any, supabase: SupabaseClien
         try {
           const { data: pRow } = await supabase
             .from('profiles')
-            .select('id, price_type, credit_limit_usd, is_blocked_for_shipment, impersonation_enabled, showroom_warehouse_id')
+            .select('id, price_type, credit_limit_usd, is_blocked_for_shipment, impersonation_enabled, showroom_warehouse_id, manager_id')
             .eq('partner_id', pId)
             .maybeSingle();
           dbProfile = pRow;
@@ -90,6 +140,9 @@ export async function handleErpLoginToken(jsonData: any, supabase: SupabaseClien
 
       const firstContract = Array.isArray(c.contracts) && c.contracts.length > 0 ? c.contracts[0] : null;
       const priceType = String(c.price_type || firstContract?.price_type || dbProfile?.price_type || 'wholesale');
+      const assignedManagerId = String(
+        c.regional_manager?.id || jsonData.regional_manager?.id || c.manager_id || dbProfile?.manager_id || ''
+      ).trim() || null;
       const creditLimitUsd = Number(
         c.credit_limit_usd ??
         c.financials?.credit_limit_usd ??
@@ -112,6 +165,7 @@ export async function handleErpLoginToken(jsonData: any, supabase: SupabaseClien
           id: resolvedUserId,
           role: 'client',
           partner_id: pId,
+          manager_id: assignedManagerId,
           full_name: fName,
           phone,
           company_name: fName,
@@ -137,6 +191,7 @@ export async function handleErpLoginToken(jsonData: any, supabase: SupabaseClien
               id: resolvedUserId,
               partner_id: pId,
               erp_id: Number(pId) || null,
+              manager_id: assignedManagerId,
               full_name: fName,
               company_name: fName,
               phone,
@@ -320,3 +375,89 @@ export async function handleErpLoginFallback(
 
   return false;
 }
+
+export async function enrichOrdersWithBufferedLocalOrders(
+  jsonData: any,
+  query: any,
+  supabase: SupabaseClient | null
+): Promise<void> {
+  if (!supabase || !jsonData || !Array.isArray(jsonData.orders)) return;
+  try {
+    const clientIdParam = String(query?.client_id || query?.partner_id || query?.counterparty_id || '').trim();
+    const managerIdParam = String(query?.manager_id || '').trim();
+    let q = supabase
+      .from('orders')
+      .select('*, order_items(*), profiles!user_id(full_name, company_name, phone, partner_id, manager_id)')
+      .is('parent_order_id', null)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (clientIdParam) {
+      const { data: pRow } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('partner_id', clientIdParam)
+        .maybeSingle();
+      if (pRow?.id) {
+        q = q.eq('user_id', pRow.id);
+      } else {
+        return;
+      }
+    }
+
+    const { data: dbOrders } = await q;
+    if (!Array.isArray(dbOrders) || dbOrders.length === 0) return;
+
+    const knownDocs = new Set(jsonData.orders.map((o: any) => String(o.doc_number || o.order_number || '')).filter(Boolean));
+    const knownIds = new Set(jsonData.orders.map((o: any) => String(o.id || '')));
+
+    const buffered = dbOrders
+      .filter((row: any) => {
+        const doc = String(row.order_number || row.doc_number || '');
+        if (knownIds.has(String(row.id)) || (doc && knownDocs.has(doc))) return false;
+        const prof = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
+        if (managerIdParam && prof?.manager_id && String(prof.manager_id) !== managerIdParam) return false;
+        return true;
+      })
+      .map((row: any) => {
+        const prof = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
+        const rawItems = Array.isArray(row.order_items) && row.order_items.length > 0
+          ? row.order_items
+          : (Array.isArray(row.items) ? row.items : []);
+        return {
+          id: row.id,
+          doc_number: row.order_number || row.doc_number || `ORD-${String(row.id).slice(0, 8)}`,
+          client_id: Number(prof?.partner_id || clientIdParam || 0) || row.user_id,
+          client_name: prof?.company_name || prof?.full_name || 'Клиент',
+          client_phone: prof?.phone || '',
+          date: row.created_at,
+          status: row.status || 'pending',
+          status_code: row.status || 'pending',
+          warehouse_name: row.warehouse || row.warehouse_name || 'Основной Склад Астана',
+          comment: row.notes || row.comment || '',
+          total_amount: Number(row.total_amount || 0),
+          total_sqm: Number(row.total_sqm || 0),
+          items_count: Number(row.total_items || rawItems.length || 0),
+          items: rawItems.map((it: any, idx: number) => ({
+            id: it.id || idx + 1,
+            item_id: it.item_id || it.product_id,
+            name: it.product_name || it.name || 'Ковер',
+            size: it.size || 'Стандарт',
+            sku: it.sku || '',
+            warehouse: it.warehouse || row.warehouse || 'Основной Склад Астана',
+            warehouse_id: it.warehouse_id,
+            price: Number(it.price || 0),
+            quantity: Number(it.quantity || 1),
+          })),
+        };
+      });
+
+    if (buffered.length > 0) {
+      jsonData.orders = [...buffered, ...jsonData.orders];
+      jsonData.count = jsonData.orders.length;
+    }
+  } catch (err) {
+    console.warn('[API Proxy ERP] Orders enrichment notice:', err);
+  }
+}
+
