@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '../../lib/logger';
 import { recordAuditLog } from '../../audit/logs';
+import { extractAuthoritativeClientFinancials } from './debtHandler';
 
 export interface RefreshBalanceContext {
   req: VercelRequest;
@@ -100,21 +101,15 @@ export async function handleRefreshClientBalance(ctx: RefreshBalanceContext): Pr
     }
 
     const fin = jsonData.financials || {};
-    const rawDebt = fin.total_debt_usd ?? jsonData.debt_usd ?? jsonData.total_debt_usd;
-    const totalDebtUsd = rawDebt !== undefined
-      ? Math.max(0, Number(rawDebt))
-      : (typeof fin.balance_usd === 'number' && fin.balance_usd < 0 ? Math.abs(fin.balance_usd) : 0);
-
-    const balanceUsd = typeof fin.balance_usd === 'number'
-      ? Math.max(0, fin.balance_usd)
-      : (typeof jsonData.balance_usd === 'number'
-          ? Math.max(0, jsonData.balance_usd)
-          : (totalDebtUsd === 0 && Number(jsonData.balance || 0) > 0 ? Number(jsonData.balance) : 0));
-    const isOverdue = Boolean(fin.is_overdue || jsonData.is_overdue);
-    const overdueDays = Number(fin.max_overdue_days || fin.overdue_days || 0);
+    const rawDebt = fin.total_debt_usd ?? fin.debt_usd ?? jsonData.total_debt_usd ?? jsonData.debt_usd;
+    const parsedFin = extractAuthoritativeClientFinancials(jsonData);
+    const totalDebtUsd = rawDebt !== undefined ? Math.max(0, Number(rawDebt)) : parsedFin.totalDebtUsd;
+    const balanceUsd = parsedFin.signedBalanceUsd;
+    const isOverdue = parsedFin.isOverdue;
+    const overdueDays = parsedFin.overdueDays;
     const refreshedAt = new Date().toISOString();
 
-    // 1. Атомарно сохраняем в partner_balances
+    // 1. Атомарно сохраняем знаковое сальдо в partner_balances (отрицательное = долг, положительное = аванс)
     if (supabase) {
       await supabase
         .from('partner_balances')
@@ -127,15 +122,15 @@ export async function handleRefreshClientBalance(ctx: RefreshBalanceContext): Pr
           last_synced_at: refreshedAt,
         }, { onConflict: 'partner_id' });
 
-      // 2. Также обновляем поле debt_usd, overdue_days и credit_limit_usd (из contracts[0]) в профиле контрагента
+      // 2. Также обновляем поле debt_usd, overdue_days и credit_limit_usd (из contracts[0] / limit_sum_usd) в профиле контрагента
       const firstContract = Array.isArray(jsonData.contracts) && jsonData.contracts.length > 0 ? jsonData.contracts[0] : null;
-      const erpCreditLimit = jsonData.client?.credit_limit_usd ?? jsonData.credit_limit_usd ?? firstContract?.credit_limit_usd ?? firstContract?.credit_limit;
+      const erpCreditLimit = parsedFin.creditLimitUsd || (firstContract?.credit_limit_usd ?? firstContract?.limit_sum_usd ?? firstContract?.credit_limit);
       const profileUpdate: Record<string, any> = {
         debt_usd: totalDebtUsd,
         overdue_days: overdueDays,
         updated_at: refreshedAt,
       };
-      if (erpCreditLimit !== undefined && !isNaN(Number(erpCreditLimit))) {
+      if (erpCreditLimit !== undefined && !isNaN(Number(erpCreditLimit)) && Number(erpCreditLimit) > 0) {
         profileUpdate.credit_limit_usd = Number(erpCreditLimit);
       }
       await supabase
@@ -160,8 +155,12 @@ export async function handleRefreshClientBalance(ctx: RefreshBalanceContext): Pr
       partner_id: effectivePartnerId,
       balance_usd: balanceUsd,
       total_debt_usd: totalDebtUsd,
+      overdue_usd: parsedFin.overdueUsd,
+      credit_limit_usd: parsedFin.creditLimitUsd,
       is_overdue: isOverdue,
       overdue_days: overdueDays,
+      contracts: parsedFin.normalizedContracts,
+      unpaid_invoices: Array.isArray(jsonData.unpaid_invoices) ? jsonData.unpaid_invoices : [],
       refreshed_at: refreshedAt,
       source: 'live_erp',
     });

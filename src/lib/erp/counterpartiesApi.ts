@@ -345,13 +345,22 @@ export function broadcastClientDeactivated(counterpartyId: number | string) {
 /**
  * Получение персональной задолженности и неоплаченных накладных клиента из ERP.
  */
-export async function fetchClientDebtFromErp(params: { phone?: string; counterpartyId?: number; search?: string }): Promise<ClientDebtReport> {
+export async function fetchClientDebtFromErp(params: {
+  phone?: string;
+  counterpartyId?: number;
+  search?: string;
+  refresh?: boolean;
+  includeInvoices?: boolean;
+}): Promise<ClientDebtReport> {
   const response = await erpFetch('client_debt', {
     method: 'GET',
     params: {
       phone: params.phone,
       counterparty_id: params.counterpartyId,
+      partner_id: params.counterpartyId,
       search: params.search,
+      refresh: params.refresh ? '1' : undefined,
+      include_invoices: params.includeInvoices !== false ? '1' : undefined,
     },
   });
 

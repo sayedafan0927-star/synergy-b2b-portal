@@ -122,12 +122,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
             const erpDebt = Math.max(0, Number(erpItem.total_debt_usd ?? erpItem.debt_usd ?? 0));
             const erpFirstContract = Array.isArray(erpItem.contracts) && erpItem.contracts.length > 0 ? erpItem.contracts[0] : null;
-            const erpCreditLimit = Number(erpItem.credit_limit_usd ?? erpFirstContract?.credit_limit_usd ?? erpFirstContract?.credit_limit ?? client.credit_limit_usd ?? 0);
-            const erpBalance = Number(
-              erpItem.balance_usd !== undefined
-                ? Math.max(0, Number(erpItem.balance_usd))
-                : (erpDebt === 0 && Number(erpItem.balance ?? 0) > 0 ? Number(erpItem.balance) : 0)
-            );
+            const erpCreditLimit = Number(erpItem.credit_limit_usd ?? erpFirstContract?.credit_limit_usd ?? erpFirstContract?.limit_sum_usd ?? erpFirstContract?.credit_limit ?? client.credit_limit_usd ?? 0);
+            const rawErpBal = erpItem.balance_usd !== undefined ? Number(erpItem.balance_usd) : (erpDebt > 0 ? -erpDebt : Number(erpItem.balance ?? 0));
+            const erpBalance = (erpDebt > 0 && rawErpBal === 0) ? -erpDebt : rawErpBal;
+            const erpOverdueDays = Math.max(0, Number(erpItem.max_overdue_days ?? erpItem.overdue_days ?? 0));
+            const erpIsOverdue = Boolean(erpItem.is_overdue || Number(erpItem.overdue_usd || 0) > 0 || erpOverdueDays > 0);
             const isBlocked = Boolean(erpItem.is_blocked_for_shipment);
 
             const localDebt = Number(client.debt_usd || 0);
@@ -144,6 +143,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 .upsert({
                   partner_id: partnerId,
                   balance: erpBalance,
+                  is_overdue: erpIsOverdue,
+                  overdue_days: erpOverdueDays,
                   currency: erpItem.currency || 'USD',
                   last_synced_at: new Date().toISOString(),
                 }, { onConflict: 'partner_id' });
@@ -152,6 +153,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 .from('profiles')
                 .update({
                   debt_usd: erpDebt,
+                  overdue_days: erpOverdueDays,
                   credit_limit_usd: erpCreditLimit,
                   is_blocked_for_shipment: isBlocked,
                   updated_at: new Date().toISOString(),
@@ -233,12 +235,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
           const erpDebt = Math.max(0, Number(debtData.financials?.total_debt_usd ?? debtData.debt_usd ?? 0));
           const debtFirstContract = Array.isArray(debtData.contracts) && debtData.contracts.length > 0 ? debtData.contracts[0] : null;
-          const erpCreditLimit = Number(debtData.client?.credit_limit_usd ?? debtData.credit_limit_usd ?? debtFirstContract?.credit_limit_usd ?? debtFirstContract?.credit_limit ?? client.credit_limit_usd ?? 0);
-          const erpBalance = Number(
-            debtData.financials?.balance_usd !== undefined
-              ? Math.max(0, Number(debtData.financials.balance_usd))
-              : (erpDebt === 0 && Number(debtData.balance_usd ?? debtData.balance ?? 0) > 0 ? Number(debtData.balance_usd ?? debtData.balance) : 0)
-          );
+          const contractsSum = Array.isArray(debtData.contracts)
+            ? debtData.contracts.reduce((s: number, c: any) => {
+                const lim = Number(c.credit_limit_usd ?? c.limit_sum_usd ?? c.credit_limit ?? 0) || 0;
+                return s + (lim > 1 ? lim : 0);
+              }, 0)
+            : 0;
+          const erpCreditLimit = Number(debtData.client?.credit_limit_usd || debtData.credit_limit_usd || contractsSum || debtFirstContract?.credit_limit_usd || debtFirstContract?.limit_sum_usd || client.credit_limit_usd || 0);
+          const rawErpBal = debtData.financials?.balance_usd !== undefined
+            ? Number(debtData.financials.balance_usd)
+            : (erpDebt > 0 ? -erpDebt : Number(debtData.balance_usd ?? debtData.balance ?? 0));
+          const erpBalance = (erpDebt > 0 && rawErpBal === 0) ? -erpDebt : rawErpBal;
+          const erpOverdueDays = Math.max(0, Number(debtData.financials?.max_overdue_days ?? debtData.financials?.overdue_days ?? 0));
+          const erpIsOverdue = Boolean(debtData.financials?.is_overdue || Number(debtData.financials?.overdue_usd || 0) > 0 || erpOverdueDays > 0);
 
           const isBlocked = Boolean(debtData.client?.is_blocked_for_shipment);
           const localDebt = Number(client.debt_usd || 0);
@@ -255,6 +264,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               .upsert({
                 partner_id: partnerId,
                 balance: erpBalance,
+                is_overdue: erpIsOverdue,
+                overdue_days: erpOverdueDays,
                 currency: 'USD',
                 last_synced_at: new Date().toISOString(),
               }, { onConflict: 'partner_id' });
@@ -263,6 +274,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               .from('profiles')
               .update({
                 debt_usd: erpDebt,
+                overdue_days: erpOverdueDays,
                 credit_limit_usd: erpCreditLimit,
                 is_blocked_for_shipment: isBlocked,
                 updated_at: new Date().toISOString(),

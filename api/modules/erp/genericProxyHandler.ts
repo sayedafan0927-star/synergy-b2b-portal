@@ -16,7 +16,7 @@ import {
   handleErpLoginToken,
   handleErpLoginFallback,
 } from './upstreamProxy';
-import { handleDebtFallbackOnFailure } from '../financial/debtHandler';
+import { handleDebtFallbackOnFailure, extractAuthoritativeClientFinancials } from '../financial/debtHandler';
 
 let lastKnownInboundShipments: any = null;
 
@@ -116,6 +116,11 @@ export async function handleGenericErpProxy(
 
     if (isForceRefresh && (action === 'catalog' || action === 'catalog_normalized')) {
       queryParams.set('refresh', '1');
+    }
+
+    if ((action === 'client_debt' || action === 'get_client_debt') && !queryParams.has('counterparty_id') && !queryParams.has('phone')) {
+      const pid = queryParams.get('partner_id') || queryParams.get('client_id');
+      if (pid) queryParams.set('counterparty_id', pid);
     }
 
     const targetUrl = `${TARGET_ERP_URL}?${queryParams.toString()}`;
@@ -314,24 +319,43 @@ export async function handleGenericErpProxy(
       }
 
       if ((action === 'client_debt' || action === 'get_client_debt') && erpResponse.ok && jsonData?.success) {
-        const pId = String(req.query.partner_id || req.query.counterparty_id || req.query.client_id || jsonData.client?.partner_id || jsonData.partner_id || '').trim();
-        const fin = jsonData.financials || {};
-        const bal = typeof fin.balance_usd === 'number' ? fin.balance_usd : (typeof jsonData.balance_usd === 'number' ? jsonData.balance_usd : -Number(fin.total_debt_usd || jsonData.debt_usd || 0));
-        const isOverdue = Boolean(fin.is_overdue || jsonData.is_overdue);
-        const overdueDays = Number(fin.max_overdue_days || fin.overdue_days || 0);
+        const pId = String(req.query.partner_id || req.query.counterparty_id || req.query.client_id || jsonData.client?.id || jsonData.client?.partner_id || jsonData.partner_id || '').trim();
+        const parsedFin = extractAuthoritativeClientFinancials(jsonData);
+        jsonData.contracts = parsedFin.normalizedContracts;
+        jsonData.credit_limit_usd = parsedFin.creditLimitUsd;
+        if (jsonData.client && typeof jsonData.client === 'object') {
+          jsonData.client.credit_limit_usd = parsedFin.creditLimitUsd;
+        }
+        if (jsonData.financials && typeof jsonData.financials === 'object') {
+          jsonData.financials.credit_limit_usd = parsedFin.creditLimitUsd;
+          jsonData.financials.available_credit_usd = Math.max(0, Number((parsedFin.creditLimitUsd - parsedFin.totalDebtUsd).toFixed(2)));
+        }
 
         if (pId && supabase) {
+          const syncedAt = new Date().toISOString();
           supabase
             .from('partner_balances')
             .upsert({
               partner_id: pId,
-              balance: bal,
-              is_overdue: isOverdue,
-              overdue_days: overdueDays,
+              balance: parsedFin.signedBalanceUsd,
+              is_overdue: parsedFin.isOverdue,
+              overdue_days: parsedFin.overdueDays,
               currency: 'USD',
-              last_synced_at: new Date().toISOString(),
+              last_synced_at: syncedAt,
             }, { onConflict: 'partner_id' })
             .catch((e: any) => console.warn('[Financial Cache] Update error:', e));
+
+          const profUpd: Record<string, any> = {
+            debt_usd: parsedFin.totalDebtUsd,
+            overdue_days: parsedFin.overdueDays,
+            updated_at: syncedAt,
+          };
+          if (parsedFin.creditLimitUsd > 0) profUpd.credit_limit_usd = parsedFin.creditLimitUsd;
+          supabase
+            .from('profiles')
+            .update(profUpd)
+            .eq('partner_id', pId)
+            .catch((e: any) => console.warn('[Profile Debt Sync] Update error:', e));
         }
       }
 

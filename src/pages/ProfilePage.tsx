@@ -13,7 +13,6 @@ import {
 } from 'lucide-react';
 import type { PageId } from '@/types';
 import { useAuth, type UserRole } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
 import {
   fetchClientDebtFromErp,
   type ClientDebtReport,
@@ -114,8 +113,10 @@ export default function ProfilePage({
         endDate,
       });
 
-      if (data.success && data.report) {
-        setReconciliationData(data.report);
+      if (data && data.success) {
+        setReconciliationData(data.report || data);
+      } else {
+        setReconciliationData(null);
       }
     } catch (e) {
       console.warn('[Profile] Reconciliation report fetch failed:', e);
@@ -136,7 +137,7 @@ export default function ProfilePage({
       try {
         const phone = profile.phone || user?.phone || (user?.user_metadata?.phone as string) || undefined;
         const partnerId = profile.partner_id ? Number(profile.partner_id) : (!isNaN(Number(profile.id)) ? Number(profile.id) : undefined);
-        const res = await fetchClientDebtFromErp({ phone, counterpartyId: partnerId });
+        const res = await fetchClientDebtFromErp({ phone, counterpartyId: partnerId, includeInvoices: true });
         if (!cancelled && res.success) {
           setClientDebt(res);
         }
@@ -151,33 +152,25 @@ export default function ProfilePage({
     return () => { cancelled = true; };
   }, [profile?.id, profile?.phone, profile?.partner_id, profile?.role, user?.phone, user?.user_metadata]);
 
-  // Договоры клиента
-  const [clientContracts, setClientContracts] = useState<any[]>([]);
-  const [loadingContracts, setLoadingContracts] = useState(false);
-
-  useEffect(() => {
-    if (!profile?.id || profile.role !== 'client') return;
-    let isMounted = true;
-    const loadContracts = async () => {
-      setLoadingContracts(true);
-      try {
-        const { data } = await supabase
-          .from('client_contracts')
-          .select('*')
-          .eq('client_id', profile.id)
-          .order('valid_from', { ascending: false });
-        if (data && isMounted) {
-          setClientContracts(data);
-        }
-      } catch (err) {
-        console.warn('Failed to load client contracts:', err);
-      } finally {
-        if (isMounted) setLoadingContracts(false);
-      }
-    };
-    loadContracts();
-    return () => { isMounted = false; };
-  }, [profile?.id, profile?.role]);
+  // Договоры клиента из живого ответа шлюза ERP (client_debt.contracts)
+  const clientContracts = useMemo(() => {
+    const raw = Array.isArray(clientDebt?.contracts) ? clientDebt!.contracts! : [];
+    return raw.map((c: any, idx: number) => {
+      const limitUsd = Number(c.credit_limit_usd ?? c.limit_sum_usd ?? c.credit_limit ?? 0);
+      const limitDays = Number(c.limit_days ?? c.payment_delay_days ?? 0);
+      return {
+        id: c.id ?? idx + 1,
+        contract_number: c.contract_number || c.name || `Договор #${c.id || idx + 1}`,
+        status: c.status || 'active',
+        contract_type: c.contract_type || (limitDays > 1 ? `Отсрочка ${limitDays} дн.` : 'prepayment'),
+        credit_limit_usd: limitUsd > 1 ? limitUsd : 0,
+        debt_usd: Number(c.debt_usd || 0),
+        overdue_usd: Number(c.overdue_usd || 0),
+        overdue_days: Number(c.overdue_days || 0),
+      };
+    });
+  }, [clientDebt?.contracts]);
+  const loadingContracts = loadingDebt;
 
   const handleSignOut = async () => {
     await signOut();
@@ -303,6 +296,17 @@ export default function ProfilePage({
                   </span>
                 </div>
 
+                {(clientDebt?.financials?.overdue_usd ?? 0) > 0 && (
+                  <div className="flex justify-between items-center text-[11px]">
+                    <span className="text-red-600 font-medium">
+                      Просрочено {clientDebt?.financials?.max_overdue_days ? `(${clientDebt.financials.max_overdue_days} дн.)` : ''}
+                    </span>
+                    <span className="font-bold text-red-600">
+                      {fmtPrice(clientDebt?.financials?.overdue_usd ?? 0)}
+                    </span>
+                  </div>
+                )}
+
                 <div className="flex justify-between items-center">
                   <span className="text-slate-500">{t('profile.credit_limit')}</span>
                   <span className="font-semibold text-slate-700">
@@ -353,9 +357,11 @@ export default function ProfilePage({
                 <div className="space-y-2.5">
                   {clientContracts.map((c) => (
                     <div key={c.id} className="rounded-lg bg-slate-50 border border-slate-200/80 p-2.5 text-xs space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-slate-800">№ {c.contract_number}</span>
-                        <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                      <div className="flex items-center justify-between gap-1.5">
+                        <span className="font-bold text-slate-800 truncate" title={String(c.contract_number)}>
+                          {String(c.contract_number).startsWith('№') ? c.contract_number : `№ ${c.contract_number}`}
+                        </span>
+                        <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold shrink-0 ${
                           c.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
                         }`}>
                           {c.status === 'active' ? t('profile.contract_active') : c.status}
@@ -368,6 +374,12 @@ export default function ProfilePage({
                         <span>{t('profile.credit_limit')}</span>
                         <span className="font-bold text-slate-900">${Number(c.credit_limit_usd).toLocaleString('en-US')}</span>
                       </div>
+                      {Number(c.debt_usd) > 0 && (
+                        <div className="flex items-center justify-between text-[11px] text-red-600">
+                          <span>Долг по договору</span>
+                          <span className="font-bold">${Number(c.debt_usd).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

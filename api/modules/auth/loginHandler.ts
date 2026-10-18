@@ -80,7 +80,7 @@ export async function handleLoginFallback(
   // 2. Поиск хэша пароля в profiles
   const { data: dbProfile } = await supabase
     .from('profiles')
-    .select('id, password_hash, role, is_blocked_for_shipment')
+    .select('id, password_hash, role, is_blocked_for_shipment, debt_usd, credit_limit_usd')
     .or(`phone.eq.${matchedClient.phone},partner_id.eq.${matchedClient.id}`)
     .maybeSingle();
 
@@ -163,9 +163,19 @@ export async function handleLoginFallback(
   const fName = String(matchedClient.name || 'Оптовый клиент');
   const firstContract = Array.isArray(matchedClient.contracts) && matchedClient.contracts.length > 0 ? matchedClient.contracts[0] : null;
   const priceType = String(matchedClient.price_type || firstContract?.price_type || 'wholesale');
-  const debtUsd = typeof matchedClient.financials?.debt_usd === 'number' ? matchedClient.financials.debt_usd : Number(matchedClient.debt_usd || 0);
-  const balanceUsd = typeof matchedClient.financials?.balance_usd === 'number' ? matchedClient.financials.balance_usd : Number(matchedClient.balance_usd || 0);
-  const creditLimitUsd = Number(matchedClient.credit_limit_usd ?? matchedClient.financials?.credit_limit_usd ?? firstContract?.credit_limit_usd ?? firstContract?.credit_limit ?? 0);
+  const contractsLimitSum = Array.isArray(matchedClient.contracts)
+    ? matchedClient.contracts.reduce((s: number, c: any) => {
+        const l = Number(c.credit_limit_usd ?? c.limit_sum_usd ?? c.credit_limit ?? 0);
+        return s + (l > 1 ? l : 0);
+      }, 0)
+    : 0;
+  const debtUsd = (dbProfile?.debt_usd !== undefined && dbProfile?.debt_usd !== null)
+    ? Number(dbProfile.debt_usd)
+    : (typeof matchedClient.financials?.debt_usd === 'number' ? matchedClient.financials.debt_usd : Number(matchedClient.debt_usd || 0));
+  const balanceUsd = -debtUsd;
+  const creditLimitUsd = contractsLimitSum > 0
+    ? contractsLimitSum
+    : Number(matchedClient.credit_limit_usd || matchedClient.financials?.credit_limit_usd || firstContract?.credit_limit_usd || firstContract?.credit_limit || dbProfile?.credit_limit_usd || 0);
 
   const sessionData = {
     user: {

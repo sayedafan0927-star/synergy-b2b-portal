@@ -94,21 +94,121 @@ export async function handleReconciliationReport(
   }
 
   try {
-    const erpUrl = `${targetErpUrl}?action=get_reconciliation_report&partner_id=${encodeURIComponent(partnerId)}&start_date=${startDate}&end_date=${endDate}`;
+    const qp = new URLSearchParams({
+      action: 'get_reconciliation_report',
+      counterparty_id: partnerId,
+      client_id: partnerId,
+      partner_id: partnerId,
+      date_from: startDate,
+      date_to: endDate,
+      start_date: startDate,
+      end_date: endDate,
+    });
+    const erpUrl = `${targetErpUrl}?${qp.toString()}`;
+    const debtUrl = `${targetErpUrl}?action=client_debt&counterparty_id=${encodeURIComponent(partnerId)}`;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8000);
-    const erpRes = await fetch(erpUrl, { headers: { 'X-Portal-Key': serverErpKey }, signal: controller.signal }).finally(() => clearTimeout(timeout));
-    
+
+    const [erpRes, debtRes] = await Promise.all([
+      fetch(erpUrl, { headers: { 'X-Portal-Key': serverErpKey }, signal: controller.signal }),
+      fetch(debtUrl, { headers: { 'X-Portal-Key': serverErpKey }, signal: controller.signal }).catch(() => null),
+    ]).finally(() => clearTimeout(timeout));
+
     if (erpRes.ok) {
-      const report = await erpRes.json();
+      const rawReport = await erpRes.json();
+      const debtData = debtRes && debtRes.ok ? await debtRes.json().catch(() => null) : null;
+
+      const rawOps: any[] = Array.isArray(rawReport.operations)
+        ? rawReport.operations
+        : (Array.isArray(rawReport.transactions) ? rawReport.transactions : []);
+
+      const unpaidInvoices: any[] = Array.isArray(debtData?.unpaid_invoices)
+        ? debtData.unpaid_invoices
+        : (Array.isArray(rawReport.invoices) ? rawReport.invoices : []);
+
+      const existingDocNumbers = new Set(rawOps.map((op: any) => String(op.doc_number || '').trim()).filter(Boolean));
+      const invoiceTransactions = unpaidInvoices
+        .filter((inv: any) => {
+          const invDate = String(inv.invoice_date || inv.date || '').trim();
+          const docNum = String(inv.document_number || inv.doc_number || '').trim();
+          if (docNum && existingDocNumbers.has(docNum)) return false;
+          if (!invDate) return true;
+          return invDate >= startDate && invDate <= endDate;
+        })
+        .map((inv: any) => ({
+          date: inv.invoice_date || inv.date || startDate,
+          doc_type: inv.is_overdue ? 'Реализация (просрочено)' : 'Реализация товаров',
+          doc_number: inv.document_number || inv.doc_number || `INV-${inv.id || ''}`,
+          description: inv.contract_name || '',
+          debit: Number(inv.amount_usd ?? inv.debt_usd ?? 0),
+          credit: Number(inv.paid_usd ?? 0),
+          debt_usd: Number(inv.debt_usd ?? 0),
+          due_date: inv.due_date || null,
+          is_overdue: Boolean(inv.is_overdue),
+          overdue_days: Number(inv.overdue_days || 0),
+        }));
+
+      const mergedTransactions = [
+        ...rawOps.map((op: any) => ({
+          date: op.date || startDate,
+          doc_type: op.doc_type || op.type || 'Операция',
+          doc_number: op.doc_number || op.number || '—',
+          description: op.description || '',
+          debit: Number(op.debit || 0),
+          credit: Number(op.credit || 0),
+          running_balance: op.running_balance !== undefined ? Number(op.running_balance) : undefined,
+        })),
+        ...invoiceTransactions,
+      ].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+
+      const calcDebit = mergedTransactions.reduce((acc, tx) => acc + Number(tx.debit || 0), 0);
+      const calcCredit = mergedTransactions.reduce((acc, tx) => acc + Number(tx.credit || 0), 0);
+
+      const initialBalNum = Number(rawReport.initial_balance ?? rawReport.balance_start ?? 0);
+      const totalDebitNum = Number(rawReport.total_debit || 0) > 0 ? Number(rawReport.total_debit) : calcDebit;
+      const totalCreditNum = Number(rawReport.total_credit || 0) > 0 ? Number(rawReport.total_credit) : calcCredit;
+      const finalBalNum = Number(
+        rawReport.final_balance ??
+        rawReport.balance_end ??
+        rawReport.saldo ??
+        debtData?.financials?.balance_usd ??
+        0
+      );
+      const debtUsdNum = Number(
+        rawReport.debt ??
+        debtData?.financials?.total_debt_usd ??
+        (finalBalNum < 0 ? Math.abs(finalBalNum) : 0)
+      );
+
+      const normalizedReportPayload = {
+        partner_id: partnerId,
+        counterparty: rawReport.counterparty || debtData?.client || null,
+        period: rawReport.period || { date_from: startDate, date_to: endDate },
+        initial_balance: initialBalNum.toFixed(2),
+        total_debit: totalDebitNum.toFixed(2),
+        total_credit: totalCreditNum.toFixed(2),
+        final_balance: finalBalNum.toFixed(2),
+        debt_usd: debtUsdNum.toFixed(2),
+        prepayment_usd: Number(rawReport.prepayment || (finalBalNum > 0 ? finalBalNum : 0)).toFixed(2),
+        transactions: mergedTransactions,
+        unpaid_invoices: unpaidInvoices,
+      };
+
+      const responseBody = {
+        ...rawReport,
+        success: true,
+        ...normalizedReportPayload,
+        report: normalizedReportPayload,
+      };
+
       await recordAuditLog({
         eventType: 'reconciliation_report',
         direction: 'inbound',
         status: 'success',
         source: 'Synergy ERP Reconciliation',
-        payload: { partner_id: partnerId, startDate, endDate },
+        payload: { partner_id: partnerId, startDate, endDate, txCount: mergedTransactions.length },
       });
-      return res.status(200).json(report);
+      return res.status(200).json(responseBody);
     } else {
       throw new Error(`ERP status ${erpRes.status}`);
     }

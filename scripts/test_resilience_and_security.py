@@ -2286,7 +2286,36 @@ with open(os.path.join(ROOT_DIR, "api", "modules", "supplier", "supplierHandler.
 test_assert("jsonData.shipments = []" in sh_s45 and "authenticateRequest" in sh_s45, "supplierHandler.ts prevents cross-supplier shipment leak on empty match and restricts POST supplier_defects to staff")
 
 # ------------------------------------------------------------------------------
-# 70. Summary Report
+# 70. Stage 46: Pass 5 Accounts Receivable & ERP Financial Pipeline Audit
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 70. STAGE 46: PASS 5 ACCOUNTS RECEIVABLE & ERP FINANCIAL PIPELINE AUDIT ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "financial", "debtHandler.ts"), "r", encoding="utf-8") as fp:
+    dh_s46 = fp.read()
+test_assert("export function extractAuthoritativeClientFinancials" in dh_s46 and "limit_sum_usd" in dh_s46 and "req.query.counterparty_id = pId" in dh_s46, "debtHandler.ts normalizes 1C contracts limit_sum_usd, preserves signed balance, and sets counterparty_id")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "financial", "refreshBalanceHandler.ts"), "r", encoding="utf-8") as fp:
+    rbh_s46 = fp.read()
+test_assert("extractAuthoritativeClientFinancials" in rbh_s46 and "parsedFin.signedBalanceUsd" in rbh_s46 and "counterparty_id=" in rbh_s46, "refreshBalanceHandler.ts queries client_debt by counterparty_id and stores signed balance in partner_balances")
+
+with open(os.path.join(ROOT_DIR, "api", "cron", "reconcile-balances.ts"), "r", encoding="utf-8") as fp:
+    rc_s46 = fp.read()
+test_assert("balance: erpBalance" in rc_s46 and "limit_sum_usd" in rc_s46 and "counterparty_id: partnerId" in rc_s46, "reconcile-balances.ts stores signed erpBalance in partner_balances and aggregates contract credit limits")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "erp", "genericProxyHandler.ts"), "r", encoding="utf-8") as fp:
+    gph_s46 = fp.read()
+test_assert("extractAuthoritativeClientFinancials" in gph_s46 and "queryParams.set('counterparty_id', pid)" in gph_s46, "genericProxyHandler.ts maps partner_id to counterparty_id and normalizes client_debt response + syncs profiles")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "reconciliation.ts"), "r", encoding="utf-8") as fp:
+    rec_s46 = fp.read()
+test_assert("counterparty_id: partnerId" in rec_s46 and "date_from: startDate" in rec_s46 and "normalizedReportPayload" in rec_s46, "reconciliation.ts passes counterparty_id/date_from/date_to to Synergy ERP and normalizes report.report")
+
+with open(os.path.join(ROOT_DIR, "src", "pages", "ProfilePage.tsx"), "r", encoding="utf-8") as fp:
+    pp_s46 = fp.read()
+test_assert("client_contracts" not in pp_s46 and "clientDebt?.contracts" in pp_s46 and "data.report || data" in pp_s46, "ProfilePage.tsx uses live ERP clientDebt.contracts instead of dead client_contracts table and supports normalized reconciliation report")
+
+# ------------------------------------------------------------------------------
+# 71. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests
