@@ -1904,7 +1904,9 @@ test_assert("pending_erp_cancel" in coh_p1 and "triggerImmediateOutboxSync" in c
 
 with open(os.path.join(ROOT_DIR, "api", "outbox", "sync.ts"), "r", encoding="utf-8") as fp:
     obs_p1 = fp.read()
-test_assert("pending_erp_cancel" in obs_p1 and "update_order_status" in obs_p1, "api/outbox/sync.ts drains pending_erp_cancel orders guaranteeing 1C ERP delivery")
+with open(os.path.join(ROOT_DIR, "api", "outbox", "cancellationSync.ts"), "r", encoding="utf-8") as fp:
+    obc_p1 = fp.read()
+test_assert("drainPendingErpCancelOrders" in obs_p1 and "pending_erp_cancel" in obc_p1 and "update_order_status" in obc_p1, "api/outbox/sync.ts drains pending_erp_cancel orders guaranteeing Synergy ERP delivery")
 
 with open(os.path.join(ROOT_DIR, "api", "approvals", "whatsapp.ts"), "r", encoding="utf-8") as fp:
     wa_p1 = fp.read()
@@ -2352,7 +2354,52 @@ with open(os.path.join(ROOT_DIR, "api", "modules", "supplier", "supplierHandler.
 test_assert("isUnassignedOrPlaceholder" in sh_s47, "supplierHandler.ts only applies item-name heuristic to unassigned/placeholder supplier_id shipments")
 
 # ------------------------------------------------------------------------------
-# 72. Summary Report
+# 72. Stage 48: Pass 7 End-to-End State, Saga, Outbox, Approval & Webhook Hardening
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 72. STAGE 48: PASS 7 END-TO-END STATE, SAGA, OUTBOX, APPROVAL & WEBHOOK HARDENING ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "api", "outbox", "sync.ts"), "r", encoding="utf-8") as fp:
+    obs_s48 = fp.read()
+test_assert("erpData?.success !== false" in obs_s48 and "1C-" not in obs_s48 and "releaseOrderAndSubordersReservations" in obs_s48, "api/outbox/sync.ts verifies erpData.success !== false, eliminates legacy 1C- prefix, and releases suborder reservations on DLQ")
+
+with open(os.path.join(ROOT_DIR, "api", "outbox", "outboxUtils.ts"), "r", encoding="utf-8") as fp:
+    obu_s48 = fp.read()
+test_assert("resolveWarehouseId" in obu_s48 and "outbox_doc_number: order.order_number" in obu_s48 and "client_id: numericClientId" in obu_s48, "outboxUtils.ts resolves warehouse_id (default 81) and passes client_id + outbox_doc_number to Synergy ERP")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "createOrderHandler.ts"), "r", encoding="utf-8") as fp:
+    coh_s48 = fp.read()
+test_assert("saveIdempotencyCompleted(incomingIdempotencyKey, replayBody)" in coh_s48 and "else if (atomicData && (atomicData.success || atomicData.order_id))" in coh_s48, "createOrderHandler.ts releases/completes Redis idempotency lock on early atomic returns and only tracks actually reserved stock items")
+
+with open(os.path.join(ROOT_DIR, "api", "approvals", "action.ts"), "r", encoding="utf-8") as fp:
+    apa_s48 = fp.read()
+test_assert("isOutboxUncreated" in apa_s48 and "parent_order_id" in apa_s48, "api/approvals/action.ts prevents duplicate Outbox order creation on WhatsApp approval and releases child suborders on rejection")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "approvals", "approvalHandler.ts"), "r", encoding="utf-8") as fp:
+    aph_s48 = fp.read()
+test_assert("safeManagerPhone = isPrivileged" in aph_s48 and "Anti-BOLA Guard" in aph_s48, "approvalHandler.ts blocks client self-approval privilege escalation via manager_phone spoofing and enforces BOLA")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "dlq", "dlqHandler.ts"), "r", encoding="utf-8") as fp:
+    dlq_s48 = fp.read()
+test_assert("reReserveOrderItems" in dlq_s48 and "skipped_insufficient_stock" in dlq_s48 and "triggerImmediateOutboxSync" in dlq_s48, "dlqHandler.ts re-reserves stock by warehouse in single & batch DLQ retry and triggers immediate Outbox drain")
+
+with open(os.path.join(ROOT_DIR, "api", "webhooks", "handlers", "orderStatusHandler.ts"), "r", encoding="utf-8") as fp:
+    osh_s48 = fp.read()
+test_assert(osh_s48.index("canTransitionOrderStatus(existingOrder.status, targetStatus)") < osh_s48.index("await broadcastLiveUpdate('order_status_changed'"), "orderStatusHandler.ts validates Monotonic Order State Machine BEFORE broadcasting Realtime events and releases child suborders")
+
+with open(os.path.join(ROOT_DIR, "api", "webhooks", "handlers", "paymentHandler.ts"), "r", encoding="utf-8") as fp:
+    pmh_s48 = fp.read()
+test_assert("netBalance = Math.round((baseBalance + amount) * 100) / 100" in pmh_s48, "paymentHandler.ts preserves overpayments and advance payments in partner_balances")
+
+with open(os.path.join(ROOT_DIR, "api", "financial", "reconciliation.ts"), "r", encoding="utf-8") as fp:
+    frec_s48 = fp.read()
+test_assert("handleReconciliationReport(req, res, TARGET_ERP_URL, SERVER_ERP_KEY, callerAuth)" in frec_s48, "api/financial/reconciliation.ts passes callerAuth to enforce BOLA guard on direct micro-endpoint")
+
+with open(os.path.join(ROOT_DIR, "api", "auth", "session.ts"), "r", encoding="utf-8") as fp:
+    sess_s48 = fp.read()
+test_assert("const showroomWarehouseId = (!callerAuth.isServer && callerAuth.role === 'client')" in sess_s48, "api/auth/session.ts locks showroom_warehouse_id and userId for client callers preventing showroom spoofing")
+
+# ------------------------------------------------------------------------------
+# 73. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests
@@ -2364,6 +2411,7 @@ else:
 print(f"{BOLD}{BLUE}===================================================================={RESET}\n")
 
 sys.exit(0 if failed_tests == 0 else 1)
+
 
 
 

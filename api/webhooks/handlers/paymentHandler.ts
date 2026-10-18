@@ -40,10 +40,11 @@ export async function handlePaymentReceived(
   let hasAuthoritativeDebt = false;
 
   if (rawDebt !== undefined && rawDebt !== null) {
-    calculatedDebt = Math.max(0, Number(rawDebt));
+    const numericRawDebt = Number(rawDebt);
+    calculatedDebt = Math.max(0, numericRawDebt);
     calculatedBalance = hasExplicitBalance
       ? Number(payload.new_balance_usd ?? payload.balance_usd)
-      : -calculatedDebt;
+      : (numericRawDebt < 0 ? Math.abs(numericRawDebt) : -calculatedDebt);
     hasAuthoritativeDebt = true;
   } else if (hasExplicitBalance) {
     const rawBal = Number(payload.new_balance_usd ?? payload.balance_usd ?? 0);
@@ -51,20 +52,20 @@ export async function handlePaymentReceived(
     calculatedDebt = rawBal < 0 ? Math.abs(rawBal) : 0;
     hasAuthoritativeDebt = true;
   } else if (client_id && supabaseServer && amount > 0) {
-    // Частичная оплата без явного поля остатка долга: вычитаем сумму платежа из текущего долга в БД
+    // Оплата без явного поля остатка долга: учитываем частичную оплату, полное погашение и переплату (аванс)
     try {
-      const { data: existingProf } = await supabaseServer
-        .from('profiles')
-        .select('debt_usd')
-        .eq('partner_id', String(client_id))
-        .limit(1)
-        .maybeSingle();
+      const [{ data: existingBal }, { data: existingProf }] = await Promise.all([
+        supabaseServer.from('partner_balances').select('balance').eq('partner_id', String(client_id)).maybeSingle(),
+        supabaseServer.from('profiles').select('debt_usd').eq('partner_id', String(client_id)).limit(1).maybeSingle(),
+      ]);
       const prevDebt = Math.max(0, Number(existingProf?.debt_usd || 0));
-      if (prevDebt > 0) {
-        calculatedDebt = Math.max(0, Math.round((prevDebt - amount) * 100) / 100);
-        calculatedBalance = -calculatedDebt;
-        hasAuthoritativeDebt = true;
-      }
+      const baseBalance = existingBal?.balance !== undefined && existingBal?.balance !== null
+        ? Number(existingBal.balance)
+        : -prevDebt;
+      const netBalance = Math.round((baseBalance + amount) * 100) / 100;
+      calculatedBalance = netBalance;
+      calculatedDebt = netBalance < 0 ? Math.abs(netBalance) : Math.max(0, Math.round((prevDebt - amount) * 100) / 100);
+      hasAuthoritativeDebt = true;
     } catch {}
   }
 

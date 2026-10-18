@@ -125,9 +125,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
-      // Разрешенные статусы для согласования: только pending или processing (а также waiting_approval)
+      // Разрешенные статусы для согласования: pending, processing, reserved, waiting_approval
       const allowedStatuses = ['pending', 'processing'];
-      const isWaitingApproval = existingOrder.status === 'waiting_approval';
+      const isWaitingApproval = ['waiting_approval', 'reserved', 'error_sync', 'processing_sync'].includes(existingOrder.status);
       if (!allowedStatuses.includes(existingOrder.status) && !isWaitingApproval && !existingOrder.is_erp_direct && !existingOrder.is_test) {
         const currentStatus = existingOrder.status;
         const msg = currentStatus === 'confirmed'
@@ -160,19 +160,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ));
       }
 
-      // 2.1. При отклонении заказа: СНАЧАЛА возвращаем зарезервированные остатки на склад
+      // 2.1. При отклонении заказа: СНАЧАЛА возвращаем зарезервированные остатки на склад (включая мультискладские подзаказы)
       if (!isApprove && supabase) {
         try {
           await supabase.rpc('release_order_reservations', { p_order_id: targetOrderId });
+          const { data: childSubs } = await supabase
+            .from('orders')
+            .select('id, reservations_released')
+            .eq('parent_order_id', targetOrderId);
+          if (Array.isArray(childSubs)) {
+            for (const sub of childSubs) {
+              if (sub.id && !sub.reservations_released) {
+                await supabase.rpc('release_order_reservations', { p_order_id: sub.id }).catch(() => {});
+              }
+            }
+          }
         } catch (relErr: any) {
           console.warn('[Approval Action] Error releasing reservations on reject:', relErr?.message);
         }
       }
 
       // Определение нового статуса:
-      // Если заказ еще в буфере Outbox (pending / waiting_approval) и одобрен, статус 'pending' сохраняется,
-      // добавляется отметка одобрения в notes и немедленно активируется воркер Outbox.
-      const isBufferedOutbox = (existingOrder.status === 'pending' || isWaitingApproval) && !existingOrder.is_erp_direct;
+      // Заказ считается буферизованным в Outbox ТОЛЬКО если он еще не был создан в Synergy ERP (status='pending' или номер начинается с OUTBOX-).
+      const isOutboxUncreated = String(existingOrder.order_number || '').startsWith('OUTBOX-');
+      const isBufferedOutbox = (existingOrder.status === 'pending' || (isWaitingApproval && isOutboxUncreated)) && !existingOrder.is_erp_direct;
       const newStatus = !isApprove
         ? 'cancelled'
         : (isBufferedOutbox ? 'pending' : 'confirmed');
@@ -236,9 +247,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
-      // 2.3. Синхронизация с 1С:ERP или запуск Outbox дренажа
+      // 2.3. Синхронизация с Synergy ERP или запуск Outbox дренажа
       if (isApprove && isBufferedOutbox) {
-        // Заказ одобрен, но ожидает создания в 1С через Outbox: немедленный дренаж
+        // Заказ одобрен, но ожидает первичного создания в Synergy ERP через Outbox: немедленный дренаж
         try {
           triggerImmediateOutboxSync(req, 'wa-approved-drain', {
             orderId: targetOrderId,
@@ -250,8 +261,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
-      // Всегда синхронизируем статус с 1C:ERP при отклонении или если заказ уже был на WMS-холде в 1С
-      if (SERVER_ERP_KEY && (!isBufferedOutbox || isWaitingApproval || !isApprove || existingOrder.is_erp_direct)) {
+      // Синхронизируем статус с Synergy ERP, если заказ уже создан в ERP (не буферизован в Outbox)
+      if (SERVER_ERP_KEY && (!isBufferedOutbox || existingOrder.is_erp_direct)) {
         const erpUrl = `${TARGET_ERP_URL}?action=update_order_status`;
         try {
           let numericErpOrderId: number | null = null;

@@ -69,14 +69,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    const userId = String(user?.id || profile?.id || callerAuth.userId || `user-${effectiveRole}`);
+    const userId = (!callerAuth.isServer && callerAuth.role !== 'admin')
+      ? String(callerAuth.userId || user?.id || profile?.id || `user-${effectiveRole}`)
+      : String(user?.id || profile?.id || callerAuth.userId || `user-${effectiveRole}`);
     const fullName = String(
       profile?.full_name ||
       user?.user_metadata?.full_name ||
       callerAuth.fullName ||
       (effectiveRole === 'admin' ? 'Администратор портала' : 'Пользователь портала')
     );
-    // Для клиентов фиксируем partnerId, priceType и b2b_role исключительно из подтвержденной сессии (Anti-Privilege Escalation)
+    // Для клиентов фиксируем partnerId, priceType, b2b_role и showroom_warehouse_id исключительно из подтвержденной сессии (Anti-Privilege Escalation)
     const partnerId = (!callerAuth.isServer && callerAuth.role === 'client')
       ? (callerAuth.partnerId || null)
       : (profile?.partner_id ? String(profile.partner_id) : (callerAuth.partnerId || null));
@@ -87,6 +89,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const b2bRole = (!callerAuth.isServer && callerAuth.role === 'client')
       ? (callerAuth.b2bRole || 'director')
       : (profile?.b2b_role || callerAuth.b2bRole || 'director');
+    const showroomWarehouseId = (!callerAuth.isServer && callerAuth.role === 'client')
+      ? (callerAuth.showroomWarehouseId ?? null)
+      : (profile?.showroom_warehouse_id ?? callerAuth.showroomWarehouseId ?? null);
 
     const sessionData = {
       user: {
@@ -103,7 +108,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         company_name: profile?.company_name || callerAuth.companyName || 'ТОО «Kilem Khan Synergy»',
         phone,
         price_type: priceType,
-        showroom_warehouse_id: profile?.showroom_warehouse_id ?? null,
+        showroom_warehouse_id: showroomWarehouseId,
       },
       two_factor_verified: Boolean(callerAuth.isTwoFactorVerified),
       timestamp: Date.now(),

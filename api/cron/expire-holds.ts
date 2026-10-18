@@ -69,9 +69,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       if (pendingOrders && pendingOrders.length > 0) {
         const orderIds = pendingOrders.map((o: any) => o.id);
+        const { data: childSubs } = await supabase
+          .from('orders')
+          .select('id, reservations_released')
+          .in('parent_order_id', orderIds);
 
-        // Освобождаем зарезервированные остатки обратно в free_stock
-        for (const ord of pendingOrders) {
+        // Освобождаем зарезервированные остатки обратно в free_stock (включая мультискладские подзаказы)
+        for (const ord of [...pendingOrders, ...(childSubs || [])]) {
           try {
             await supabase.rpc('release_order_reservations', { p_order_id: ord.id });
           } catch (relErr) {
@@ -139,14 +143,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         logger.warn('[WMS Hold Expiry] Realtime broadcast warning', {}, broadcastErr as Error);
       }
 
-      // Двустороннее уведомление 1C:ERP о снятии броней для исключения зомби-резервов
+      // Двустороннее уведомление Synergy ERP о снятии броней для исключения зомби-резервов
       if (SERVER_ERP_KEY && TARGET_ERP_URL) {
         for (const ord of cancelledOrders) {
-          const ordDoc = ord.cancelled_order_number || ord.order_number || ord.id;
+          const ordId = ord.cancelled_order_id || ord.id;
+          const ordDoc = String(ord.cancelled_order_number || ord.order_number || ordId);
+          if (ordDoc.startsWith('OUTBOX-')) continue;
           try {
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 3000);
-            await fetch(`${TARGET_ERP_URL}?action=update_order_status`, {
+            const erpRes = await fetch(`${TARGET_ERP_URL}?action=update_order_status`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -160,8 +166,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               }),
               signal: controller.signal,
             }).finally(() => clearTimeout(timeout));
+            if (!erpRes.ok && erpRes.status !== 404 && ordId) {
+              await supabase.from('orders').update({ last_error: 'pending_erp_cancel' }).eq('id', ordId);
+            }
           } catch (erpErr: any) {
-            logger.warn('[WMS Hold Expiry] Notice syncing cancel with 1C ERP:', { ordDoc, error: erpErr?.message });
+            logger.warn('[WMS Hold Expiry] Notice syncing cancel with Synergy ERP:', { ordDoc, error: erpErr?.message });
+            if (ordId) {
+              await supabase.from('orders').update({ last_error: 'pending_erp_cancel' }).eq('id', ordId).catch(() => {});
+            }
           }
         }
       }

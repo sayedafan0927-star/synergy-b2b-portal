@@ -5,14 +5,22 @@ import { recordAuditLog } from '../audit/logs';
 import { applyCorsHeaders } from '../lib/cors';
 import { logger } from '../lib/logger';
 import { handleClientDeactivated } from './handlers/clientLifecycleHandler';
+import { getErpApiKey } from '../lib/erpKey';
+import { getRedisClient } from '../lib/redis';
+import { verifyErpWebhookSignature } from './erp';
 
-const ALLOWED_KEYS = new Set(
-  [
-    process.env.PORTAL_SECRET_KEY,
-    process.env.ERP_PORTAL_SECRET,
-    process.env.ERP_WEBHOOK_SECRET,
-  ].filter((k): k is string => Boolean(k && k.trim().length > 0))
-);
+function getAllowedKeys(): Set<string> {
+  return new Set(
+    [
+      process.env.PORTAL_SECRET_KEY?.trim(),
+      process.env.SITE_WEBHOOK_SECRET?.trim(),
+      process.env.ERP_PORTAL_SECRET?.trim(),
+      process.env.ERP_WEBHOOK_SECRET?.trim(),
+      process.env.ERP_API_KEY?.trim(),
+      getErpApiKey(),
+    ].filter((k): k is string => Boolean(k && k.length > 0))
+  );
+}
 
 const SECRET_KEY = process.env.PORTAL_SECRET_KEY || process.env.ERP_PORTAL_SECRET || process.env.ERP_WEBHOOK_SECRET || '';
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
@@ -89,22 +97,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // 1. Проверка авторизационного ключа
-  const portalKey = (req.headers['x-portal-key'] || req.headers['X-Portal-Key']) as string | undefined;
-  if (!portalKey || !ALLOWED_KEYS.has(portalKey)) {
+  const rawPortalKey = (req.headers['x-portal-key'] || req.headers['X-Portal-Key'] || req.body?.portal_key) as string | undefined;
+  const portalKey = rawPortalKey ? String(rawPortalKey).trim() : '';
+  const allowedKeys = getAllowedKeys();
+  if (!portalKey || !allowedKeys.has(portalKey)) {
     return res.status(401).json({
       success: false,
       error: 'Unauthorized: Invalid or missing X-Portal-Key header.',
     });
   }
 
-  // 2. Проверка HMAC SHA256 подписи
+  // 2. Проверка HMAC SHA256 подписи (timing-safe)
   const isProd = process.env.NODE_ENV === 'production' && process.env.ENFORCE_WEBHOOK_HMAC !== 'false';
   const receivedSig = (req.headers['x-webhook-signature'] || req.headers['X-Webhook-Signature']) as string | undefined;
   const rawBody = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
 
   if (receivedSig) {
-    const expectedSig = crypto.createHmac('sha256', SECRET_KEY).update(rawBody).digest('hex');
-    if (receivedSig.toLowerCase() !== expectedSig.toLowerCase()) {
+    const rawBuffer = (req as any).rawBody || rawBody;
+    const sigMatched =
+      verifyErpWebhookSignature(String(rawBuffer), receivedSig, SECRET_KEY) ||
+      verifyErpWebhookSignature(String(rawBuffer), receivedSig, portalKey) ||
+      verifyErpWebhookSignature(String(rawBody), receivedSig, SECRET_KEY) ||
+      verifyErpWebhookSignature(String(rawBody), receivedSig, portalKey);
+
+    if (!sigMatched) {
       if (isProd) {
         return res.status(401).json({
           success: false,
@@ -112,7 +128,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           code: 'INVALID_HMAC_SIGNATURE',
         });
       }
-      logger.warn(`[Webhook clients] Invalid HMAC signature. Expected: ${expectedSig}, Received: ${receivedSig}`);
+      logger.warn(`[Webhook clients] Invalid HMAC signature. Authenticated via verified X-Portal-Key.`);
     }
   } else if (isProd && SECRET_KEY) {
     return res.status(401).json({
@@ -170,7 +186,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
-      // Сохраняем в Supabase profiles расширенные атрибуты контрагента
+      // Сохраняем в Supabase profiles расширенные атрибуты контрагента и снимаем блокировку
       try {
         await supabase
           .from('profiles')
@@ -186,9 +202,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             credit_limit_usd: Number(p.credit_limit_usd || 0),
             payment_delay_days: Number(p.payment_delay_days || 0),
             role: 'client',
+            status: 'active',
+            is_blocked_for_shipment: false,
+            is_blocked_for_orders: false,
             impersonation_enabled: true,
             updated_at: new Date().toISOString(),
           }, { onConflict: 'partner_id' });
+
+        const redis = getRedisClient();
+        if (redis) {
+          await redis.del(`revoked_partner:${p.counterparty_id}`).catch(() => {});
+        }
 
         if (p.credit_limit_usd !== undefined) {
           await supabase

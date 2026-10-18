@@ -2,8 +2,39 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { authenticateRequest } from '../../lib/authGuard';
 import { recordAuditLog } from '../../audit/logs';
-
+import { resolveWarehouseId } from '../../lib/pricingValidator';
+import { triggerImmediateOutboxSync } from '../orders/orderDispatcher';
 import { categorizeDlqError } from '../../outbox/outboxUtils';
+
+async function reReserveOrderItems(
+  supabase: SupabaseClient,
+  orderId: string,
+): Promise<{ ok: boolean; conflictSku?: string; reservedNow: Array<{ sku: string; qty: number; wh: number }> }> {
+  const { data: oItems } = await supabase
+    .from('order_items')
+    .select('sku, quantity, warehouse')
+    .eq('order_id', orderId);
+
+  const reservedNow: Array<{ sku: string; qty: number; wh: number }> = [];
+  if (oItems && oItems.length > 0) {
+    for (const it of oItems) {
+      const whId = resolveWarehouseId((it as any).warehouse_id, it.warehouse);
+      const { data: isRes } = await supabase.rpc('reserve_stock', {
+        p_sku: it.sku,
+        p_qty: it.quantity,
+        p_warehouse_id: whId,
+      });
+      if (isRes === false) {
+        for (const r of reservedNow) {
+          await supabase.rpc('release_stock', { p_sku: r.sku, p_qty: r.qty, p_warehouse_id: r.wh }).catch(() => {});
+        }
+        return { ok: false, conflictSku: it.sku, reservedNow: [] };
+      }
+      reservedNow.push({ sku: it.sku, qty: it.quantity, wh: whId });
+    }
+  }
+  return { ok: true, reservedNow };
+}
 
 export async function handleDlqOrders(req: VercelRequest, res: VercelResponse, supabase: SupabaseClient) {
   const auth = await authenticateRequest(req, { requiredRoles: ['admin', 'manager_rm'], allowServerKey: true });
@@ -57,34 +88,17 @@ export async function handleRetryDlqOrder(
   }
 
   // Повторное резервирование остатков на складе, если при попадании в DLQ бронь была снята
+  let reservedNow: Array<{ sku: string; qty: number; wh: number }> = [];
   if (dlqOrder.reservations_released !== false) {
-    const { data: oItems } = await supabase
-      .from('order_items')
-      .select('sku, quantity, warehouse_id')
-      .eq('order_id', orderId);
-
-    const reservedNow: Array<{ sku: string; qty: number; wh: number }> = [];
-    if (oItems && oItems.length > 0) {
-      for (const it of oItems) {
-        const whId = Number(it.warehouse_id || 81);
-        const { data: isRes } = await supabase.rpc('reserve_stock', {
-          p_sku: it.sku,
-          p_qty: it.quantity,
-          p_warehouse_id: whId,
-        });
-        if (isRes === false) {
-          for (const r of reservedNow) {
-            await supabase.rpc('release_stock', { p_sku: r.sku, p_qty: r.qty, p_warehouse_id: r.wh });
-          }
-          return res.status(409).json({
-            success: false,
-            code: 'INSUFFICIENT_STOCK',
-            error: `Невозможно перезапустить заказ из DLQ: недостаточно свободного остатка для артикула "${it.sku}".`,
-          });
-        }
-        reservedNow.push({ sku: it.sku, qty: it.quantity, wh: whId });
-      }
+    const resCheck = await reReserveOrderItems(supabase, orderId);
+    if (!resCheck.ok) {
+      return res.status(409).json({
+        success: false,
+        code: 'INSUFFICIENT_STOCK',
+        error: `Невозможно перезапустить заказ из DLQ: недостаточно свободного остатка для артикула "${resCheck.conflictSku}".`,
+      });
     }
+    reservedNow = resCheck.reservedNow;
   }
 
   const retryNotes = `[Ручной перезапуск администратором: ${auth.fullName || auth.userId}]`;
@@ -95,6 +109,7 @@ export async function handleRetryDlqOrder(
     .update({
       status: 'pending',
       reservations_released: false,
+      last_error: null,
       retry_count: 0,
       next_retry_at: nowIso,
       notes: retryNotes,
@@ -106,6 +121,9 @@ export async function handleRetryDlqOrder(
     .maybeSingle();
 
   if (updErr || !updated) {
+    for (const r of reservedNow) {
+      await supabase.rpc('release_stock', { p_sku: r.sku, p_qty: r.qty, p_warehouse_id: r.wh }).catch(() => {});
+    }
     return res.status(500).json({ success: false, error: updErr?.message || 'Заказ не найден в очереди DLQ.' });
   }
 
@@ -116,6 +134,7 @@ export async function handleRetryDlqOrder(
       .update({
         status: 'pending',
         reservations_released: false,
+        last_error: null,
         retry_count: 0,
         next_retry_at: nowIso,
         notes: retryNotes,
@@ -125,6 +144,8 @@ export async function handleRetryDlqOrder(
   } catch (subErr) {
     console.warn('[DLQ Retry] Suborder cascade notice:', subErr);
   }
+
+  triggerImmediateOutboxSync(req, correlationId, { orderId: updated.id, orderDoc: updated.order_number });
 
   await recordAuditLog({
     eventType: 'dlq_manual_retry',
@@ -154,24 +175,71 @@ export async function handleRetryAllDlqOrders(
     return res.status(403).json({ success: false, error: auth.error || 'Access denied' });
   }
 
-  const { data: updatedList, error: updErr } = await supabase
+  const { data: dlqCandidates, error: fetchErr } = await supabase
     .from('orders')
-    .update({
-      status: 'pending',
-      reservations_released: false,
-      retry_count: 0,
-      next_retry_at: new Date().toISOString(),
-      notes: `[Пакетный перезапуск администратором: ${auth.fullName || auth.userId}]`,
-      updated_at: new Date().toISOString(),
-    })
+    .select('id, order_number, reservations_released')
     .eq('status', 'failed_dlq')
-    .select('id, order_number');
+    .is('parent_order_id', null)
+    .limit(50);
 
-  if (updErr) {
-    return res.status(500).json({ success: false, error: updErr.message });
+  if (fetchErr) {
+    return res.status(500).json({ success: false, error: fetchErr.message });
   }
 
-  const retriedCount = updatedList?.length || 0;
+  const updatedList: Array<{ id: string; order_number: string }> = [];
+  const skippedOutOfStock: Array<{ id: string; order_number: string; conflict_sku?: string }> = [];
+  const nowIso = new Date().toISOString();
+  const batchNotes = `[Пакетный перезапуск администратором: ${auth.fullName || auth.userId}]`;
+
+  for (const cand of dlqCandidates || []) {
+    if (cand.reservations_released !== false) {
+      const resCheck = await reReserveOrderItems(supabase, cand.id);
+      if (!resCheck.ok) {
+        skippedOutOfStock.push({ id: cand.id, order_number: cand.order_number, conflict_sku: resCheck.conflictSku });
+        continue;
+      }
+    }
+
+    const { data: upd } = await supabase
+      .from('orders')
+      .update({
+        status: 'pending',
+        reservations_released: false,
+        last_error: null,
+        retry_count: 0,
+        next_retry_at: nowIso,
+        notes: batchNotes,
+        updated_at: nowIso,
+      })
+      .eq('id', cand.id)
+      .eq('status', 'failed_dlq')
+      .select('id, order_number')
+      .maybeSingle();
+
+    if (upd) {
+      updatedList.push(upd);
+      await supabase
+        .from('orders')
+        .update({
+          status: 'pending',
+          reservations_released: false,
+          last_error: null,
+          retry_count: 0,
+          next_retry_at: nowIso,
+          notes: batchNotes,
+          updated_at: nowIso,
+        })
+        .eq('parent_order_id', cand.id);
+    }
+  }
+
+  const retriedCount = updatedList.length;
+  if (retriedCount > 0) {
+    triggerImmediateOutboxSync(req, correlationId, {
+      orderId: updatedList[0].id,
+      orderDoc: updatedList[0].order_number,
+    });
+  }
 
   await recordAuditLog({
     eventType: 'dlq_batch_retry',
@@ -182,16 +250,18 @@ export async function handleRetryAllDlqOrders(
     correlationId,
     payload: {
       retried_count: retriedCount,
-      order_numbers: updatedList?.map(o => o.order_number) || [],
+      skipped_out_of_stock: skippedOutOfStock.length,
+      order_numbers: updatedList.map(o => o.order_number),
       retried_by: auth.userId,
     },
   });
 
   return res.status(200).json({
     success: true,
-    message: `Успешно возвращено в очередь ${retriedCount} заказов из DLQ.`,
+    message: `Успешно возвращено в очередь ${retriedCount} заказов из DLQ.${skippedOutOfStock.length > 0 ? ` Пропущено из-за нехватки остатка: ${skippedOutOfStock.length}.` : ''}`,
     count: retriedCount,
     orders: updatedList,
+    skipped_insufficient_stock: skippedOutOfStock,
   });
 }
 

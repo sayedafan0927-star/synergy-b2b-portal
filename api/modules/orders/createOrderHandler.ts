@@ -195,13 +195,6 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
     ? rawTargetId.trim()
     : ((callerAuth.userId && UUID_REGEX.test(callerAuth.userId)) ? callerAuth.userId : '00000000-0000-0000-0000-000000000000');
 
-  for (const it of pricingResult.items) {
-    const itemSku = String(it.sku || '');
-    const itemQty = Number(it.quantity || 1);
-    const whId = resolveWarehouseId(it.warehouse_id, it.warehouse);
-    if (itemSku) reservedSkuItems.push({ sku: itemSku, qty: itemQty, whId });
-  }
-
   const effectivePartnerId = String(
     (callerAuth.role === 'client' ? callerAuth.partnerId : (rawPayload.partner_id || callerAuth.partnerId)) || ''
   ).trim() || null;
@@ -246,6 +239,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
     if (atomicErr) {
       const errMsg = atomicErr.message || '';
       if (errMsg.includes('CLIENT_BLOCKED') || errMsg.includes('OVERDUE_DEBT') || errMsg.includes('CLIENT_DEACTIVATED')) {
+        await releaseIdempotencyLock(incomingIdempotencyKey);
         res.status(403).json({ success: false, code: errMsg.split(':')[0].trim(), error: errMsg.replace(/^[A-Z_]+:\s*/, '').trim() });
         return;
       }
@@ -268,7 +262,7 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
         const { data: replayOrder } = await supabase.from('orders').select('id, order_number, status, total_amount').eq('idempotency_key', incomingIdempotencyKey).maybeSingle();
         if (replayOrder) {
           logger.info('[Order] Returning order via concurrent Idempotency Key collision', { orderId: replayOrder.id });
-          res.status(200).json({
+          const replayBody = {
             success: true,
             is_idempotent_replay: true,
             order_number: replayOrder.order_number,
@@ -276,12 +270,20 @@ export async function handleCreateOrder(ctx: CreateOrderContext): Promise<void> 
             status: replayOrder.status,
             total_amount: replayOrder.total_amount,
             message: 'Заказ уже зарегистрирован параллельным запросом (Idempotency Key Concurrent HIT).',
-          });
+          };
+          saveIdempotencyCompleted(incomingIdempotencyKey, replayBody).catch(() => {});
+          res.status(200).json(replayBody);
           return;
         }
       }
       logger.warn('[Order] create_order_atomic RPC notice, falling back to sequential saga:', atomicErr);
     } else if (atomicData && (atomicData.success || atomicData.order_id)) {
+      for (const it of pricingResult.items) {
+        const itemSku = String(it.sku || '');
+        if (itemSku && !it.is_preorder) {
+          reservedSkuItems.push({ sku: itemSku, qty: Number(it.quantity || 1), whId: resolveWarehouseId(it.warehouse_id, it.warehouse) });
+        }
+      }
       outboxOrderId = atomicData.order_id;
       outboxOrderDoc = atomicData.order_number;
       const splitList = (Array.isArray(atomicData.split_orders) && atomicData.split_orders.length > 0)

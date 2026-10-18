@@ -174,11 +174,14 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
       }
 
       // SAGA: Откат всех локальных резервов
+      if (outboxOrderId) {
+        await supabase.rpc('release_order_reservations', { p_order_id: outboxOrderId }).catch(() => {});
+      }
       await releaseAllReservedStock(reservedSkuItems, {
         correlationId,
         orderId: outboxOrderId || undefined,
         orderNumber: outboxOrderDoc || undefined,
-        reason: '1C ERP отклонила заказ по причине нехватки остатка (409 Conflict)',
+        reason: 'Synergy ERP отклонила заказ по причине нехватки остатка (409 Conflict)',
       });
 
       const rawErr = jsonData?.error || '';
@@ -259,6 +262,9 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
       }
 
       // SAGA: Освобождаем локальные резервы
+      if (outboxOrderId) {
+        await supabase.rpc('release_order_reservations', { p_order_id: outboxOrderId }).catch(() => {});
+      }
       await releaseAllReservedStock(reservedSkuItems, {
         correlationId,
         orderId: outboxOrderId || undefined,
@@ -286,7 +292,8 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
 
     if (erpResponse.ok && jsonData?.success) {
       await recordSuccess('erp_gateway');
-      const docNumber = jsonData.order?.doc_number || jsonData.order_id || outboxOrderDoc;
+      const fallbackSyncedDoc = String(outboxOrderDoc || '').replace(/^OUTBOX-/, 'ORD-');
+      const docNumber = jsonData.order?.doc_number || (jsonData.order_id ? `ORD-${jsonData.order_id}` : fallbackSyncedDoc);
       if (outboxOrderId) {
         const initialStatus = (outboundPayload?.requires_approval || outboundPayload?.hold_wms)
           ? 'waiting_approval'

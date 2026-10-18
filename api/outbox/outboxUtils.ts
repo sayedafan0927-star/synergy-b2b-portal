@@ -64,10 +64,13 @@ export async function dispatchDlqEmergencyAlert(params: DlqAlertParams): Promise
   }).catch(() => {});
 }
 
+import { resolveWarehouseId } from '../lib/pricingValidator';
+
 /**
  * Подготовка нормализованного payload заказа для ERP из записей orders и order_items
  */
 export function buildOutboxErpPayload(order: any, dbItems: any[] | null) {
+  const defaultWhId = resolveWarehouseId(order?.warehouse_id, order?.warehouse);
   const itemsList = (dbItems && dbItems.length > 0)
     ? dbItems.map(it => {
         const sizeStr = it.size || '1.6x2.3';
@@ -75,37 +78,42 @@ export function buildOutboxErpPayload(order: any, dbItems: any[] | null) {
         const width = (parts.length >= 2 && !isNaN(parts[0])) ? parts[0] : 1.6;
         const length = (parts.length >= 2 && !isNaN(parts[1])) ? parts[1] : 2.3;
         const area_sqm = Math.round(width * length * 100) / 100;
+        const whId = resolveWarehouseId(it.warehouse_id, it.warehouse || order?.warehouse);
         return {
           item_id: Number(it.product_id) > 0 ? Number(it.product_id) : undefined,
           sku: it.sku || it.product_name,
           quantity: Number(it.quantity) || 1,
+          qty: Number(it.quantity) || 1,
           price: Number(it.price) || 10,
           width,
           length,
           area_sqm,
-          warehouse_id: it.warehouse_id || (it.warehouse && it.warehouse.includes('Астана') ? 1 : 1),
+          warehouse: it.warehouse || order?.warehouse || 'Основной Склад Астана',
+          warehouse_id: whId,
         };
       })
     : [
         {
           sku: 'OUTBOX-ITEM',
           quantity: order.total_items || 1,
+          qty: order.total_items || 1,
           price: order.total_amount || 10,
           width: 1.6,
           length: 2.3,
           area_sqm: 3.68,
-          warehouse_id: 1,
+          warehouse: order?.warehouse || 'Основной Склад Астана',
+          warehouse_id: defaultWhId,
         }
       ];
 
-  const primaryWarehouseId = (itemsList[0] as any)?.warehouse_id || 1;
+  const primaryWarehouseId = (itemsList[0] as any)?.warehouse_id || defaultWhId || 81;
 
   // Определение мультискладского состава позиций
   const warehouseMap = new Map<number | string, { warehouse: string; amount: number; items_count: number }>();
   for (const it of itemsList) {
-    const whKey = (it as any).warehouse_id || 1;
+    const whKey = (it as any).warehouse_id || 81;
     const existing = warehouseMap.get(whKey) || {
-      warehouse: String((it as any).warehouse || 'Склад'),
+      warehouse: String((it as any).warehouse || 'Основной Склад Астана'),
       amount: 0,
       items_count: 0,
     };
@@ -117,17 +125,24 @@ export function buildOutboxErpPayload(order: any, dbItems: any[] | null) {
   const isMultiWarehouse = warehouseMap.size > 1;
   const splitOrdersSummary = isMultiWarehouse
     ? Array.from(warehouseMap.entries()).map(([whId, info]) => ({
-        warehouse_id: typeof whId === 'number' ? whId : 1,
+        warehouse_id: typeof whId === 'number' ? whId : 81,
         warehouse: info.warehouse,
         amount: Math.round(info.amount * 100) / 100,
         items_count: info.items_count,
       }))
     : [];
 
+  const numericClientId = order.partner_id && /^\d+$/.test(String(order.partner_id).trim())
+    ? Number(String(order.partner_id).trim())
+    : undefined;
+
   return {
     idempotency_key: order.idempotency_key || `outbox-${order.id}`,
+    outbox_doc_number: order.order_number,
+    client_id: numericClientId,
     partner_id: order.partner_id || 'guest',
     client_name: order.client_name || 'Оптовый клиент',
+    currency: order.currency || 'USD',
     warehouse_id: primaryWarehouseId,
     is_multi_warehouse: isMultiWarehouse,
     split_orders: splitOrdersSummary.length > 0 ? splitOrdersSummary : undefined,

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { recordAuditLog } from '../../audit/logs';
+import { sendWhatsAppMessage } from '../../approvals/whatsapp';
 
 export async function dispatchWhatsAppNotification(params: {
   phone: string;
@@ -8,9 +9,6 @@ export async function dispatchWhatsAppNotification(params: {
   trackCode?: string;
   clientName?: string;
 }) {
-  const WHATSAPP_GATEWAY_URL = process.env.WHATSAPP_API_URL || process.env.GREEN_API_URL;
-  const WHATSAPP_TOKEN = process.env.WHATSAPP_API_TOKEN;
-
   let text = '';
   if (params.status === 'shipped') {
     text =
@@ -24,24 +22,13 @@ export async function dispatchWhatsAppNotification(params: {
   if (!text) return;
   console.log(`[WhatsApp Dispatcher] Message ready for ${params.phone}:\n${text}`);
 
-  if (WHATSAPP_GATEWAY_URL) {
-    try {
-      await fetch(WHATSAPP_GATEWAY_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(WHATSAPP_TOKEN ? { Authorization: `Bearer ${WHATSAPP_TOKEN}` } : {}),
-        },
-        body: JSON.stringify({
-          phone: params.phone.replace(/\D+/g, ''),
-          message: text,
-        }),
-      });
-      console.log(`[WhatsApp Dispatcher] Successfully sent WhatsApp message to ${params.phone}`);
-    } catch (err) {
-      console.warn(`[WhatsApp Dispatcher] Gateway delivery error for ${params.phone}:`, err);
-    }
-  }
+  await sendWhatsAppMessage(params.phone, text, {
+    eventType: `order_${params.status}`,
+    orderDocNumber: params.orderDoc,
+    clientName: params.clientName,
+  }).catch(err => {
+    console.warn(`[WhatsApp Dispatcher] Gateway delivery error for ${params.phone}:`, err);
+  });
 }
 
 const STATUS_HIERARCHY: Record<string, number> = {
@@ -94,43 +81,7 @@ export async function handleOrderStatusChanged(
     `[Webhook ERP: order_status_changed] Order: ${order_doc_number || order_id} -> ${targetStatus} (Client: ${client_name}, Phone: ${client_phone}, Reason: ${payload.reason || 'n/a'})`,
   );
 
-  // Сквозная трансляция в Realtime-шину браузеров
-  await broadcastLiveUpdate('order_status_changed', {
-    order_id,
-    order_doc_number,
-    order_number: order_doc_number,
-    new_status: targetStatus,
-    status: targetStatus,
-    track_code: track_code || null,
-    comment: orderNotes,
-    reason: payload.reason || null,
-    timestamp,
-  });
-
-  // Также транслируем в канал 'portal_order_live_sync' для гарантированной доставки
-  if (supabaseServer) {
-    try {
-      const orderChannel = supabaseServer.channel('portal_order_live_sync');
-      await orderChannel.send({
-        type: 'broadcast',
-        event: 'order_status_changed',
-        payload: {
-          order_id,
-          order_doc_number,
-          new_status: targetStatus,
-          status: targetStatus,
-          track_code: track_code || null,
-          comment: orderNotes,
-          reason: payload.reason || null,
-          timestamp,
-        },
-      });
-    } catch (bcErr) {
-      console.warn('[Webhook ERP] Secondary channel broadcast notice:', bcErr);
-    }
-  }
-
-  // Синхронизация статуса в Supabase
+  // 1. Синхронизация статуса в Supabase и проверка Monotonic Order State Machine ПЕРЕД трансляцией в браузеры
   try {
     const isUuid = (val: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
     const matchConditions: string[] = [];
@@ -145,7 +96,7 @@ export async function handleOrderStatusChanged(
     }
 
     if (matchConditions.length > 0 && supabaseServer) {
-      // 1. Проверяем текущий статус для защиты от отката (Monotonic Order State Machine)
+      // 1.1. Проверяем текущий статус для защиты от отката (Monotonic Order State Machine)
       const { data: existingOrder } = await supabaseServer
         .from('orders')
         .select('id, status, order_number, parent_order_id')
@@ -175,18 +126,40 @@ export async function handleOrderStatusChanged(
         );
       }
 
-      // 2. Высвобождение остатков при отмене заказа (Zero Reservation Leak Invariant)
+      // 1.2. Высвобождение / списание остатков по заказу и дочерним подзаказам (Zero Reservation Leak Invariant)
       if (targetStatus === 'cancelled' && existingOrder?.id) {
         try {
           await supabaseServer.rpc('release_order_reservations', { p_order_id: existingOrder.id });
+          const { data: childSubs } = await supabaseServer
+            .from('orders')
+            .select('id, reservations_released')
+            .eq('parent_order_id', existingOrder.id);
+          if (Array.isArray(childSubs)) {
+            for (const sub of childSubs) {
+              if (sub.id && !sub.reservations_released) {
+                await supabaseServer.rpc('release_order_reservations', { p_order_id: sub.id }).catch(() => {});
+              }
+            }
+          }
           console.log(`[Webhook ERP] Successfully released stock reservations for cancelled order ${existingOrder.id}`);
         } catch (relErr) {
           console.warn('[Webhook ERP] Notice during release_order_reservations RPC:', relErr);
         }
       } else if (['shipped', 'delivered', 'completed'].includes(targetStatus) && existingOrder?.id) {
-        // Проводка первичного документа в 1С (РТУ): бронь переходит в фактическое списание
+        // Проводка первичного документа в Synergy ERP: бронь переходит в фактическое списание
         try {
           await supabaseServer.rpc('fulfill_order_reservations', { p_order_id: existingOrder.id });
+          const { data: childSubs } = await supabaseServer
+            .from('orders')
+            .select('id, reservations_released')
+            .eq('parent_order_id', existingOrder.id);
+          if (Array.isArray(childSubs)) {
+            for (const sub of childSubs) {
+              if (sub.id && !sub.reservations_released) {
+                await supabaseServer.rpc('fulfill_order_reservations', { p_order_id: sub.id }).catch(() => {});
+              }
+            }
+          }
         } catch (fulErr) {
           // Fallback if RPC pending migration
         }
@@ -216,7 +189,7 @@ export async function handleOrderStatusChanged(
         await supabaseServer.from('orders').update(updatePayload).in('parent_order_id', masterIds);
       }
 
-      // ОБРАТНАЯ СИНХРОНИЗАЦИЯ РОДИТЕЛЬСКОГО МАСТЕР-ЗАКАЗА ПРИ ЧАСТИЧНОЙ ОТМЕНЕ ДОЧЕРНЕГО ПОДЗАКАЗА ИЗ 1С
+      // ОБРАТНАЯ СИНХРОНИЗАЦИЯ РОДИТЕЛЬСКОГО МАСТЕР-ЗАКАЗА ПРИ ЧАСТИЧНОЙ ОТМЕНЕ ДОЧЕРНЕГО ПОДЗАКАЗА ИЗ ERP
       if (existingOrder?.parent_order_id) {
         try {
           const { data: siblings } = await supabaseServer
@@ -257,6 +230,41 @@ export async function handleOrderStatusChanged(
     }
   } catch (dbErr) {
     console.warn('[Webhook ERP] Supabase sync notice:', dbErr);
+  }
+
+  // 2. Сквозная трансляция в Realtime-шину браузеров (только после прохождения Monotonic State Machine)
+  await broadcastLiveUpdate('order_status_changed', {
+    order_id,
+    order_doc_number,
+    order_number: order_doc_number,
+    new_status: targetStatus,
+    status: targetStatus,
+    track_code: track_code || null,
+    comment: orderNotes,
+    reason: payload.reason || null,
+    timestamp,
+  });
+
+  if (supabaseServer) {
+    try {
+      const orderChannel = supabaseServer.channel('portal_order_live_sync');
+      await orderChannel.send({
+        type: 'broadcast',
+        event: 'order_status_changed',
+        payload: {
+          order_id,
+          order_doc_number,
+          new_status: targetStatus,
+          status: targetStatus,
+          track_code: track_code || null,
+          comment: orderNotes,
+          reason: payload.reason || null,
+          timestamp,
+        },
+      });
+    } catch (bcErr) {
+      console.warn('[Webhook ERP] Secondary channel broadcast notice:', bcErr);
+    }
   }
 
   await recordAuditLog({

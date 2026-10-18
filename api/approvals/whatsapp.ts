@@ -6,7 +6,7 @@ const TARGET_ERP_URL = getTargetErpUrl();
 const ERP_FALLBACK_URL = getErpFallbackUrl();
 const WHATSAPP_GATEWAY_URL = process.env.WHATSAPP_API_URL || process.env.GREEN_API_URL;
 const WHATSAPP_TOKEN = process.env.WHATSAPP_API_TOKEN;
-const PORTAL_BASE_URL = process.env.PORTAL_BASE_URL || 'https://synergy-b2b-portal.vercel.app';
+const PORTAL_BASE_URL = process.env.PORTAL_BASE_URL || 'https://synergy-group.kz';
 const DEFAULT_DUTY_PHONE = process.env.ADMIN_WHATSAPP_PHONE || process.env.MANAGER_WHATSAPP_PHONE || '77086984543';
 
 export interface ApprovalPayload {

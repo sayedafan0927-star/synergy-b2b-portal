@@ -166,7 +166,11 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
     }
   }, [products, items, syncItemPrices, getVariantPrice, getPricePerSqm, toastInfo]);
 
-  // Сброс флага синхронизации при получении фоновых обновлений остатков
+  // Сброс флага синхронизации при получении фоновых обновлений остатков или смене контрагента/типа цен
+  useEffect(() => {
+    syncedRef.current = false;
+  }, [effectiveProfile?.id, effectiveProfile?.price_type, selectedClient?.id, checkoutMode]);
+
   useEffect(() => {
     const handler = () => {
       syncedRef.current = false;
@@ -242,7 +246,14 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
   const isBlocked = !isAdmin && !isManagerSelfOrder && debtReport?.client?.is_blocked_for_shipment === true;
   const overdueDebt = debtReport?.financials?.overdue_usd || 0;
   const currentDebt = debtReport?.financials?.total_debt_usd || debtReport?.client?.debt_usd || 0;
-  const creditLimit = debtReport?.client?.credit_limit_usd || 0;
+  const creditLimit = Number(
+    debtReport?.client?.credit_limit_usd ||
+    debtReport?.financials?.credit_limit_usd ||
+    debtReport?.credit_limit_usd ||
+    debtReport?.contracts?.[0]?.credit_limit_usd ||
+    effectiveProfile?.credit_limit_usd ||
+    0
+  );
   const totalExposure = currentDebt + totalPrice;
   const exceedsLimit = creditLimit > 0 && totalExposure > creditLimit;
   const hasOverdue = overdueDebt > 0;

@@ -86,9 +86,19 @@ export function CartProvider({ children }: { children: ReactNode }) {
           let updated = false;
           const next = prevItems.map(cartItem => {
             const match = rawItems.find(
-              (it: any) =>
-                (it.sku && String(it.sku).toUpperCase() === String(cartItem.sku).toUpperCase()) ||
-                (it.article && String(it.article).toUpperCase() === String(cartItem.sku).toUpperCase())
+              (it: any) => {
+                const skuMatches =
+                  (it.sku && String(it.sku).toUpperCase() === String(cartItem.sku).toUpperCase()) ||
+                  (it.article && String(it.article).toUpperCase() === String(cartItem.sku).toUpperCase());
+                if (!skuMatches) return false;
+                if (it.warehouse_id && (cartItem as any).warehouse_id && Number(it.warehouse_id) !== Number((cartItem as any).warehouse_id)) {
+                  return false;
+                }
+                if (it.warehouse && cartItem.warehouse && String(it.warehouse).toLowerCase() !== String(cartItem.warehouse).toLowerCase()) {
+                  return false;
+                }
+                return true;
+              }
             );
             if (match) {
               const newFree = Math.max(0, Number(match.free_stock ?? match.stock ?? 0));

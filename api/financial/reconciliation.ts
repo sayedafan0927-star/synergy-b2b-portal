@@ -31,5 +31,5 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ success: false, error: callerAuth.error || 'Требуется авторизация.' });
   }
 
-  return await handleReconciliationReport(req, res, TARGET_ERP_URL, SERVER_ERP_KEY);
+  return await handleReconciliationReport(req, res, TARGET_ERP_URL, SERVER_ERP_KEY, callerAuth);
 }

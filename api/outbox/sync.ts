@@ -8,7 +8,7 @@ import { getErpApiKey, getTargetErpUrl } from '../lib/erpKey';
 import { checkCircuit } from '../lib/circuitBreaker';
 import { dequeueOutboxOrders } from '../lib/queueBroker';
 import { dispatchDlqEmergencyAlert, buildOutboxErpPayload, computeBackoffNextRetry, isFatalBusinessError } from './outboxUtils';
-import { syncPendingCancellation } from './cancellationSync';
+import { syncPendingCancellation, drainPendingErpCancelOrders, releaseOrderAndSubordersReservations } from './cancellationSync';
 
 export { dispatchDlqEmergencyAlert };
 
@@ -99,7 +99,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (!pendingOrders || pendingOrders.length === 0) {
-      return res.status(200).json({ success: true, message: 'Очередь Outbox пуста.', count: 0, processed: [] });
+      const drainedCancels = await drainPendingErpCancelOrders(supabase, TARGET_ERP_URL, SERVER_ERP_KEY, correlationId);
+      return res.status(200).json({ success: true, message: 'Очередь Outbox пуста.', count: 0, drained_cancels: drainedCancels, processed: [] });
     }
 
     // Circuit Breaker Guard
@@ -161,9 +162,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           signal: controller.signal,
         }).finally(() => clearTimeout(timeout));
 
-        if (erpRes.ok) {
-          const erpData = await erpRes.json().catch(() => ({}));
-          const docNumber = erpData?.order?.doc_number || erpData?.order_id || `1C-${order.order_number}`;
+        const rawText = await erpRes.text().catch(() => '');
+        let erpData: any = {};
+        try { erpData = rawText ? JSON.parse(rawText) : {}; } catch {}
+
+        if (erpRes.ok && erpData?.success !== false) {
+          const fallbackDoc = String(order.order_number || '').replace(/^OUTBOX-/, 'ORD-') || `ORD-${order.id}`;
+          const docNumber = erpData?.order?.doc_number || (erpData?.order_id ? `ORD-${erpData.order_id}` : fallbackDoc);
 
           // Успех: обновляем статус заказа в Supabase на confirmed
           await supabase
@@ -235,7 +240,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
           return { order_id: order.id, order_number: order.order_number, success: true };
         } else {
-          const errText = await erpRes.text().catch(() => '');
+          const errText = erpData?.error || erpData?.message || rawText;
           const isFatal = isFatalBusinessError(erpRes.status, errText);
           const nextRetries = isFatal ? 5 : (currentRetries + 1);
           const { nextRetryAt, isDlq } = isFatal
@@ -258,6 +263,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
           if (isDlq) {
             try {
+              await supabase.rpc('release_order_reservations', { p_order_id: order.id });
+              await releaseOrderAndSubordersReservations(supabase, order.id);
               await supabase
                 .from('orders')
                 .update({
@@ -269,8 +276,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                   updated_at: new Date().toISOString(),
                 })
                 .eq('parent_order_id', order.id);
-
-              await supabase.rpc('release_order_reservations', { p_order_id: order.id });
             } catch (relErr) {
               console.warn('[Outbox Sync] DLQ reservation release error:', relErr);
             }
@@ -331,6 +336,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         if (isDlq) {
           try {
+            await releaseOrderAndSubordersReservations(supabase, order.id);
             await supabase
               .from('orders')
               .update({
@@ -340,8 +346,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 updated_at: new Date().toISOString(),
               })
               .eq('parent_order_id', order.id);
-
-            await supabase.rpc('release_order_reservations', { p_order_id: order.id });
           } catch (relErr) {
             console.warn('[Outbox Sync] Network DLQ reservation release error:', relErr);
           }
@@ -405,39 +409,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // 4. Гарантированный дренаж отмененных заказов (Async Order Cancellation Drain)
     if (Date.now() - startTime < MAX_EXECUTION_MS) {
-      try {
-        const { data: cancelPending } = await supabase
-          .from('orders')
-          .select('id, order_number, notes')
-          .eq('last_error', 'pending_erp_cancel')
-          .limit(3);
-
-        if (cancelPending && cancelPending.length > 0) {
-          for (const co of cancelPending) {
-            try {
-              const cRes = await fetch(`${TARGET_ERP_URL}?action=update_order_status`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-Portal-Key': SERVER_ERP_KEY, 'X-Correlation-ID': correlationId },
-                body: JSON.stringify({ order_id: co.order_number || co.id, status: 'cancelled', comment: 'Асинхронная отмена через Outbox Worker' }),
-              });
-              const cText = !cRes.ok ? await cRes.text().catch(() => '') : '';
-              const isOrderMissingInErp = cRes.status === 404 || cText.toLowerCase().includes('not found') || cText.toLowerCase().includes('не найден');
-
-              if (cRes.ok || isOrderMissingInErp) {
-                await supabase.from('orders').update({
-                  last_error: null,
-                  notes: `${co.notes || ''} [Отмена подтверждена ERP: ${new Date().toISOString()}]`.trim(),
-                  updated_at: new Date().toISOString(),
-                }).eq('id', co.id);
-              }
-            } catch (coErr) {
-              console.warn('[Outbox Sync] Async cancel retry error:', coErr);
-            }
-          }
-        }
-      } catch (cancelErr) {
-        console.warn('[Outbox Sync] Cancel query error:', cancelErr);
-      }
+      await drainPendingErpCancelOrders(supabase, TARGET_ERP_URL, SERVER_ERP_KEY, correlationId);
     }
 
     const succeeded = results.filter(r => r.success).length;

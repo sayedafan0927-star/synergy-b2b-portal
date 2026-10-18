@@ -24,7 +24,7 @@ export async function handleClientDeactivated(
         })
         .eq('partner_id', String(counterpartyId));
 
-      // 1.1. Освобождаем складские резервы по неотправленным заказам (pending / waiting_approval) деактивированного контрагента
+      // 1.1. Освобождаем складские резервы по неотправленным заказам (pending / waiting_approval) деактивированного контрагента (включая подзаказы)
       try {
         const { data: activeOrders } = await supabaseServer
           .from('orders')
@@ -34,10 +34,22 @@ export async function handleClientDeactivated(
           .is('parent_order_id', null);
 
         if (Array.isArray(activeOrders) && activeOrders.length > 0) {
+          const ids = activeOrders.map((o: any) => o.id);
+          const { data: childOrders } = await supabaseServer
+            .from('orders')
+            .select('id, reservations_released')
+            .in('parent_order_id', ids);
+
           for (const ord of activeOrders) {
             await supabaseServer.rpc('release_order_reservations', { p_order_id: ord.id }).catch(() => {});
           }
-          const ids = activeOrders.map((o: any) => o.id);
+          if (Array.isArray(childOrders)) {
+            for (const sub of childOrders) {
+              if (sub.id && !sub.reservations_released) {
+                await supabaseServer.rpc('release_order_reservations', { p_order_id: sub.id }).catch(() => {});
+              }
+            }
+          }
           await supabaseServer
             .from('orders')
             .update({

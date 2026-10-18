@@ -58,10 +58,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
+    const isUuid = (v?: string) => Boolean(v && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v));
+
     // Проверка текущего пароля (Anti-Account-Takeover Guard)
     if (!authCtx.isServer && authCtx.role !== 'admin' && (authCtx.userId || authCtx.partnerId)) {
       let currentProfile: any = null;
-      if (authCtx.userId) {
+      if (isUuid(authCtx.userId)) {
         const { data: byId } = await supabaseAdmin
           .from('profiles')
           .select('password_hash')
@@ -104,8 +106,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     let updated = false;
 
-    // 1. Поиск и обновление профиля по userId
-    if (authCtx.userId) {
+    // 1. Поиск и обновление профиля по UUID userId
+    if (isUuid(authCtx.userId)) {
       const { data: updatedRow, error: upErr } = await supabaseAdmin
         .from('profiles')
         .update({
@@ -121,19 +123,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // 2. Если по id не найден, но есть partnerId (клиент ERP)
+    // 2. Если по id не найден, но есть partnerId (клиент Synergy ERP)
     if (!updated && authCtx.partnerId) {
-      const { data: updatedPartner, error: partErr } = await supabaseAdmin
+      const { data: updatedRows, error: partErr } = await supabaseAdmin
         .from('profiles')
         .update({
           password_hash: hashedPassword,
           updated_at: new Date().toISOString(),
         })
         .eq('partner_id', authCtx.partnerId)
-        .select('id')
-        .maybeSingle();
+        .select('id');
 
-      if (!partErr && updatedPartner) {
+      if (!partErr && Array.isArray(updatedRows) && updatedRows.length > 0) {
         updated = true;
       }
     }
