@@ -116,8 +116,8 @@ function MainLayout({ children, page, navigate, showFooter }: { children: React.
   return (
     <div className="flex min-h-screen flex-col">
       <Header currentPage={page} onNavigate={navigate} />
-      <div className="pt-16"><AnnouncementBar onNavigate={navigate} /></div>
-      <main className={`flex-1 transition-all duration-200 ${showBanner ? 'pt-9 sm:pt-9' : '-mt-16'}`}>{children}</main>
+      <AnnouncementBar onNavigate={navigate} />
+      <main className={`flex-1 transition-all duration-200 ${showBanner ? 'pt-9 sm:pt-9' : ''}`}>{children}</main>
       {showFooter && <Footer onNavigate={navigate} />}
       <MobileNav currentPage={page} onNavigate={navigate} />
       <WhatsAppWidget />

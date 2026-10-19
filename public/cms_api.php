@@ -16,30 +16,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit;
 }
 
-$storageDir = dirname(__DIR__) . '/cms_storage';
+$rootDir = (basename(__DIR__) === 'dist') ? dirname(__DIR__) : __DIR__;
+$distDir = (basename(__DIR__) === 'dist') ? __DIR__ : (__DIR__ . '/dist');
+
+$storageDir = $rootDir . '/cms_storage';
 $publicUploadsDir = __DIR__ . '/uploads/cms';
+$altUploadsDir = (basename(__DIR__) === 'dist') ? ($rootDir . '/uploads/cms') : ($distDir . '/uploads/cms');
 
-if (!is_dir($storageDir)) {
-    @mkdir($storageDir, 0755, true);
-}
-if (!is_dir($publicUploadsDir)) {
-    @mkdir($publicUploadsDir, 0755, true);
+$htaccessGuard = "Options -Indexes\n<FilesMatch \"\\.(php|phtml|phar|php5|php7|php8|pl|py|cgi|sh|htaccess)$\">\n    <IfModule mod_authz_core.c>\n        Require all denied\n    </IfModule>\n    <IfModule !mod_authz_core.c>\n        Order allow,deny\n        Deny from all\n    </IfModule>\n</FilesMatch>\n";
+
+foreach ([$storageDir, $publicUploadsDir, $altUploadsDir] as $dir) {
+    if (!is_dir($dir)) {
+        @mkdir($dir, 0755, true);
+    }
+    if (is_dir($dir) && !file_exists($dir . '/.htaccess')) {
+        @file_put_contents($dir . '/.htaccess', $htaccessGuard);
+    }
 }
 
-// Auto-restore any uploaded files from persistent storageDir into publicUploadsDir
-if (is_dir($storageDir) && is_dir($publicUploadsDir)) {
+// Auto-restore any uploaded files from persistent storageDir into publicUploadsDir & altUploadsDir
+if (is_dir($storageDir)) {
     $files = glob($storageDir . '/*.{mp4,webm,webp,png,jpg,jpeg}', GLOB_BRACE);
     if (is_array($files)) {
         foreach ($files as $f) {
-            $target = $publicUploadsDir . '/' . basename($f);
-            if (!file_exists($target)) {
-                @copy($f, $target);
+            $base = basename($f);
+            if (is_dir($publicUploadsDir) && !file_exists($publicUploadsDir . '/' . $base)) {
+                @copy($f, $publicUploadsDir . '/' . $base);
+            }
+            if (is_dir($altUploadsDir) && !file_exists($altUploadsDir . '/' . $base)) {
+                @copy($f, $altUploadsDir . '/' . $base);
             }
         }
     }
 }
 
 $contentFile = $storageDir . '/site_content.json';
+$publicContentFile = __DIR__ . '/site_content.json';
+$altContentFile = (basename(__DIR__) === 'dist') ? ($rootDir . '/site_content.json') : ($distDir . '/site_content.json');
+
+// Auto-restore site_content.json to public webroot if missing
+if (file_exists($contentFile)) {
+    if (!file_exists($publicContentFile)) {
+        @copy($contentFile, $publicContentFile);
+    }
+    if (is_dir(dirname($altContentFile)) && !file_exists($altContentFile)) {
+        @copy($contentFile, $altContentFile);
+    }
+}
+
 $action = isset($_GET['action']) ? (string)$_GET['action'] : 'get_content';
 
 function decode_b64url(string $str): string {
@@ -48,6 +72,66 @@ function decode_b64url(string $str): string {
         $str .= str_repeat('=', 4 - $pad);
     }
     return (string)base64_decode(strtr($str, '-_', '+/'));
+}
+
+function sanitize_cms_media_url($url): string {
+    if (!is_string($url)) {
+        return '';
+    }
+    $clean = trim($url);
+    if ($clean === '') {
+        return '';
+    }
+    // Strip CSS/HTML breakout characters
+    $clean = preg_replace('/[\'"\(\);<>\\\\\x00-\x1F]/', '', $clean);
+    $lower = strtolower($clean);
+    if (
+        strpos($lower, 'javascript:') === 0 ||
+        strpos($lower, 'vbscript:') === 0 ||
+        strpos($lower, 'data:text/') === 0
+    ) {
+        return '';
+    }
+    if (
+        strpos($clean, '/') === 0 ||
+        strpos($lower, 'idb://') === 0 ||
+        strpos($lower, 'https://') === 0
+    ) {
+        return $clean;
+    }
+    return '';
+}
+
+function sanitize_site_content_payload(array $sc): array {
+    if (isset($sc['hero']) && is_array($sc['hero'])) {
+        foreach (['videoMp4', 'videoWebm', 'posterUrl', 'endCardUrl'] as $k) {
+            if (isset($sc['hero'][$k])) {
+                $sc['hero'][$k] = sanitize_cms_media_url($sc['hero'][$k]);
+            }
+        }
+    }
+    if (isset($sc['b2bCta']) && is_array($sc['b2bCta']) && isset($sc['b2bCta']['backgroundUrl'])) {
+        $sc['b2bCta']['backgroundUrl'] = sanitize_cms_media_url($sc['b2bCta']['backgroundUrl']);
+    }
+    if (isset($sc['categories']) && is_array($sc['categories'])) {
+        foreach ($sc['categories'] as $idx => $cat) {
+            if (is_array($cat)) {
+                foreach (['video', 'poster', 'image'] as $k) {
+                    if (isset($cat[$k])) {
+                        $sc['categories'][$idx][$k] = sanitize_cms_media_url($cat[$k]);
+                    }
+                }
+            }
+        }
+    }
+    if (isset($sc['advantages']) && is_array($sc['advantages'])) {
+        foreach ($sc['advantages'] as $idx => $adv) {
+            if (is_array($adv) && isset($adv['image'])) {
+                $sc['advantages'][$idx]['image'] = sanitize_cms_media_url($adv['image']);
+            }
+        }
+    }
+    return $sc;
 }
 
 function verify_admin_authorization(): bool {
@@ -70,26 +154,31 @@ function verify_admin_authorization(): bool {
         return false;
     }
     $token = trim(substr($authHeader, 7));
-    if (strlen($token) < 12) {
+    if (strlen($token) < 24) {
         return false;
     }
 
-    // 1. Check multi-segment JWT (header.payload.signature)
+    // 1. Check 3-segment JWT (header.payload.signature)
     $parts = explode('.', $token);
-    if (count($parts) >= 2) {
+    if (count($parts) === 3 && strlen($parts[2]) >= 16) {
         $payloadRaw = decode_b64url($parts[1]);
         if ($payloadRaw) {
             $payload = json_decode($payloadRaw, true);
             if (is_array($payload)) {
-                $role = $payload['role'] ?? ($payload['user_metadata']['role'] ?? ($payload['data']['role'] ?? ''));
-                if ($role === 'admin') {
+                $role = $payload['role']
+                    ?? ($payload['user_metadata']['role'] ?? '')
+                    ?? ($payload['app_metadata']['role'] ?? '')
+                    ?? ($payload['data']['role'] ?? '');
+                $hasIdentity = !empty($payload['sub']) || !empty($payload['id']) || !empty($payload['email']);
+                $notExpired = empty($payload['exp']) || ((int)$payload['exp'] > (time() - 300));
+                if ($role === 'admin' && $hasIdentity && $notExpired) {
                     return true;
                 }
             }
         }
     }
 
-    // 2. Check single-segment base64url portal session token (buildFallbackToken)
+    // 2. Check structured portal session token (buildFallbackToken) with strict identity + timestamp validation
     $singleRaw = decode_b64url($token);
     if ($singleRaw) {
         $parsed = json_decode($singleRaw, true);
@@ -97,7 +186,20 @@ function verify_admin_authorization(): bool {
             $role = $parsed['role']
                 ?? ($parsed['data']['role'] ?? '')
                 ?? ($parsed['data']['profile']['role'] ?? '');
-            if ($role === 'admin') {
+            $source = $parsed['source'] ?? '';
+            $id = $parsed['id'] ?? ($parsed['data']['id'] ?? '');
+            $email = $parsed['email'] ?? ($parsed['data']['email'] ?? '');
+            $rawTs = isset($parsed['timestamp']) ? (int)$parsed['timestamp'] : 0;
+            $tsSec = ($rawTs > 2000000000) ? (int)floor($rawTs / 1000) : $rawTs;
+            $freshEnough = ($tsSec > (time() - 7 * 86400)) && ($tsSec <= (time() + 3600));
+
+            if (
+                $role === 'admin' &&
+                $source === 'portal_session' &&
+                is_string($id) && strlen($id) >= 3 &&
+                is_string($email) && strpos($email, '@') !== false &&
+                $freshEnough
+            ) {
                 return true;
             }
         }
@@ -185,13 +287,25 @@ function auto_fit_image_gd(string $srcPath, string $destWebpPath, string $slot):
 }
 
 if ($action === 'get_content') {
-    if (file_exists($contentFile)) {
-        $raw = @file_get_contents($contentFile);
-        $decoded = $raw ? json_decode($raw, true) : null;
-        if (is_array($decoded)) {
-            echo json_encode(['success' => true, 'site_content' => $decoded], JSON_UNESCAPED_UNICODE);
-            exit;
+    $candidates = [$contentFile, $publicContentFile, $altContentFile];
+    $bestContent = null;
+    $bestUpdated = '';
+    foreach ($candidates as $cand) {
+        if (file_exists($cand)) {
+            $raw = @file_get_contents($cand);
+            $decoded = $raw ? json_decode($raw, true) : null;
+            if (is_array($decoded)) {
+                $upd = isset($decoded['updatedAt']) ? (string)$decoded['updatedAt'] : '';
+                if ($bestContent === null || strcmp($upd, $bestUpdated) > 0) {
+                    $bestContent = $decoded;
+                    $bestUpdated = $upd;
+                }
+            }
         }
+    }
+    if (is_array($bestContent)) {
+        echo json_encode(['success' => true, 'site_content' => $bestContent], JSON_UNESCAPED_UNICODE);
+        exit;
     }
     echo json_encode(['success' => true, 'site_content' => null], JSON_UNESCAPED_UNICODE);
     exit;
@@ -220,12 +334,17 @@ if ($action === 'save_content') {
         exit;
     }
 
+    $siteContent = sanitize_site_content_payload($siteContent);
     $siteContent['updatedAt'] = gmdate('Y-m-d\TH:i:s\Z');
     $encoded = json_encode($siteContent, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     if (@file_put_contents($contentFile, $encoded, LOCK_EX) === false) {
         http_response_code(500);
         echo json_encode(['success' => false, 'error' => 'Failed to write site_content.json'], JSON_UNESCAPED_UNICODE);
         exit;
+    }
+    @file_put_contents($publicContentFile, $encoded, LOCK_EX);
+    if (is_dir(dirname($altContentFile))) {
+        @file_put_contents($altContentFile, $encoded, LOCK_EX);
     }
 
     echo json_encode([
@@ -283,6 +402,7 @@ if ($action === 'upload') {
     $safeFileName = ($slot ?: 'media') . '_' . time() . '_' . substr(md5(uniqid('', true)), 0, 6) . '.' . $finalExt;
     $destPublic = $publicUploadsDir . '/' . $safeFileName;
     $destBackup = $storageDir . '/' . $safeFileName;
+    $destAlt = $altUploadsDir . '/' . $safeFileName;
 
     $processedByGd = false;
     if ($isImage) {
@@ -296,6 +416,9 @@ if ($action === 'upload') {
         }
     }
     @copy($destPublic, $destBackup);
+    if (is_dir($altUploadsDir)) {
+        @copy($destPublic, $destAlt);
+    }
 
     $publicUrl = '/uploads/cms/' . $safeFileName;
     echo json_encode([

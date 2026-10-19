@@ -301,33 +301,39 @@ export async function autoOptimizeVideoForSlot(
       }
     };
 
-    const recordedBlob = await new Promise<Blob>((resolve, reject) => {
-      recorder.onstop = () => {
-        cancelAnimationFrame(rafId);
-        const extType = chosenMime.includes('mp4') ? 'video/mp4' : 'video/webm';
-        resolve(new Blob(chunks, { type: extType }));
-      };
-      recorder.onerror = () => {
-        cancelAnimationFrame(rafId);
-        reject(new Error('MediaRecorder error'));
-      };
-      recorder.start(200);
-      video.play().then(() => {
-        renderLoop();
-      }).catch(reject);
+    let recordedBlob: Blob;
+    try {
+      recordedBlob = await new Promise<Blob>((resolve, reject) => {
+        recorder.onstop = () => {
+          cancelAnimationFrame(rafId);
+          const extType = chosenMime.includes('mp4') ? 'video/mp4' : 'video/webm';
+          resolve(new Blob(chunks, { type: extType }));
+        };
+        recorder.onerror = () => {
+          cancelAnimationFrame(rafId);
+          reject(new Error('MediaRecorder error'));
+        };
+        recorder.start(200);
+        video.play().then(() => {
+          renderLoop();
+        }).catch(reject);
 
-      const stopTimer = setTimeout(() => {
-        if (recorder.state === 'recording') {
-          video.pause();
-          recorder.stop();
-        }
-      }, targetDuration * 1000 + 250);
+        const stopTimer = setTimeout(() => {
+          if (recorder.state === 'recording') {
+            video.pause();
+            recorder.stop();
+          }
+        }, targetDuration * 1000 + 250);
 
-      video.onended = () => {
-        clearTimeout(stopTimer);
-        if (recorder.state === 'recording') recorder.stop();
-      };
-    });
+        video.onended = () => {
+          clearTimeout(stopTimer);
+          if (recorder.state === 'recording') recorder.stop();
+        };
+      });
+    } finally {
+      cancelAnimationFrame(rafId);
+      stream.getTracks().forEach(t => t.stop());
+    }
 
     const isMp4Out = chosenMime.includes('mp4');
     const ext = isMp4Out ? 'mp4' : 'webm';
@@ -350,6 +356,11 @@ export async function autoOptimizeVideoForSlot(
       summaryNote: `Авто-подгонка видео: ${origW}×${origH} (${(file.size / (1024 * 1024)).toFixed(2)} МБ) → ${targetW}×${targetH} px (${(optimizedFile.size / (1024 * 1024)).toFixed(2)} МБ)`,
     };
   } finally {
+    try {
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
+    } catch {}
     URL.revokeObjectURL(videoUrl);
   }
 }

@@ -130,6 +130,9 @@ def sync_directory(ftp: ftplib.FTP, local_dir: str, remote_base: str, force: boo
         ensure_remote_dir(ftp, remote_dir)
 
         for file in files:
+            if file == "site_content.json" or "uploads/cms" in root.replace("\\", "/"):
+                skipped += 1
+                continue
             local_file = os.path.join(root, file)
             remote_file = os.path.join(remote_dir, file).replace("\\", "/")
             file_size = os.path.getsize(local_file)
@@ -191,10 +194,13 @@ def main():
             print("📦 Syncing api/ directory...")
             sync_directory(ftp, os.path.join(PROJECT_DIR, "api"), "api", force=args.force)
             
-            # Sync index.html at root if needed
+            # Sync index.html and cms_api.php at root if needed
             print("📦 Syncing root files...")
             upload_file(ftp, os.path.join(PROJECT_DIR, "index.html"), "index.html")
             upload_file(ftp, os.path.join(PROJECT_DIR, "package.json"), "package.json")
+            cms_api_local = os.path.join(PROJECT_DIR, "public", "cms_api.php")
+            if os.path.exists(cms_api_local):
+                upload_file(ftp, cms_api_local, "cms_api.php")
             if os.path.exists(os.path.join(PROJECT_DIR, "AGENTS.md")):
                 upload_file(ftp, os.path.join(PROJECT_DIR, "AGENTS.md"), "AGENTS.md")
     finally:

@@ -20,37 +20,37 @@ function parseInitialApprovalIntent(searchStr: string): ParsedApprovalIntent | n
     const params = new URLSearchParams(searchStr);
     const rawDecision = params.get('decision');
     const token = params.get('token');
+    if (!token || token.length < 16) return null;
+
     let decision: 'approve' | 'reject' | null =
       rawDecision === 'approve' || rawDecision === 'reject' ? rawDecision : null;
-    let orderId = params.get('order_id') || '';
+    let orderId = '';
     let orderDocNumber = params.get('doc') || '';
     let expired = false;
 
-    if (token) {
+    try {
+      const base64 = token.replace(/-/g, '+').replace(/_/g, '/');
+      const decoded = JSON.parse(decodeURIComponent(escape(atob(base64))));
+      if (decoded?.orderId) orderId = String(decoded.orderId);
+      if (decoded?.orderDocNumber) orderDocNumber = String(decoded.orderDocNumber);
+      if (!decision && (decoded?.decision === 'approve' || decoded?.decision === 'reject')) {
+        decision = decoded.decision;
+      }
+      if (decoded?.expiresAt && Date.now() > Number(decoded.expiresAt)) {
+        expired = true;
+      }
+    } catch {
       try {
         const base64 = token.replace(/-/g, '+').replace(/_/g, '/');
-        const decoded = JSON.parse(decodeURIComponent(escape(atob(base64))));
+        const decoded = JSON.parse(atob(base64));
         if (decoded?.orderId) orderId = String(decoded.orderId);
-        if (decoded?.orderDocNumber) orderDocNumber = String(decoded.orderDocNumber);
         if (!decision && (decoded?.decision === 'approve' || decoded?.decision === 'reject')) {
           decision = decoded.decision;
         }
         if (decoded?.expiresAt && Date.now() > Number(decoded.expiresAt)) {
           expired = true;
         }
-      } catch {
-        try {
-          const base64 = token.replace(/-/g, '+').replace(/_/g, '/');
-          const decoded = JSON.parse(atob(base64));
-          if (decoded?.orderId) orderId = String(decoded.orderId);
-          if (!decision && (decoded?.decision === 'approve' || decoded?.decision === 'reject')) {
-            decision = decoded.decision;
-          }
-          if (decoded?.expiresAt && Date.now() > Number(decoded.expiresAt)) {
-            expired = true;
-          }
-        } catch {}
-      }
+      } catch {}
     }
 
     if (!decision || !orderId) return null;
@@ -74,6 +74,18 @@ export default function WhatsAppApprovalOverlay() {
 
   useEffect(() => {
     if (!intent) return;
+    if (typeof window !== 'undefined') {
+      try {
+        const cleanParams = new URLSearchParams(window.location.search);
+        ['decision', 'token', 'order_id', 'doc'].forEach(k => cleanParams.delete(k));
+        const qs = cleanParams.toString();
+        window.history.replaceState(
+          window.history.state,
+          document.title,
+          window.location.pathname + (qs ? `?${qs}` : '')
+        );
+      } catch {}
+    }
     if (intent.expired) {
       setStatus('error');
       setErrorMsg('Срок действия ссылки согласования (24 часа) истек.');

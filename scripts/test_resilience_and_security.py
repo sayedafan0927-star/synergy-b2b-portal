@@ -2632,7 +2632,38 @@ with open(os.path.join(ROOT_DIR, "src", "lib", "mediaAutoOptimizer.ts"), "r", en
 test_assert(os.path.exists(cms_php_path) and "auto_fit_image_gd" in cms_php_s54 and "autoOptimizeImageForSlot" in mao_s54 and "autoOptimizeVideoForSlot" in mao_s54 and "/cms_api.php?action=upload" in sms_s54 and "/cms_api.php?action=save_content" in scs_s54 and "useSiteContent" in hbm_s54 and "translationsOverride" in lc_s54, "mediaAutoOptimizer.ts and public/cms_api.php automatically resize, crop/fit, compress, extract 1st-frame posters, and persist media across all devices")
 
 # ------------------------------------------------------------------------------
-# 79. Summary Report
+# 79. Stage 55: Pass 13 CMS Security, SSO Privilege Hardening, Password Hashing & Layout Resilience
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 79. STAGE 55: PASS 13 CMS SECURITY, SSO HARDENING, PASSWORD HASHING & LAYOUT RESILIENCE ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "public", "cms_api.php"), "r", encoding="utf-8") as fp:
+    cms_php_s55 = fp.read()
+test_assert("sanitize_cms_media_url" in cms_php_s55 and "htaccessGuard" in cms_php_s55 and "$source === 'portal_session'" in cms_php_s55 and "$freshEnough" in cms_php_s55, "public/cms_api.php enforces strict admin session freshness/identity verification, URL sanitization, .htaccess script execution guard, and dual-root/dist persistence")
+
+with open(os.path.join(ROOT_DIR, "src", "lib", "siteContentStore.ts"), "r", encoding="utf-8") as fp:
+    scs_s55 = fp.read()
+test_assert("export function sanitizeMediaUrl" in scs_s55 and "javascript:" in scs_s55, "siteContentStore.ts sanitizes all media URLs against XSS and CSS breakout injection")
+
+with open(os.path.join(ROOT_DIR, "src", "contexts", "AuthContext.tsx"), "r", encoding="utf-8") as fp:
+    ac_s55 = fp.read()
+test_assert("inner.profile.role !== 'admin'" in ac_s55 and "ssoParam.length >= 16" in ac_s55 and "data && data.success === false" in ac_s55, "AuthContext.tsx blocks privilege escalation to admin via unsigned SSO query parameters and revokes rejected SSO sessions")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "common", "WhatsAppApprovalOverlay.tsx"), "r", encoding="utf-8") as fp:
+    wao_s55 = fp.read()
+test_assert("if (!token || token.length < 16) return null;" in wao_s55 and "window.history.replaceState" in wao_s55, "WhatsAppApprovalOverlay.tsx requires a valid approval token and cleans approval query parameters from URL on first parse")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "profile", "SettingsTab.tsx"), "r", encoding="utf-8") as fp:
+    st_s55 = fp.read()
+test_assert("erpFetch('change_password'" in st_s55 and "localStorage.setItem(`synergy:custom_pwd_" not in st_s55 and "localStorage.removeItem(`synergy:custom_pwd_${targetKey}`)" in st_s55, "SettingsTab.tsx delegates password changes to server endpoints and removes legacy plaintext password entries from localStorage")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "common", "AnnouncementBar.tsx"), "r", encoding="utf-8") as fp:
+    ab_s55 = fp.read()
+with open(os.path.join(ROOT_DIR, "src", "lib", "mediaAutoOptimizer.ts"), "r", encoding="utf-8") as fp:
+    mao_s55 = fp.read()
+test_assert("hasImpersonationBanner" in ab_s55 and "stream.getTracks().forEach(t => t.stop())" in mao_s55, "AnnouncementBar.tsx handles header/impersonation offsets internally and mediaAutoOptimizer.ts stops captureStream tracks and video decoder in finally")
+
+# ------------------------------------------------------------------------------
+# 80. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

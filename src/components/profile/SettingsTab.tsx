@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Settings, Shield } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { getAuthHeaders } from '@/lib/erpApi';
+import { getAuthHeaders, erpFetch } from '@/lib/erpApi';
 
 export function SettingsTab() {
   const { profile, refreshProfile } = useAuth();
@@ -55,6 +55,7 @@ export function SettingsTab() {
     }
     setPassSaving(true);
     try {
+      const targetKey = String(profile.partner_id || profile.id);
       const authHeaders = await getAuthHeaders();
       const res = await fetch('/api/auth/change-password', {
         method: 'POST',
@@ -68,10 +69,13 @@ export function SettingsTab() {
       const isJson = (res.headers.get('content-type') || '').includes('application/json');
       if (res.status === 405 || res.status === 404 || !isJson) {
         try {
-          await supabase.auth.updateUser({ password: newPassword });
+          await erpFetch('change_password', {
+            method: 'POST',
+            body: { partner_id: profile.partner_id || profile.id, new_password: newPassword },
+          });
         } catch {}
         try {
-          localStorage.setItem(`synergy:custom_pwd_${profile.partner_id || profile.id}`, newPassword);
+          await supabase.auth.updateUser({ password: newPassword });
         } catch {}
       } else {
         const data = await res.json().catch(() => null);
@@ -79,6 +83,9 @@ export function SettingsTab() {
           throw new Error(data?.error || `Ошибка смены пароля (${res.status})`);
         }
       }
+      try {
+        localStorage.removeItem(`synergy:custom_pwd_${targetKey}`);
+      } catch {}
 
       setPassSaved(true);
       setNewPassword('');

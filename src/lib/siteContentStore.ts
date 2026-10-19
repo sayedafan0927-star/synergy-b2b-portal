@@ -137,8 +137,23 @@ export const DEFAULT_SITE_CONTENT: SiteContentConfig = {
 const STORAGE_KEY = 'synergy:site_content_v1';
 const EVENT_KEY = 'synergy:site-content-updated';
 
+export function sanitizeMediaUrl(url: string | undefined | null, fallback = ''): string {
+  if (!url || typeof url !== 'string') return fallback;
+  const clean = url.trim().replace(/['"();<>\\\x00-\x1F]/g, '');
+  if (!clean) return fallback;
+  const lower = clean.toLowerCase();
+  if (lower.startsWith('javascript:') || lower.startsWith('vbscript:') || lower.startsWith('data:text/')) {
+    return fallback;
+  }
+  if (clean.startsWith('/') || lower.startsWith('idb://') || lower.startsWith('https://') || lower.startsWith('blob:')) {
+    return clean;
+  }
+  return fallback;
+}
+
 function mergeWithDefaults(raw: Partial<SiteContentConfig> | null | undefined): SiteContentConfig {
   if (!raw || typeof raw !== 'object') return DEFAULT_SITE_CONTENT;
+  const rawHero = raw.hero || ({} as Partial<HeroContentConfig>);
   return {
     updatedAt: raw.updatedAt || DEFAULT_SITE_CONTENT.updatedAt,
     announcement: {
@@ -147,11 +162,34 @@ function mergeWithDefaults(raw: Partial<SiteContentConfig> | null | undefined): 
       text: { ...DEFAULT_SITE_CONTENT.announcement.text, ...(raw.announcement?.text || {}) },
       ctaLabel: { ...DEFAULT_SITE_CONTENT.announcement.ctaLabel, ...(raw.announcement?.ctaLabel || {}) },
     },
-    hero: { ...DEFAULT_SITE_CONTENT.hero, ...(raw.hero || {}) },
-    advantages: Array.isArray(raw.advantages) && raw.advantages.length === 4 ? raw.advantages : DEFAULT_SITE_CONTENT.advantages,
-    categories: Array.isArray(raw.categories) && raw.categories.length === 3 ? raw.categories : DEFAULT_SITE_CONTENT.categories,
+    hero: {
+      ...DEFAULT_SITE_CONTENT.hero,
+      ...rawHero,
+      videoMp4: sanitizeMediaUrl(rawHero.videoMp4, DEFAULT_SITE_CONTENT.hero.videoMp4),
+      videoWebm: sanitizeMediaUrl(rawHero.videoWebm ?? DEFAULT_SITE_CONTENT.hero.videoWebm, ''),
+      posterUrl: sanitizeMediaUrl(rawHero.posterUrl, DEFAULT_SITE_CONTENT.hero.posterUrl),
+      endCardUrl: sanitizeMediaUrl(rawHero.endCardUrl, DEFAULT_SITE_CONTENT.hero.endCardUrl),
+    },
+    advantages:
+      Array.isArray(raw.advantages) && raw.advantages.length === 4
+        ? raw.advantages.map((adv, i) => ({
+            ...DEFAULT_SITE_CONTENT.advantages[i],
+            ...adv,
+            image: sanitizeMediaUrl(adv?.image, DEFAULT_SITE_CONTENT.advantages[i].image),
+          }))
+        : DEFAULT_SITE_CONTENT.advantages,
+    categories:
+      Array.isArray(raw.categories) && raw.categories.length === 3
+        ? raw.categories.map((cat, i) => ({
+            ...DEFAULT_SITE_CONTENT.categories[i],
+            ...cat,
+            image: sanitizeMediaUrl(cat?.image, DEFAULT_SITE_CONTENT.categories[i].image),
+            video: sanitizeMediaUrl(cat?.video, DEFAULT_SITE_CONTENT.categories[i].video),
+            poster: sanitizeMediaUrl(cat?.poster, DEFAULT_SITE_CONTENT.categories[i].poster),
+          }))
+        : DEFAULT_SITE_CONTENT.categories,
     featuredSkus: Array.isArray(raw.featuredSkus) ? raw.featuredSkus : DEFAULT_SITE_CONTENT.featuredSkus,
-    b2bBackgroundUrl: raw.b2bBackgroundUrl || DEFAULT_SITE_CONTENT.b2bBackgroundUrl,
+    b2bBackgroundUrl: sanitizeMediaUrl(raw.b2bBackgroundUrl, DEFAULT_SITE_CONTENT.b2bBackgroundUrl),
     contacts: { ...DEFAULT_SITE_CONTENT.contacts, ...(raw.contacts || {}) },
     translationsOverride: raw.translationsOverride || {},
   };

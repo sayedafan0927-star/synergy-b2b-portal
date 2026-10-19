@@ -65,39 +65,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         let localSsoInitialized = false;
         try {
-          const p = JSON.parse(atob(ssoParam.replace(/-/g, '+').replace(/_/g, '/')));
-          const inner = p?.data || p;
-          if (inner?.user && inner?.profile) {
-            setUser(inner.user);
-            setProfile(inner.profile);
-            saveAuthSession(inner.user, inner.profile, ssoParam);
-            localSsoInitialized = true;
+          if (ssoParam.length >= 24) {
+            const p = JSON.parse(atob(ssoParam.replace(/-/g, '+').replace(/_/g, '/')));
+            const inner = p?.data || p;
+            const rawTs = Number(inner?.timestamp || p?.timestamp || 0);
+            const tsMs = rawTs > 0 && rawTs < 2000000000 ? rawTs * 1000 : rawTs;
+            const isFresh = tsMs > Date.now() - 24 * 3600 * 1000 && tsMs <= Date.now() + 3600 * 1000;
+            if (inner?.user && inner?.profile && isFresh && inner.profile.role !== 'admin') {
+              setUser(inner.user); setProfile(inner.profile);
+              saveAuthSession(inner.user, inner.profile, ssoParam);
+              localSsoInitialized = true;
+            }
           }
         } catch {}
 
-        if (!localSsoInitialized && ssoMgrId) {
+        if (!localSsoInitialized && ssoMgrId && ssoParam.length >= 16) {
           if (ssoRawRole === 'client') {
-            const { profile: cpProf, user: cpUser } = createClientUserAndProfile({
-              id: Number(ssoMgrId) || 0,
-              name: ssoName || `Партнер #${ssoMgrId}`,
-              phone: ssoPhone,
-              token: ssoParam,
-            });
-            setUser(cpUser);
-            setProfile(cpProf);
-            saveAuthSession(cpUser, cpProf, ssoParam);
+            const { profile: cpProf, user: cpUser } = createClientUserAndProfile({ id: Number(ssoMgrId) || 0, name: ssoName || `Партнер #${ssoMgrId}`, phone: ssoPhone, token: ssoParam });
+            setUser(cpUser); setProfile(cpProf); saveAuthSession(cpUser, cpProf, ssoParam);
           } else {
-            const normRole = ssoRawRole === 'lm' ? 'manager_lm' : (ssoRawRole === 'admin' ? 'admin' : 'manager_rm');
-            const { profile: empProf, user: empUser } = createEmployeeUserAndProfile({
-              id: Number(ssoMgrId) || 1,
-              name: ssoName || 'Менеджер Synergy ERP',
-              role: normRole,
-              phone: ssoPhone,
-              token: ssoParam,
-            });
-            setUser(empUser);
-            setProfile(empProf);
-            saveAuthSession(empUser, empProf, ssoParam);
+            const normRole = ssoRawRole === 'lm' ? 'manager_lm' : 'manager_rm';
+            const { profile: empProf, user: empUser } = createEmployeeUserAndProfile({ id: Number(ssoMgrId) || 1, name: ssoName || 'Менеджер Synergy ERP', role: normRole, phone: ssoPhone, token: ssoParam });
+            setUser(empUser); setProfile(empProf); saveAuthSession(empUser, empProf, ssoParam);
           }
         }
 
@@ -106,19 +95,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ token: ssoParam, manager_id: ssoMgrId, role: ssoRawRole }),
         })
-          .then(res => (res.ok && (res.headers.get('content-type') || '').includes('application/json') ? res.json() : null))
+          .then(res => (res.headers.get('content-type') || '').includes('application/json') ? res.json() : null)
           .then(data => {
             if (data?.success && data.user && data.profile) {
               const sessionToken = data.token || data.portal_session_token || ssoParam;
-              setUser(data.user);
-              setProfile(data.profile);
-              saveAuthSession(data.user, data.profile, sessionToken);
+              setUser(data.user); setProfile(data.profile); saveAuthSession(data.user, data.profile, sessionToken);
+            } else if (data && data.success === false) {
+              setUser(null); setProfile(null);
+              sessionStorage.removeItem('synergy:auth_session'); localStorage.removeItem('synergy:auth_session');
             }
           })
           .catch(() => {})
-          .finally(() => {
-            setLoading(false);
-          });
+          .finally(() => setLoading(false));
         return;
       }
 

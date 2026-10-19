@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Megaphone, ArrowRight, X } from 'lucide-react';
 import { useSiteContent } from '@/lib/siteContentStore';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useAuth } from '@/contexts/AuthContext';
 import type { PageId } from '@/types';
 
 export default function AnnouncementBar({
@@ -11,6 +12,7 @@ export default function AnnouncementBar({
 }) {
   const { content } = useSiteContent();
   const { language } = useLanguage();
+  const { isImpersonating, profile } = useAuth();
   const [dismissed, setDismissed] = useState(false);
 
   const ann = content.announcement;
@@ -19,6 +21,8 @@ export default function AnnouncementBar({
   const text = ann.text[language] || ann.text.ru;
   if (!text) return null;
   const ctaLabel = ann.ctaLabel[language] || ann.ctaLabel.ru;
+  const hasImpersonationBanner = Boolean(isImpersonating && profile);
+  const offsetClass = hasImpersonationBanner ? 'mt-[100px] -mb-[100px]' : 'mt-16 -mb-16';
 
   const themeClass =
     ann.theme === 'brand'
@@ -30,7 +34,7 @@ export default function AnnouncementBar({
       : 'bg-amber-500 text-slate-950 border-amber-400';
 
   return (
-    <div className={`relative z-40 border-b px-4 py-2 text-xs font-medium transition-colors ${themeClass}`}>
+    <div className={`${offsetClass} relative z-40 border-b px-4 py-2 text-xs font-medium transition-colors ${themeClass}`}>
       <div className="container-w flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <Megaphone className="h-3.5 w-3.5 shrink-0 opacity-90" />
