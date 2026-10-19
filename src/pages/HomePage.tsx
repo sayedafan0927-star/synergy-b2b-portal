@@ -1,40 +1,17 @@
-import { useMemo, useRef } from 'react';
+import { useMemo } from 'react';
 import { ArrowRight } from 'lucide-react';
 import type { PageId } from '@/types';
-import { categories } from '@/data/categories';
+import { categories as defaultCategories } from '@/data/categories';
 import { useProducts } from '@/hooks/useProductData';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
 import { isProductInStockForUser } from '@/lib/warehouseVisibility';
+import { useSiteContent } from '@/lib/siteContentStore';
 import ProductCard from '@/components/ProductCard';
 import HeroBannerMedia from '@/components/home/HeroBannerMedia';
-import TechnoLuxuryButton from '@/components/home/TechnoLuxuryButton';
 import B2BPartnerCtaSection from '@/components/home/B2BPartnerCtaSection';
 import { useSynchronizedCategoryVideos } from '@/hooks/useSynchronizedCategoryVideos';
-
-const advantageItems = [
-  {
-    image: '/images/advantages/advantage_loom.webp',
-    titleKey: 'home.adv_loom_title',
-    descKey: 'home.adv_loom_desc',
-  },
-  {
-    image: '/images/advantages/advantage_rolls.webp',
-    titleKey: 'home.adv_rolls_title',
-    descKey: 'home.adv_rolls_desc',
-  },
-  {
-    image: '/images/advantages/advantage_compass.webp',
-    titleKey: 'home.adv_compass_title',
-    descKey: 'home.adv_compass_desc',
-  },
-  {
-    image: '/images/advantages/advantage_paisley.webp',
-    titleKey: 'home.adv_paisley_title',
-    descKey: 'home.adv_paisley_desc',
-  },
-];
 
 export default function HomePage({ 
   onNavigate, 
@@ -51,6 +28,10 @@ export default function HomePage({
   const isEffectiveAdmin = isAdmin && !isImpersonating;
   const { settings: displaySettings } = useDisplaySettings();
   const hideOutOfStock = displaySettings.hide_out_of_stock_products !== false;
+  const { content, resolvedUrls } = useSiteContent();
+
+  const advantageItems = content.advantages;
+  const activeCategories = content.categories?.length ? content.categories : defaultCategories;
 
   const {
     sectionRef: categoriesSectionRef,
@@ -59,19 +40,22 @@ export default function HomePage({
 
   const featuredProducts = useMemo(() => {
     const available = products.filter(p => isProductInStockForUser(p, profile, isEffectiveAdmin, hideOutOfStock));
-    return available.slice(0, 4);
-  }, [products, profile, isEffectiveAdmin, hideOutOfStock]);
-
-  const countryCounts = useMemo(() => {
-    const counts: Record<string, number> = { 'Турция': 0, 'Иран': 0, 'Китай': 0 };
-    for (const p of products) {
-      const c = p.country?.trim() || '';
-      if (c.toLowerCase().includes('турц') || c.toLowerCase().includes('turkey')) counts['Турция']++;
-      else if (c.toLowerCase().includes('иран') || c.toLowerCase().includes('iran')) counts['Иран']++;
-      else if (c.toLowerCase().includes('китай') || c.toLowerCase().includes('china')) counts['Китай']++;
+    const pinned = (content.featuredSkus || []).map(s => s.trim().toLowerCase()).filter(Boolean);
+    if (pinned.length > 0) {
+      const matched = available.filter(p => {
+        const art = (p.article || '').toLowerCase();
+        const pid = String(p.id).toLowerCase();
+        return (
+          pinned.includes(art) ||
+          pinned.includes(pid) ||
+          p.variants.some(v => pinned.includes((v.sku || '').toLowerCase()) || pinned.includes((v.article || '').toLowerCase()))
+        );
+      });
+      const rest = available.filter(p => !matched.includes(p));
+      return [...matched, ...rest].slice(0, 4);
     }
-    return counts;
-  }, [products]);
+    return available.slice(0, 4);
+  }, [products, profile, isEffectiveAdmin, hideOutOfStock, content.featuredSkus]);
 
   const handleCatalogNavigate = () => {
     if (typeof document !== 'undefined' && document.activeElement instanceof HTMLElement) {
@@ -145,7 +129,9 @@ export default function HomePage({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 lg:gap-6">
-            {advantageItems.map((item) => (
+            {advantageItems.map((item, advIdx) => {
+              const imgSrc = resolvedUrls[`adv_${advIdx}`] || item.image;
+              return (
               <div
                 key={item.titleKey}
                 className="card flex flex-col justify-between p-6 sm:p-7 text-left bg-white border border-slate-200/90 hover:border-brand-600/70 shadow-xs hover:shadow-xl hover:-translate-y-1 transition-all duration-300 relative group rounded-2xl cursor-default"
@@ -154,7 +140,7 @@ export default function HomePage({
                   {/* Clean Transparent Ink Illustration */}
                   <div className="h-32 sm:h-36 flex items-center justify-center mb-6 overflow-hidden">
                     <img
-                      src={item.image}
+                      src={imgSrc}
                       alt={t(item.titleKey)}
                       loading="lazy"
                       decoding="async"
@@ -174,7 +160,8 @@ export default function HomePage({
                   <ArrowRight className="h-4 w-4 text-slate-400 group-hover:text-brand-700 group-hover:translate-x-1 transition-all duration-300" />
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>
@@ -195,11 +182,14 @@ export default function HomePage({
           </div>
 
           <div className="mt-8 lg:mt-12 grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-6">
-            {categories.map((category, idx) => {
+            {activeCategories.map((category, idx) => {
               const isFirst = idx === 0;
               const mediaScale = isFirst
                 ? 'scale-110 sm:scale-115 md:scale-110 lg:scale-115 group-hover:scale-[1.22]'
                 : 'scale-[1.32] sm:scale-[1.35] md:scale-110 lg:scale-115 group-hover:scale-[1.22]';
+              const catVideo = resolvedUrls[`cat_video_${idx}`] || category.video;
+              const catPoster = resolvedUrls[`cat_poster_${idx}`] || category.poster || category.image;
+              const catImage = resolvedUrls[`cat_image_${idx}`] || category.image;
               return (
                 <button
                   key={category.id}
@@ -213,8 +203,9 @@ export default function HomePage({
                   <div className={`aspect-square flex items-center justify-center overflow-visible ${
                     isFirst ? 'w-[230px] sm:w-[270px] md:w-full' : 'w-full'
                   }`}>
-                    {category.video ? (
+                    {catVideo ? (
                       <video
+                        key={catVideo}
                         ref={registerVideoRef(idx)}
                         autoPlay
                         muted
@@ -223,15 +214,15 @@ export default function HomePage({
                         disablePictureInPicture
                         disableRemotePlayback
                         preload={typeof window !== 'undefined' && window.innerWidth < 768 ? 'metadata' : 'auto'}
-                        poster={category.poster || category.image}
+                        poster={catPoster}
                         style={{ willChange: 'transform' }}
                         className={`h-full w-full object-contain mix-blend-screen transition-transform duration-500 ${mediaScale}`}
                       >
-                        <source src={category.video} type="video/mp4" />
+                        <source src={catVideo} type="video/mp4" />
                       </video>
                     ) : (
                       <img
-                        src={category.image}
+                        src={catImage}
                         alt={category.name}
                         loading="lazy"
                         className={`h-full w-full object-contain mix-blend-screen transition-transform duration-500 ${mediaScale}`}

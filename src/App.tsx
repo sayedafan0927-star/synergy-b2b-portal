@@ -58,6 +58,7 @@ import OfflineBanner from '@/components/common/OfflineBanner';
 import CookieBanner from '@/components/common/CookieBanner';
 import Preloader from '@/components/common/Preloader';
 import WhatsAppApprovalOverlay from '@/components/common/WhatsAppApprovalOverlay';
+import AnnouncementBar from '@/components/common/AnnouncementBar';
 import type { PageId } from '@/types';
 import { readCatalogState } from '@/components/catalog/useCatalogStatePersistence';
 
@@ -115,7 +116,8 @@ function MainLayout({ children, page, navigate, showFooter }: { children: React.
   return (
     <div className="flex min-h-screen flex-col">
       <Header currentPage={page} onNavigate={navigate} />
-      <main className={`flex-1 transition-all duration-200 ${showBanner ? 'pt-9 sm:pt-9' : ''}`}>{children}</main>
+      <div className="pt-16"><AnnouncementBar onNavigate={navigate} /></div>
+      <main className={`flex-1 transition-all duration-200 ${showBanner ? 'pt-9 sm:pt-9' : '-mt-16'}`}>{children}</main>
       {showFooter && <Footer onNavigate={navigate} />}
       <MobileNav currentPage={page} onNavigate={navigate} />
       <WhatsAppWidget />

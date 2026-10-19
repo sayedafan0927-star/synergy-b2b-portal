@@ -2600,7 +2600,34 @@ with open(os.path.join(ROOT_DIR, "src", "lib", "erp", "supplierFallback.ts"), "r
 test_assert("AbortController" in core_s53 and "suppliersMemoryCache" in sa_s53 and "dist.type = 'central_hub'" in sf_s53, "erp/core.ts enforces AbortController timeout, suppliersApi.ts caches suppliers list, and supplierFallback.ts tags central_hub on Warehouse 81")
 
 # ------------------------------------------------------------------------------
-# 78. Summary Report
+# 78. Stage 54: Admin Content Management System (CMS) & Snow Leopard Video Specs
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 78. STAGE 54: ADMIN CONTENT MANAGEMENT SYSTEM (CMS) & MEDIA SPECS ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "src", "lib", "siteMediaStorage.ts"), "r", encoding="utf-8") as fp:
+    sms_s54 = fp.read()
+with open(os.path.join(ROOT_DIR, "src", "lib", "siteContentStore.ts"), "r", encoding="utf-8") as fp:
+    scs_s54 = fp.read()
+test_assert("1920 × 1080 px (Full HD)" in sms_s54 and "720 × 720 px" in sms_s54 and "964 × 714 px" in sms_s54 and "inspectMediaElement" in sms_s54 and "useSiteContent" in scs_s54, "siteMediaStorage.ts and siteContentStore.ts define exact media specs (1920x1080 16:9 Snow Leopard hero video, 720x720 country videos, 964x714 HUD card), IndexedDB blob storage, and dimension inspector")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "admin", "AdminContentTab.tsx"), "r", encoding="utf-8") as fp:
+    act_s54 = fp.read()
+with open(os.path.join(ROOT_DIR, "src", "components", "admin", "content", "HeroAndMediaSubTab.tsx"), "r", encoding="utf-8") as fp:
+    hms_s54 = fp.read()
+with open(os.path.join(ROOT_DIR, "src", "components", "admin", "content", "TextsAndBannerSubTab.tsx"), "r", encoding="utf-8") as fp:
+    tbs_s54 = fp.read()
+with open(os.path.join(ROOT_DIR, "src", "components", "admin", "content", "ContactsAndLegalSubTab.tsx"), "r", encoding="utf-8") as fp:
+    cls_s54 = fp.read()
+test_assert("HeroAndMediaSubTab" in act_s54 and "TextsAndBannerSubTab" in act_s54 and "ContactsAndLegalSubTab" in act_s54 and "SITE_MEDIA_SPECS" in hms_s54 and "translationsOverride" in tbs_s54 and "whatsappIntl" in cls_s54, "AdminContentTab and its 3 modular sub-tabs provide full control over Hero video/media, announcement bar, multi-language texts, and company contacts")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "home", "HeroBannerMedia.tsx"), "r", encoding="utf-8") as fp:
+    hbm_s54 = fp.read()
+with open(os.path.join(ROOT_DIR, "src", "contexts", "LanguageContext.tsx"), "r", encoding="utf-8") as fp:
+    lc_s54 = fp.read()
+test_assert("useSiteContent" in hbm_s54 and "translationsOverride" in lc_s54, "HeroBannerMedia.tsx and LanguageContext.tsx dynamically apply CMS media and localization overrides")
+
+# ------------------------------------------------------------------------------
+# 79. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

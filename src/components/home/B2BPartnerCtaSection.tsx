@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ArrowRight } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useSiteContent } from '@/lib/siteContentStore';
 import B2BPartnerModal from './B2BPartnerModal';
 
 interface B2BPartnerCtaSectionProps {
@@ -10,6 +11,8 @@ interface B2BPartnerCtaSectionProps {
 export default function B2BPartnerCtaSection({ onNavigate: _onNavigate }: B2BPartnerCtaSectionProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const { t } = useLanguage();
+  const { content, resolvedUrls } = useSiteContent();
+  const bgUrl = resolvedUrls.b2bBackgroundUrl || content.b2bBackgroundUrl || '/images/b2b_partner_macro_bg.webp';
   return (
     <section className="py-6 sm:py-16 lg:py-20 bg-white select-none">
       <div className="container-w">
@@ -19,7 +22,7 @@ export default function B2BPartnerCtaSection({ onNavigate: _onNavigate }: B2BPar
           <div 
             className="absolute inset-0 bg-cover bg-center transform scale-[1.01] transition-transform duration-1000 ease-out"
             style={{
-              backgroundImage: "url('/images/b2b_partner_macro_bg.webp')",
+              backgroundImage: `url('${bgUrl}')`,
             }}
           />
 

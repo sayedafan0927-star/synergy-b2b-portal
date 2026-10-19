@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { MessageCircle, X } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useSiteContent } from '@/lib/siteContentStore';
 
 export const WHATSAPP_PHONE = '87785806866';
 export const WHATSAPP_INTL = '77785806866';
@@ -8,11 +9,13 @@ export const WHATSAPP_DISPLAY = '+7 (778) 580-68-66';
 
 export default function WhatsAppWidget() {
   const { t } = useLanguage();
+  const { content } = useSiteContent();
   const [tooltipDismissed, setTooltipDismissed] = useState(false);
 
   const defaultMsg = t('whatsapp.default_msg');
+  const waIntl = content.contacts?.whatsappIntl || WHATSAPP_INTL;
 
-  const waUrl = `https://wa.me/${WHATSAPP_INTL}?text=${encodeURIComponent(defaultMsg)}`;
+  const waUrl = `https://wa.me/${waIntl}?text=${encodeURIComponent(defaultMsg)}`;
 
   return (
     <aside aria-label="WhatsApp Widget" className="fixed bottom-20 right-4 sm:bottom-6 sm:right-6 z-40 flex items-center gap-2.5">

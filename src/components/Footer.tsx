@@ -1,5 +1,6 @@
 import { Phone, Mail, MapPin, MessageCircle, Globe } from 'lucide-react';
 import { useLanguage, SUPPORTED_LANGUAGES } from '@/contexts/LanguageContext';
+import { useSiteContent } from '@/lib/siteContentStore';
 import type { PageId } from '@/types';
 
 interface FooterProps {
@@ -8,6 +9,8 @@ interface FooterProps {
 
 export default function Footer({ onNavigate }: FooterProps) {
   const { t, language, setLanguage } = useLanguage();
+  const { content } = useSiteContent();
+  const c = content.contacts;
 
   const defaultWaMsg = t('whatsapp.default_msg');
 
@@ -25,7 +28,7 @@ export default function Footer({ onNavigate }: FooterProps) {
             </p>
             <div className="mt-4 flex items-center gap-3">
               <a
-                href={`https://wa.me/77785806866?text=${encodeURIComponent(defaultWaMsg)}`}
+                href={`https://wa.me/${c.whatsappIntl}?text=${encodeURIComponent(defaultWaMsg)}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 rounded-lg bg-[#25D366] px-3.5 py-1.5 text-xs font-bold text-white hover:bg-[#20bd5a] transition-all"
@@ -64,20 +67,20 @@ export default function Footer({ onNavigate }: FooterProps) {
               <li className="flex items-start gap-2.5">
                 <Phone className="mt-0.5 h-4 w-4 text-brand-500 shrink-0" />
                 <div className="text-sm">
-                  <a href="tel:+77785806866" className="hover:text-white transition-colors">
-                    +7 (778) 580-68-66
+                  <a href={`tel:${c.phoneRaw}`} className="hover:text-white transition-colors">
+                    {c.phoneDisplay}
                   </a>
                 </div>
               </li>
               <li className="flex items-start gap-2.5">
                 <Mail className="mt-0.5 h-4 w-4 text-brand-500 shrink-0" />
-                <a href="mailto:synergiya.group@gmail.com" className="text-sm hover:text-white transition-colors">
-                  synergiya.group@gmail.com
+                <a href={`mailto:${c.email}`} className="text-sm hover:text-white transition-colors">
+                  {c.email}
                 </a>
               </li>
               <li className="flex items-start gap-2.5">
                 <MapPin className="mt-0.5 h-4 w-4 text-brand-500 shrink-0" />
-                <span className="text-sm">{t('contacts.address')}</span>
+                <span className="text-sm">{c.warehouseAddress || t('contacts.address')}</span>
               </li>
             </ul>
           </div>
@@ -88,11 +91,11 @@ export default function Footer({ onNavigate }: FooterProps) {
             <ul className="space-y-2 text-sm">
               <li className="flex justify-between">
                 <span className="text-slate-400">{t('footer.weekdays')}</span>
-                <span className="text-white">09:00 — 17:00</span>
+                <span className="text-white">{c.weekdaysHours || '09:00 — 17:00'}</span>
               </li>
               <li className="flex justify-between">
                 <span className="text-slate-400">Сб, Вс</span>
-                <span className="text-slate-500">{t('footer.sunday')}</span>
+                <span className="text-slate-500">{c.weekendHours || t('footer.sunday')}</span>
               </li>
             </ul>
 
@@ -131,7 +134,7 @@ export default function Footer({ onNavigate }: FooterProps) {
 
         <div className="mt-8 flex flex-col items-center justify-between gap-4 border-t border-slate-800/60 pt-6 lg:flex-row">
           <p className="text-xs text-slate-500 text-center lg:text-left">
-            &copy; 2025 ТОО «Синэнергия Груп» (БИН 250140013808). {t('footer.rights')}
+            &copy; 2025 {c.companyLegalName} (БИН {c.bin}). {t('footer.rights')}
           </p>
           <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
             <button

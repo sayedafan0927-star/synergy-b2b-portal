@@ -2,6 +2,7 @@ import { useRef, useState, useEffect } from 'react';
 import { RotateCcw } from 'lucide-react';
 import type { PageId } from '@/types';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useSiteContent } from '@/lib/siteContentStore';
 
 // Lightweight, hardware-optimized 2.7MB stream for buttery-smooth 60fps playback
 const VIDEO_MP4 = '/assets/hero-video-desktop-v4.mp4';
@@ -16,6 +17,13 @@ interface HeroBannerMediaProps {
 
 export default function HeroBannerMedia({ onNavigate, isReady = true, isActive = true }: HeroBannerMediaProps) {
   const { t } = useLanguage();
+  const { content, resolvedUrls } = useSiteContent();
+  const activeMp4 = resolvedUrls.heroVideoMp4 || content.hero.videoMp4 || VIDEO_MP4;
+  const activeWebm = resolvedUrls.heroVideoWebm || content.hero.videoWebm || VIDEO_WEBM;
+  const activePoster = resolvedUrls.heroPoster || content.hero.posterUrl || POSTER;
+  const activeEndCard = resolvedUrls.heroEndCard || content.hero.endCardUrl || '/images/techno_hero_card.webp';
+  const showEndCard = content.hero.showEndCard !== false;
+  const freezeDurationMs = Number(content.hero.freezeDurationMs) > 0 ? Number(content.hero.freezeDurationMs) : 1500;
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isEnded, setIsEnded] = useState(false);
 
@@ -102,7 +110,7 @@ export default function HeroBannerMedia({ onNavigate, isReady = true, isActive =
       window.removeEventListener('touchstart', handleFirstGesture);
       window.removeEventListener('click', handleFirstGesture);
     };
-  }, [isReady, isActive]);
+  }, [isReady, isActive, activeMp4]);
 
   const loopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -129,7 +137,7 @@ export default function HeroBannerMedia({ onNavigate, isReady = true, isActive =
   }, []);
 
   const handleEnded = () => {
-    // Freeze on final frame for 1.5 seconds across all devices (desktop and mobile)
+    // Freeze on final frame for freezeDurationMs across all devices (desktop and mobile)
     if (videoRef.current) {
       videoRef.current.pause();
     }
@@ -145,7 +153,7 @@ export default function HeroBannerMedia({ onNavigate, isReady = true, isActive =
         } catch {}
         video.play().catch(() => {});
       }
-    }, 1500);
+    }, freezeDurationMs);
   };
 
   // High-performance hardware frame presentation callback (60Hz / 120Hz ProMotion VSync)
@@ -242,6 +250,7 @@ export default function HeroBannerMedia({ onNavigate, isReady = true, isActive =
       */}
       <div className="relative w-full h-[255px] sm:h-[70vh] lg:h-[78vh] sm:min-h-[460px] max-h-[820px] overflow-hidden bg-[#0a0a0c] [contain:paint_layout] [isolation:isolate] transform-gpu">
         <video
+          key={activeMp4}
           ref={videoRef}
           autoPlay
           muted
@@ -250,7 +259,7 @@ export default function HeroBannerMedia({ onNavigate, isReady = true, isActive =
           disablePictureInPicture
           disableRemotePlayback
           preload={typeof window !== 'undefined' && window.innerWidth < 768 ? 'metadata' : 'auto'}
-          poster={POSTER}
+          poster={activePoster}
           onEnded={handleEnded}
           onTimeUpdate={handleTimeUpdate}
           style={{
@@ -260,8 +269,8 @@ export default function HeroBannerMedia({ onNavigate, isReady = true, isActive =
           }}
           className="w-full h-full object-cover object-[center_28%] sm:object-[center_24%] transform-gpu pointer-events-none"
         >
-          <source src={VIDEO_MP4} type="video/mp4" />
-          <source src={VIDEO_WEBM} type="video/webm" />
+          <source src={activeMp4} type="video/mp4" />
+          {activeWebm && activeMp4 === VIDEO_MP4 && <source src={activeWebm} type="video/webm" />}
         </video>
 
         {/* 
@@ -269,6 +278,7 @@ export default function HeroBannerMedia({ onNavigate, isReady = true, isActive =
           Smoothly floats up and emerges from the bottom with rich cubic-bezier easing
           when the video reaches the final frame, revealing the brand logo, offer, and CTA buttons.
         */}
+        {showEndCard && (
         <div 
           className="hidden sm:flex absolute inset-0 items-center pointer-events-none z-20"
         >
@@ -290,7 +300,7 @@ export default function HeroBannerMedia({ onNavigate, isReady = true, isActive =
               }`}
             >
               <img 
-                src="/images/techno_hero_card.webp" 
+                src={activeEndCard} 
                 alt="Прямые оптовые поставки ковровых коллекций" 
                 className="w-full h-auto block select-none pointer-events-none drop-shadow-[0_10px_30px_rgba(0,0,0,0.8)]"
               />
@@ -321,6 +331,7 @@ export default function HeroBannerMedia({ onNavigate, isReady = true, isActive =
             </div>
           </div>
         </div>
+        )}
 
         {/* 
           Minimalist, non-intrusive replay button:

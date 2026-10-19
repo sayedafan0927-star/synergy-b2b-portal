@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, lazy, Suspense } from 'react';
-import { Package, Settings, User, Users, LogOut, DollarSign, Eye, Server, FileText } from 'lucide-react';
+import { Package, Settings, User, Users, LogOut, DollarSign, Eye, Server, FileText, Film } from 'lucide-react';
 import type { PageId } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { fetchClientDebtFromErp, type ClientDebtReport, fetchReconciliationReportFromErp } from '@/lib/erpApi';
@@ -15,10 +15,11 @@ import {
 // Lazy-loaded supplier & modular admin tabs from '@/components/admin'
 const SupplierCabinet = lazy(() => import('@/components/SupplierCabinet'));
 const AdminDisplaySettingsTab = lazy(() => import('@/components/admin/AdminDisplaySettingsTab').then(m => ({ default: m.AdminDisplaySettingsTab })));
+const AdminContentTab = lazy(() => import('@/components/admin/AdminContentTab').then(m => ({ default: m.AdminContentTab })));
 const AdminUsersTab = lazy(() => import('@/components/admin/AdminUsersTab').then(m => ({ default: m.AdminUsersTab })));
 const AdminErpSyncTab = lazy(() => import('@/components/admin/AdminErpSyncTab').then(m => ({ default: m.AdminErpSyncTab })));
 
-type TabId = 'orders' | 'supplier-portal' | 'admin-erp' | 'admin-users' | 'admin-display' | 'settings';
+type TabId = 'orders' | 'supplier-portal' | 'admin-erp' | 'admin-users' | 'admin-display' | 'admin-content' | 'settings';
 
 export default function ProfilePage({
   onNavigate,
@@ -35,13 +36,10 @@ export default function ProfilePage({
   const effectiveManagerOrders = Boolean((isManager || realIsManager) && !isImpersonating);
 
   const [activeTab, setActiveTabState] = useState<TabId>(() => {
-    const validTabs: TabId[] = ['orders', 'supplier-portal', 'admin-erp', 'admin-users', 'admin-display', 'settings'];
-    if (initialTab && validTabs.includes(initialTab as TabId)) {
-      return initialTab as TabId;
-    }
+    const validTabs: TabId[] = ['orders', 'supplier-portal', 'admin-erp', 'admin-users', 'admin-display', 'admin-content', 'settings'];
+    if (initialTab && validTabs.includes(initialTab as TabId)) return initialTab as TabId;
     if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const urlTab = params.get('tab');
+      const urlTab = new URLSearchParams(window.location.search).get('tab');
       if (urlTab && validTabs.includes(urlTab as TabId)) return urlTab as TabId;
       const storedTab = sessionStorage.getItem('synergy:profile_tab');
       if (storedTab && validTabs.includes(storedTab as TabId)) return storedTab as TabId;
@@ -177,6 +175,7 @@ export default function ProfilePage({
     { id: 'admin-erp', label: t('profile.tab_admin_erp'), icon: Server, show: adminAccess },
     { id: 'admin-users', label: t('profile.tab_admin_users'), icon: Users, show: clientsAccess },
     { id: 'admin-display', label: t('profile.tab_admin_display'), icon: Eye, show: adminAccess },
+    { id: 'admin-content', label: t('profile.tab_admin_content', 'Контент сайта'), icon: Film, show: adminAccess },
     { id: 'settings', label: t('profile.tab_settings'), icon: Settings, show: true },
   ];
 
@@ -426,6 +425,7 @@ export default function ProfilePage({
             {activeTab === 'admin-erp' && adminAccess && <AdminErpSyncTab isAdmin={adminAccess} />}
             {activeTab === 'admin-users' && clientsAccess && <AdminUsersTab onNavigate={onNavigate} />}
             {activeTab === 'admin-display' && adminAccess && <AdminDisplaySettingsTab />}
+            {activeTab === 'admin-content' && adminAccess && <AdminContentTab />}
           </Suspense>
           {activeTab === 'settings' && (
             <div className="space-y-6">

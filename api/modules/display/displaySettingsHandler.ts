@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { authenticateRequest } from '../../lib/authGuard';
 
 let displaySettingsCache: { data: any; expiry: number } | null = null;
+let cachedSiteContent: any = null;
 const DEFAULT_RATE = 520.00;
 
 export function getFallbackDisplaySettings() {
@@ -18,11 +19,15 @@ export function getFallbackDisplaySettings() {
       show_dealer_showroom: true,
       allow_orders_when_zero_stock: false,
       exchange_rate_usd_kzt: DEFAULT_RATE,
+      ...(cachedSiteContent ? { site_content: cachedSiteContent } : {}),
     },
   };
 }
 
 export function updateDisplaySettingsCache(data: any, ttlMs: number = 60000) {
+  if (data?.settings?.site_content) {
+    cachedSiteContent = data.settings.site_content;
+  }
   displaySettingsCache = {
     data,
     expiry: Date.now() + ttlMs,
@@ -87,7 +92,11 @@ export async function handleDisplaySettingsPost(
 
   const submittedSettings = req.body?.settings || req.body;
   if (submittedSettings) {
-    const newRate = Number(submittedSettings.exchange_rate_usd_kzt || submittedSettings.exchange_rate || DEFAULT_RATE);
+    if (submittedSettings.site_content) {
+      cachedSiteContent = submittedSettings.site_content;
+    }
+    const prevRate = displaySettingsCache?.data?.settings?.exchange_rate_usd_kzt || DEFAULT_RATE;
+    const newRate = Number(submittedSettings.exchange_rate_usd_kzt || submittedSettings.exchange_rate || prevRate);
     
     if (supabase && !isNaN(newRate) && newRate > 0) {
       try {
@@ -105,8 +114,10 @@ export async function handleDisplaySettingsPost(
 
     const mergedSettings = {
       ...getFallbackDisplaySettings().settings,
+      ...(displaySettingsCache?.data?.settings || {}),
       ...submittedSettings,
       exchange_rate_usd_kzt: newRate,
+      ...(cachedSiteContent ? { site_content: cachedSiteContent } : {}),
     };
 
     updateDisplaySettingsCache({ success: true, settings: mergedSettings }, 60000);

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { translations, SUPPORTED_LANGUAGES, type Language, type LanguageOption } from '@/i18n';
+import { getSiteContent } from '@/lib/siteContentStore';
 
 export type { Language, LanguageOption };
 export { SUPPORTED_LANGUAGES };
@@ -47,6 +48,17 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     }
     return 'ru';
   });
+  const [overrides, setOverrides] = useState(() => getSiteContent().translationsOverride);
+
+  useEffect(() => {
+    const syncOverrides = () => setOverrides(getSiteContent().translationsOverride);
+    window.addEventListener('synergy:site-content-updated', syncOverrides);
+    window.addEventListener('storage', syncOverrides);
+    return () => {
+      window.removeEventListener('synergy:site-content-updated', syncOverrides);
+      window.removeEventListener('storage', syncOverrides);
+    };
+  }, []);
 
   const setLanguage = useCallback((lang: Language) => {
     setLanguageState(lang);
@@ -78,7 +90,8 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
         defaultText = fallback;
       }
 
-      let rawText = translations[language]?.[key] ?? translations.ru?.[key] ?? defaultText ?? key;
+      const customVal = overrides?.[language]?.[key] || overrides?.ru?.[key];
+      let rawText = customVal ?? translations[language]?.[key] ?? translations.ru?.[key] ?? defaultText ?? key;
 
       if (params) {
         Object.entries(params).forEach(([paramKey, val]) => {
@@ -88,7 +101,7 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
 
       return rawText;
     },
-    [language]
+    [language, overrides]
   );
 
   return (

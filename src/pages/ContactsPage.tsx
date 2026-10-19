@@ -2,11 +2,14 @@ import { useState } from 'react';
 import { Phone, Mail, MapPin, Clock, Send, CheckCircle, Warehouse, MessageCircle, Loader2, Building } from 'lucide-react';
 import { useReveal } from '@/hooks/useReveal';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useSiteContent } from '@/lib/siteContentStore';
 import { submitLeadToErp } from '@/lib/erpApi';
 import type { PageId } from '@/types';
 
 export default function ContactsPage({ onNavigate: _onNavigate }: { onNavigate: (page: PageId) => void }) {
   const { t, language } = useLanguage();
+  const { content } = useSiteContent();
+  const c = content.contacts;
   const [formSent, setFormSent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState({ name: '', company: '', phone: '', email: '', message: '' });
@@ -80,7 +83,7 @@ export default function ContactsPage({ onNavigate: _onNavigate }: { onNavigate: 
                 <ul className="space-y-3 pt-2">
                   <li className="flex items-start gap-3 text-sm text-slate-700 font-medium">
                     <MapPin className="mt-0.5 h-4 w-4 text-brand-600 shrink-0" />
-                    <span>{t('contacts.address')}</span>
+                    <span>{c.warehouseAddress || t('contacts.address')}</span>
                   </li>
                   <li className="flex items-center gap-3 text-sm text-slate-700">
                     <Clock className="h-4 w-4 text-brand-600 shrink-0" />
@@ -88,14 +91,14 @@ export default function ContactsPage({ onNavigate: _onNavigate }: { onNavigate: 
                   </li>
                   <li className="flex items-center gap-3 text-sm text-slate-700">
                     <Phone className="h-4 w-4 text-brand-600 shrink-0" />
-                    <a href="tel:+77785806866" className="font-bold text-slate-900 hover:text-brand-700 transition-colors">
-                      +7 (778) 580-68-66
+                    <a href={`tel:${c.phoneRaw}`} className="font-bold text-slate-900 hover:text-brand-700 transition-colors">
+                      {c.phoneDisplay}
                     </a>
                   </li>
                   <li className="flex items-center gap-3 text-sm text-slate-700">
                     <Mail className="h-4 w-4 text-brand-600 shrink-0" />
-                    <a href="mailto:synergiya.group@gmail.com" className="text-brand-700 hover:underline">
-                      synergiya.group@gmail.com
+                    <a href={`mailto:${c.email}`} className="text-brand-700 hover:underline">
+                      {c.email}
                     </a>
                   </li>
                 </ul>
@@ -104,7 +107,7 @@ export default function ContactsPage({ onNavigate: _onNavigate }: { onNavigate: 
               {/* Быстрые действия */}
               <div className="flex flex-col sm:flex-row md:flex-col gap-3 shrink-0">
                 <a
-                  href={`https://wa.me/77785806866?text=${encodeURIComponent(defaultWaMsg)}`}
+                  href={`https://wa.me/${c.whatsappIntl}?text=${encodeURIComponent(defaultWaMsg)}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#25D366] px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-[#20bd5a] transition-all"
@@ -113,7 +116,7 @@ export default function ContactsPage({ onNavigate: _onNavigate }: { onNavigate: 
                   <span>{t('whatsapp.chat')}</span>
                 </a>
                 <a
-                  href="tel:+77785806866"
+                  href={`tel:${c.phoneRaw}`}
                   className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-800 shadow-2xs hover:bg-slate-50 transition-all"
                 >
                   <Phone className="h-4 w-4 text-brand-600" />
@@ -141,8 +144,8 @@ export default function ContactsPage({ onNavigate: _onNavigate }: { onNavigate: 
                 </div>
                 <div>
                   <p className="text-xs text-slate-400">Email</p>
-                  <a href="mailto:synergiya.group@gmail.com" className="text-sm font-medium text-slate-900 hover:text-brand-700 transition-colors">
-                    synergiya.group@gmail.com
+                  <a href={`mailto:${c.email}`} className="text-sm font-medium text-slate-900 hover:text-brand-700 transition-colors">
+                    {c.email}
                   </a>
                 </div>
               </div>
@@ -152,8 +155,8 @@ export default function ContactsPage({ onNavigate: _onNavigate }: { onNavigate: 
                 </div>
                 <div>
                   <p className="text-xs text-slate-400">{t('contacts.form_phone')}</p>
-                  <a href="tel:+77785806866" className="text-sm font-medium text-slate-900 hover:text-brand-700 transition-colors">
-                    +7 (778) 580-68-66
+                  <a href={`tel:${c.phoneRaw}`} className="text-sm font-medium text-slate-900 hover:text-brand-700 transition-colors">
+                    {c.phoneDisplay}
                   </a>
                 </div>
               </div>
@@ -173,10 +176,10 @@ export default function ContactsPage({ onNavigate: _onNavigate }: { onNavigate: 
                 <span>Юридические реквизиты</span>
               </div>
               <div className="space-y-1.5 text-xs text-slate-600 leading-relaxed">
-                <p><strong className="text-slate-800">Наименование:</strong> ТОО «Синэнергия Груп»</p>
-                <p><strong className="text-slate-800">БИН:</strong> 250140013808</p>
-                <p><strong className="text-slate-800">Юр. адрес:</strong> РК, г. Астана, район Байконыр, шоссе Алаш, зд. 13, инд. 010000</p>
-                <p><strong className="text-slate-800">Центральный склад:</strong> РК, г. Астана, 69-ый проезд, 20-ое строение</p>
+                <p><strong className="text-slate-800">Наименование:</strong> {c.companyLegalName}</p>
+                <p><strong className="text-slate-800">БИН:</strong> {c.bin}</p>
+                <p><strong className="text-slate-800">Юр. адрес:</strong> {c.legalAddress}</p>
+                <p><strong className="text-slate-800">Центральный склад:</strong> {c.warehouseAddress}</p>
               </div>
             </div>
           </div>
