@@ -119,9 +119,15 @@ export function RepeatOrderModal({
                                 </span>
                               )}
 
-                              <span className="inline-flex items-center text-[10.5px] font-medium px-2 py-0.5 rounded-md bg-brand-50 text-brand-900 border border-brand-100">
-                                {item.warehouse || 'Основной Склад Астана'}
-                              </span>
+                              {item.isPreorder ? (
+                                <span className="inline-flex items-center text-[10.5px] font-bold px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-300">
+                                  🏭 Предзаказ с фабрики{item.productionEta ? ` (${item.productionEta})` : ''}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center text-[10.5px] font-medium px-2 py-0.5 rounded-md bg-brand-50 text-brand-900 border border-brand-100">
+                                  {item.warehouse || 'Основной Склад Астана'}
+                                </span>
+                              )}
                             </div>
                           </div>
 

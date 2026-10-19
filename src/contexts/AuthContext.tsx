@@ -50,28 +50,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (typeof window !== 'undefined') {
       // 1. Проверяем наличие SSO-токена из ERP в адресной строке
       const urlParams = new URLSearchParams(window.location.search);
-      const ssoParam = urlParams.get('sso_session');
+      const ssoParam = urlParams.get('sso_session') || urlParams.get('erp_sso') || (urlParams.get('manager_id') ? urlParams.get('token') : null);
       if (ssoParam) {
-        urlParams.delete('sso_session');
+        const ssoMgrId = urlParams.get('manager_id') || urlParams.get('partner_id') || urlParams.get('client_id');
+        const ssoRawRole = (urlParams.get('role') || 'manager_rm').toLowerCase().trim();
+        const ssoName = urlParams.get('name') || '';
+        const ssoPhone = urlParams.get('phone') || '';
+        ['sso_session', 'erp_sso', 'token', 'manager_id', 'role', 'timestamp', 'name', 'phone'].forEach(k => urlParams.delete(k));
         const targetPage = urlParams.get('page') || 'profile';
         if (!urlParams.has('page')) urlParams.set('page', targetPage);
         const newSearch = urlParams.toString();
         const cleanUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '');
         window.history.replaceState({ page: targetPage }, document.title, cleanUrl);
 
+        let localSsoInitialized = false;
         try {
           const p = JSON.parse(atob(ssoParam.replace(/-/g, '+').replace(/_/g, '/')));
-          if (p?.data?.user && p?.data?.profile) {
-            setUser(p.data.user);
-            setProfile(p.data.profile);
-            saveAuthSession(p.data.user, p.data.profile, ssoParam);
+          const inner = p?.data || p;
+          if (inner?.user && inner?.profile) {
+            setUser(inner.user);
+            setProfile(inner.profile);
+            saveAuthSession(inner.user, inner.profile, ssoParam);
+            localSsoInitialized = true;
           }
         } catch {}
+
+        if (!localSsoInitialized && ssoMgrId) {
+          if (ssoRawRole === 'client') {
+            const { profile: cpProf, user: cpUser } = createClientUserAndProfile({
+              id: Number(ssoMgrId) || 0,
+              name: ssoName || `Партнер #${ssoMgrId}`,
+              phone: ssoPhone,
+              token: ssoParam,
+            });
+            setUser(cpUser);
+            setProfile(cpProf);
+            saveAuthSession(cpUser, cpProf, ssoParam);
+          } else {
+            const normRole = ssoRawRole === 'lm' ? 'manager_lm' : (ssoRawRole === 'admin' ? 'admin' : 'manager_rm');
+            const { profile: empProf, user: empUser } = createEmployeeUserAndProfile({
+              id: Number(ssoMgrId) || 1,
+              name: ssoName || 'Менеджер Synergy ERP',
+              role: normRole,
+              phone: ssoPhone,
+              token: ssoParam,
+            });
+            setUser(empUser);
+            setProfile(empProf);
+            saveAuthSession(empUser, empProf, ssoParam);
+          }
+        }
 
         fetch('/api/auth/verify-sso', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: ssoParam }),
+          body: JSON.stringify({ token: ssoParam, manager_id: ssoMgrId, role: ssoRawRole }),
         })
           .then(res => (res.ok && (res.headers.get('content-type') || '').includes('application/json') ? res.json() : null))
           .then(data => {
@@ -80,13 +113,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               setUser(data.user);
               setProfile(data.profile);
               saveAuthSession(data.user, data.profile, sessionToken);
-            } else if (data?.error) {
-              console.warn('[AuthContext] SSO verification rejected:', data?.error);
             }
           })
-          .catch(err => {
-            console.warn('[AuthContext] Failed to verify SSO token via server:', err);
-          })
+          .catch(() => {})
           .finally(() => {
             setLoading(false);
           });

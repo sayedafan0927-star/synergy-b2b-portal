@@ -8,9 +8,11 @@ import {
   Activity,
   Filter,
   ArrowUpDown,
+  Download,
+  Printer,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { updateOrderStatusInErp, cancelOrderViaPortal } from '@/lib/erpApi';
+import { updateOrderStatusInErp, cancelOrderViaPortal, exportOrderToCsv } from '@/lib/erpApi';
 import { triggerCatalogReload } from '@/hooks/useProductData';
 import { useToast } from '@/contexts/ToastContext';
 import { calcSqm } from '@/types';
@@ -223,6 +225,26 @@ export function OrderDetail({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => exportOrderToCsv(order)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 px-3 py-1.5 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+            title="Скачать спецификацию заказа в Excel (CSV)"
+          >
+            <Download className="h-3.5 w-3.5 text-slate-500" />
+            Excel (CSV)
+          </button>
+
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 px-3 py-1.5 text-xs font-semibold shadow-2xs transition-colors cursor-pointer"
+            title="Распечатать спецификацию заказа"
+          >
+            <Printer className="h-3.5 w-3.5 text-slate-500" />
+            Печать
+          </button>
+
           {onRepeatOrder && (
             <button
               type="button"

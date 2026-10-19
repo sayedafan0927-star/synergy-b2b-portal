@@ -29,6 +29,8 @@ export interface RepeatItemAdded {
   originalWarehouse?: string;
   warehouse?: string;
   isWarehouseSubstituted?: boolean;
+  isPreorder?: boolean;
+  productionEta?: string;
 }
 
 export interface RepeatItemMissing {

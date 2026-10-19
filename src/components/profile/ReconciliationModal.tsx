@@ -1,7 +1,8 @@
-import { FileText, X, RefreshCw, Printer } from 'lucide-react';
+import { FileText, X, RefreshCw, Printer, Download } from 'lucide-react';
 import type { Profile } from '@/contexts/AuthContext';
 import { Portal } from '@/components/common/Portal';
 import { useCurrency } from '@/contexts/CurrencyContext';
+import { exportReconciliationToCsv } from '@/lib/erpApi';
 
 export interface ReconciliationModalProps {
   isOpen: boolean;
@@ -26,6 +27,15 @@ export function ReconciliationModal({
 
   if (!isOpen) return null;
 
+  const initialBal = data ? Number(data.initial_balance ?? data.balance_start ?? 0).toFixed(2) : '0.00';
+  const totalDebit = data ? Number(data.total_debit ?? 0).toFixed(2) : '0.00';
+  const totalCredit = data ? Number(data.total_credit ?? 0).toFixed(2) : '0.00';
+  const finalBal = data ? Number(data.final_balance ?? data.balance_end ?? data.saldo ?? 0).toFixed(2) : '0.00';
+  const transactions: any[] = data
+    ? (Array.isArray(data.transactions) ? data.transactions : (Array.isArray(data.operations) ? data.operations : []))
+    : [];
+  const cpTitle = profile?.company_name || profile?.full_name || data?.counterparty?.name || 'Оптовый клиент';
+
   return (
     <Portal>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -39,7 +49,7 @@ export function ReconciliationModal({
             <div>
               <h3 className="font-bold text-slate-900 text-base">Акт сверки взаиморасчетов</h3>
               <p className="text-xs text-slate-500">
-                Контрагент: <strong>{profile?.company_name || profile?.full_name || 'Оптовый клиент'}</strong>
+                Контрагент: <strong>{cpTitle}</strong>
               </p>
             </div>
           </div>
@@ -100,25 +110,25 @@ export function ReconciliationModal({
                 <div className="card p-3 bg-slate-50">
                   <span className="text-[10px] text-slate-400 uppercase font-semibold">Входящее сальдо</span>
                   <p className="text-sm font-bold text-slate-800 mt-0.5">
-                    {canViewRawDollar ? `$${data.initial_balance ?? '0.00'}` : `${data.initial_balance ?? '0.00'} у.е.`}
+                    {canViewRawDollar ? `$${initialBal}` : `${initialBal} у.е.`}
                   </p>
                 </div>
                 <div className="card p-3 bg-slate-50">
                   <span className="text-[10px] text-slate-400 uppercase font-semibold">Отгрузки (Дебет)</span>
                   <p className="text-sm font-bold text-red-600 mt-0.5">
-                    {canViewRawDollar ? `$${data.total_debit ?? '0.00'}` : `${data.total_debit ?? '0.00'} у.е.`}
+                    {canViewRawDollar ? `$${totalDebit}` : `${totalDebit} у.е.`}
                   </p>
                 </div>
                 <div className="card p-3 bg-slate-50">
                   <span className="text-[10px] text-slate-400 uppercase font-semibold">Оплаты (Кредит)</span>
                   <p className="text-sm font-bold text-emerald-600 mt-0.5">
-                    {canViewRawDollar ? `$${data.total_credit ?? '0.00'}` : `${data.total_credit ?? '0.00'} у.е.`}
+                    {canViewRawDollar ? `$${totalCredit}` : `${totalCredit} у.е.`}
                   </p>
                 </div>
                 <div className="card p-3 bg-slate-50">
                   <span className="text-[10px] text-slate-400 uppercase font-semibold">Конечное сальдо</span>
                   <p className="text-sm font-bold text-slate-900 mt-0.5">
-                    {canViewRawDollar ? `$${data.final_balance ?? '0.00'}` : `${data.final_balance ?? '0.00'} у.е.`}
+                    {canViewRawDollar ? `$${finalBal}` : `${finalBal} у.е.`}
                   </p>
                 </div>
               </div>
@@ -136,19 +146,19 @@ export function ReconciliationModal({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {data.transactions && data.transactions.length > 0 ? (
-                      data.transactions.map((tx: any, idx: number) => (
+                    {transactions.length > 0 ? (
+                      transactions.map((tx: any, idx: number) => (
                         <tr key={idx} className="hover:bg-slate-25">
                           <td className="py-2 px-3 font-mono text-slate-600">{tx.date}</td>
-                          <td className="py-2 px-3 font-medium text-slate-800">{tx.doc_type}</td>
-                          <td className="py-2 px-3 font-mono text-slate-500">{tx.doc_number}</td>
+                          <td className="py-2 px-3 font-medium text-slate-800">{tx.doc_type || tx.type || 'Операция'}</td>
+                          <td className="py-2 px-3 font-mono text-slate-500">{tx.doc_number || tx.number || '—'}</td>
                           <td className="py-2 px-3 text-right font-semibold text-slate-900">
-                            {tx.debit > 0
+                            {Number(tx.debit) > 0
                               ? (canViewRawDollar ? `$${Number(tx.debit).toFixed(2)}` : `${Number(tx.debit).toFixed(2)} у.е.`)
                               : '—'}
                           </td>
                           <td className="py-2 px-3 text-right font-semibold text-emerald-600">
-                            {tx.credit > 0
+                            {Number(tx.credit) > 0
                               ? (canViewRawDollar ? `$${Number(tx.credit).toFixed(2)}` : `${Number(tx.credit).toFixed(2)} у.е.`)
                               : '—'}
                           </td>
@@ -173,15 +183,27 @@ export function ReconciliationModal({
         </div>
 
         {/* Footer */}
-        <div className="pt-3 border-t border-slate-100 flex items-center justify-between shrink-0">
-          <button
-            type="button"
-            onClick={() => window.print()}
-            className="btn-secondary flex items-center gap-1.5 text-xs py-1.5 px-3 cursor-pointer"
-          >
-            <Printer className="h-3.5 w-3.5" />
-            Печать
-          </button>
+        <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 shrink-0">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className="btn-secondary flex items-center gap-1.5 text-xs py-1.5 px-3 cursor-pointer"
+            >
+              <Printer className="h-3.5 w-3.5" />
+              Печать
+            </button>
+            {data && (
+              <button
+                type="button"
+                onClick={() => exportReconciliationToCsv(data, cpTitle)}
+                className="btn-secondary flex items-center gap-1.5 text-xs py-1.5 px-3 cursor-pointer"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Скачать Excel (CSV)
+              </button>
+            )}
+          </div>
           <button
             type="button"
             onClick={onClose}

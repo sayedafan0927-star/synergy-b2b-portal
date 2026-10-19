@@ -336,18 +336,62 @@ export async function cancelOrderViaPortal(params: {
   orderNumber?: string;
   comment?: string;
 }): Promise<{ success: boolean; status?: string; cancellation_pending?: boolean; message?: string }> {
+  const rawDigits = String(params.orderId || '').replace(/\D+/g, '');
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(params.orderId || ''));
+  const resolvedOrderId = (!isUuid && rawDigits) ? Number(rawDigits) : params.orderId;
+  const commentText = params.comment || 'Заказ отменен пользователем через B2B-портал';
+
   const response = await erpFetch('cancel_order', {
     method: 'POST',
-    body: { order_id: params.orderId, order_number: params.orderNumber, comment: params.comment || 'Заказ отменен пользователем через B2B-портал' },
+    body: { order_id: resolvedOrderId, doc_number: params.orderNumber, order_number: params.orderNumber, comment: commentText },
   });
   const data = await response.json().catch(() => null);
-  if (!response.ok || !data?.success) {
-    const err = new Error(data?.error || `Ошибка отмены заказа (${response.status})`);
-    (err as any).status = response.status;
-    (err as any).code = data?.code;
-    throw err;
+  if (response.ok && data?.success) return data;
+
+  // Fallback для прямого шлюза api_portal.php через update_order_status(status='cancelled')
+  if (!isUuid && rawDigits) {
+    try {
+      const fallbackRes = await updateOrderStatusInErp({ orderId: Number(rawDigits), status: 'cancelled', comment: commentText });
+      if (fallbackRes?.success) return { success: true, status: 'cancelled', message: fallbackRes.message };
+    } catch {}
   }
-  return data;
+
+  const err = new Error(data?.error || `Ошибка отмены заказа (${response.status})`);
+  (err as any).status = response.status;
+  (err as any).code = data?.code;
+  throw err;
+}
+
+export function exportOrderToCsv(order: any): void {
+  if (!order) return;
+  const docNum = String(order.orderNumber || order.id || 'order');
+  const rows: string[] = [];
+  rows.push(`"Спецификация оптового заказа";"${docNum}";"Дата: ${order.date || ''}"`);
+  rows.push(`"Контрагент:";"${String(order.clientCompany || order.clientName || 'Клиент').replace(/"/g, '""')}";"Склад:";"${String(order.warehouse || 'Основной Склад Астана').replace(/"/g, '""')}"`);
+  rows.push(`"Статус:";"${String(order.status || '').replace(/"/g, '""')}"`);
+  rows.push('');
+  rows.push('"№";"Коллекция";"Наименование";"Артикул / SKU";"Размер";"Склад";"Кол-во (шт)";"Цена за ед.";"Сумма"');
+
+  const items: any[] = Array.isArray(order.items) ? order.items : [];
+  items.forEach((it, idx) => {
+    const qty = Number(it.quantity || 1);
+    const price = Number(it.price || 0);
+    const lineSum = (qty * price).toFixed(2);
+    rows.push(`"${idx + 1}";"${String(it.collection || '').replace(/"/g, '""')}";"${String(it.productName || '').replace(/"/g, '""')}";"${String(it.sku || '').replace(/"/g, '""')}";"${String(it.size || '').replace(/"/g, '""')}";"${String(it.warehouse || order.warehouse || '').replace(/"/g, '""')}";"${qty}";"${price.toFixed(2)}";"${lineSum}"`);
+  });
+
+  rows.push('');
+  rows.push(`"Итого позиций:";"${order.totalItems || items.length} шт";"Общая площадь:";"${Number(order.totalSqm || 0).toFixed(2)} м²";"Итоговая сумма:";"${Number(order.totalAmount || 0).toFixed(2)}"`);
+
+  const csvContent = '\uFEFF' + rows.join('\r\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const blobUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = blobUrl;
+  a.download = `Zakaz_${docNum.replace(/[^a-zA-Z0-9А-Яа-я_\-]/g, '_')}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { a.remove(); URL.revokeObjectURL(blobUrl); }, 2000);
 }
 
 export async function submitLeadToErp(payload: LeadPayload): Promise<LeadResponse> {

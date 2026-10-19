@@ -212,6 +212,48 @@ export function useRepeatOrder(partnerId?: string | number | null, profileId?: s
         const resolvedSku = foundVariant.sku || foundVariant.article || item.sku || '';
 
         if (totalAllowedStock <= 0) {
+          const inProdQty = Number(foundVariant.in_production_qty || 0);
+          if (inProdQty > 0 || Boolean(foundVariant.is_preorder_available)) {
+            const preorderMax = inProdQty > 0 ? inProdQty : 999;
+            const allocPreorderQty = Math.min(item.quantity, preorderMax);
+            const eta = foundVariant.production_eta || foundProd.production_eta || undefined;
+            addItem({
+              productId: String(foundProd.id),
+              item_id: foundVariant.item_id || (Number(foundVariant.id) > 0 ? Number(foundVariant.id) : undefined),
+              productName: foundProd.name,
+              collection: foundProd.collection,
+              image: prodImg,
+              size: foundVariant.size,
+              sku: resolvedSku,
+              warehouse: 'Предзаказ с фабрики',
+              warehouse_id: 81,
+              price: currentPrice,
+              price_per_sqm: currentSqmPrice,
+              area_sqm: foundVariant.area_sqm,
+              maxStock: preorderMax,
+              is_preorder: true,
+              production_eta: eta,
+            }, allocPreorderQty);
+
+            added.push({
+              name: foundProd.name,
+              size: foundVariant.size,
+              requestedQty: item.quantity,
+              addedQty: allocPreorderQty,
+              originalWarehouse: item.warehouse,
+              warehouse: 'Предзаказ с фабрики',
+              isWarehouseSubstituted: false,
+              isPreorder: true,
+              productionEta: eta,
+              image: prodImg,
+              sku: resolvedSku,
+              collection: foundProd.collection,
+              price: currentPrice,
+              area_sqm: foundVariant.area_sqm,
+            });
+            continue;
+          }
+
           missing.push({
             name: foundProd.name || item.productName,
             size: foundVariant.size || item.size,

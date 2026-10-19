@@ -1,42 +1,22 @@
-import { useState, useMemo, useEffect } from 'react';
-import {
-  Package,
-  Settings,
-  User,
-  Users,
-  LogOut,
-  DollarSign,
-  Eye,
-  Server,
-  FileText,
-  RefreshCw,
-} from 'lucide-react';
+import { useState, useMemo, useEffect, lazy, Suspense } from 'react';
+import { Package, Settings, User, Users, LogOut, DollarSign, Eye, Server, FileText } from 'lucide-react';
 import type { PageId } from '@/types';
-import { useAuth, type UserRole } from '@/contexts/AuthContext';
-import {
-  fetchClientDebtFromErp,
-  type ClientDebtReport,
-  fetchReconciliationReportFromErp,
-} from '@/lib/erpApi';
+import { useAuth } from '@/contexts/AuthContext';
+import { fetchClientDebtFromErp, type ClientDebtReport, fetchReconciliationReportFromErp } from '@/lib/erpApi';
 import { useShowroomMode } from '@/contexts/ShowroomModeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { formatPriceType } from '@/lib/pricingEngine';
-import SupplierCabinet from '@/components/SupplierCabinet';
 import LoginPage from './LoginPage';
-import { AdminDisplaySettingsTab, AdminUsersTab, AdminErpSyncTab } from '@/components/admin';
 import {
-  type Order,
-  type RepeatResult,
-  roleName,
-  roleColor,
-  fmtPrice,
-  OrderDetail,
-  OrdersTab,
-  SettingsTab,
-  ReconciliationModal,
-  RepeatOrderModal,
-  useRepeatOrder,
+  type Order, roleName, roleColor, fmtPrice,
+  OrderDetail, OrdersTab, SettingsTab, ReconciliationModal, RepeatOrderModal, useRepeatOrder,
 } from '@/components/profile';
+
+// Lazy-loaded supplier & modular admin tabs from '@/components/admin'
+const SupplierCabinet = lazy(() => import('@/components/SupplierCabinet'));
+const AdminDisplaySettingsTab = lazy(() => import('@/components/admin/AdminDisplaySettingsTab').then(m => ({ default: m.AdminDisplaySettingsTab })));
+const AdminUsersTab = lazy(() => import('@/components/admin/AdminUsersTab').then(m => ({ default: m.AdminUsersTab })));
+const AdminErpSyncTab = lazy(() => import('@/components/admin/AdminErpSyncTab').then(m => ({ default: m.AdminErpSyncTab })));
 
 type TabId = 'orders' | 'supplier-portal' | 'admin-erp' | 'admin-users' | 'admin-display' | 'settings';
 
@@ -437,12 +417,14 @@ export default function ProfilePage({
               />
             )
           )}
-          {activeTab === 'supplier-portal' && (isSupplier || adminAccess) && (
-            <SupplierCabinet profile={profile} isAdmin={adminAccess} />
-          )}
-          {activeTab === 'admin-erp' && adminAccess && <AdminErpSyncTab isAdmin={adminAccess} />}
-          {activeTab === 'admin-users' && clientsAccess && <AdminUsersTab onNavigate={onNavigate} />}
-          {activeTab === 'admin-display' && adminAccess && <AdminDisplaySettingsTab />}
+          <Suspense fallback={<div className="p-12 flex justify-center"><div className="h-7 w-7 animate-spin rounded-full border-2 border-brand-700 border-t-transparent" /></div>}>
+            {activeTab === 'supplier-portal' && (isSupplier || adminAccess) && (
+              <SupplierCabinet profile={profile} isAdmin={adminAccess} />
+            )}
+            {activeTab === 'admin-erp' && adminAccess && <AdminErpSyncTab isAdmin={adminAccess} />}
+            {activeTab === 'admin-users' && clientsAccess && <AdminUsersTab onNavigate={onNavigate} />}
+            {activeTab === 'admin-display' && adminAccess && <AdminDisplaySettingsTab />}
+          </Suspense>
           {activeTab === 'settings' && (
             <div className="space-y-6">
               <SettingsTab />

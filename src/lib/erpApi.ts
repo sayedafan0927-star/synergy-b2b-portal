@@ -35,6 +35,7 @@ export {
   fetchClientOrdersFromErp,
   updateOrderStatusInErp,
   cancelOrderViaPortal,
+  exportOrderToCsv,
   submitLeadToErp,
   fetchActiveReservations,
   type ActiveReservation,
@@ -79,6 +80,7 @@ export {
 
 export {
   fetchReconciliationReportFromErp,
+  exportReconciliationToCsv,
 } from './erp/reconciliationApi';
 
 export {

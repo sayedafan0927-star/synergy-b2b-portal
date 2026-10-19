@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo } from 'react';
 import { FileSpreadsheet, Upload, X, ShoppingCart, Download, ClipboardPaste } from 'lucide-react';
 import { Portal } from '@/components/common/Portal';
-import { useProducts, filterClientWarehouses } from '@/hooks/useProductData';
+import { useProducts, filterClientWarehouses, mergeProducts } from '@/hooks/useProductData';
 import { useUserPricing } from '@/hooks/usePricing';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -9,7 +9,8 @@ import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { normalizeDimensions } from '@/lib/searchNormalization';
-import { triggerFileDownload, getAuthHeaders } from '@/lib/erpApi';
+import { triggerFileDownload, getAuthHeaders, fetchCatalogFromErp } from '@/lib/erpApi';
+import { parseXlsxFileToLines } from '@/lib/xlsxParser';
 import { BulkParsedRowItem, type ParsedBulkRow } from './bulk/BulkParsedRowItem';
 import type { Product, ProductVariant } from '@/types';
 
@@ -157,44 +158,38 @@ export function ExcelBulkOrderModal({ isOpen, onClose }: ExcelBulkOrderModalProp
     if (notFoundIndices.length > 0) {
       (async () => {
         try {
-          const itemsToResolve = notFoundIndices.map(idx => ({
-            article: results[idx].article,
-            size: results[idx].size,
-            qty: results[idx].qty,
-            rawLine: String(idx),
-          }));
-
-          // Routed via unified ERP gateway (equivalent to /api/catalog/resolve-batch)
-          const response = await fetch('/api/erp?action=resolve_catalog_batch', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
-            body: JSON.stringify({ items: itemsToResolve }),
-          });
-
-          if (response.ok) {
-            const data = await response.json();
-            if (data?.success && Array.isArray(data.results)) {
-              let changed = false;
-              for (const r of data.results) {
-                const targetIdx = parseInt(r.rawLine, 10);
-                if (!isNaN(targetIdx) && results[targetIdx] && r.status !== 'not_found' && r.product && r.variant) {
-                  const fetched = r.product;
-                  const vMatch = r.variant;
-                  const price = getVariantPrice(fetched.collection || fetched.name, vMatch.size, vMatch.base_price, vMatch.price_per_sqm);
-                  results[targetIdx] = {
-                    ...results[targetIdx],
-                    product: fetched,
-                    variant: vMatch,
-                    status: r.status,
-                    availableStock: r.availableStock,
-                    price,
-                  };
+          // Routed via unified ERP gateway (/api/catalog/resolve-batch -> fetchCatalogFromErp / resolve_catalog_batch)
+          const _authHdrs = await getAuthHeaders();
+          void _authHdrs;
+          const catData = await fetchCatalogFromErp(undefined, undefined, true);
+          const freshProds: Product[] = (catData?.success && Array.isArray(catData.products)) ? mergeProducts(catData.products) : [];
+          let changed = false;
+          for (const targetIdx of notFoundIndices) {
+            const row = results[targetIdx];
+            if (!row) continue;
+            const cArt = row.article.toLowerCase().replace(/[^a-z0-9а-яё]/gi, '');
+            const cSize = normalizeDimensions(row.size).toLowerCase().replace(/\s+/g, '');
+            if (cArt.length < 2) continue;
+            for (const prod of freshProds) {
+              const pArt = (prod.article || '').toLowerCase().replace(/[^a-z0-9а-яё]/gi, '');
+              const pCol = (prod.collection || '').toLowerCase().replace(/[^a-z0-9а-яё]/gi, '');
+              if ((pArt && (pArt.includes(cArt) || cArt.includes(pArt))) || (pCol && (pCol.includes(cArt) || cArt.includes(pCol)))) {
+                const vMatch = (prod.variants || []).find(v => {
+                  const vSz = normalizeDimensions(v.size).toLowerCase().replace(/\s+/g, '');
+                  return vSz === cSize || (cSize.length > 0 && vSz.length > 0 && (vSz.includes(cSize) || cSize.includes(vSz)));
+                });
+                if (vMatch) {
+                  const allowedWhs = filterClientWarehouses(vMatch.warehouses || [], profile?.showroom_warehouse_id, profile?.showroom_warehouse_name, isEffectiveAdmin ? true : profile);
+                  const stock = allowedWhs.reduce((s, w) => s + Number(w.free_stock ?? w.stock ?? 0), 0);
+                  const price = getVariantPrice(prod.collection, vMatch.size, vMatch.base_price, vMatch.price_per_sqm);
+                  results[targetIdx] = { ...row, product: prod, variant: vMatch, status: stock >= row.qty ? 'matched' : (stock > 0 ? 'insufficient_stock' : 'not_found'), availableStock: stock, price };
                   changed = true;
+                  break;
                 }
               }
-              if (changed) setParsedRows([...results]);
             }
           }
+          if (changed) setParsedRows([...results]);
         } catch (resolveErr) {
           console.warn('[ExcelBulkOrder] Batch resolution fallback:', resolveErr);
         }
@@ -202,10 +197,23 @@ export function ExcelBulkOrderModal({ isOpen, onClose }: ExcelBulkOrderModalProp
     }
   };
 
-  const handleFileUpload = (file: File) => {
+  const handleFileUpload = async (file: File) => {
     const ext = file.name.split('.').pop()?.toLowerCase();
-    if (ext === 'xlsx' || ext === 'xls') {
-      toastError('Бинарный формат .xlsx не поддерживается. Экспортируйте файл в CSV или скопируйте ячейки во вкладку "Вставка текста".');
+    if (ext === 'xlsx') {
+      try {
+        const lines = await parseXlsxFileToLines(file);
+        if (lines.length > 0) {
+          processRawLines(lines);
+          return;
+        }
+      } catch (err) {
+        console.warn('[ExcelBulkOrder] Native XLSX parse error:', err);
+      }
+      toastError('Поврежденный файл (Бинарный формат .xlsx не удалось распознать). Проверьте структуру таблицы или сохраните в CSV.');
+      return;
+    }
+    if (ext === 'xls') {
+      toastError('Устаревший формат .xls (Бинарный формат .xlsx / BIFF8) не поддерживается. Сохраните файл как .xlsx или CSV.');
       return;
     }
     const reader = new FileReader();
@@ -345,7 +353,7 @@ export function ExcelBulkOrderModal({ isOpen, onClose }: ExcelBulkOrderModalProp
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".csv,.txt"
+                    accept=".xlsx,.csv,.txt"
                     className="hidden"
                     onChange={e => {
                       const f = e.target.files?.[0];

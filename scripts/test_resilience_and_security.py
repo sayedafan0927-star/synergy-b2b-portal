@@ -2518,7 +2518,46 @@ with open(os.path.join(ROOT_DIR, "src", "lib", "erp", "counterpartiesApi.ts"), "
 test_assert("CP_CACHE_TTL_MS" in cpa_s51 and "deduplicateRequest(cacheKey" in cpa_s51, "counterpartiesApi.ts deduplicates and caches fetchCounterpartiesFromErp and fetchClientDebtFromErp")
 
 # ------------------------------------------------------------------------------
-# 76. Summary Report
+# 76. Stage 52: Pass 11 Financial Reconciliation, Order Export, Native XLSX, Factory Preorder Repeat & Code Splitting
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 76. STAGE 52: PASS 11 RECONCILIATION, ORDER EXPORT, NATIVE XLSX, PREORDER REPEAT & CODE SPLITTING ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "src", "lib", "erp", "reconciliationApi.ts"), "r", encoding="utf-8") as fp:
+    rec_s52 = fp.read()
+test_assert("balance_start" in rec_s52 and "balance_end" in rec_s52 and "exportReconciliationToCsv" in rec_s52, "reconciliationApi.ts normalizes live api_portal.php balance_start/balance_end/operations/invoices/payments and provides CSV export")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "profile", "ReconciliationModal.tsx"), "r", encoding="utf-8") as fp:
+    rm_s52 = fp.read()
+test_assert("exportReconciliationToCsv" in rm_s52, "ReconciliationModal.tsx wires CSV export button for reconciliation statements")
+
+with open(os.path.join(ROOT_DIR, "src", "lib", "erp", "ordersApi.ts"), "r", encoding="utf-8") as fp:
+    oa_s52 = fp.read()
+test_assert("resolvedOrderId" in oa_s52 and "exportOrderToCsv" in oa_s52, "ordersApi.ts normalizes numeric order_id with update_order_status fallback and provides exportOrderToCsv")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "profile", "OrderDetail.tsx"), "r", encoding="utf-8") as fp:
+    od_s52 = fp.read()
+test_assert("exportOrderToCsv" in od_s52 and "window.print()" in od_s52, "OrderDetail.tsx provides Excel (CSV) export and Print invoice actions")
+
+with open(os.path.join(ROOT_DIR, "src", "contexts", "AuthContext.tsx"), "r", encoding="utf-8") as fp:
+    ac_s52 = fp.read()
+test_assert("manager_id" in ac_s52 and "erp_sso" in ac_s52 and "ssoRawRole" in ac_s52, "AuthContext.tsx supports direct ERP SSO query parameter handoff on static Nginx")
+
+xlsx_parser_path = os.path.join(ROOT_DIR, "src", "lib", "xlsxParser.ts")
+test_assert(os.path.exists(xlsx_parser_path), "src/lib/xlsxParser.ts exists for zero-dependency browser .xlsx decompression and XML parsing")
+with open(os.path.join(ROOT_DIR, "src", "components", "cart", "ExcelBulkOrderModal.tsx"), "r", encoding="utf-8") as fp:
+    ebm_s52 = fp.read()
+test_assert("parseXlsxFileToLines" in ebm_s52 and "fetchCatalogFromErp" in ebm_s52, "ExcelBulkOrderModal.tsx parses .xlsx files natively and falls back to fetchCatalogFromErp for unresolved items")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "profile", "useRepeatOrder.ts"), "r", encoding="utf-8") as fp:
+    uro_s52 = fp.read()
+test_assert("in_production_qty" in uro_s52 and "is_preorder_available" in uro_s52 and "Предзаказ с фабрики" in uro_s52, "useRepeatOrder.ts supports factory preorders when warehouse stock is 0 but item is in production")
+
+with open(os.path.join(ROOT_DIR, "src", "pages", "ProfilePage.tsx"), "r", encoding="utf-8") as fp:
+    pp_s52 = fp.read()
+test_assert("lazy(() => import('@/components/SupplierCabinet'))" in pp_s52 and "<Suspense" in pp_s52, "ProfilePage.tsx lazy-loads SupplierCabinet and Admin tabs with React.Suspense")
+
+# ------------------------------------------------------------------------------
+# 77. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests
