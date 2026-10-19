@@ -8,7 +8,9 @@ import {
 } from 'lucide-react';
 import { calcSqm } from '@/types';
 import { fetchClientOrdersFromErp, fetchClientDebtFromErp, type ClientDebtReport } from '@/lib/erpApi';
-import { formatCurrency } from '@/lib/pricingEngine';
+import { ORDER_STATUS_MAP, fmtPrice, fmt2 } from '@/components/profile';
+
+export { ORDER_STATUS_MAP, fmtPrice, fmt2 };
 
 export interface OrderItem {
   id?: string;
@@ -40,43 +42,6 @@ export interface Order {
   totalSqm: number;
   totalItems: number;
   items: OrderItem[];
-}
-
-export const ORDER_STATUS_MAP: Record<string, { label: string; color: string }> = {
-  pending: { label: 'В авторезерве', color: 'bg-amber-50 text-amber-700 border-amber-200' },
-  reserved: { label: 'В авторезерве', color: 'bg-amber-50 text-amber-700 border-amber-200' },
-  confirmed: { label: 'В авторезерве', color: 'bg-amber-50 text-amber-700 border-amber-200' },
-  processing: { label: 'На сборке', color: 'bg-blue-50 text-blue-700 border-blue-200' },
-  picking: { label: 'На сборке', color: 'bg-blue-50 text-blue-700 border-blue-200' },
-  assembled: { label: 'Готов к отгрузке', color: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
-  ready: { label: 'Готов к отгрузке', color: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
-  shipped: { label: 'Отгружен', color: 'bg-purple-50 text-purple-700 border-purple-200' },
-  delivered: { label: 'Доставлен', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  cancelled: { label: 'Отменён', color: 'bg-rose-50 text-rose-700 border-rose-200' },
-  draft: { label: 'Черновик', color: 'bg-slate-100 text-slate-600 border-slate-200' },
-};
-
-function fmt2(n: number) {
-  return n.toFixed(2);
-}
-
-function fmtPrice(n: number) {
-  try {
-    const cur = typeof localStorage !== 'undefined' ? localStorage.getItem('synergy_preferred_currency') : 'USD';
-    const session = typeof localStorage !== 'undefined' ? localStorage.getItem('synergy_auth_session') : null;
-    const isImp = typeof sessionStorage !== 'undefined' && Boolean(sessionStorage.getItem('synergy:impersonated_profile'));
-    let isAdminUser = false;
-    if (session && !isImp) {
-      try {
-        const parsed = JSON.parse(session);
-        isAdminUser = parsed?.profile?.role === 'admin' || parsed?.role === 'admin';
-      } catch {}
-    }
-    if (cur === 'KZT' && isAdminUser) {
-      return formatCurrency(n, 'KZT');
-    }
-  } catch {}
-  return `$${n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }
 
 function orderTotals(items: OrderItem[]) {

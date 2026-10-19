@@ -76,12 +76,44 @@ export function clean1CName(rawName?: string): { name: string; sku: string; colo
   return { name: clean, sku: '', color: '', collection: coll };
 }
 
+function getCallerReservationScope(): {
+  isPrivileged: boolean;
+  ownPartnerId: string;
+  ownPhone10: string;
+} {
+  if (typeof window === 'undefined') {
+    return { isPrivileged: false, ownPartnerId: '', ownPhone10: '' };
+  }
+  try {
+    const impStr =
+      sessionStorage.getItem('synergy:impersonated_profile') ||
+      localStorage.getItem('synergy:impersonated_profile');
+    const sessStr =
+      sessionStorage.getItem('synergy:auth_session') ||
+      localStorage.getItem('synergy:auth_session') ||
+      sessionStorage.getItem('synergy:demo_auth') ||
+      localStorage.getItem('synergy:demo_auth');
+    const sess = sessStr ? JSON.parse(sessStr) : null;
+    const imp = impStr ? JSON.parse(impStr) : null;
+    const realRole = String(sess?.profile?.role || sess?.user?.role || 'client');
+    const effectiveProfile = imp || sess?.profile || null;
+    const effectiveRole = String(effectiveProfile?.role || realRole || 'client');
+    const isPrivileged = !imp && ['admin', 'manager_rm', 'manager_lm'].includes(effectiveRole);
+    const ownPartnerId = String(effectiveProfile?.partner_id || '').replace(/^erp-client-/, '').trim();
+    const ownPhone10 = String(effectiveProfile?.phone || '').replace(/\D+/g, '').slice(-10);
+    return { isPrivileged, ownPartnerId, ownPhone10 };
+  } catch {
+    return { isPrivileged: false, ownPartnerId: '', ownPhone10: '' };
+  }
+}
+
 /**
  * Получить список активных складских резервов с разбивкой по клиентам и позициям.
- * Извлекает данные из 1С:ERP (action=orders) и объединяет с буфером Supabase.
+ * Извлекает данные из Synergy ERP (action=orders) с защитой коммерческой тайны (Anti-BOLA PII Masking).
  */
 export async function fetchActiveReservations(params?: { sku?: string; q?: string }): Promise<ActiveReservationsResponse> {
-  let erpMapped: ActiveReservation[] = [];
+  let erpMapped: Array<ActiveReservation & { _rawClientKey?: string }> = [];
+  const { isPrivileged, ownPartnerId, ownPhone10 } = getCallerReservationScope();
 
   // 1. Извлечение живых заказов из ERP через action=orders
   try {
@@ -131,6 +163,13 @@ export async function fetchActiveReservations(params?: { sku?: string; q?: strin
           }
         }
 
+        const rawClientKey = String(o.client_id || clientCompany || clientName || o.id);
+        const orderPhone10 = String(o.client_phone || '').replace(/\D+/g, '').slice(-10);
+        const isOwnOrder =
+          (ownPartnerId.length > 0 && String(o.client_id || '') === ownPartnerId) ||
+          (ownPhone10.length === 10 && orderPhone10 === ownPhone10);
+        const canSeePii = isPrivileged || isOwnOrder;
+
         const totalItems = calculatedQty || Number(o.items_count) || 1;
         const pickedItems = Number(o.picked_items ?? o.picked_count ?? 0);
         const progressPercent = totalItems > 0 ? Math.round((pickedItems / totalItems) * 100) : 0;
@@ -141,9 +180,9 @@ export async function fetchActiveReservations(params?: { sku?: string; q?: strin
         return {
           id: String(o.id),
           order_number: o.doc_number || `ORD-${o.id}`,
-          client_name: clientName,
-          client_company: clientCompany || clientName,
-          client_phone: o.client_phone || '',
+          client_name: canSeePii ? clientName : 'Оптовый партнер',
+          client_company: canSeePii ? (clientCompany || clientName) : 'Оптовый партнер',
+          client_phone: canSeePii ? (o.client_phone || '') : '',
           status: isAssembly ? 'processing' : 'pending',
           status_label: o.status || (isAssembly ? 'В сборке' : 'Авторезерв'),
           warehouse: o.warehouse_name || 'Основной Склад Астана',
@@ -151,10 +190,11 @@ export async function fetchActiveReservations(params?: { sku?: string; q?: strin
           hold_expires_at: o.hold_expires_at || (o.date ? new Date(new Date(o.date).getTime() + 24 * 3600 * 1000).toISOString() : undefined),
           total_items: totalItems,
           total_sqm: calculatedSqm || Number(o.total_sqm) || 0,
-          total_amount: Number(o.total_amount) || 0,
+          total_amount: canSeePii ? (Number(o.total_amount) || 0) : 0,
           currency: o.currency || 'USD',
           assembly_progress: assemblyProgress,
           items,
+          _rawClientKey: rawClientKey,
         };
       });
     }
@@ -192,7 +232,7 @@ export async function fetchActiveReservations(params?: { sku?: string; q?: strin
     );
   }
 
-  const uniqueClients = new Set(combined.map(o => o.client_company || o.client_name).filter(Boolean));
+  const uniqueClients = new Set(combined.map(o => o._rawClientKey || o.client_company || o.client_name).filter(Boolean));
   const totalReservedQty = combined.reduce((sum, o) => sum + o.total_items, 0);
   const totalReservedSqm = Math.round(combined.reduce((sum, o) => sum + o.total_sqm, 0) * 100) / 100;
 

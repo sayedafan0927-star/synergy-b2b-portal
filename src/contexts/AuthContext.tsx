@@ -179,13 +179,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const signInAsDemo = useCallback((demoRole: UserRole = 'admin') => {
-    const { profile: demoProfile, user: mockUser } = createDemoUserAndProfile(demoRole);
+  const signInAsDemo = useCallback((demoRole: UserRole = 'client') => {
+    const safeRole: UserRole = (!import.meta.env.DEV && demoRole === 'admin' && profile?.role !== 'admin')
+      ? 'client'
+      : demoRole;
+    const { profile: demoProfile, user: mockUser } = createDemoUserAndProfile(safeRole);
     setUser(mockUser);
     setProfile(demoProfile);
     saveAuthSession(mockUser, demoProfile);
-    provisionSessionToken(mockUser, demoProfile, demoRole);
-  }, []);
+    provisionSessionToken(mockUser, demoProfile, safeRole);
+  }, [profile?.role]);
 
   const signInAsClient = useCallback((client: ClientSignInInput) => {
     const { profile: clientProfile, user: mockUser } = createClientUserAndProfile(client);

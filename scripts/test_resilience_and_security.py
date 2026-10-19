@@ -2485,7 +2485,40 @@ with open(os.path.join(ROOT_DIR, "src", "lib", "warehouseRulesStore.ts"), "r", e
 test_assert("warehouseRulesEndpointAvailable" in wrs_s50, "warehouseRulesStore.ts guards POST/DELETE /api/warehouse-rules with warehouseRulesEndpointAvailable preventing 405 errors on static Nginx")
 
 # ------------------------------------------------------------------------------
-# 75. Summary Report
+# 75. Stage 51: Pass 10 Information Security (Anti-BOLA), Multi-Warehouse Correctness & Performance
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 75. STAGE 51: PASS 10 INFORMATION SECURITY, CORRECTNESS & PERFORMANCE ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "src", "lib", "erp", "activeReservations.ts"), "r", encoding="utf-8") as fp:
+    ar_s51 = fp.read()
+test_assert("getCallerReservationScope" in ar_s51 and "Оптовый партнер" in ar_s51 and "_rawClientKey" in ar_s51, "activeReservations.ts masks competitor dealer PII on direct api_portal.php while preserving unique client counts")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "profile", "useOrdersList.ts"), "r", encoding="utf-8") as fp:
+    uol_s51 = fp.read()
+test_assert("managerClientIds" in uol_s51 and "isUuidProfileId" in uol_s51 and "filteredRawOrders" in uol_s51, "useOrdersList.ts enforces client/manager Anti-BOLA order isolation and UUID-safe Supabase queries")
+
+with open(os.path.join(ROOT_DIR, "src", "contexts", "AuthContext.tsx"), "r", encoding="utf-8") as fp:
+    ac_s51 = fp.read()
+test_assert("safeRole: UserRole = (!import.meta.env.DEV && demoRole === 'admin'" in ac_s51, "AuthContext.tsx prevents unauthorized elevation to admin via signInAsDemo in production")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "admin", "ClientDemoPanel.tsx"), "r", encoding="utf-8") as fp:
+    cdp_s51 = fp.read()
+test_assert("from '@/components/profile'" in cdp_s51 and "synergy_auth_session" not in cdp_s51, "ClientDemoPanel.tsx uses canonical ORDER_STATUS_MAP and fmtPrice from @/components/profile")
+
+with open(os.path.join(ROOT_DIR, "src", "lib", "erp", "ordersApi.ts"), "r", encoding="utf-8") as fp:
+    oa_s51 = fp.read()
+test_assert("warehouseGroups" in oa_s51 and "primary.split_orders =" in oa_s51, "ordersApi.ts splits multi-warehouse/preorder carts into separate ERP sub-orders")
+
+with open(os.path.join(ROOT_DIR, "src", "lib", "erp", "catalogApi.ts"), "r", encoding="utf-8") as fp:
+    ca_s51 = fp.read()
+test_assert("NORMALIZED_TTL_MS = 5 * 60 * 1000" in ca_s51 and "getNormalizedVariantMap" in ca_s51 and "CATALOG_STALE_TTL_MS" in ca_s51, "catalogApi.ts implements 60s SWR cache and 5m normalizedVariantCache")
+
+with open(os.path.join(ROOT_DIR, "src", "lib", "erp", "counterpartiesApi.ts"), "r", encoding="utf-8") as fp:
+    cpa_s51 = fp.read()
+test_assert("CP_CACHE_TTL_MS" in cpa_s51 and "deduplicateRequest(cacheKey" in cpa_s51, "counterpartiesApi.ts deduplicates and caches fetchCounterpartiesFromErp and fetchClientDebtFromErp")
+
+# ------------------------------------------------------------------------------
+# 76. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

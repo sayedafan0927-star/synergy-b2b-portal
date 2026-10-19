@@ -298,15 +298,25 @@ export async function handleErpLoginFallback(
 
   if (effectiveEmp) {
     const inputPass = String(loginBody.password || req.query?.password || '').trim();
-    const handled = await handleEmployeeLoginFallback(
-      req,
-      res,
-      effectiveEmp,
-      inputCleanPhone,
-      inputLogin,
-      inputPass,
-      correlationId,
-    );
+    const empUsername = String(effectiveEmp.username || effectiveEmp.name || '').trim();
+    if (empUsername && empUsername.toLowerCase() !== inputLogin.toLowerCase() && inputPass) {
+      try {
+        const retryRes = await fetch(`${targetErpUrl}?action=login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Portal-Key': serverErpKey },
+          body: JSON.stringify({ login: empUsername, password: inputPass }),
+        });
+        const retryData = retryRes.ok ? await retryRes.json().catch(() => null) : null;
+        if (retryData?.success) {
+          await handleErpLoginToken(retryData, supabase || null);
+          res.status(200).json(retryData);
+          return true;
+        }
+      } catch (retryErr) {
+        console.warn('[AUTH] Upstream employee username retry notice:', retryErr);
+      }
+    }
+    const handled = await handleEmployeeLoginFallback(req, res, effectiveEmp, inputCleanPhone, inputLogin, inputPass, correlationId);
     if (handled) return true;
   }
 
@@ -393,17 +403,8 @@ export async function enrichOrdersWithBufferedLocalOrders(
       .limit(50);
 
     if (clientIdParam) {
-      const { data: pRow } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('partner_id', clientIdParam)
-        .limit(1)
-        .maybeSingle();
-      if (pRow?.id) {
-        q = q.or(`user_id.eq.${pRow.id},partner_id.eq.${clientIdParam}`);
-      } else {
-        q = q.eq('partner_id', clientIdParam);
-      }
+      const { data: pRow } = await supabase.from('profiles').select('id').eq('partner_id', clientIdParam).limit(1).maybeSingle();
+      q = pRow?.id ? q.or(`user_id.eq.${pRow.id},partner_id.eq.${clientIdParam}`) : q.eq('partner_id', clientIdParam);
     }
 
     const { data: dbOrders } = await q;
@@ -435,18 +436,12 @@ export async function enrichOrdersWithBufferedLocalOrders(
         const prof = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
         const rawItems = Array.isArray(row.order_items) && row.order_items.length > 0 ? row.order_items : (Array.isArray(row.items) ? row.items : []);
         return {
-          id: row.id,
-          doc_number: row.order_number || row.doc_number || `ORD-${String(row.id).slice(0, 8)}`,
+          id: row.id, doc_number: row.order_number || row.doc_number || `ORD-${String(row.id).slice(0, 8)}`,
           client_id: Number(prof?.partner_id || row.partner_id || clientIdParam || 0) || row.user_id,
-          client_name: prof?.company_name || prof?.full_name || 'Клиент',
-          client_phone: prof?.phone || '',
-          date: row.created_at,
-          status: row.status || 'pending',
-          status_code: row.status || 'pending',
-          warehouse_name: row.warehouse || row.warehouse_name || 'Основной Склад Астана',
-          comment: row.notes || row.comment || '',
-          total_amount: Number(row.total_amount || 0),
-          total_sqm: Number(row.total_sqm || 0),
+          client_name: prof?.company_name || prof?.full_name || 'Клиент', client_phone: prof?.phone || '',
+          date: row.created_at, status: row.status || 'pending', status_code: row.status || 'pending',
+          warehouse_name: row.warehouse || row.warehouse_name || 'Основной Склад Астана', comment: row.notes || row.comment || '',
+          total_amount: Number(row.total_amount || 0), total_sqm: Number(row.total_sqm || 0),
           items_count: Number(row.total_items || rawItems.length || 0),
           items: rawItems.map((it: any, idx: number) => ({
             id: it.id || idx + 1, item_id: it.item_id || it.product_id, name: it.product_name || it.name || 'Ковер',

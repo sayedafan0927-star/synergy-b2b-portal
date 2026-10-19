@@ -80,9 +80,6 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
         const matchedCity = CITIES.find(c => c.toLowerCase() === client.city.toLowerCase());
         if (matchedCity) setSelectedCity(matchedCity);
       }
-      fetchClientDebtFromErp({ phone: client.phone, counterpartyId: Number(client.id) || undefined, search: client.name })
-        .then(res => setDebtReport(res?.success && res.found ? res : null))
-        .catch(() => setDebtReport(null));
     } else {
       setClientName(effectiveProfile?.full_name || 'Менеджер Synergy');
       setClientCompany('Synergy Group (Внутренний заказ)');

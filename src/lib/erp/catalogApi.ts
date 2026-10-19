@@ -2,12 +2,58 @@ import { erpFetch, deduplicateRequest, pingErp } from './core';
 import { fetchCounterpartiesFromErp, fetchRegionalManagersFromErp } from './counterpartiesApi';
 import type { PaginatedCatalogParams, PaginatedCatalogResult, ErpSyncReport } from './types';
 
-// ─── Stale-While-Revalidate Catalog Cache (20s TTL; ERP Redis serves < 5ms with 90s TTL) ───
-const CATALOG_TTL_MS = 20 * 1000;
+// ─── Stale-While-Revalidate Catalog Cache (60s fresh TTL, 300s stale TTL; 5m normalized metadata cache) ───
+const CATALOG_TTL_MS = 60 * 1000;
+const CATALOG_STALE_TTL_MS = 5 * 60 * 1000;
+const NORMALIZED_TTL_MS = 5 * 60 * 1000;
 const catalogMemoryCache = new Map<string, { timestamp: number; data: any }>();
+let normalizedVariantCache: { timestamp: number; map: Map<string, any> } | null = null;
 
 export function invalidateClientCatalogCache(): void {
   catalogMemoryCache.clear();
+  normalizedVariantCache = null;
+}
+
+async function getNormalizedVariantMap(queryParams: Record<string, string | undefined>, bypassCache: boolean): Promise<Map<string, any>> {
+  if (!bypassCache && normalizedVariantCache && Date.now() - normalizedVariantCache.timestamp < NORMALIZED_TTL_MS) {
+    return normalizedVariantCache.map;
+  }
+  const map = new Map<string, any>();
+  try {
+    const normResponse = await erpFetch('catalog_normalized', {
+      method: 'GET',
+      params: queryParams,
+    });
+    if (normResponse && normResponse.ok) {
+      const normData = await normResponse.json();
+      const normDesigns = normData?.designs || normData?.products || [];
+      if (Array.isArray(normDesigns)) {
+        for (const d of normDesigns) {
+          const dColl = String(d.collection || '').trim().toUpperCase();
+          const dArt = String(d.article || '').trim().toUpperCase();
+          const rawVars = d.variants || d.sizes || [];
+          for (const sv of rawVars) {
+            const enrichedSv = {
+              ...sv,
+              _designEta: d.production_eta || null,
+            };
+            const vId = String(sv.item_id ?? sv.id ?? '').trim();
+            const vSku = String(sv.sku ?? '').trim();
+            const vSizeNorm = String(sv.size || '').replace(/[\s*xXхХ×]+/g, 'x').toLowerCase();
+            if (vId) map.set(`id:${vId}`, enrichedSv);
+            if (vSku) map.set(`sku:${vSku}`, enrichedSv);
+            if (dColl && vSizeNorm) map.set(`key:${dColl}__${dArt}__${vSizeNorm}`, enrichedSv);
+          }
+        }
+      }
+      if (map.size > 0) {
+        normalizedVariantCache = { timestamp: Date.now(), map };
+      }
+    }
+  } catch {
+    if (normalizedVariantCache) return normalizedVariantCache.map;
+  }
+  return map;
 }
 
 /**
@@ -17,11 +63,18 @@ export function invalidateClientCatalogCache(): void {
 export async function fetchCatalogFromErp(dealerId?: string | number, priceType?: string, bypassCache = false) {
   const cacheKey = `catalog_${dealerId || 'public'}_${priceType || 'default'}`;
 
-  // 1. Проверяем свежий кэш в памяти
+  // 1. Проверяем свежий кэш в памяти (SWR: мгновенный возврат и тихое фоновое обновление после 60с)
   if (!bypassCache) {
     const cached = catalogMemoryCache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < CATALOG_TTL_MS) {
-      return cached.data;
+    if (cached) {
+      const age = Date.now() - cached.timestamp;
+      if (age < CATALOG_TTL_MS) {
+        return cached.data;
+      }
+      if (age < CATALOG_STALE_TTL_MS) {
+        void fetchCatalogFromErp(dealerId, priceType, true).catch(() => {});
+        return cached.data;
+      }
     }
   } else {
     catalogMemoryCache.delete(cacheKey);
@@ -37,15 +90,12 @@ export async function fetchCatalogFromErp(dealerId?: string | number, priceType?
       refresh: bypassCache ? '1' : undefined,
     };
 
-    const [response, normResponse] = await Promise.all([
+    const [response, normVariantMap] = await Promise.all([
       erpFetch('catalog', {
         method: 'GET',
         params: queryParams,
       }),
-      erpFetch('catalog_normalized', {
-        method: 'GET',
-        params: queryParams,
-      }).catch(() => null),
+      getNormalizedVariantMap(queryParams, bypassCache),
     ]);
 
     const xCache = response.headers.get('x-cache') || response.headers.get('x-erp-cache');
@@ -59,38 +109,6 @@ export async function fetchCatalogFromErp(dealerId?: string | number, priceType?
     }
 
     const data = await response.json();
-
-    // Обогащаем каталог данными предзаказа и производства из catalog_normalized (in_production_qty, production_eta, stock_status)
-    let normData: any = null;
-    if (normResponse && normResponse.ok) {
-      try {
-        normData = await normResponse.json();
-      } catch {
-        normData = null;
-      }
-    }
-
-    const normVariantMap = new Map<string, any>();
-    const normDesigns = normData?.designs || normData?.products || (Array.isArray(data?.designs) ? data.designs : []);
-    if (Array.isArray(normDesigns)) {
-      for (const d of normDesigns) {
-        const dColl = String(d.collection || '').trim().toUpperCase();
-        const dArt = String(d.article || '').trim().toUpperCase();
-        const rawVars = d.variants || d.sizes || [];
-        for (const sv of rawVars) {
-          const enrichedSv = {
-            ...sv,
-            _designEta: d.production_eta || null,
-          };
-          const vId = String(sv.item_id ?? sv.id ?? '').trim();
-          const vSku = String(sv.sku ?? '').trim();
-          const vSizeNorm = String(sv.size || '').replace(/[\s*xXхХ×]+/g, 'x').toLowerCase();
-          if (vId) normVariantMap.set(`id:${vId}`, enrichedSv);
-          if (vSku) normVariantMap.set(`sku:${vSku}`, enrichedSv);
-          if (dColl && vSizeNorm) normVariantMap.set(`key:${dColl}__${dArt}__${vSizeNorm}`, enrichedSv);
-        }
-      }
-    }
 
     // Если основной ответ вернул designs[] вместо products[] (например, при прямом вызове catalog_normalized)
     if (data && !Array.isArray(data.products) && Array.isArray(data.designs)) {

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { fetchClientOrdersFromErp, cancelOrderViaPortal } from '@/lib/erpApi';
+import { fetchClientOrdersFromErp, fetchCounterpartiesFromErp, cancelOrderViaPortal } from '@/lib/erpApi';
 import { triggerCatalogReload } from '@/hooks/useProductData';
 import { useAuth } from '@/contexts/AuthContext';
 import { calcSqm } from '@/types';
@@ -24,19 +24,58 @@ export function useOrdersList({ isAdmin, isManager }: UseOrdersListOptions) {
       const clientId = profile?.partner_id
         ? Number(profile.partner_id)
         : (profile?.id && !isNaN(Number(profile.id)) ? Number(profile.id) : undefined);
-      const phone = profile?.phone || user?.phone || (user?.user_metadata?.phone as string) || undefined;
+      const rawPhone = profile?.phone || user?.phone || (user?.user_metadata?.phone as string) || undefined;
+      const cleanPhone = rawPhone ? rawPhone.replace(/[^\d+]/g, '') : undefined;
+      const phone10 = cleanPhone ? cleanPhone.replace(/\D/g, '').slice(-10) : '';
 
       const params: { phone?: string; clientId?: number; limit?: number } = { limit: 100 };
       if (!isAdmin && !isManager) {
+        if (!clientId && !cleanPhone) {
+          setOrders([]);
+          setLoading(false);
+          return;
+        }
         if (clientId) params.clientId = clientId;
-        if (phone) params.phone = phone;
+        if (cleanPhone) params.phone = cleanPhone;
+      }
+
+      // Для менеджера получаем пул закрепленных за ним контрагентов (Anti-BOLA)
+      let managerClientIds: Set<number> | null = null;
+      let managerPhones10: Set<string> | null = null;
+      const rawManagerId = Number(profile?.manager_id) || (profile?.id && !isNaN(Number(profile.id)) ? Number(profile.id) : undefined);
+      if (isManager && !isAdmin && rawManagerId) {
+        try {
+          const cpData = await fetchCounterpartiesFromErp({ managerId: rawManagerId, limit: 300, includeArchived: true });
+          if (cpData && Array.isArray(cpData.counterparties)) {
+            managerClientIds = new Set<number>();
+            managerPhones10 = new Set<string>();
+            for (const c of cpData.counterparties) {
+              if (c.id) managerClientIds.add(Number(c.id));
+              const cpPhone = String(c.phone || '').replace(/\D/g, '').slice(-10);
+              if (cpPhone.length >= 10) managerPhones10.add(cpPhone);
+            }
+          }
+        } catch {}
       }
 
       let mappedErp: Order[] = [];
       try {
         const erpData = await fetchClientOrdersFromErp(params);
         if (erpData && erpData.success && Array.isArray(erpData.orders)) {
-          mappedErp = erpData.orders.map((o) => {
+          const filteredRawOrders = erpData.orders.filter((o: any) => {
+            if (isAdmin) return true;
+            const oClientId = Number(o.client_id || o.partner_id || 0);
+            const oPhone10 = String(o.client_phone || '').replace(/\D/g, '').slice(-10);
+            if (isManager) {
+              if (!managerClientIds || managerClientIds.size === 0) return true;
+              return (oClientId > 0 && managerClientIds.has(oClientId)) || (oPhone10.length >= 10 && Boolean(managerPhones10?.has(oPhone10)));
+            }
+            const matchId = clientId && oClientId > 0 && oClientId === clientId;
+            const matchPhone = phone10.length >= 10 && oPhone10.length >= 10 && oPhone10 === phone10;
+            return Boolean(matchId || matchPhone);
+          });
+
+          mappedErp = filteredRawOrders.map((o) => {
             const isAwaitingSupply = o.status_code === 'awaiting_supply' || o.status === 'awaiting_supply' || (o as any).is_preorder === true && (!o.status_code || o.status_code === 'awaiting_supply');
             const st = isAwaitingSupply ? 'awaiting_supply' : (o.status_code || (o.status && ORDER_STATUS_MAP[o.status] ? o.status : 'pending'));
             const meta = ORDER_STATUS_MAP[st] || { label: o.status || st, color: 'bg-amber-50 text-amber-700 border-amber-200' };
@@ -88,30 +127,57 @@ export function useOrdersList({ isAdmin, isManager }: UseOrdersListOptions) {
 
       // Offline Resilience: Merge with Supabase orders table (buffered/offline orders)
       try {
-        // Metadata invariant: profiles!user_id(full_name, company_name, phone)
-        let q = supabase
-          .from('orders')
-          .select('*, order_items(*)')
-          .is('parent_order_id', null)
-          .order('created_at', { ascending: false })
-          .limit(50);
+        const isUuidProfileId = Boolean(profile?.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(profile.id)));
+        const applyLocalFilter = (query: any) => {
+          if (isAdmin) return query;
+          if (isManager && isUuidProfileId && profile?.id) {
+            return query.eq('placed_by_id', profile.id);
+          }
+          if (!isManager) {
+            if (isUuidProfileId && profile?.id && clientId) {
+              return query.or(`user_id.eq.${profile.id},partner_id.eq.${clientId}`);
+            }
+            if (isUuidProfileId && profile?.id) {
+              return query.eq('user_id', profile.id);
+            }
+            if (clientId) {
+              return query.eq('partner_id', String(clientId));
+            }
+            return null;
+          }
+          return query;
+        };
 
-        if (!isAdmin && !isManager && profile?.id) {
-          q = q.eq('user_id', profile.id);
-        }
-        let { data: dbOrders, error: qErr } = await q;
-        if (qErr) {
-          let fbQ = supabase
+        // Metadata invariant: profiles!user_id(full_name, company_name, phone)
+        let q = applyLocalFilter(
+          supabase
             .from('orders')
             .select('*, order_items(*)')
             .is('parent_order_id', null)
             .order('created_at', { ascending: false })
-            .limit(50);
-          if (!isAdmin && !isManager && profile?.id) {
-            fbQ = fbQ.eq('user_id', profile.id);
+            .limit(50)
+        );
+
+        let dbOrders: any[] | null = null;
+        if (q) {
+          const { data, error: qErr } = await q;
+          if (!qErr) {
+            dbOrders = data;
+          } else {
+            let fbQ = supabase
+              .from('orders')
+              .select('*, order_items(*)')
+              .is('parent_order_id', null)
+              .order('created_at', { ascending: false })
+              .limit(50);
+            if (!isAdmin && !isManager && profile?.id && isUuidProfileId) {
+              fbQ = fbQ.eq('user_id', profile.id);
+            } else if (!isAdmin && !isManager && clientId) {
+              fbQ = fbQ.eq('partner_id', String(clientId));
+            }
+            const fallback = await fbQ;
+            dbOrders = fallback.data;
           }
-          const fallback = await fbQ;
-          dbOrders = fallback.data;
         }
         if (Array.isArray(dbOrders) && dbOrders.length > 0) {
           const knownDocNumbers = new Set(mappedErp.map(o => o.orderNumber).filter(Boolean));

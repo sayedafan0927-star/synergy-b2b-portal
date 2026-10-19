@@ -1,5 +1,8 @@
-import { erpFetch } from './core';
+import { erpFetch, deduplicateRequest } from './core';
 import type { ErpClientAuthResult, ClientDebtReport } from './types';
+
+const CP_CACHE_TTL_MS = 15 * 1000;
+const cpMemoryCache = new Map<string, { timestamp: number; data: any }>();
 
 /**
  * Получение списка активных региональных менеджеров (РМ) и логистов (ЛМ).
@@ -68,46 +71,26 @@ export function isCounterpartyArchivedOrMailing(c: any): boolean {
   const status = String(c.status || '').toLowerCase().trim();
   const access = String(c.access || '').toLowerCase().trim();
 
-  // 1. Формальные флаги деактивации / архива
   if (
-    status === 'inactive' ||
-    status === 'archived' ||
-    status === 'archive' ||
-    status === 'disabled' ||
-    status === 'deleted' ||
+    ['inactive', 'archived', 'archive', 'disabled', 'deleted'].includes(status) ||
     access === 'disabled' ||
-    c.is_active === 0 ||
-    c.is_active === false ||
-    c.is_active === '0' ||
-    c.portal_access_enabled === 0 ||
-    c.portal_access_enabled === false ||
-    c.portal_access_enabled === '0' ||
-    c.is_archived === true ||
-    c.is_archived === 1 ||
-    c.archived === true ||
-    c.archived === 1
+    c.is_active === 0 || c.is_active === false || c.is_active === '0' ||
+    c.portal_access_enabled === 0 || c.portal_access_enabled === false || c.portal_access_enabled === '0' ||
+    c.is_archived === true || c.is_archived === 1 || c.archived === true || c.archived === 1
   ) {
     return true;
   }
 
-  // 2. Семантическая фильтрация недействующих / рассылочных контактов
-  if (
+  return (
     name.includes('рассылк') ||
     city.includes('заполним позже') ||
     name.includes('архив') ||
     name.includes('[архив]') ||
     name.includes('(архив)') ||
     name.startsWith('для рассылки')
-  ) {
-    return true;
-  }
-
-  return false;
+  );
 }
 
-/**
- * Проверка, является ли контрагент реально действующим активным клиентом B2B.
- */
 export function isCounterpartyActive(c: any): boolean {
   return !isCounterpartyArchivedOrMailing(c);
 }
@@ -123,44 +106,48 @@ export async function fetchCounterpartiesFromErp(params: {
   limit?: number;
   includeArchived?: boolean;
 } = {}) {
-  const response = await erpFetch('counterparties', {
-    method: 'GET',
-    params: {
-      search: params.search,
-      phone: params.phone,
-      manager_id: params.managerId,
-      limit: params.limit,
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Ошибка загрузки контрагентов (${response.status})`);
+  const cleanPhone = params.phone ? params.phone.replace(/[^\d+]/g, '') : undefined;
+  const cacheKey = `cp_${params.search || ''}_${cleanPhone || ''}_${params.managerId || ''}_${params.limit || ''}_${params.includeArchived ? '1' : '0'}`;
+  const cached = cpMemoryCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CP_CACHE_TTL_MS) {
+    return cached.data;
   }
 
-  const data = await response.json();
-  if (data && Array.isArray(data.counterparties)) {
-    // Размечаем каждого контрагента метаданными активности
-    const tagged = data.counterparties.map((c: any) => {
-      const isArchived = isCounterpartyArchivedOrMailing(c);
-      return {
-        ...c,
-        is_archived_or_mailing: isArchived,
-        is_acting_client: !isArchived,
-      };
+  return deduplicateRequest(cacheKey, async () => {
+    const response = await erpFetch('counterparties', {
+      method: 'GET',
+      params: {
+        search: params.search,
+        phone: cleanPhone || undefined,
+        manager_id: params.managerId,
+        limit: params.limit,
+      },
     });
 
-    if (params.includeArchived) {
-      data.counterparties = tagged;
-    } else {
-      // По умолчанию фильтруем строго действующих клиентов
-      data.counterparties = tagged.filter((c: any) => c.is_acting_client);
+    if (!response.ok) {
+      throw new Error(`Ошибка загрузки контрагентов (${response.status})`);
     }
-    data.count = data.counterparties.length;
-    data.total_raw_count = tagged.length;
-    data.active_count = tagged.filter((c: any) => c.is_acting_client).length;
-    data.archived_count = tagged.filter((c: any) => c.is_archived_or_mailing).length;
-  }
-  return data;
+
+    const data = await response.json();
+    if (data && Array.isArray(data.counterparties)) {
+      const tagged = data.counterparties.map((c: any) => {
+        const isArchived = isCounterpartyArchivedOrMailing(c);
+        return {
+          ...c,
+          is_archived_or_mailing: isArchived,
+          is_acting_client: !isArchived,
+        };
+      });
+
+      data.counterparties = params.includeArchived ? tagged : tagged.filter((c: any) => c.is_acting_client);
+      data.count = data.counterparties.length;
+      data.total_raw_count = tagged.length;
+      data.active_count = tagged.filter((c: any) => c.is_acting_client).length;
+      data.archived_count = tagged.filter((c: any) => c.is_archived_or_mailing).length;
+    }
+    cpMemoryCache.set(cacheKey, { timestamp: Date.now(), data });
+    return data;
+  });
 }
 
 /**
@@ -173,18 +160,44 @@ export async function authenticateClientViaErp(login: string, password: string):
 
   // 1. Попытка авторизации через action=login в Synergy ERP
   try {
-    const response = await erpFetch('login', {
+    let response = await erpFetch('login', {
       method: 'POST',
-      body: {
-        phone: cleanPhone || login.trim(),
-        login: login.trim(),
-        password: password.trim(),
-      },
+      body: { phone: cleanPhone || login.trim(), login: login.trim(), password: password.trim() },
     });
+    let data = await response.json().catch(() => null);
 
-    const data = await response.json().catch(() => null);
+    // Если введён номер телефона, который одновременно привязан к клиенту в 1С и к сотруднику ERP (например, 87086984543 -> afan),
+    // шлюз ERP проверяет пароль клиента первым. Проверяем справочник сотрудников по телефону и повторяем вход по логину сотрудника.
+    const inputDigits = cleanPhone.replace(/\D+/g, '');
+    if ((!response.ok || !data?.success) && inputDigits.length >= 10) {
+      try {
+        const rmRes = await erpFetch('regional_managers', { method: 'GET' });
+        if (rmRes.ok) {
+          const rmData = await rmRes.json().catch(() => null);
+          const managers: any[] = Array.isArray(rmData?.managers) ? rmData.managers : [];
+          const last10 = inputDigits.slice(-10);
+          const matchedEmp = managers.find((m: any) => {
+            const mDigits = String(m.phone || '').replace(/\D+/g, '');
+            return mDigits.length >= 10 && mDigits.slice(-10) === last10;
+          });
+          const empUsername = String(matchedEmp?.username || matchedEmp?.name || '').trim();
+          if (empUsername && empUsername.toLowerCase() !== login.trim().toLowerCase()) {
+            const empRetryRes = await erpFetch('login', {
+              method: 'POST',
+              body: { login: empUsername, password: password.trim() },
+            });
+            const empRetryData = await empRetryRes.json().catch(() => null);
+            if (empRetryRes.ok && empRetryData?.success) {
+              response = empRetryRes;
+              data = empRetryData;
+            }
+          }
+        }
+      } catch (empFallbackErr) {
+        console.warn('[authenticateClientViaErp] Employee phone-to-username resolution notice:', empFallbackErr);
+      }
+    }
 
-    // Обработка 403 Forbidden: деактивирован в ERP
     if (response.status === 403 || data?.code === 'CLIENT_DEACTIVATED') {
       return {
         success: false,
@@ -234,15 +247,11 @@ export async function authenticateClientViaErp(login: string, password: string):
           showroom_warehouse_name: showroomName,
           regional_manager: data.regional_manager || data.client?.regional_manager,
           contracts: data.client?.contracts || [],
-          financials: {
-            debt_usd: debtUsd,
-            balance_usd: balanceUsd,
-          },
+          financials: { debt_usd: debtUsd, balance_usd: balanceUsd },
         },
       };
     }
 
-    // Если бэкенд ERP вернул явную ошибку логина/пароля — не пытаемся обходить её на клиенте
     if (data && data.error && !data.error.includes('Неизвестное действие')) {
       return { success: false, code: data.code || 'AUTH_FAILED', error: data.error };
     }
@@ -269,7 +278,6 @@ export async function authenticateClientViaErp(login: string, password: string):
         };
       }
 
-      // Получаем доверенный SSO-токен сессии от шлюза ERP
       let ssoToken: string | undefined;
       try {
         const ssoRes = await erpFetch('sso_link', {
@@ -277,9 +285,7 @@ export async function authenticateClientViaErp(login: string, password: string):
         });
         if (ssoRes.ok) {
           const ssoData = await ssoRes.json();
-          if (ssoData?.token) {
-            ssoToken = ssoData.token;
-          }
+          if (ssoData?.token) ssoToken = ssoData.token;
         }
       } catch (ssoErr) {
         console.warn('[authenticateClientViaErp] Error obtaining SSO link token:', ssoErr);
@@ -338,15 +344,10 @@ export function broadcastClientDeactivated(counterpartyId: number | string) {
       const bc = new BroadcastChannel('synergy_client_channel');
       bc.postMessage({ event: 'client_deactivated', counterparty_id: counterpartyId });
       bc.close();
-    } catch {
-      // fallback
-    }
+    } catch {}
   }
 }
 
-/**
- * Получение персональной задолженности и неоплаченных накладных клиента из ERP.
- */
 export async function fetchClientDebtFromErp(params: {
   phone?: string;
   counterpartyId?: number;
@@ -354,72 +355,59 @@ export async function fetchClientDebtFromErp(params: {
   refresh?: boolean;
   includeInvoices?: boolean;
 }): Promise<ClientDebtReport> {
-  const response = await erpFetch('client_debt', {
-    method: 'GET',
-    params: {
-      phone: params.phone,
-      counterparty_id: params.counterpartyId,
-      partner_id: params.counterpartyId,
-      search: params.search,
-      refresh: params.refresh ? '1' : undefined,
-      include_invoices: params.includeInvoices !== false ? '1' : undefined,
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Ошибка загрузки задолженности (${response.status})`);
+  const cleanPhone = params.phone ? params.phone.replace(/[^\d+]/g, '') : undefined;
+  const cacheKey = `debt_${params.counterpartyId || ''}_${cleanPhone || ''}_${params.search || ''}_${params.includeInvoices !== false ? '1' : '0'}`;
+  if (!params.refresh) {
+    const cached = cpMemoryCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CP_CACHE_TTL_MS) return cached.data;
+  } else {
+    cpMemoryCache.delete(cacheKey);
   }
 
-  return await response.json();
+  return deduplicateRequest(params.refresh ? `${cacheKey}_refresh` : cacheKey, async () => {
+    const response = await erpFetch('client_debt', {
+      method: 'GET',
+      params: {
+        phone: cleanPhone || undefined,
+        counterparty_id: params.counterpartyId,
+        partner_id: params.counterpartyId,
+        search: params.search,
+        refresh: params.refresh ? '1' : undefined,
+        include_invoices: params.includeInvoices !== false ? '1' : undefined,
+      },
+    });
+    if (!response.ok) throw new Error(`Ошибка загрузки задолженности (${response.status})`);
+    const data = await response.json();
+    if (data && data.success) cpMemoryCache.set(cacheKey, { timestamp: Date.now(), data });
+    return data;
+  });
 }
 
-/**
- * Управление доступом дилера к порталу в ERP (action=update_client_access).
- * При отключении дилер мгновенно блокируется (CLIENT_DEACTIVATED).
- */
 export async function updateClientAccessInErp(clientId: number | string, accessEnabled: boolean | number): Promise<{ success: boolean }> {
   const numClientId = Number(String(clientId).replace(/\D+/g, '')) || clientId;
   const isEnabled = typeof accessEnabled === 'boolean' ? (accessEnabled ? 1 : 0) : accessEnabled;
   const response = await erpFetch('update_client_access', {
     method: 'POST',
-    body: {
-      client_id: numClientId,
-      access_enabled: isEnabled,
-    },
+    body: { client_id: numClientId, access_enabled: isEnabled },
   });
-
-  if (!response.ok) {
-    throw new Error(`Ошибка изменения доступа клиента в ERP (${response.status})`);
-  }
-
+  if (!response.ok) throw new Error(`Ошибка изменения доступа клиента в ERP (${response.status})`);
   return { success: true };
 }
 
-/**
- * Принудительное онлайн-обновление актуального баланса дилера из Synergy ERP (минуя локальный кэш)
- */
 export async function refreshLiveClientBalance(partnerId: string | number): Promise<any> {
   try {
     const response = await erpFetch('refresh_balance', {
       method: 'POST',
       body: { partner_id: String(partnerId) },
     });
-
     if (response.ok && (response.headers.get('content-type') || '').includes('application/json')) {
       const data = await response.json();
-      if (data && data.success !== false) {
-        return data;
-      }
+      if (data && data.success !== false) return data;
     }
   } catch {}
 
   const cleanNumericId = Number(String(partnerId).replace(/\D+/g, '')) || undefined;
-  const debtData: any = await fetchClientDebtFromErp({
-    counterpartyId: cleanNumericId,
-    refresh: true,
-    includeInvoices: true,
-  });
-
+  const debtData: any = await fetchClientDebtFromErp({ counterpartyId: cleanNumericId, refresh: true, includeInvoices: true });
   const canonicalDebt = Number(debtData?.total_debt_usd ?? debtData?.financials?.debt_usd ?? debtData?.client?.debt_usd ?? 0);
   const rawBal = Number(debtData?.financials?.balance_usd ?? debtData?.client?.balance_usd ?? 0);
 
