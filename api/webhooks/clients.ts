@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 import { createClient } from '@supabase/supabase-js';
 import { recordAuditLog } from '../audit/logs';
 import { applyCorsHeaders } from '../lib/cors';
@@ -174,6 +175,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .from('profiles')
           .select('updated_at')
           .eq('partner_id', String(p.counterparty_id))
+          .limit(1)
           .maybeSingle();
 
         if (existingProf?.updated_at && new Date(existingProf.updated_at).getTime() > incomingTimestamp) {
@@ -188,6 +190,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       // Сохраняем в Supabase profiles расширенные атрибуты контрагента и снимаем блокировку
       try {
+        const resolvedPasswordHash = p.portal_password_hash
+          ? String(p.portal_password_hash)
+          : (p.portal_password ? await bcrypt.hash(String(p.portal_password), 10) : undefined);
+
         await supabase
           .from('profiles')
           .upsert({
@@ -201,6 +207,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             bin_iin: p.bin || '',
             credit_limit_usd: Number(p.credit_limit_usd || 0),
             payment_delay_days: Number(p.payment_delay_days || 0),
+            ...(resolvedPasswordHash ? { password_hash: resolvedPasswordHash } : {}),
             role: 'client',
             status: 'active',
             is_blocked_for_shipment: false,

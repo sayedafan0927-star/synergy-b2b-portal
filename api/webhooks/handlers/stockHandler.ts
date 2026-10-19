@@ -38,22 +38,24 @@ export async function handleStockChanged(
     console.warn('[Webhook ERP] Error materializing stock updates:', patchErr);
   }
 
-  // Сбрасываем локальный кэш портала (L1 RAM + L2 Redis) и запускаем фоновый прогрев каталога из ERP (?action=catalog&refresh=1)
-  try {
-    await invalidateCatalogCache();
-    const warmupPromise = fetchUpstreamCatalogSingleflight({
-      forceRefresh: true,
-      correlationId: eventId || `stock-changed-${Date.now()}`,
-    }).catch(err => {
-      console.warn('[Webhook ERP: stock_changed] Background catalog refresh=1 warmup notice:', err?.message);
-    });
+  // Сбрасываем локальный кэш портала и запускаем фоновый прогрев ТОЛЬКО если инкрементальный патч кэша не сработал (!cachePatched)
+  if (!cachePatched) {
+    try {
+      await invalidateCatalogCache();
+      const warmupPromise = fetchUpstreamCatalogSingleflight({
+        forceRefresh: true,
+        correlationId: eventId || `stock-changed-${Date.now()}`,
+      }).catch(err => {
+        console.warn('[Webhook ERP: stock_changed] Background catalog refresh=1 warmup notice:', err?.message);
+      });
 
-    const waitUntilFn = (globalThis as any).waitUntil;
-    if (typeof waitUntilFn === 'function') {
-      waitUntilFn(warmupPromise);
+      const waitUntilFn = (globalThis as any).waitUntil;
+      if (typeof waitUntilFn === 'function') {
+        waitUntilFn(warmupPromise);
+      }
+    } catch (invErr) {
+      console.warn('[Webhook ERP: stock_changed] Cache invalidation notice:', invErr);
     }
-  } catch (invErr) {
-    console.warn('[Webhook ERP: stock_changed] Cache invalidation notice:', invErr);
   }
 
   // Сквозная трансляция в Realtime-шину браузеров
@@ -73,7 +75,7 @@ export async function handleStockChanged(
       items_count: items.length,
       db_updated: dbUpdated,
       cache_patched: cachePatched,
-      cache_invalidated: true,
+      cache_invalidated: !cachePatched,
       reason: payload.reason || 'manual',
     },
   });
@@ -85,8 +87,8 @@ export async function handleStockChanged(
     items_processed: items.length,
     items_saved_to_db: dbUpdated,
     catalog_cache_updated: cachePatched,
-    catalog_cache_invalidated: true,
-    message: `Successfully processed stock update for ${items.length} item(s) (DB: ${dbUpdated}, Cache Reset & Warmup: true).`,
+    catalog_cache_invalidated: !cachePatched,
+    message: `Successfully processed stock update for ${items.length} item(s) (DB: ${dbUpdated}, Cache Patched: ${cachePatched}).`,
     processed_at: new Date().toISOString(),
   };
 }

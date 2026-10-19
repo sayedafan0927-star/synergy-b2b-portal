@@ -1,11 +1,17 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import crypto from 'crypto';
+import { createClient } from '@supabase/supabase-js';
 import { applyCorsHeaders } from '../lib/cors';
 import { applyCorrelationId } from '../lib/trace';
 import { enforceRateLimit } from '../lib/rateLimit';
 import { authenticateRequest } from '../lib/authGuard';
 
 const SECRET_KEY = process.env.PORTAL_SECRET_KEY || process.env.ERP_PORTAL_SECRET || '';
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
+const supabase = (SUPABASE_URL && SUPABASE_KEY)
+  ? createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })
+  : null as any;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!applyCorsHeaders(req, res)) {
@@ -52,6 +58,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           error: 'Forbidden: Повышение привилегий до роли сотрудника или администратора запрещено без валидной серверной авторизации.',
         });
       }
+    } else if (callerAuth.role === 'supplier' && !callerAuth.isServer) {
+      return res.status(403).json({
+        success: false,
+        error: 'Forbidden: Учетные записи поставщиков (фабрик) не имеют прав выпускать клиентские сессионные токены.',
+      });
     } else if (callerAuth.role === 'client' && !callerAuth.isServer) {
       // IDOR Guard: Клиент может обновлять токен исключительно для своего собственного подтвержденного partner_id
       const requestedPartnerId = profile?.partner_id ? String(profile.partner_id) : (callerAuth.partnerId || null);
@@ -83,8 +94,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ? (callerAuth.partnerId || null)
       : (profile?.partner_id ? String(profile.partner_id) : (callerAuth.partnerId || null));
     const phone = String(profile?.phone || user?.phone || callerAuth.phone || '');
+
+    let dbPriceType: string | null = null;
+    const isManagerCaller = !callerAuth.isServer && (callerAuth.role === 'manager_rm' || callerAuth.role === 'manager_lm');
+    if (isManagerCaller && partnerId && supabase) {
+      try {
+        const { data: clientProf } = await supabase
+          .from('profiles')
+          .select('price_type')
+          .eq('partner_id', String(partnerId))
+          .limit(1)
+          .maybeSingle();
+        if (clientProf?.price_type) dbPriceType = String(clientProf.price_type);
+      } catch {}
+    }
+
     const priceType = (!callerAuth.isServer && callerAuth.role === 'client')
       ? String(callerAuth.priceType || 'wholesale')
+      : isManagerCaller
+      ? String(dbPriceType || 'wholesale')
       : String(profile?.price_type || callerAuth.priceType || 'wholesale');
     const b2bRole = (!callerAuth.isServer && callerAuth.role === 'client')
       ? (callerAuth.b2bRole || 'director')

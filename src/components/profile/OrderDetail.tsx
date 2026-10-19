@@ -11,11 +11,12 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { updateOrderStatusInErp, cancelOrderViaPortal } from '@/lib/erpApi';
+import { triggerCatalogReload } from '@/hooks/useProductData';
+import { useToast } from '@/contexts/ToastContext';
 import { calcSqm } from '@/types';
 import type { Order, OrderItem } from './types';
 import {
   ORDER_STATUS_MAP,
-  getReservationTtlRemaining,
   fmt2,
   fmtPrice,
   sizeArea,
@@ -36,11 +37,11 @@ export interface OrderDetailProps {
 export function OrderDetail({
   order,
   onBack,
-  isAdmin,
   onUpdateOrder,
   onRepeatOrder,
   repeatingOrderId,
 }: OrderDetailProps) {
+  const toast = useToast();
   const [activeCollection, setActiveCollection] = useState<string | null>(null);
   const [sizeAsc, setSizeAsc] = useState(true);
   const [status, setStatus] = useState(order.statusRaw || 'pending');
@@ -54,6 +55,10 @@ export function OrderDetail({
     reason?: string;
   }>>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+
+  useEffect(() => {
+    setStatus(order.statusRaw || 'pending');
+  }, [order.statusRaw]);
 
   useEffect(() => {
     let isMounted = true;
@@ -80,7 +85,7 @@ export function OrderDetail({
   }, [order.id]);
 
   const collections = useMemo(() => Array.from(new Set(order.items.map(i => i.collection))).sort(), [order]);
-  const canCancel = !['cancelled', 'shipped', 'delivered'].includes(status);
+  const canCancel = !['cancelled', 'shipped', 'delivered', 'cancellation_pending', 'pending_erp_cancel'].includes(status);
 
   const handleCancelOrder = () => {
     setIsCancelModalOpen(true);
@@ -99,6 +104,7 @@ export function OrderDetail({
       try {
         const cancelRes = await cancelOrderViaPortal({
           orderId: order.id,
+          orderNumber: order.orderNumber,
           comment: 'Заказ отменен пользователем/администратором через B2B-портал',
         });
         portalCancelSucceeded = true;
@@ -108,6 +114,7 @@ export function OrderDetail({
       } catch (cancelErr: any) {
         console.warn('[OrderDetailModal] cancelOrderViaPortal error:', cancelErr);
         if (cancelErr?.status && cancelErr.status >= 400 && cancelErr.status < 500) {
+          toast.error(cancelErr.message || 'Не удалось отменить заказ');
           setUpdatingStatus(false);
           return;
         }
@@ -132,6 +139,7 @@ export function OrderDetail({
           // safe fallback
         }
       }
+      triggerCatalogReload();
     } else {
       // Синхронизируем статус в ERP
       try {
@@ -146,7 +154,7 @@ export function OrderDetail({
       try {
         await supabase
           .from('orders')
-          .update({
+            .update({
             status: newStatus,
             updated_at: new Date().toISOString(),
           })
@@ -190,6 +198,7 @@ export function OrderDetail({
   }, [filteredItems]);
 
   const totals = useMemo(() => orderTotals(filteredItems), [filteredItems]);
+  const currentMeta = ORDER_STATUS_MAP[status] || { label: order.status, color: order.statusColor };
 
   return (
     <div className="space-y-6">
@@ -202,7 +211,7 @@ export function OrderDetail({
             <div className="flex flex-wrap items-center gap-2">
               <Hash className="h-4 w-4 text-slate-400" />
               <h2 className="text-lg font-bold text-slate-900">{order.orderNumber || order.id}</h2>
-              <span className={`badge border ${order.statusColor}`}>{order.status}</span>
+              <span className={`badge border ${currentMeta.color}`}>{currentMeta.label}</span>
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-400 mt-0.5">
               <span>{order.date}</span>

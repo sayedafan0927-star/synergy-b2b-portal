@@ -102,6 +102,15 @@ export async function handleCachedClientDebt(
     req.query.include_invoices === '1';
   let pId = String(req.query.partner_id || req.query.counterparty_id || req.query.client_id || (req.body && (req.body.partner_id || req.body.counterparty_id || req.body.client_id)) || '').trim();
 
+  if (callerAuth && callerAuth.role === 'supplier' && !callerAuth.isServer) {
+    res.status(403).json({
+      success: false,
+      code: 'FORBIDDEN_SUPPLIER_FINANCIAL_ACCESS',
+      error: 'Forbidden: Учетные записи поставщиков (фабрик) не имеют доступа к задолженности дилеров.',
+    });
+    return true;
+  }
+
   // Anti-IDOR & B2B RBAC: Если запрашивает оптовый клиент, он имеет доступ ТОЛЬКО к своим финансовым данным
   if (callerAuth && callerAuth.role === 'client' && !callerAuth.isServer) {
     if (callerAuth.b2bRole === 'buyer') {

@@ -81,7 +81,7 @@ export function SupplierStockMobileCard({ item }: SupplierStockMobileCardProps) 
                         : dist.partner_name || dist.location_name || t('supplier.partner_store', 'Партнерский магазин')}
                     </p>
                     <p className="text-[10px] opacity-75">
-                      {dist.city === 'Алматы' ? 'Астана' : (dist.city || 'Астана')}
+                      {dist.city || 'Астана'}
                     </p>
                   </div>
                 </div>

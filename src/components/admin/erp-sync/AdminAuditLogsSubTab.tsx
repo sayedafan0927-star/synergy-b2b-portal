@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Search, RefreshCw, Eye, Activity, X } from 'lucide-react';
+import { Portal } from '@/components/common/Portal';
 
 export interface AdminAuditLogsSubTabProps {
   auditLogs: any[];
@@ -152,70 +153,72 @@ export function AdminAuditLogsSubTab({
 
       {/* Payload Inspector Modal */}
       {selectedLog && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden border border-slate-200">
-            <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                  <Activity className="h-4 w-4 text-brand-600" />
-                  Аудит события: <span className="font-mono text-brand-700">{selectedLog.event_type}</span>
-                </h3>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  ID: {selectedLog.id} • {selectedLog.created_at ? new Date(selectedLog.created_at).toLocaleString('ru-RU') : ''}
-                </p>
-              </div>
-              <button
-                onClick={() => setSelectedLog(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 cursor-pointer"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="p-4 overflow-y-auto space-y-4">
-              <div className="flex flex-wrap gap-2 text-xs">
-                <span className={`badge ${selectedLog.status === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
-                  Статус: {selectedLog.status}
-                </span>
-                <span className="badge bg-slate-100 text-slate-700">
-                  Направление: {selectedLog.direction}
-                </span>
-                <span className="badge bg-slate-100 text-slate-700">
-                  Источник: {selectedLog.source}
-                </span>
-                {selectedLog.latency_ms && (
-                  <span className="badge bg-purple-50 text-purple-700">
-                    Задержка: {selectedLog.latency_ms} мс
-                  </span>
-                )}
-              </div>
-
-              {selectedLog.error_message && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-mono">
-                  <strong>Ошибка:</strong> {selectedLog.error_message}
+        <Portal>
+          <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setSelectedLog(null)}>
+            <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden border border-slate-200" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between p-4 border-b border-slate-100 bg-slate-50">
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                    <Activity className="h-4 w-4 text-brand-600" />
+                    Аудит события: <span className="font-mono text-brand-700">{selectedLog.event_type}</span>
+                  </h3>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    ID: {selectedLog.id} • {selectedLog.created_at ? new Date(selectedLog.created_at).toLocaleString('ru-RU') : ''}
+                  </p>
                 </div>
-              )}
-
-              <div>
-                <h4 className="text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1.5">
-                  Полезная нагрузка (Payload / Response):
-                </h4>
-                <pre className="p-3 bg-slate-900 text-slate-100 rounded-xl text-[11px] font-mono overflow-x-auto max-h-60">
-                  {JSON.stringify(selectedLog.payload || selectedLog.details || {}, null, 2)}
-                </pre>
+                <button
+                  onClick={() => setSelectedLog(null)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200/50 cursor-pointer"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
-            </div>
 
-            <div className="p-3 bg-slate-50 border-t border-slate-100 flex justify-end">
-              <button
-                onClick={() => setSelectedLog(null)}
-                className="btn-secondary text-xs px-4 py-1.5 cursor-pointer"
-              >
-                Закрыть
-              </button>
+              <div className="p-4 overflow-y-auto space-y-4">
+                <div className="flex flex-wrap gap-2 text-xs">
+                  <span className={`badge ${selectedLog.status === 'success' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                    Статус: {selectedLog.status}
+                  </span>
+                  <span className="badge bg-slate-100 text-slate-700">
+                    Направление: {selectedLog.direction}
+                  </span>
+                  <span className="badge bg-slate-100 text-slate-700">
+                    Источник: {selectedLog.source}
+                  </span>
+                  {selectedLog.latency_ms && (
+                    <span className="badge bg-purple-50 text-purple-700">
+                      Задержка: {selectedLog.latency_ms} мс
+                    </span>
+                  )}
+                </div>
+
+                {selectedLog.error_message && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 font-mono">
+                    <strong>Ошибка:</strong> {selectedLog.error_message}
+                  </div>
+                )}
+
+                <div>
+                  <h4 className="text-xs font-semibold text-slate-700 uppercase tracking-wide mb-1.5">
+                    Полезная нагрузка (Payload / Response):
+                  </h4>
+                  <pre className="p-3 bg-slate-900 text-slate-100 rounded-xl text-[11px] font-mono overflow-x-auto max-h-60">
+                    {JSON.stringify(selectedLog.payload || selectedLog.details || {}, null, 2)}
+                  </pre>
+                </div>
+              </div>
+
+              <div className="p-3 bg-slate-50 border-t border-slate-100 flex justify-end">
+                <button
+                  onClick={() => setSelectedLog(null)}
+                  className="btn-secondary text-xs px-4 py-1.5 cursor-pointer"
+                >
+                  Закрыть
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        </Portal>
       )}
     </div>
   );

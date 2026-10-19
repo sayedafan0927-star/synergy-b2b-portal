@@ -286,12 +286,14 @@ export async function updateOrderStatusInErp(params: UpdateOrderStatusParams): P
  */
 export async function cancelOrderViaPortal(params: {
   orderId: string;
+  orderNumber?: string;
   comment?: string;
 }): Promise<{ success: boolean; status?: string; cancellation_pending?: boolean; message?: string }> {
   const response = await erpFetch('cancel_order', {
     method: 'POST',
     body: {
       order_id: params.orderId,
+      order_number: params.orderNumber,
       comment: params.comment || 'Заказ отменен пользователем через B2B-портал',
     },
   });

@@ -108,12 +108,25 @@ export async function validateClientCreditExposure(
       };
     }
 
-    if (userProfile?.overdue_days && userProfile.overdue_days > 14) {
+    const { data: partnerBal } = effectivePartnerId
+      ? await supabase
+          .from('partner_balances')
+          .select('balance, overdue_days, is_overdue')
+          .eq('partner_id', String(effectivePartnerId))
+          .maybeSingle()
+      : { data: null as any };
+
+    const effectiveOverdueDays = Math.max(
+      Number(userProfile?.overdue_days || 0),
+      Number(partnerBal?.overdue_days || 0)
+    );
+
+    if (effectiveOverdueDays > 14) {
       return {
         blocked: true,
         statusCode: 403,
         blockCode: 'OVERDUE_DEBT',
-        blockError: `У вас имеется просроченная задолженность (${userProfile.overdue_days} дн.). Отгрузка заблокирована до погашения.`,
+        blockError: `У вас имеется просроченная задолженность (${effectiveOverdueDays} дн.). Отгрузка заблокирована до погашения.`,
       };
     }
 
@@ -132,15 +145,8 @@ export async function validateClientCreditExposure(
     }
 
     let currentDebt = Math.max(0, Number((userProfile as any)?.debt_usd || 0));
-    if (!currentDebt && effectivePartnerId) {
-      const { data: pBal } = await supabase
-        .from('partner_balances')
-        .select('balance')
-        .eq('partner_id', String(effectivePartnerId))
-        .maybeSingle();
-      if (pBal && typeof pBal.balance === 'number' && pBal.balance < 0) {
-        currentDebt = Math.abs(pBal.balance);
-      }
+    if (!currentDebt && partnerBal && typeof partnerBal.balance === 'number' && partnerBal.balance < 0) {
+      currentDebt = Math.abs(partnerBal.balance);
     }
 
     // 4. Подсчет суммы незавершенных заказов («в пути»), включая ожидающие согласования (waiting_approval)

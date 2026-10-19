@@ -104,15 +104,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
               const newFree = Math.max(0, Number(match.free_stock ?? match.stock ?? 0));
               if (cartItem.maxStock !== newFree) {
                 updated = true;
-                window.dispatchEvent(
-                  new CustomEvent('synergy:cart-item-stock-depleted', {
-                    detail: {
-                      item: cartItem,
-                      previousStock: cartItem.maxStock,
-                      newStock: newFree,
-                    },
-                  })
-                );
+                if (newFree < cartItem.quantity) {
+                  window.dispatchEvent(
+                    new CustomEvent('synergy:cart-item-stock-depleted', {
+                      detail: {
+                        item: cartItem,
+                        previousStock: cartItem.maxStock,
+                        newStock: newFree,
+                      },
+                    })
+                  );
+                }
                 return {
                   ...cartItem,
                   maxStock: newFree,
@@ -175,12 +177,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
         const stockChanged = patch.maxStock !== undefined && item.maxStock !== patch.maxStock;
         if (priceChanged || sqmChanged || stockChanged) {
           updatedCount++;
+          const clampedQty = patch.maxStock !== undefined
+            ? (patch.maxStock > 0 ? Math.min(item.quantity, patch.maxStock) : 0)
+            : item.quantity;
           return {
             ...item,
             price: patch.price,
             price_per_sqm: patch.price_per_sqm ?? item.price_per_sqm,
             maxStock: patch.maxStock ?? item.maxStock,
-            quantity: patch.maxStock !== undefined ? Math.min(item.quantity, Math.max(1, patch.maxStock)) : item.quantity,
+            quantity: clampedQty,
           };
         }
         return item;

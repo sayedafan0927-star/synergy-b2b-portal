@@ -124,11 +124,7 @@ export function StockReservationsModal({
   useEffect(() => {
     if (isOpen) {
       loadData();
-      if (hasCatalogContext) {
-        setScopeFilter('catalog');
-      } else {
-        setScopeFilter('all');
-      }
+      setScopeFilter(hasCatalogContext ? 'catalog' : 'all');
       setStatusFilter(initialTab || 'all');
     }
   }, [isOpen, filterSku, hasCatalogContext, initialTab]);
@@ -145,7 +141,7 @@ export function StockReservationsModal({
   const isOrderMatchingCatalog = useCallback(
     (r: ActiveReservation) => {
       if (!catalogSkus || catalogSkus.length === 0) return true;
-      const lowerSkus = catalogSkus.map(s => s.toLowerCase().trim());
+      const lowerSkus = catalogSkus.map(s => s.toLowerCase().trim()).filter(Boolean);
       return r.items.some(it => {
         const itSku = (it.sku || '').toLowerCase().trim();
         const cleaned = clean1CName(it.product_name);
@@ -154,11 +150,10 @@ export function StockReservationsModal({
         const itCol = (it.collection || cleaned.collection || '').toLowerCase().trim();
         return lowerSkus.some(
           cs =>
-            itSku.includes(cs) ||
-            cs.includes(itSku) ||
-            itName.includes(cs) ||
-            itRaw.includes(cs) ||
-            itCol.includes(cs)
+            (itSku && (itSku.includes(cs) || cs.includes(itSku))) ||
+            (itName && itName.includes(cs)) ||
+            (itRaw && itRaw.includes(cs)) ||
+            (itCol && itCol.includes(cs))
         );
       });
     },
@@ -176,23 +171,26 @@ export function StockReservationsModal({
     return reservations;
   }, [reservations, hasCatalogContext, scopeFilter, catalogMatchedReservations]);
 
+  const isOrderExpired = (r: ActiveReservation) =>
+    r.status !== 'processing' && r.status !== 'picking' && formatHoldTtl(r.hold_expires_at, r.created_at).isExpired;
+
   const countAll = baseScopedReservations.length;
   const countAssembly = useMemo(
     () => baseScopedReservations.filter(r => r.status === 'processing').length,
     [baseScopedReservations]
   );
   const countAuto = useMemo(
-    () => baseScopedReservations.filter(r => r.status === 'pending' && !formatHoldTtl(r.hold_expires_at, r.created_at).isExpired).length,
+    () => baseScopedReservations.filter(r => r.status === 'pending' && !isOrderExpired(r)).length,
     [baseScopedReservations]
   );
   const countExpired = useMemo(
-    () => baseScopedReservations.filter(r => formatHoldTtl(r.hold_expires_at, r.created_at).isExpired).length,
+    () => baseScopedReservations.filter(isOrderExpired).length,
     [baseScopedReservations]
   );
 
   const filteredReservations = useMemo(() => {
     return baseScopedReservations.filter(r => {
-      const isExpired = formatHoldTtl(r.hold_expires_at, r.created_at).isExpired;
+      const isExpired = isOrderExpired(r);
       if (statusFilter === 'processing' && r.status !== 'processing') return false;
       if (statusFilter === 'pending' && (r.status !== 'pending' || isExpired)) return false;
       if (statusFilter === 'expired' && !isExpired) return false;

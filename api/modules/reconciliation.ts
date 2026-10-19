@@ -13,11 +13,20 @@ export async function handleReconciliationReport(
   req: VercelRequest,
   res: VercelResponse,
   targetErpUrl: string,
-  serverErpKey: string
+  serverErpKey: string,
+  preverifiedAuth?: any
 ) {
-  const authCtx = await authenticateRequest(req, { allowServerKey: true });
+  const authCtx = preverifiedAuth || (await authenticateRequest(req, { allowServerKey: true }));
   if (!authCtx.isAuthenticated) {
     return res.status(401).json({ success: false, error: authCtx.error || 'Требуется авторизация' });
+  }
+
+  if (authCtx.role === 'supplier' && !authCtx.isServer) {
+    return res.status(403).json({
+      success: false,
+      code: 'FORBIDDEN_SUPPLIER_RECONCILIATION_ACCESS',
+      error: 'Forbidden: Учетные записи поставщиков (фабрик) не имеют доступа к актам сверки дилеров.',
+    });
   }
 
   let partnerId = String(req.query.partner_id || req.query.counterpartyId || req.body?.partner_id || req.body?.counterpartyId || '');
@@ -117,6 +126,9 @@ export async function handleReconciliationReport(
 
     if (erpRes.ok) {
       const rawReport = await erpRes.json();
+      if (rawReport?.success === false) {
+        throw new Error(rawReport.error || 'ERP returned error');
+      }
       const debtData = debtRes && debtRes.ok ? await debtRes.json().catch(() => null) : null;
 
       const rawOps: any[] = Array.isArray(rawReport.operations)

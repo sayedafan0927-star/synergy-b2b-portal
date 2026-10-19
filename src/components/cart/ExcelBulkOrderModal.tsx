@@ -1,21 +1,15 @@
 import { useState, useRef, useMemo } from 'react';
-import {
-  FileSpreadsheet,
-  Upload,
-  X,
-  ShoppingCart,
-  Download,
-  ClipboardPaste,
-} from 'lucide-react';
+import { FileSpreadsheet, Upload, X, ShoppingCart, Download, ClipboardPaste } from 'lucide-react';
 import { Portal } from '@/components/common/Portal';
-import { useProducts } from '@/hooks/useProductData';
+import { useProducts, filterClientWarehouses } from '@/hooks/useProductData';
 import { useUserPricing } from '@/hooks/usePricing';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useCart } from '@/contexts/CartContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/contexts/ToastContext';
 import { normalizeDimensions } from '@/lib/searchNormalization';
-import { triggerFileDownload } from '@/lib/erpApi';
+import { triggerFileDownload, getAuthHeaders } from '@/lib/erpApi';
 import { BulkParsedRowItem, type ParsedBulkRow } from './bulk/BulkParsedRowItem';
 import type { Product, ProductVariant } from '@/types';
 
@@ -31,10 +25,12 @@ export function ExcelBulkOrderModal({ isOpen, onClose }: ExcelBulkOrderModalProp
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { products } = useProducts();
-  const { getVariantPrice } = useUserPricing();
+  const { getVariantPrice, getPricePerSqm } = useUserPricing();
   const { formatPrice } = useCurrency();
   const { t } = useLanguage();
   const { addItem } = useCart();
+  const { profile, isAdmin, isImpersonating } = useAuth();
+  const isEffectiveAdmin = isAdmin && !isImpersonating;
   const { success: toastSuccess, error: toastError } = useToast();
 
   const handleDownloadTemplate = () => {
@@ -43,10 +39,9 @@ export function ExcelBulkOrderModal({ isOpen, onClose }: ExcelBulkOrderModalProp
     triggerFileDownload(blob, 'synergy_b2b_bulk_order_template.csv');
   };
 
-function sanitizeSpreadsheetCell(value: string): string {
-  if (!value) return '';
-  return value.replace(/^[=+\-@\t\r%|]+/, '').trim();
-}
+  function sanitizeSpreadsheetCell(value: string): string {
+    return value ? value.replace(/^[=+\-@\t\r%|]+/, '').trim() : '';
+  }
 
   const processRawLines = (lines: string[]) => {
     const results: ParsedBulkRow[] = [];
@@ -92,18 +87,21 @@ function sanitizeSpreadsheetCell(value: string): string {
       if (directMatch) {
         matchedProduct = directMatch.product;
         matchedVariant = directMatch.variant;
-      } else {
+      } else if (cleanArt.length >= 2) {
         // Fallback: подстрочный поиск для нестандартных или неполных записей
         for (const prod of products) {
           const prodArt = (prod.article || '').toLowerCase().replace(/[^a-z0-9а-яё]/gi, '');
           const prodCol = (prod.collection || '').toLowerCase().replace(/[^a-z0-9а-яё]/gi, '');
+          const artMatch =
+            (cleanArt.length >= 2 && (prodArt.includes(cleanArt) || prodCol.includes(cleanArt))) ||
+            (prodArt.length >= 2 && cleanArt.includes(prodArt)) ||
+            (prodCol.length >= 2 && cleanArt.includes(prodCol));
 
-          if (prodArt.includes(cleanArt) || prodCol.includes(cleanArt) || cleanArt.includes(prodArt) || cleanArt.includes(prodCol)) {
+          if (artMatch) {
             const vMatch = prod.variants.find(v => {
               const vSize = normalizeDimensions(v.size).toLowerCase().replace(/\s+/g, '');
-              return vSize === cleanSize || vSize.includes(cleanSize) || cleanSize.includes(vSize);
+              return vSize === cleanSize || (cleanSize.length > 0 && vSize.length > 0 && (vSize.includes(cleanSize) || cleanSize.includes(vSize)));
             });
-
             if (vMatch) {
               matchedProduct = prod;
               matchedVariant = vMatch;
@@ -114,7 +112,15 @@ function sanitizeSpreadsheetCell(value: string): string {
       }
 
       if (matchedProduct && matchedVariant) {
-        const stock = matchedVariant.free_stock ?? matchedVariant.stock ?? 0;
+        const allowedWhs = filterClientWarehouses(
+          matchedVariant.warehouses || [],
+          profile?.showroom_warehouse_id,
+          profile?.showroom_warehouse_name,
+          isEffectiveAdmin ? true : profile
+        );
+        const stock = allowedWhs.length > 0
+          ? allowedWhs.reduce((sum, w) => sum + Number(w.free_stock ?? w.stock ?? 0), 0)
+          : (matchedVariant.warehouses && matchedVariant.warehouses.length > 0 ? 0 : (matchedVariant.free_stock ?? matchedVariant.stock ?? 0));
         const price = getVariantPrice(matchedProduct.collection, matchedVariant.size, matchedVariant.base_price, matchedVariant.price_per_sqm);
 
         results.push({
@@ -158,9 +164,10 @@ function sanitizeSpreadsheetCell(value: string): string {
             rawLine: String(idx),
           }));
 
-          const response = await fetch('/api/catalog/resolve-batch', {
+          // Routed via unified ERP gateway (equivalent to /api/catalog/resolve-batch)
+          const response = await fetch('/api/erp?action=resolve_catalog_batch', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
             body: JSON.stringify({ items: itemsToResolve }),
           });
 
@@ -185,9 +192,7 @@ function sanitizeSpreadsheetCell(value: string): string {
                   changed = true;
                 }
               }
-              if (changed) {
-                setParsedRows([...results]);
-              }
+              if (changed) setParsedRows([...results]);
             }
           }
         } catch (resolveErr) {
@@ -206,10 +211,7 @@ function sanitizeSpreadsheetCell(value: string): string {
     const reader = new FileReader();
     reader.onload = e => {
       const content = e.target?.result as string;
-      if (content) {
-        const lines = content.split(/\r\n|\n|\r/);
-        processRawLines(lines);
-      }
+      if (content) processRawLines(content.split(/\r\n|\n|\r/));
     };
     reader.readAsText(file, 'utf-8');
   };
@@ -224,27 +226,42 @@ function sanitizeSpreadsheetCell(value: string): string {
     for (const row of validItems) {
       const prod = row.product!;
       const v = row.variant!;
-      const orderQty = Math.min(row.qty, row.availableStock);
-      const candidateWhs = v.warehouses || [];
-      const stockWh = candidateWhs.find(w => Number(w.free_stock ?? w.stock ?? 0) > 0) || candidateWhs[0];
-      const wh = stockWh?.warehouse_name || 'Основной Склад Астана';
-      const whId = stockWh?.warehouse_id || 81;
+      let remaining = Math.min(row.qty, row.availableStock);
+      const candidateWhs = filterClientWarehouses(
+        v.warehouses || [],
+        profile?.showroom_warehouse_id,
+        profile?.showroom_warehouse_name,
+        isEffectiveAdmin ? true : profile
+      );
+      const firstStockWh = candidateWhs.find(w => Number(w.free_stock ?? w.stock ?? 0) > 0);
+      const allowedWhs = candidateWhs.filter(w => Number(w.free_stock ?? w.stock ?? 0) > 0);
+      const sqmPrice = getPricePerSqm(prod.collection, v.size, v.base_price, v.price_per_sqm);
+      const targetWhs = allowedWhs.length > 0
+        ? allowedWhs
+        : [firstStockWh || { warehouse_name: 'Основной Склад Астана', city: 'Астана', warehouse_id: 81, free_stock: row.availableStock, stock: row.availableStock }];
 
-      addItem({
-        productId: prod.id,
-        item_id: v.item_id,
-        productName: prod.name,
-        collection: prod.collection,
-        image: prod.images[0] || '',
-        size: v.size,
-        sku: v.sku,
-        warehouse: wh,
-        warehouse_id: whId,
-        price: row.price,
-        price_per_sqm: v.price_per_sqm,
-        area_sqm: v.area_sqm,
-        maxStock: row.availableStock,
-      }, orderQty);
+      for (const stockWh of targetWhs) {
+        if (remaining <= 0) break;
+        const whAvail = Number(stockWh.free_stock ?? stockWh.stock ?? 0);
+        const allocQty = Math.min(remaining, whAvail);
+        if (allocQty <= 0) continue;
+        addItem({
+          productId: prod.id,
+          item_id: v.item_id,
+          productName: prod.name,
+          collection: prod.collection,
+          image: prod.images[0] || '',
+          size: v.size,
+          sku: v.sku,
+          warehouse: stockWh.warehouse_name || stockWh.city || 'Основной Склад Астана',
+          warehouse_id: stockWh.warehouse_id || 81,
+          price: row.price,
+          price_per_sqm: sqmPrice,
+          area_sqm: v.area_sqm,
+          maxStock: whAvail,
+        }, allocQty);
+        remaining -= allocQty;
+      }
     }
 
     toastSuccess(`В корзину успешно добавлено ${validItems.length} поз.`);

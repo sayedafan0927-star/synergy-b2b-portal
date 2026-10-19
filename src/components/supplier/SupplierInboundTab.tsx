@@ -44,7 +44,7 @@ export function SupplierInboundTab({
         if (data && data.success && Array.isArray(data.shipments)) {
           setInboundData(data);
         } else {
-          setInboundData(prev => prev || {
+          setInboundData({
             success: true,
             supplier_id: selectedSupplierId,
             supplier_name: supplierName || 'Поставщик',
@@ -56,7 +56,7 @@ export function SupplierInboundTab({
       .catch((err: any) => {
         if (cancelled) return;
         console.warn('[SupplierCabinet] Inbound shipments endpoint notice:', err);
-        setInboundData(prev => prev || {
+        setInboundData({
           success: true,
           supplier_id: selectedSupplierId,
           supplier_name: supplierName || 'Поставщик',

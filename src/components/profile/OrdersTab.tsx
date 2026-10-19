@@ -43,7 +43,7 @@ export function OrdersTab({
     const counts: Record<string, number> = { all: orders.length };
     for (const o of orders) {
       const s = o.statusRaw;
-      if (['pending', 'reserved', 'confirmed'].includes(s)) {
+      if (['pending', 'reserved', 'confirmed', 'waiting_approval', 'partially_confirmed', 'cancellation_pending', 'pending_erp_cancel'].includes(s)) {
         counts.pending = (counts.pending || 0) + 1;
       } else if (['processing', 'picking'].includes(s)) {
         counts.processing = (counts.processing || 0) + 1;
@@ -59,7 +59,7 @@ export function OrdersTab({
   const filteredOrders = useMemo(() => {
     return orders.filter(o => {
       if (statusFilter !== 'all') {
-        if (statusFilter === 'pending' && !['pending', 'reserved', 'confirmed'].includes(o.statusRaw)) return false;
+        if (statusFilter === 'pending' && !['pending', 'reserved', 'confirmed', 'waiting_approval', 'partially_confirmed', 'cancellation_pending', 'pending_erp_cancel'].includes(o.statusRaw)) return false;
         else if (statusFilter === 'processing' && !['processing', 'picking'].includes(o.statusRaw)) return false;
         else if (statusFilter === 'assembled' && !['assembled', 'ready'].includes(o.statusRaw)) return false;
         else if (!['pending', 'processing', 'assembled'].includes(statusFilter) && o.statusRaw !== statusFilter) return false;

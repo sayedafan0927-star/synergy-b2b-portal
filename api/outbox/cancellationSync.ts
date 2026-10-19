@@ -46,7 +46,7 @@ export async function drainPendingErpCancelOrders(
     const { data: cancelPending } = await supabase
       .from('orders')
       .select('id, order_number, notes, reservations_released')
-      .eq('last_error', 'pending_erp_cancel')
+      .ilike('last_error', 'pending_erp_cancel%')
       .limit(3);
 
     if (cancelPending && cancelPending.length > 0) {
@@ -97,6 +97,33 @@ export async function drainPendingErpCancelOrders(
     console.warn('[Outbox Sync] Cancel query error:', cancelErr);
   }
   return drained;
+}
+
+const MAX_CANCEL_RETRIES = 5;
+
+async function handleCancellationFailure(
+  supabase: SupabaseClient,
+  order: any,
+  reason: string,
+  nowIso: string,
+): Promise<{ order_id: string; order_number: string; success: boolean; error: string }> {
+  const nextRetryCount = Number(order.retry_count || 0) + 1;
+  const isDlq = nextRetryCount >= MAX_CANCEL_RETRIES;
+  const formattedError = nextRetryCount < MAX_CANCEL_RETRIES
+    ? `pending_erp_cancel: Retry #${nextRetryCount} (${reason})`
+    : `[Cancel DLQ] ${reason}`;
+
+  await supabase
+    .from('orders')
+    .update({
+      status: isDlq ? 'failed_dlq' : 'cancellation_pending',
+      retry_count: nextRetryCount,
+      last_error: formattedError,
+      updated_at: nowIso,
+    })
+    .eq('id', order.id);
+
+  return { order_id: order.id, order_number: order.order_number, success: false, error: reason };
 }
 
 export async function syncPendingCancellation(options: CancellationSyncOptions): Promise<{
@@ -174,29 +201,9 @@ export async function syncPendingCancellation(options: CancellationSyncOptions):
       return { order_id: order.id, order_number: order.order_number, success: false, error: 'Отмена отклонена Synergy ERP: заказ уже отгружен' };
     }
 
-    // Временная ошибка ERP: оставляем в cancellation_pending с бэкоффом
-    await supabase
-      .from('orders')
-      .update({
-        status: 'cancellation_pending',
-        retry_count: (Number(order.retry_count || 0) + 1),
-        last_error: `ERP ${erpRes.status}: ${logicalErr.slice(0, 100)}`,
-        updated_at: nowIso,
-      })
-      .eq('id', order.id);
-
-    return { order_id: order.id, order_number: order.order_number, success: false, error: `ERP ${erpRes.status}` };
+    // Временная ошибка ERP: оставляем в cancellation_pending с префиксом pending_erp_cancel
+    return await handleCancellationFailure(supabase, order, `ERP ${erpRes.status}: ${logicalErr.slice(0, 100)}`, nowIso);
   } catch (netErr: any) {
-    await supabase
-      .from('orders')
-      .update({
-        status: 'cancellation_pending',
-        retry_count: (Number(order.retry_count || 0) + 1),
-        last_error: `Сетевой сбой при отмене: ${netErr?.message}`,
-        updated_at: nowIso,
-      })
-      .eq('id', order.id);
-
-    return { order_id: order.id, order_number: order.order_number, success: false, error: netErr?.message };
+    return await handleCancellationFailure(supabase, order, `Сетевой сбой при отмене: ${netErr?.message}`, nowIso);
   }
 }

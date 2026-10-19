@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { ShoppingCart, ArrowLeft, PackageOpen, AlertCircle, Trash2, FileSpreadsheet } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -28,9 +28,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
   const { items, removeItem, updateQuantity, syncItemPrices, clearCart, totalItems, totalPrice, totalSqm } = useCart();
   const { user, profile, isImpersonating, impersonatedProfile, isAccountant } = useAuth();
   const { products } = useProducts();
-  const { getVariantPrice, getPricePerSqm } = useUserPricing();
   const { info: toastInfo } = useToast();
-  const syncedRef = useRef(false);
 
   const [orderDocNumber, setOrderDocNumber] = useState<string | null>(null);
   const [splitOrders, setSplitOrders] = useState<SplitSubOrder[] | null>(null);
@@ -50,6 +48,9 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
   const isStaff = profile?.role === 'admin' || profile?.role === 'manager_rm' || profile?.role === 'manager_lm';
   const [checkoutMode, setCheckoutMode] = useState<'manager_self' | 'dealer_client'>('manager_self');
   const [selectedClient, setSelectedClient] = useState<any | null>(null);
+  const { getVariantPrice, getPricePerSqm } = useUserPricing(
+    selectedClient?.price_type || (debtReport as any)?.client?.price_type
+  );
 
   const [clientName, setClientName] = useState(() => effectiveProfile?.full_name ?? '');
   const [clientPhone, setClientPhone] = useState(() => {
@@ -131,10 +132,9 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
       .catch(err => console.warn('Debt check notice:', err));
   }, [profile, isImpersonating, impersonatedProfile, isStaff, checkoutMode, selectedClient]);
 
-  // Автоматическая тихая синхронизация цен и курса валют при входе в корзину
+  // Автоматическая тихая синхронизация цен и курса валют при входе в корзину и смене контрагента
   useEffect(() => {
-    if (!products || products.length === 0 || items.length === 0 || syncedRef.current) return;
-    syncedRef.current = true;
+    if (!products || products.length === 0 || items.length === 0) return;
 
     const count = syncItemPrices(item => {
       const prod = products.find(p => p.id === item.productId || p.variants.some(v => v.sku === item.sku));
@@ -164,20 +164,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
     if (count > 0) {
       toastInfo(`Цены и доступные остатки для ${count} поз. в корзине актуализированы по прайсу Synergy ERP`, 'Синхронизация цен');
     }
-  }, [products, items, syncItemPrices, getVariantPrice, getPricePerSqm, toastInfo]);
-
-  // Сброс флага синхронизации при получении фоновых обновлений остатков или смене контрагента/типа цен
-  useEffect(() => {
-    syncedRef.current = false;
-  }, [effectiveProfile?.id, effectiveProfile?.price_type, selectedClient?.id, checkoutMode]);
-
-  useEffect(() => {
-    const handler = () => {
-      syncedRef.current = false;
-    };
-    window.addEventListener('synergy:reload-catalog', handler);
-    return () => window.removeEventListener('synergy:reload-catalog', handler);
-  }, []);
+  }, [products, items, syncItemPrices, getVariantPrice, getPricePerSqm, toastInfo, selectedClient?.id, effectiveProfile?.id, effectiveProfile?.price_type]);
 
   const hasDepletedItems = useMemo(() => items.some(it => it.maxStock === 0), [items]);
   const hasOverStockItems = useMemo(

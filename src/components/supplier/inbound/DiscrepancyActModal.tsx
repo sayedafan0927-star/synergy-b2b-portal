@@ -19,6 +19,7 @@ import {
   exportDiscrepancyActToCsv,
 } from '@/lib/erpApi';
 import type { DiscrepancyActResponse } from '@/types';
+import { Portal } from '@/components/common/Portal';
 import { DiscrepancyActItemsTable } from './DiscrepancyActItemsTable';
 
 export interface DiscrepancyActModalProps {
@@ -124,12 +125,13 @@ export function DiscrepancyActModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150"
-      role="dialog"
-      aria-modal="true"
-      onClick={onClose}
-    >
+    <Portal>
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150"
+        role="dialog"
+        aria-modal="true"
+        onClick={onClose}
+      >
       <div
         className="w-full max-w-5xl rounded-2xl bg-white shadow-2xl border border-slate-200 flex flex-col max-h-[92vh] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
@@ -428,7 +430,8 @@ export function DiscrepancyActModal({
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </Portal>
   );
 }
 

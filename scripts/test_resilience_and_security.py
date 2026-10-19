@@ -2399,7 +2399,54 @@ with open(os.path.join(ROOT_DIR, "api", "auth", "session.ts"), "r", encoding="ut
 test_assert("const showroomWarehouseId = (!callerAuth.isServer && callerAuth.role === 'client')" in sess_s48, "api/auth/session.ts locks showroom_warehouse_id and userId for client callers preventing showroom spoofing")
 
 # ------------------------------------------------------------------------------
-# 73. Summary Report
+# 73. Stage 49: Pass 8 Deep Schema, RBAC, Multi-Warehouse & Frontend UX Hardening
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 73. STAGE 49: PASS 8 DEEP SCHEMA, RBAC, MULTI-WAREHOUSE & FRONTEND UX HARDENING ---{RESET}")
+
+mig_s49_path = os.path.join(ROOT_DIR, "supabase", "migrations", "20261019120000_pass8_schema_and_rpc_hardening.sql")
+test_assert(os.path.exists(mig_s49_path), "Pass 8 migration 20261019120000_pass8_schema_and_rpc_hardening.sql exists")
+with open(mig_s49_path, "r", encoding="utf-8") as fp:
+    mig_s49 = fp.read()
+test_assert("DROP CONSTRAINT IF EXISTS profiles_id_fkey" in mig_s49 and "CREATE TABLE IF NOT EXISTS public.defect_reports" in mig_s49 and "CREATE TABLE IF NOT EXISTS public.leads" in mig_s49, "Pass 8 migration aligns profiles/order_items/product_variants columns, drops restrictive FKs, and creates defect_reports and leads tables")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "financial", "balanceHandler.ts"), "r", encoding="utf-8") as fp:
+    bh_s49 = fp.read()
+test_assert("commission_stock" in bh_s49 and "product_variants" in bh_s49, "balanceHandler.ts queries commission_stock and resolves product_variants prices by SKU without broken PostgREST FK join")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "cancelOrderHandler.ts"), "r", encoding="utf-8") as fp:
+    coh_s49 = fp.read()
+test_assert("releaseOrderAndSubordersReservations" in coh_s49 and "erpData?.success !== false" in coh_s49, "cancelOrderHandler.ts verifies erpData.success !== false and releases parent + child suborder reservations before marking reservations_released")
+
+with open(os.path.join(ROOT_DIR, "api", "modules", "orders", "stockPreloader.ts"), "r", encoding="utf-8") as fp:
+    sp_s49 = fp.read()
+test_assert("hasWarehouseList" in sp_s49 or "Array.isArray(v.warehouses)" in sp_s49, "stockPreloader.ts prevents seeding regional/showroom warehouses with Hub 81 stock when warehouse entry is absent")
+
+with open(os.path.join(ROOT_DIR, "api", "outbox", "cancellationSync.ts"), "r", encoding="utf-8") as fp:
+    cs_s49 = fp.read()
+test_assert("pending_erp_cancel%" in cs_s49, "cancellationSync.ts preserves pending_erp_cancel prefix across retries so failed cancellations are not abandoned after 1 retry")
+
+with open(os.path.join(ROOT_DIR, "src", "contexts", "AuthContext.tsx"), "r", encoding="utf-8") as fp:
+    ac_s49 = fp.read()
+test_assert("stopImpersonation()" in ac_s49 and "erp-client-" in ac_s49, "AuthContext.tsx exits impersonation and protects staff sessions when deactivating a client in Admin panel")
+
+with open(os.path.join(ROOT_DIR, "src", "lib", "erp", "core.ts"), "r", encoding="utf-8") as fp:
+    core_s49 = fp.read()
+test_assert("localStorage.getItem('synergy:auth_session')" in core_s49, "src/lib/erp/core.ts falls back to localStorage session in getAuthHeaders for multi-tab resilience")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "cart", "ExcelBulkOrderModal.tsx"), "r", encoding="utf-8") as fp:
+    ebm_s49 = fp.read()
+test_assert("filterClientWarehouses" in ebm_s49 and "getPricePerSqm" in ebm_s49 and "await getAuthHeaders()" in ebm_s49, "ExcelBulkOrderModal.tsx guards empty string matches, filters allowed warehouses, uses contract price_per_sqm, and awaits getAuthHeaders()")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "profile", "useRepeatOrder.ts"), "r", encoding="utf-8") as fp:
+    uro_s49 = fp.read()
+test_assert("useUserPricing" in uro_s49 and "filterClientWarehouses" in uro_s49, "useRepeatOrder.ts applies contract pricing and filters allowed client warehouses when repeating an order")
+
+with open(os.path.join(ROOT_DIR, "src", "lib", "catalogMerge.ts"), "r", encoding="utf-8") as fp:
+    cm_s49 = fp.read()
+test_assert("!existingHub && incomingHub" in cm_s49, "catalogMerge.ts preserves incoming Hub 81 warehouse and recalculates variant stock & min/max prices when merging duplicate size variants")
+
+# ------------------------------------------------------------------------------
+# 74. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

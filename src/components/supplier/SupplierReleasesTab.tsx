@@ -19,16 +19,18 @@ export function SupplierReleasesTab({
   reloadCounter,
   supplierName,
 }: SupplierReleasesTabProps) {
-  const [startDate, setStartDate] = useState<string>('2026-09-01');
-  const [endDate, setEndDate] = useState<string>('2026-09-30');
-  const [releasesData, setReleasesData] = useState<SupplierReleasesReport | null>(null);
-  const [loadingReleases, setLoadingReleases] = useState<boolean>(false);
-  const [releasesError, setReleasesError] = useState<string | null>(null);
-
   const now = new Date();
   const curYear = now.getFullYear();
   const curMonth = now.getMonth();
   const pad = (n: number) => String(n).padStart(2, '0');
+  const [startDate, setStartDate] = useState<string>(() => `${curYear}-${pad(curMonth + 1)}-01`);
+  const [endDate, setEndDate] = useState<string>(() => {
+    const lastDay = new Date(curYear, curMonth + 1, 0).getDate();
+    return `${curYear}-${pad(curMonth + 1)}-${pad(lastDay)}`;
+  });
+  const [releasesData, setReleasesData] = useState<SupplierReleasesReport | null>(null);
+  const [loadingReleases, setLoadingReleases] = useState<boolean>(false);
+  const [releasesError, setReleasesError] = useState<string | null>(null);
 
   const setPeriodQuickPick = (pick: 'current_month' | 'prev_month' | 'q3' | 'year') => {
     if (pick === 'current_month') {

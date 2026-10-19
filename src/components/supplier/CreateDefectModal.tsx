@@ -98,7 +98,15 @@ export function CreateDefectModal({
     };
 
     try {
-      // Пытаемся сохранить в таблицу defect_reports в Supabase
+      const { getAuthHeaders } = await import('@/lib/erp/core');
+      const authHeaders = await getAuthHeaders();
+      await fetch('/api/erp?action=supplier_defects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify(newDefect),
+      }).catch(() => null);
+
+      // Резервная запись в таблицу defect_reports в Supabase
       await supabase.from('defect_reports').insert({
         act_number: newDefect.act_number,
         act_date: newDefect.act_date,
@@ -119,11 +127,18 @@ export function CreateDefectModal({
         status: newDefect.status,
       });
     } catch (err) {
-      console.warn('[CreateDefectModal] Supabase save notice:', err);
+      console.warn('[CreateDefectModal] Save notice:', err);
     }
 
     onDefectCreated(newDefect);
     toast.success(`Акт рекламации ${generatedActNum} успешно сформирован`, 'Рекламация зафиксирована');
+    setArticle('');
+    setCollection('');
+    setSize('2.00x3.00');
+    setQtyPcs(1);
+    setComment('');
+    setPhotoUrls([]);
+    setPhotoUrlInput('');
     setSubmitting(false);
     onClose();
   };

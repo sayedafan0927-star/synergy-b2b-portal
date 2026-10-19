@@ -42,19 +42,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const clientId = req.query.client_id ? String(req.query.client_id).trim() : null;
       const isStaff = authCtx.isAuthenticated && (authCtx.isServer || authCtx.role === 'admin' || authCtx.role === 'manager_rm' || authCtx.role === 'manager_lm');
 
+      if (!authCtx.isAuthenticated) {
+        if (clientId) {
+          return res.status(401).json({ success: false, error: 'Требуется авторизация для чтения правил видимости складов.' });
+        }
+        return res.status(200).json({ success: true, rules: {} });
+      }
+
       let query = supabase.from('client_warehouse_rules').select('*');
       if (isStaff) {
         if (clientId) {
           query = query.eq('client_id', clientId);
         }
-      } else if (authCtx.isAuthenticated && authCtx.role === 'client') {
+      } else if (authCtx.role === 'client') {
         const ownKeys = [authCtx.partnerId, authCtx.userId].filter(Boolean).map(String);
         if (ownKeys.length === 0) {
           return res.status(200).json({ success: true, rules: {} });
         }
+        if (clientId && !ownKeys.includes(clientId)) {
+          return res.status(403).json({ success: false, error: 'Forbidden: Доступ разрешен только к собственным правилам складов.' });
+        }
         query = query.in('client_id', ownKeys);
-      } else if (clientId) {
-        query = query.eq('client_id', clientId);
       } else {
         return res.status(200).json({ success: true, rules: {} });
       }
@@ -109,14 +117,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       const targetClientId = String(clientId).trim().replace(/^erp-client-/, '');
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetClientId);
 
       // Anti-BOLA: Менеджер может менять правила только для закрепленного за ним контрагента
       if (!authCtx.isServer && (authCtx.role === 'manager_rm' || authCtx.role === 'manager_lm') && authCtx.userId && supabase) {
-        const { data: targetProfile } = await supabase
-          .from('profiles')
-          .select('id, manager_id')
-          .or(`partner_id.eq.${targetClientId},id.eq.${targetClientId}`)
-          .maybeSingle();
+        let profQuery = supabase.from('profiles').select('id, manager_id');
+        if (isUuid) {
+          profQuery = profQuery.or(`partner_id.eq.${targetClientId},id.eq.${targetClientId}`);
+        } else {
+          profQuery = profQuery.eq('partner_id', targetClientId);
+        }
+        const { data: targetProfile } = await profQuery.limit(1).maybeSingle();
 
         if (
           targetProfile?.manager_id &&
@@ -176,6 +187,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const clientId = req.query.client_id ? String(req.query.client_id).trim() : req.body?.clientId;
       if (!clientId) {
         return res.status(400).json({ success: false, error: 'clientId обязателен' });
+      }
+
+      const targetClientId = String(clientId).trim().replace(/^erp-client-/, '');
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(targetClientId);
+      if (!authCtx.isServer && authCtx.role === 'manager_lm' && authCtx.userId && supabase) {
+        let profQuery = supabase.from('profiles').select('id, manager_id');
+        if (isUuid) {
+          profQuery = profQuery.or(`partner_id.eq.${targetClientId},id.eq.${targetClientId}`);
+        } else {
+          profQuery = profQuery.eq('partner_id', targetClientId);
+        }
+        const { data: targetProfile } = await profQuery.limit(1).maybeSingle();
+        if (
+          targetProfile?.manager_id &&
+          String(targetProfile.manager_id) !== String(authCtx.userId) &&
+          (!authCtx.managerId || String(targetProfile.manager_id) !== String(authCtx.managerId))
+        ) {
+          return res.status(403).json({
+            success: false,
+            code: 'FORBIDDEN_COUNTERPARTY_SCOPE',
+            error: 'Доступ запрещен: данный контрагент закреплен за другим менеджером (Anti-BOLA).',
+          });
+        }
       }
 
       const { error: delErr } = await supabase

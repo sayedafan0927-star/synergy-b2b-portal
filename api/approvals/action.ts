@@ -180,88 +180,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
-      // Определение нового статуса:
-      // Заказ считается буферизованным в Outbox ТОЛЬКО если он еще не был создан в Synergy ERP (status='pending' или номер начинается с OUTBOX-).
       const isOutboxUncreated = String(existingOrder.order_number || '').startsWith('OUTBOX-');
       const isBufferedOutbox = (existingOrder.status === 'pending' || (isWaitingApproval && isOutboxUncreated)) && !existingOrder.is_erp_direct;
-      const newStatus = !isApprove
-        ? 'cancelled'
-        : (isBufferedOutbox ? 'pending' : 'confirmed');
 
-      const approvalNote = `[Согласование WhatsApp: ${statusLabel} (${new Date().toLocaleString('ru-RU')})]`;
-      const combinedNotes = `${existingOrder.notes || ''} ${approvalNote}`.trim();
-
-      // 2.2. Обновляем статус заказа в Supabase
-      const { error: dbError } = await supabase
-        .from('orders')
-        .update({
-          status: newStatus,
-          reservations_released: !isApprove ? true : undefined,
-          notes: combinedNotes,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', targetOrderId);
-
-      if (dbError) {
-        console.warn('[Approval Action] Supabase update warning:', dbError.message);
-      }
-
-      // При одобрении каскадно подтверждаем мультискладские подзаказы
-      if (isApprove && !isBufferedOutbox) {
-        try {
-          await supabase
-            .from('orders')
-            .update({
-              status: 'confirmed',
-              updated_at: new Date().toISOString(),
-            })
-            .eq('parent_order_id', targetOrderId);
-        } catch (subApproveErr) {
-          console.warn('[Approval Action] Error cascading approval to suborders:', subApproveErr);
-        }
-      } else if (isApprove && isBufferedOutbox) {
-        try {
-          await supabase
-            .from('orders')
-            .update({
-              status: 'pending',
-              updated_at: new Date().toISOString(),
-            })
-            .eq('parent_order_id', targetOrderId);
-        } catch {}
-      }
-
-      // При отклонении заказа каскадно отменяем мультискладские подзаказы
-      if (!isApprove) {
-        try {
-          await supabase
-            .from('orders')
-            .update({
-              status: 'cancelled',
-              reservations_released: true,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('parent_order_id', targetOrderId);
-        } catch (relErr: any) {
-          console.warn('[Approval Action] Error cascading cancel to suborders:', relErr?.message);
-        }
-      }
-
-      // 2.3. Синхронизация с Synergy ERP или запуск Outbox дренажа
-      if (isApprove && isBufferedOutbox) {
-        // Заказ одобрен, но ожидает первичного создания в Synergy ERP через Outbox: немедленный дренаж
-        try {
-          triggerImmediateOutboxSync(req, 'wa-approved-drain', {
-            orderId: targetOrderId,
-            orderDoc: targetOrderNumber,
-          });
-          console.log(`[Approval Action] Triggered immediate Outbox sync for approved order ${targetOrderNumber}`);
-        } catch (syncErr: any) {
-          console.warn('[Approval Action] Outbox trigger notice:', syncErr?.message);
-        }
-      }
-
-      // Синхронизируем статус с Synergy ERP, если заказ уже создан в ERP (не буферизован в Outbox)
+      // Синхронизируем статус с Synergy ERP, если заказ предполагается созданным в ERP
+      let erpNotified = false;
       if (SERVER_ERP_KEY && (!isBufferedOutbox || existingOrder.is_erp_direct)) {
         const erpUrl = `${TARGET_ERP_URL}?action=update_order_status`;
         try {
@@ -290,7 +213,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const erpStatus = isApprove ? 'picking' : 'cancelled';
           const controller = new AbortController();
           const timeout = setTimeout(() => controller.abort(), 4500);
-          await fetch(erpUrl, {
+          const erpRes = await fetch(erpUrl, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -303,9 +226,81 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }),
             signal: controller.signal,
           }).finally(() => clearTimeout(timeout));
-          console.log(`[Approval Action] Synced order status ${erpStatus} to ERP for order ${targetOrderNumber} (ERP ID: ${numericErpOrderId})`);
+          const erpData = await erpRes.json().catch(() => null);
+          if (erpRes.ok && erpData?.success !== false) {
+            erpNotified = true;
+            console.log(`[Approval Action] Synced order status ${erpStatus} to ERP for order ${targetOrderNumber} (ERP ID: ${numericErpOrderId})`);
+          }
         } catch (erpErr: any) {
           console.warn('[Approval Action] Notice syncing with ERP:', erpErr?.message);
+        }
+      }
+
+      const needsOutboxCreation = isApprove && (
+        isBufferedOutbox ||
+        (existingOrder.status === 'waiting_approval' && !erpNotified && !existingOrder.is_erp_direct)
+      );
+      const nextStatus = !isApprove
+        ? 'cancelled'
+        : (needsOutboxCreation ? 'pending' : 'confirmed');
+
+      const approvalNote = `[Согласование WhatsApp: ${statusLabel} (${new Date().toLocaleString('ru-RU')})]`;
+      const combinedNotes = `${existingOrder.notes || ''} ${approvalNote}`.trim();
+
+      // 2.2. Обновляем статус заказа в Supabase
+      const { error: dbError } = await supabase
+        .from('orders')
+        .update({
+          status: nextStatus,
+          reservations_released: !isApprove ? true : undefined,
+          notes: combinedNotes,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', targetOrderId);
+
+      if (dbError) {
+        console.warn('[Approval Action] Supabase update warning:', dbError.message);
+      }
+
+      // При одобрении каскадно подтверждаем (status: 'confirmed') или ставим в очередь (status: 'pending') мультискладские подзаказы
+      if (isApprove) {
+        try {
+          await supabase
+            .from('orders')
+            .update({
+              status: nextStatus,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('parent_order_id', targetOrderId);
+        } catch (subApproveErr) {
+          console.warn('[Approval Action] Error cascading approval to suborders:', subApproveErr);
+        }
+      } else {
+        // При отклонении заказа каскадно отменяем мультискладские подзаказы
+        try {
+          await supabase
+            .from('orders')
+            .update({
+              status: 'cancelled',
+              reservations_released: true,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('parent_order_id', targetOrderId);
+        } catch (relErr: any) {
+          console.warn('[Approval Action] Error cascading cancel to suborders:', relErr?.message);
+        }
+      }
+
+      // 2.3. Запуск Outbox дренажа для создания заказа в ERP, если он еще не был создан
+      if (needsOutboxCreation) {
+        try {
+          triggerImmediateOutboxSync(req, 'wa-approved-drain', {
+            orderId: targetOrderId,
+            orderDoc: targetOrderNumber,
+          });
+          console.log(`[Approval Action] Triggered immediate Outbox sync for approved order ${targetOrderNumber}`);
+        } catch (syncErr: any) {
+          console.warn('[Approval Action] Outbox trigger notice:', syncErr?.message);
         }
       }
 
@@ -317,7 +312,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           event: 'order_status_changed',
           payload: {
             order_id: orderId,
-            new_status: newStatus,
+            new_status: nextStatus,
             timestamp: new Date().toISOString(),
             decision_by: 'WhatsApp Manager Action Verified',
           },

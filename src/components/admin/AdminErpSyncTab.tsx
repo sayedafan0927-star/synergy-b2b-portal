@@ -136,7 +136,7 @@ export function AdminErpSyncTab({ isAdmin = true }: AdminErpSyncTabProps) {
     setOutboxLoading(true);
     setOutboxMessage(null);
     try {
-      const res = await fetch('/api/outbox/sync', { method: 'POST' });
+      const res = await fetch('/api/outbox/sync', { method: 'POST', headers: await getAuthHeaders() });
       const data = await res.json();
       if (data.success) {
         setOutboxMessage(data.total_pending === 0 ? 'Буфер Outbox пуст: все заказы синхронизированы с ERP' : `Успешно выгружено ${data.succeeded} из ${data.total_pending} заказов в ERP`);

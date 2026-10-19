@@ -85,6 +85,10 @@ export async function recordAuditLog(entry: AuditLogEntry): Promise<void> {
       rawPayloadObj.client_ip = entry.ip;
     }
     const payloadObj = sanitizeAuditPayload(rawPayloadObj);
+    const serialized = JSON.stringify(payloadObj || {});
+    const safeBoundedPayload = serialized.length > 10000
+      ? { _truncated: true, preview: serialized.slice(0, 9500) }
+      : payloadObj;
 
     await supabase.from('integration_audit_logs').insert({
       event_type: entry.eventType,
@@ -93,7 +97,7 @@ export async function recordAuditLog(entry: AuditLogEntry): Promise<void> {
       status_code: entry.statusCode || null,
       latency_ms: entry.latencyMs || null,
       source: entry.source,
-      payload: JSON.parse(JSON.stringify(payloadObj).slice(0, 10000)),
+      payload: safeBoundedPayload,
       error_message: entry.errorMessage || null,
     });
   } catch (err) {

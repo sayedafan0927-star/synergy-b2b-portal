@@ -55,7 +55,7 @@ export async function handleGenericErpProxy(
       const receiptId = String(req.query.receipt_id || '');
       const callerPortalKey = (req.headers['x-portal-key'] || req.headers['X-Portal-Key']) as string | undefined;
       const keyToSend = SERVER_ERP_KEY || callerPortalKey || '';
-      const targetUrl = `${TARGET_ERP_URL}?action=download_discrepancy_act&receipt_id=${receiptId}&portal_key=${keyToSend}`;
+      const targetUrl = `${TARGET_ERP_URL}?action=download_discrepancy_act&receipt_id=${encodeURIComponent(receiptId)}&portal_key=${encodeURIComponent(keyToSend)}`;
 
       try {
         const erpResp = await fetch(targetUrl, {

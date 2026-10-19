@@ -352,7 +352,7 @@ export function SupplierStockTab({ selectedSupplierId, reloadCounter }: Supplier
                                     {isHub ? <WarehouseIcon className="h-3.5 w-3.5 text-emerald-700 shrink-0" /> : <Store className="h-3.5 w-3.5 text-indigo-700 shrink-0" />}
                                     <div>
                                       <span className="font-bold">{isHub ? (dist.warehouse_name || 'Основной Склад Астана') : dist.partner_name || dist.location_name || 'Партнерский магазин'}</span>
-                                      <span className="text-[11px] opacity-75 ml-1.5">• {dist.city === 'Алматы' ? 'Астана' : (dist.city || 'Астана')}</span>
+                                      <span className="text-[11px] opacity-75 ml-1.5">• {dist.city || 'Астана'}</span>
                                     </div>
                                   </div>
                                   <div className="text-right whitespace-nowrap pl-3">

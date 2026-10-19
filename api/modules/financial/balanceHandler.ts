@@ -84,20 +84,33 @@ export async function handleFinancialBalanceSheet(
 
     // 2: Оценка складских запасов (Хаб 81 vs Шоурумы)
     (async () => {
-      const { data, error } = await supabase
+      const { data: balRows, error } = await supabase
         .from('inventory_balances')
-        .select('warehouse_id, free_stock, reserved_stock, product_variants(price_per_sqm, area_sqm, base_price)');
+        .select('sku, warehouse_id, free_stock, reserved_stock');
       if (error) throw error;
-      
+
+      const skus = Array.from(new Set((balRows || []).map((r: any) => String(r.sku || '').trim()).filter(Boolean)));
+      const priceMap = new Map<string, number>();
+      if (skus.length > 0) {
+        const { data: variants } = await supabase
+          .from('product_variants')
+          .select('sku, base_price, price_per_sqm, area_sqm')
+          .in('sku', skus.slice(0, 1000));
+        for (const v of variants || []) {
+          const unitP = Number(v.base_price) || (Number((v as any).price_per_sqm || 15) * Number((v as any).area_sqm || 3.68)) || 55;
+          if (v.sku) priceMap.set(String(v.sku).trim().toUpperCase(), unitP);
+        }
+      }
+
       let hubValue = 0;
       let showroomValue = 0;
 
-      for (const row of data || []) {
+      for (const row of balRows || []) {
         const qty = (Number(row.free_stock) || Number((row as any).stock_free) || 0) +
                     (Number(row.reserved_stock) || Number((row as any).stock_reserved) || 0);
         if (qty <= 0) continue;
-        const variant = (row as any).product_variants;
-        const unitPrice = Number(variant?.base_price) || (Number(variant?.price_per_sqm || 15) * Number(variant?.area_sqm || 3.68));
+        const skuKey = String(row.sku || '').trim().toUpperCase();
+        const unitPrice = priceMap.get(skuKey) || 55;
         const itemVal = qty * unitPrice;
 
         if (row.warehouse_id === 81) {
@@ -113,17 +126,17 @@ export async function handleFinancialBalanceSheet(
       };
     })(),
 
-    // 3: Забалансовые остатки комитентов (is_consignment = true)
+    // 3: Забалансовые остатки комитентов (commission_stock)
     (async () => {
       const { data, error } = await supabase
-        .from('inventory_balances')
-        .select('stock_free, is_consignment, product_variants(base_price)')
-        .eq('is_consignment', true);
+        .from('commission_stock')
+        .select('sku, quantity, consignment_price');
       if (error) return 0;
       let val = 0;
       for (const row of data || []) {
-        const qty = Number(row.stock_free) || 0;
-        const price = Number((row as any).product_variants?.base_price) || 0;
+        const qty = Number(row.quantity) || 0;
+        if (qty <= 0) continue;
+        const price = Number(row.consignment_price) || 55;
         val += qty * price;
       }
       return roundToCents(val);

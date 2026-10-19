@@ -5,6 +5,7 @@ import { applyCorrelationId } from '../lib/trace';
 import { applyCorsHeaders } from '../lib/cors';
 import { saveCachedCatalog, getCachedCatalog, patchCachedCatalogStock } from '../lib/catalogCache';
 import { getErpApiKey, getTargetErpUrl } from '../lib/erpKey';
+import { resolveWarehouseId } from '../lib/pricingValidator';
 
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
@@ -119,29 +120,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             if (currentAutoRetries < 3) {
               const nextAuto = currentAutoRetries + 1;
               const newNotes = `${tOrder.notes || ''} [DLQ_AUTO_RETRY_${nextAuto} на ${new Date().toISOString()}]`.trim();
-              
+
               // Проверяем возможность повторного резервирования остатка перед возвратом в pending
               const { data: oItems } = await supabase
                 .from('order_items')
-                .select('sku, quantity, warehouse_id')
+                .select('sku, quantity, warehouse')
                 .eq('order_id', tOrder.id);
 
               let canReserveAll = true;
+              const reservedItems: Array<{ sku: string; qty: number; whId: number }> = [];
               if (oItems && oItems.length > 0) {
                 for (const it of oItems) {
+                  const whId = resolveWarehouseId(undefined, it.warehouse);
                   const { data: isRes } = await supabase.rpc('reserve_stock', {
                     p_sku: it.sku,
                     p_qty: it.quantity,
-                    p_warehouse_id: it.warehouse_id || 81,
+                    p_warehouse_id: whId,
                   });
                   if (isRes === false) {
                     canReserveAll = false;
                     break;
                   }
+                  reservedItems.push({ sku: it.sku, qty: Number(it.quantity || 1), whId });
                 }
               }
 
               if (!canReserveAll) {
+                for (const rIt of reservedItems) {
+                  await supabase.rpc('release_stock_atomic', { p_sku: rIt.sku, p_qty: rIt.qty, p_warehouse_id: rIt.whId }).catch(async () => {
+                    await supabase.rpc('release_stock', { p_sku: rIt.sku, p_qty: rIt.qty, p_warehouse_id: rIt.whId }).catch(() => {});
+                  });
+                }
                 console.warn(`[Stock Reconciliation] Cannot auto-recover DLQ order ${tOrder.order_number}: insufficient stock.`);
                 continue;
               }
@@ -149,12 +158,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               await supabase
                 .from('orders')
                 .update({
-                  status: 'pending',
-                  reservations_released: false,
-                  retry_count: 0,
-                  next_retry_at: new Date().toISOString(),
-                  notes: newNotes,
-                  updated_at: new Date().toISOString(),
+                  status: 'pending', reservations_released: false, retry_count: 0,
+                  next_retry_at: new Date().toISOString(), notes: newNotes, updated_at: new Date().toISOString(),
                 })
                 .eq('id', tOrder.id);
 
@@ -177,30 +182,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let phantomReservationsFixed = 0;
     if (supabase) {
       try {
-        // Подсчитываем реальные активные брони по заказам клиентов (Zero Ghost Reservation)
-        // Пагинация для гарантированной вычитки всех активных позиций без срезки PostgREST в 1000 строк
         const actualActiveOrderReservations = new Map<string, number>();
         const unconfirmedPortalHolds = new Map<string, number>();
         const UNCONFIRMED_HOLD_STATUSES = new Set(['pending', 'processing_sync', 'waiting_approval']);
         let itemOffset = 0;
         const CHUNK_SIZE = 1000;
         let hasMoreItems = true;
+        let itemsQuerySucceeded = true;
 
         while (hasMoreItems) {
-          const { data: chunkItems } = await supabase
+          const { data: chunkItems, error: chunkErr } = await supabase
             .from('order_items')
-            .select('sku, quantity, warehouse_id, orders!inner(status, reservations_released, parent_order_id)')
+            .select('sku, quantity, warehouse, orders!inner(status, reservations_released, parent_order_id, warehouse)')
             .is('orders.parent_order_id', null)
             .not('orders.status', 'in', '("cancelled","rejected","completed","delivered","shipped")')
             .or('reservations_released.is.null,reservations_released.eq.false', { foreignTable: 'orders' })
             .range(itemOffset, itemOffset + CHUNK_SIZE - 1);
 
+          if (chunkErr) {
+            itemsQuerySucceeded = false;
+            hasMoreItems = false;
+            break;
+          }
+
           if (chunkItems && chunkItems.length > 0) {
             for (const item of chunkItems) {
               const sku = String(item.sku || '').trim().toUpperCase();
-              const wh = Number(item.warehouse_id || 81);
-              const qty = Number(item.quantity || 0);
               const ordObj = Array.isArray((item as any).orders) ? (item as any).orders[0] : (item as any).orders;
+              const wh = resolveWarehouseId(undefined, item.warehouse || ordObj?.warehouse);
+              const qty = Number(item.quantity || 0);
               const ordStatus = String(ordObj?.status || '').toLowerCase();
               if (sku && qty > 0) {
                 const key = `${sku}::${wh}`;
@@ -213,15 +223,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               }
             }
             itemOffset += chunkItems.length;
-            if (chunkItems.length < CHUNK_SIZE) {
-              hasMoreItems = false;
-            }
+            if (chunkItems.length < CHUNK_SIZE) hasMoreItems = false;
           } else {
             hasMoreItems = false;
           }
         }
 
-        // Queries canonical .select('sku, reserved_stock') with warehouse granularity and full chunk pagination
+        // Queries canonical .select('sku, reserved_stock') and .select('sku, free_stock, reserved_stock, warehouse_id') with full chunk pagination
         const allActiveBalances: any[] = [];
         let balOffset = 0;
         let hasMoreBalances = true;
@@ -229,16 +237,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         while (hasMoreBalances) {
           const { data: chunkBalances, error: qErr } = await supabase
             .from('inventory_balances')
-            .select('sku, reserved_stock, warehouse_id')
+            .select('sku, free_stock, reserved_stock, warehouse_id')
             .gt('reserved_stock', 0)
             .range(balOffset, balOffset + CHUNK_SIZE - 1);
 
           if (!qErr && chunkBalances && chunkBalances.length > 0) {
             allActiveBalances.push(...chunkBalances);
             balOffset += chunkBalances.length;
-            if (chunkBalances.length < CHUNK_SIZE) {
-              hasMoreBalances = false;
-            }
+            if (chunkBalances.length < CHUNK_SIZE) hasMoreBalances = false;
           } else {
             hasMoreBalances = false;
           }
@@ -248,7 +254,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (!activeBalances) {
           const { data: fallbackBalances } = await supabase
             .from('inventory_balances')
-            .select('sku, stock_reserved, warehouse_id')
+            .select('sku, stock_free, stock_reserved, warehouse_id')
             .gt('stock_reserved', 0)
             .limit(5000);
           activeBalances = fallbackBalances;
@@ -257,21 +263,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (activeBalances) {
           for (const b of activeBalances) {
             const resStock = Number((b as any).reserved_stock ?? (b as any).stock_reserved ?? 0);
+            const curFree = Number((b as any).free_stock ?? (b as any).stock_free ?? 0);
             if (b.sku && resStock > 0) {
               const skuUpper = String(b.sku).trim().toUpperCase();
               const bWh = Number(b.warehouse_id || 81);
               const key = `${skuUpper}::${bWh}`;
 
-              // Self-Healing: устраняем фантомные резервы, не подтвержденные активными заказами
+              // Self-Healing: устраняем фантомные резервы ТОЛЬКО при успешном запросе order_items
               const realReserved = actualActiveOrderReservations.get(key) || 0;
               const portalUnconfirmedHold = unconfirmedPortalHolds.get(key) || 0;
-              const effectiveReserved = Math.min(resStock, portalUnconfirmedHold);
+              const effectiveReserved = itemsQuerySucceeded ? Math.min(resStock, portalUnconfirmedHold) : resStock;
 
-              if (resStock > realReserved) {
+              if (itemsQuerySucceeded && resStock > realReserved) {
+                const releasedDiff = resStock - realReserved;
                 phantomReservationsFixed++;
                 supabase
                   .from('inventory_balances')
-                  .update({ reserved_stock: realReserved, updated_at: new Date().toISOString() })
+                  .update({ reserved_stock: realReserved, free_stock: curFree + releasedDiff, updated_at: new Date().toISOString() })
                   .eq('sku', b.sku)
                   .eq('warehouse_id', bWh)
                   .then(() => {})

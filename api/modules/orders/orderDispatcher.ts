@@ -151,38 +151,33 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
         correlationId,
       });
 
+      // SAGA: Откат всех локальных резервов ПЕРЕД установкой reservations_released = true
+      let rpcRelFailed = false;
       if (outboxOrderId) {
-        await supabase
-          .from('orders')
-          .update({
+        const { error: relErr } = await supabase.rpc('release_order_reservations', { p_order_id: outboxOrderId });
+        if (relErr) rpcRelFailed = true;
+      } else {
+        rpcRelFailed = true;
+      }
+      if (rpcRelFailed) {
+        await releaseAllReservedStock(reservedSkuItems, {
+          correlationId,
+          orderId: outboxOrderId || undefined,
+          orderNumber: outboxOrderDoc || undefined,
+          reason: 'Synergy ERP отклонила заказ по причине нехватки остатка (409 Conflict)',
+        });
+      }
+
+      if (outboxOrderId) {
+        const cancelMeta = {
             status: 'cancelled',
             reservations_released: true,
             notes: `[Отклонено ERP: Недостаточно остатка] ${jsonData?.error || ''}`,
             updated_at: new Date().toISOString(),
-          })
-          .eq('id', outboxOrderId);
-
-        await supabase
-          .from('orders')
-          .update({
-            status: 'cancelled',
-            reservations_released: true,
-            notes: `[Отклонено ERP: Недостаточно остатка] ${jsonData?.error || ''}`,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('parent_order_id', outboxOrderId);
+        };
+        await supabase.from('orders').update(cancelMeta).eq('id', outboxOrderId);
+        await supabase.from('orders').update(cancelMeta).eq('parent_order_id', outboxOrderId);
       }
-
-      // SAGA: Откат всех локальных резервов
-      if (outboxOrderId) {
-        await supabase.rpc('release_order_reservations', { p_order_id: outboxOrderId }).catch(() => {});
-      }
-      await releaseAllReservedStock(reservedSkuItems, {
-        correlationId,
-        orderId: outboxOrderId || undefined,
-        orderNumber: outboxOrderDoc || undefined,
-        reason: 'Synergy ERP отклонила заказ по причине нехватки остатка (409 Conflict)',
-      });
 
       const rawErr = jsonData?.error || '';
       const m1 = rawErr.match(/SKU\s*"?([^"\s]+)"?\s*\(доступно:\s*(\d+),\s*запрошено:\s*(\d+)\)/i);
@@ -239,38 +234,33 @@ export async function dispatchErpCheckoutWithFallback(params: DispatchErpCheckou
         correlationId,
       });
 
+      // SAGA: Освобождаем локальные резервы ПЕРЕД установкой reservations_released = true
+      let fatalRelFailed = false;
       if (outboxOrderId) {
-        await supabase
-          .from('orders')
-          .update({
+        const { error: relErr } = await supabase.rpc('release_order_reservations', { p_order_id: outboxOrderId });
+        if (relErr) fatalRelFailed = true;
+      } else {
+        fatalRelFailed = true;
+      }
+      if (fatalRelFailed) {
+        await releaseAllReservedStock(reservedSkuItems, {
+          correlationId,
+          orderId: outboxOrderId || undefined,
+          orderNumber: outboxOrderDoc || undefined,
+          reason: `Фатальный отказ Synergy ERP (${erpResponse.status}): ${fatalErrorText}`,
+        });
+      }
+
+      if (outboxOrderId) {
+        const dlqMeta = {
             status: 'failed_dlq',
             reservations_released: true,
             last_error: `[Фатальный сбой ERP (${erpResponse.status})] ${fatalErrorText}`,
             updated_at: new Date().toISOString(),
-          })
-          .eq('id', outboxOrderId);
-
-        await supabase
-          .from('orders')
-          .update({
-            status: 'failed_dlq',
-            reservations_released: true,
-            last_error: `[Фатальный сбой ERP (${erpResponse.status})] ${fatalErrorText}`,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('parent_order_id', outboxOrderId);
+        };
+        await supabase.from('orders').update(dlqMeta).eq('id', outboxOrderId);
+        await supabase.from('orders').update(dlqMeta).eq('parent_order_id', outboxOrderId);
       }
-
-      // SAGA: Освобождаем локальные резервы
-      if (outboxOrderId) {
-        await supabase.rpc('release_order_reservations', { p_order_id: outboxOrderId }).catch(() => {});
-      }
-      await releaseAllReservedStock(reservedSkuItems, {
-        correlationId,
-        orderId: outboxOrderId || undefined,
-        orderNumber: outboxOrderDoc || undefined,
-        reason: `Фатальный отказ Synergy ERP (${erpResponse.status}): ${fatalErrorText}`,
-      });
 
       // Тревожный алерт дежурной смене
       dispatchDlqEmergencyAlert({

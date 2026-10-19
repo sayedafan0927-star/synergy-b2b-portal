@@ -30,6 +30,15 @@ export async function handleRefreshClientBalance(ctx: RefreshBalanceContext): Pr
     ''
   ).trim();
 
+  if (callerAuth && callerAuth.role === 'supplier' && !callerAuth.isServer) {
+    res.status(403).json({
+      success: false,
+      code: 'FORBIDDEN_SUPPLIER_FINANCIAL_ACCESS',
+      error: 'Forbidden: Учетные записи поставщиков не имеют доступа к финансовым балансам дилеров.',
+    });
+    return;
+  }
+
   // Anti-IDOR & B2B RBAC: Клиент может обновлять только свой баланс, закупщикам доступ запрещен
   if (callerAuth && callerAuth.role === 'client' && !callerAuth.isServer) {
     if (callerAuth.b2bRole === 'buyer') {
@@ -37,6 +46,13 @@ export async function handleRefreshClientBalance(ctx: RefreshBalanceContext): Pr
         success: false,
         code: 'FORBIDDEN_FINANCIAL_ACCESS',
         error: 'Доступ к финансовым взаиморасчетам и задолженности компании ограничен для роли закупщика.',
+      });
+      return;
+    }
+    if (!callerAuth.partnerId) {
+      res.status(403).json({
+        success: false,
+        error: 'Доступ запрещен: партнерский ID клиента не привязан к профилю.',
       });
       return;
     }
@@ -189,7 +205,7 @@ export async function handleRefreshClientBalance(ctx: RefreshBalanceContext): Pr
     res.status(200).json({
       success: true,
       partner_id: effectivePartnerId,
-      balance_usd: Math.max(0, rawBal),
+      balance_usd: rawBal !== 0 ? rawBal : -canonicalDebt,
       total_debt_usd: canonicalDebt,
       credit_limit_usd: Number(profileRow?.credit_limit_usd || 0),
       is_overdue: Boolean(cachedBal?.is_overdue || Number(profileRow?.overdue_days || 0) > 0),

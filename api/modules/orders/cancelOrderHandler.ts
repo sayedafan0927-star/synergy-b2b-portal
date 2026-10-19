@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '../../lib/logger';
 import { recordAuditLog } from '../../audit/logs';
 import { triggerImmediateOutboxSync } from './orderDispatcher';
+import { releaseOrderAndSubordersReservations } from '../../outbox/cancellationSync';
 
 export interface CancelOrderOptions {
   req: VercelRequest;
@@ -17,7 +18,13 @@ export interface CancelOrderOptions {
 export async function handleCancelOrder(options: CancelOrderOptions): Promise<void> {
   const { req, res, callerAuth, correlationId, supabase, targetErpUrl, serverErpKey } = options;
 
-  const rawOrderId = String(req.body?.order_id || req.query?.order_id || '').trim();
+  const rawOrderId = String(
+    req.body?.order_id ||
+    req.query?.order_id ||
+    req.body?.order_number ||
+    req.query?.order_number ||
+    ''
+  ).trim();
   const comment = String(req.body?.comment || 'Отмена заказа пользователем/администратором через B2B-портал').trim();
 
   if (!rawOrderId) {
@@ -29,11 +36,11 @@ export async function handleCancelOrder(options: CancelOrderOptions): Promise<vo
   const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const isUuid = UUID_REGEX.test(rawOrderId);
 
-  let query = supabase.from('orders').select('id, order_number, user_id, placed_by_id, partner_id, status, total_amount, reservations_released, parent_order_id');
+  let query = supabase.from('orders').select('id, order_number, user_id, placed_by_id, partner_id, status, erp_synced, total_amount, reservations_released, parent_order_id');
   if (isUuid) {
     query = query.eq('id', rawOrderId);
   } else {
-    query = query.or(`order_number.eq.${rawOrderId},id.eq.${rawOrderId}`);
+    query = query.eq('order_number', rawOrderId);
   }
 
   const { data: order, error: orderErr } = await query.maybeSingle();
@@ -73,12 +80,16 @@ export async function handleCancelOrder(options: CancelOrderOptions): Promise<vo
   }
 
   // Для менеджеров филиалов: строгая проверка закрепления клиента (Anti-BOLA)
-  if (isManager && !isGlobalAdmin && callerAuth.userId && order.user_id) {
-    const { data: clientProfile } = await supabase
-      .from('profiles')
-      .select('id, manager_id')
-      .eq('id', order.user_id)
-      .maybeSingle();
+  if (isManager && !isGlobalAdmin && callerAuth.userId && (order.user_id || order.partner_id)) {
+    let profQuery = supabase.from('profiles').select('id, manager_id');
+    if (order.user_id && order.partner_id) {
+      profQuery = profQuery.or(`id.eq.${order.user_id},partner_id.eq.${order.partner_id}`);
+    } else if (order.user_id) {
+      profQuery = profQuery.eq('id', order.user_id);
+    } else {
+      profQuery = profQuery.eq('partner_id', String(order.partner_id));
+    }
+    const { data: clientProfile } = await profQuery.limit(1).maybeSingle();
 
     const isClientAssigned = Boolean(
       clientProfile?.manager_id &&
@@ -139,22 +150,27 @@ export async function handleCancelOrder(options: CancelOrderOptions): Promise<vo
       signal: controller.signal,
     }).finally(() => clearTimeout(timeout));
 
-    if (erpRes.ok) {
+    const erpData = await erpRes.json().catch(() => null);
+    if (erpRes.ok && erpData?.success !== false) {
       erpNotified = true;
     } else {
-      logger.warn('[CancelOrder] 1C ERP update_order_status non-OK response', { status: erpRes.status });
+      logger.warn('[CancelOrder] 1C ERP update_order_status non-OK response', { status: erpRes.status, erpError: erpData?.error });
     }
   } catch (netErr) {
     logger.warn('[CancelOrder] Notice notifying 1C ERP:', netErr as Error);
   }
 
-  const isSafeLocalCancel = order.status === 'pending' || order.status === 'waiting_approval' || erpNotified;
+  const isUncreatedInErp =
+    order.status === 'pending' ||
+    (order.status === 'waiting_approval' && !order.erp_synced) ||
+    String(order.order_number || '').startsWith('OUTBOX-');
+  const isSafeLocalCancel = isUncreatedInErp || erpNotified;
   const nowIso = new Date().toISOString();
 
   if (isSafeLocalCancel) {
     // 5. Высвобождение резервов в PostgreSQL (безопасно, т.к. ERP подтвердила или заказ еще не был в ERP)
     try {
-      await supabase.rpc('release_order_reservations', { p_order_id: order.id });
+      await releaseOrderAndSubordersReservations(supabase, order.id);
     } catch (rpcErr) {
       logger.warn('[CancelOrder] release_order_reservations RPC error:', rpcErr as Error);
     }
@@ -196,8 +212,9 @@ export async function handleCancelOrder(options: CancelOrderOptions): Promise<vo
         .eq('parent_order_id', order.parent_order_id);
 
       if (Array.isArray(siblings) && siblings.length > 0) {
-        const allCancelled = siblings.every((s: any) => s.status === 'cancelled');
-        const activeSiblings = siblings.filter((s: any) => s.status !== 'cancelled');
+        const isInactiveStatus = (st: string) => st === 'cancelled' || st === 'cancellation_pending';
+        const allCancelled = siblings.every((s: any) => isInactiveStatus(s.status));
+        const activeSiblings = siblings.filter((s: any) => !isInactiveStatus(s.status));
         const newTotal = activeSiblings.reduce((sum: number, s: any) => sum + (Number(s.total_amount) || 0), 0);
 
         if (allCancelled) {

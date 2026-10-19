@@ -104,17 +104,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (!parsed.token && (su || sp)) {
           const effectiveRole = sp?.role || (su as any)?.role || 'client';
-          const isPrivileged = ['admin', 'manager_rm', 'manager_lm', 'supplier'].includes(effectiveRole);
-          if (!isPrivileged) {
+          if (!['admin', 'manager_rm', 'manager_lm', 'supplier'].includes(effectiveRole)) {
             fetch('/api/auth/session', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ role: effectiveRole, user: su, profile: sp }),
             })
               .then(r => r.json())
-              .then(resData => {
-                if (resData?.token) saveAuthSession(su, sp, resData.token);
-              })
+              .then(resData => { if (resData?.token) saveAuthSession(su, sp, resData.token); })
               .catch(() => {});
           }
         }
@@ -125,11 +122,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(({ data: { session } }) => {
       const u = session?.user ?? null;
       setUser(u);
-      if (u) {
-        fetchProfile(u.id).finally(() => setLoading(false));
-      } else {
-        setLoading(false);
-      }
+      if (u) fetchProfile(u.id).finally(() => setLoading(false));
+      else setLoading(false);
     }).catch((err) => {
       console.warn('Supabase getSession failed:', err);
       setLoading(false);
@@ -138,11 +132,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       const u = session?.user ?? null;
       setUser(u);
-      if (u) {
-        (async () => { await fetchProfile(u.id); })();
-      } else {
-        setProfile(null);
-      }
+      if (u) { (async () => { await fetchProfile(u.id); })(); }
+      else setProfile(null);
     });
 
     return () => subscription.unsubscribe();
@@ -151,7 +142,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Тихое продление сессии при активной работе дилера (Sliding Session Renewal)
   useEffect(() => {
     if (!user || !profile || typeof window === 'undefined') return;
-
     let lastRenew = Date.now();
     const handleActivity = () => {
       const now = Date.now();
@@ -160,10 +150,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         renewSessionIfActive(user, profile);
       }
     };
-
     window.addEventListener('pointerdown', handleActivity, { passive: true });
     window.addEventListener('keydown', handleActivity, { passive: true });
-
     return () => {
       window.removeEventListener('pointerdown', handleActivity);
       window.removeEventListener('keydown', handleActivity);
@@ -173,10 +161,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = useCallback(async (email: string, password: string): Promise<string | null> => {
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) {
-        if (error.message.includes('Invalid login')) return 'Неверный email или пароль';
-        return error.message;
-      }
+      if (error) return error.message.includes('Invalid login') ? 'Неверный email или пароль' : error.message;
       return null;
     } catch (err: unknown) {
       console.warn('Supabase signIn network error:', err);
@@ -194,15 +179,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     meta: { full_name: string; company_name: string },
   ): Promise<string | null> => {
     try {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { data: meta },
-      });
-      if (error) {
-        if (error.message.includes('already registered')) return 'Этот email уже зарегистрирован';
-        return error.message;
-      }
+      const { error } = await supabase.auth.signUp({ email, password, options: { data: meta } });
+      if (error) return error.message.includes('already registered') ? 'Этот email уже зарегистрирован' : error.message;
       return null;
     } catch (err: unknown) {
       console.warn('Supabase signUp network error:', err);
@@ -235,30 +213,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const [deactivationNotice, setDeactivationNotice] = useState<string | null>(() => getStoredDeactivationNotice());
-
   const clearDeactivationNotice = useCallback(() => {
     setDeactivationNotice(null);
     saveStoredDeactivationNotice(null);
   }, []);
 
   const [impersonatedProfile, setImpersonatedProfile] = useState<Profile | null>(() => getStoredImpersonation());
-
   const impersonateUser = useCallback((target: Profile) => {
     setImpersonatedProfile(target);
     saveStoredImpersonation(target);
   }, []);
-
   const stopImpersonation = useCallback(() => {
     setImpersonatedProfile(null);
     saveStoredImpersonation(null);
   }, []);
 
   const signOutFn = useCallback(async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch {
-      // ignore network errors on signout
-    }
+    try { await supabase.auth.signOut(); } catch {}
     clearAuthSession();
     saveStoredImpersonation(null);
     setUser(null);
@@ -269,12 +240,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Мгновенная деактивация: слушатель события client_deactivated от ERP
   useEffect(() => {
     const handleDeactivation = (targetId: number | string) => {
+      const targetStr = String(targetId);
+
+      // Если сотрудник находится в режиме имперсонации деактивированного клиента — выходим из имперсонации, не разлогинивая сотрудника
+      if (
+        impersonatedProfile &&
+        (String(impersonatedProfile.partner_id) === targetStr ||
+          String(impersonatedProfile.id) === targetStr ||
+          impersonatedProfile.id === `erp-client-${targetStr}`)
+      ) {
+        stopImpersonation();
+        return;
+      }
+
+      // Никогда не разлогиниваем сотрудников (admin, manager_rm, manager_lm, supplier)
+      if (profile?.role && ['admin', 'manager_rm', 'manager_lm', 'supplier'].includes(profile.role)) {
+        return;
+      }
+
       const activePartnerId = profile?.partner_id;
-      const activeUserId = user?.id;
+      const activeUserId = user?.id || profile?.id;
 
       if (
-        (activePartnerId && String(activePartnerId) === String(targetId)) ||
-        (activeUserId && activeUserId.includes(String(targetId)))
+        (activePartnerId && String(activePartnerId) === targetStr) ||
+        (activeUserId && (String(activeUserId) === targetStr || String(activeUserId) === `erp-client-${targetStr}`))
       ) {
         console.warn(`[AuthContext] Instant deactivation event received for counterparty_id=${targetId}. Revoking all sessions.`);
         const msg = 'Доступ к сайту заблокирован: учетная запись клиента деактивирована в ERP.';
@@ -289,9 +278,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     const domHandler = (e: CustomEvent<{ counterparty_id?: number | string }>) => {
-      if (e.detail?.counterparty_id) {
-        handleDeactivation(e.detail.counterparty_id);
-      }
+      if (e.detail?.counterparty_id) handleDeactivation(e.detail.counterparty_id);
     };
 
     window.addEventListener('synergy:client-deactivated', domHandler as EventListener);
@@ -304,30 +291,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           handleDeactivation(event.data.counterparty_id);
         }
       };
-    } catch {
-      // fallback
-    }
+    } catch {}
 
     return () => {
       window.removeEventListener('synergy:client-deactivated', domHandler as EventListener);
       if (bc) bc.close();
     };
-  }, [profile, user, stopImpersonation]);
+  }, [profile, user, impersonatedProfile, stopImpersonation]);
 
-  /**
-   * Прямая авторизация клиента через ERP (проверка логина, пароля и статуса is_active).
-   */
   const signInWithPortal = useCallback(async (login: string, password: string): Promise<{ success: boolean; role?: UserRole; error?: string }> => {
     setLoading(true);
     try {
       const res = await authenticateClientViaErp(login, password);
-
       if (!res.success) {
         setLoading(false);
-        return {
-          success: false,
-          error: res.error || 'Ошибка входа',
-        };
+        return { success: false, error: res.error || 'Ошибка входа' };
       }
 
       if (res.user_type === 'employee' && res.employee) {
@@ -337,13 +315,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           role: res.employee.role as UserRole,
           phone: res.employee.phone,
         });
-
         setUser(mockUser);
         setProfile(employeeProfile);
         setDeactivationNotice(null);
         saveStoredDeactivationNotice(null);
         saveAuthSession(mockUser, employeeProfile, res.token);
-
         setLoading(false);
         return { success: true, role: employeeProfile.role };
       }
@@ -379,21 +355,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       };
 
       const sessionToken = res.token || (await requestSignedClientToken(clientProfile, mockUser));
-
       setUser(mockUser as User);
       setProfile(clientProfile);
       setDeactivationNotice(null);
       saveStoredDeactivationNotice(null);
       saveAuthSession(mockUser, clientProfile, sessionToken);
-
       setLoading(false);
       return { success: true, role: 'client' };
     } catch (err: any) {
       setLoading(false);
-      return {
-        success: false,
-        error: err?.message || 'Не удалось выполнить вход в систему',
-      };
+      return { success: false, error: err?.message || 'Не удалось выполнить вход в систему' };
     }
   }, []);
 

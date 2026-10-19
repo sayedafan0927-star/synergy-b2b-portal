@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { fetchClientOrdersFromErp, updateOrderStatusInErp, cancelOrderViaPortal } from '@/lib/erpApi';
+import { fetchClientOrdersFromErp, cancelOrderViaPortal } from '@/lib/erpApi';
+import { triggerCatalogReload } from '@/hooks/useProductData';
 import { useAuth } from '@/contexts/AuthContext';
 import { calcSqm } from '@/types';
 import type { Order, OrderItem } from './types';
@@ -248,13 +249,18 @@ export function useOrdersList({ isAdmin, isManager }: UseOrdersListOptions) {
     }
     setUpdatingId(order.id);
     try {
-      await cancelOrderViaPortal({
+      const cancelRes = await cancelOrderViaPortal({
         orderId: order.id,
+        orderNumber: order.orderNumber,
         comment: 'Заказ отменен пользователем через B2B-портал',
       });
 
-      const meta = ORDER_STATUS_MAP['cancelled'] || { label: 'Отменён', color: 'bg-rose-50 text-rose-700 border-rose-200' };
-      setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: meta.label, statusRaw: 'cancelled', statusColor: meta.color } : o));
+      const effectiveStatus = (cancelRes?.status === 'cancellation_pending' || cancelRes?.cancellation_pending)
+        ? 'cancellation_pending'
+        : 'cancelled';
+      const meta = ORDER_STATUS_MAP[effectiveStatus] || { label: 'Отменён', color: 'bg-rose-50 text-rose-700 border-rose-200' };
+      setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: meta.label, statusRaw: effectiveStatus, statusColor: meta.color } : o));
+      triggerCatalogReload();
     } catch (cancelErr: any) {
       console.warn('[handleCancelOrder] Cancel failed:', cancelErr);
       alert(cancelErr?.message || 'Не удалось отменить заказ. Пожалуйста, обратитесь к персональному менеджеру.');

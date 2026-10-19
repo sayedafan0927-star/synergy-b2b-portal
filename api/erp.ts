@@ -155,6 +155,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // 1.1.1. Сводный финансовый баланс-лист для администратора
     if (action === 'financial_balance' && req.method === 'GET') {
+      const callerAuth = await authenticateRequest(req, { requiredRoles: ['admin'], allowServerKey: true });
+      if (!callerAuth.isAuthenticated) {
+        return res.status(401).json({ success: false, error: callerAuth.error || 'Требуется авторизация администратора' });
+      }
+      if (!callerAuth.isServer && callerAuth.role !== 'admin') {
+        return res.status(403).json({ success: false, error: 'Forbidden: Доступ к сводному финансовому балансу разрешен только администраторам.' });
+      }
       return await handleFinancialBalanceSheet(req, res, supabase);
     }
 

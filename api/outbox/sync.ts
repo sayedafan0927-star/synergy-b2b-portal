@@ -71,7 +71,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .from('orders')
         .select('*')
         .eq('status', 'cancellation_pending')
-        .is('parent_order_id', null)
         .limit(2);
 
       const { data: claimedOrders, error: rpcErr } = await supabase.rpc('claim_outbox_orders', { p_limit: 4 });
@@ -82,10 +81,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (!pendingOrders) {
+      const { data: cancelFallback } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('status', 'cancellation_pending')
+        .limit(2);
+
       const baseQuery = supabase
         .from('orders')
         .select('*')
-        .in('status', ['pending', 'cancellation_pending'])
+        .eq('status', 'pending')
         .is('parent_order_id', null);
 
       const { data: fetchedOrders, error: fetchErr } = isForce
@@ -95,7 +100,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (fetchErr) {
         return res.status(500).json({ success: false, error: 'Ошибка очереди заказов в БД', details: fetchErr.message });
       }
-      pendingOrders = fetchedOrders;
+      pendingOrders = [...(cancelFallback || []), ...(fetchedOrders || [])].slice(0, isForce ? 10 : 4);
     }
 
     if (!pendingOrders || pendingOrders.length === 0) {
@@ -247,38 +252,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             ? { nextRetryAt: new Date().toISOString(), isDlq: true }
             : computeBackoffNextRetry(nextRetries);
 
+          if (isDlq) {
+            try {
+              await releaseOrderAndSubordersReservations(supabase, order.id);
+            } catch (relErr) {
+              console.warn('[Outbox Sync] DLQ release_order_reservations error:', relErr);
+            }
+          }
+
+          const errLabel = isFatal
+            ? `[Fatal Business Error] ERP ${erpRes.status}: ${errText.slice(0, 200)}`
+            : `ERP ${erpRes.status}: ${errText.slice(0, 200)}`;
+
           await supabase
             .from('orders')
             .update({
               status: isDlq ? 'failed_dlq' : 'pending',
               reservations_released: isDlq ? true : undefined,
               retry_count: nextRetries,
-              last_error: isFatal
-                ? `[Fatal Business Error] ERP ${erpRes.status}: ${errText.slice(0, 200)}`
-                : `ERP ${erpRes.status}: ${errText.slice(0, 200)}`,
+              last_error: errLabel,
               next_retry_at: nextRetryAt,
               updated_at: new Date().toISOString(),
             })
             .eq('id', order.id);
 
           if (isDlq) {
-            try {
-              await supabase.rpc('release_order_reservations', { p_order_id: order.id });
-              await releaseOrderAndSubordersReservations(supabase, order.id);
-              await supabase
-                .from('orders')
-                .update({
-                  status: 'failed_dlq',
-                  reservations_released: true,
-                  last_error: isFatal
-                    ? `[Fatal Business Error] ERP ${erpRes.status}: ${errText.slice(0, 200)}`
-                    : `ERP ${erpRes.status}: ${errText.slice(0, 200)}`,
-                  updated_at: new Date().toISOString(),
-                })
-                .eq('parent_order_id', order.id);
-            } catch (relErr) {
-              console.warn('[Outbox Sync] DLQ reservation release error:', relErr);
-            }
+            await supabase
+              .from('orders')
+              .update({
+                status: 'failed_dlq',
+                reservations_released: true,
+                last_error: errLabel,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('parent_order_id', order.id);
           }
 
           await recordAuditLog({
@@ -322,6 +329,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const nextRetries = currentRetries + 1;
         const { nextRetryAt, isDlq } = computeBackoffNextRetry(nextRetries);
 
+        if (isDlq) {
+          try {
+            await releaseOrderAndSubordersReservations(supabase, order.id);
+          } catch (relErr) {
+            console.warn('[Outbox Sync] Network DLQ reservation release error:', relErr);
+          }
+        }
+
         await supabase
           .from('orders')
           .update({
@@ -335,20 +350,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .eq('id', order.id);
 
         if (isDlq) {
-          try {
-            await releaseOrderAndSubordersReservations(supabase, order.id);
-            await supabase
-              .from('orders')
-              .update({
-                status: 'failed_dlq',
-                reservations_released: true,
-                last_error: `Сетевой сбой: ${reqErr?.message || 'Network error'}`,
-                updated_at: new Date().toISOString(),
-              })
-              .eq('parent_order_id', order.id);
-          } catch (relErr) {
-            console.warn('[Outbox Sync] Network DLQ reservation release error:', relErr);
-          }
+          await supabase
+            .from('orders')
+            .update({
+              status: 'failed_dlq',
+              reservations_released: true,
+              last_error: `Сетевой сбой: ${reqErr?.message || 'Network error'}`,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('parent_order_id', order.id);
+
           dispatchDlqEmergencyAlert({
             orderId: order.id,
             orderNumber: order.order_number,

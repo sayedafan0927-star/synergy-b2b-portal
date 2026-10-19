@@ -163,7 +163,7 @@ export default function ProductPage({
     if (!product) return;
     const minPrice = product.variants.reduce((min, v) => Math.min(min, v.base_price), Infinity);
     const maxPrice = product.variants.reduce((max, v) => Math.max(max, v.base_price), 0);
-    const inStock = product.variants.some(v => filterClientWarehouses(v.warehouses, profile?.showroom_warehouse_id, profile?.showroom_warehouse_name, isAdmin, displaySettings).some(w => w.stock > 0));
+    const inStock = product.variants.some(v => filterClientWarehouses(v.warehouses, profile?.showroom_warehouse_id, profile?.showroom_warehouse_name, isEffectiveAdmin, displaySettings).some(w => w.stock > 0));
     const ld = {
       '@context': 'https://schema.org',
       '@type': 'Product',
@@ -542,7 +542,7 @@ export default function ProductPage({
             isMobile={true}
           />
 
-          {hasDealerStock && (
+          {hasDealerStock && !isShowroomMode && (
             <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3.5 mb-4">
               <p className="text-xs font-bold uppercase tracking-wider text-emerald-900 mb-2 flex items-center gap-1.5">
                 <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />

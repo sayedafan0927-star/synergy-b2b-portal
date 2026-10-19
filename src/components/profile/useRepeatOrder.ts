@@ -1,7 +1,9 @@
 import { useState, useCallback } from 'react';
 import { useCart } from '@/contexts/CartContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { useUserPricing } from '@/hooks/usePricing';
 import { fetchCatalogFromErp } from '@/lib/erpApi';
-import { mergeProducts } from '@/hooks/useProductData';
+import { mergeProducts, filterClientWarehouses } from '@/hooks/useProductData';
 import { parse1CNomenclature } from '@/lib/nomenclatureParser';
 import type { Order, RepeatResult, RepeatItemAdded, RepeatItemMissing } from './types';
 
@@ -16,6 +18,9 @@ function normalizeSize(s?: string): string {
 
 export function useRepeatOrder(partnerId?: string | number | null, profileId?: string | null) {
   const { addItem } = useCart();
+  const { profile, isAdmin, isImpersonating } = useAuth();
+  const isEffectiveAdmin = isAdmin && !isImpersonating;
+  const { getVariantPrice, getPricePerSqm } = useUserPricing();
   const [repeatingOrderId, setRepeatingOrderId] = useState<string | null>(null);
   const [repeatResult, setRepeatResult] = useState<RepeatResult | null>(null);
 
@@ -177,31 +182,36 @@ export function useRepeatOrder(partnerId?: string | number | null, profileId?: s
           continue;
         }
 
-        // Мультискладской подбор остатка: приоритет оригинальному складу заказа, затем хабам
+        // Фильтрация доступных клиенту складов и приоритет оригинальному складу заказа, затем хабам
+        const allowedWarehouses = filterClientWarehouses(
+          foundVariant.warehouses || [],
+          profile?.showroom_warehouse_id,
+          profile?.showroom_warehouse_name,
+          isEffectiveAdmin ? true : profile
+        ).filter((w: any) => Number(w.free_stock ?? w.stock ?? 0) > 0);
+
         const itemWhId = item.warehouse_id || (item as any).warehouse_id;
         const itemWhName = (item.warehouse || '').toLowerCase().trim();
-        let wh = foundVariant.warehouses?.find((w: any) =>
-          ((itemWhId && w.warehouse_id === itemWhId) ||
-           (itemWhName && (w.warehouse_name?.toLowerCase().includes(itemWhName) || w.city?.toLowerCase().includes(itemWhName)))) &&
-          Number(w.free_stock ?? w.stock ?? 0) > 0
-        );
+        const isOrigWh = (w: any) =>
+          (itemWhId && w.warehouse_id === itemWhId) ||
+          (itemWhName && (w.warehouse_name?.toLowerCase().includes(itemWhName) || w.city?.toLowerCase().includes(itemWhName)));
 
-        const hadOriginalStock = Boolean(wh);
+        const orderedWhs = [...allowedWarehouses].sort((a: any, b: any) => {
+          const aOrig = isOrigWh(a) ? 0 : (a.warehouse_id === 81 || a.is_hub ? 1 : 2);
+          const bOrig = isOrigWh(b) ? 0 : (b.warehouse_id === 81 || b.is_hub ? 1 : 2);
+          return aOrig - bOrig;
+        });
 
-        if (!wh && Array.isArray(foundVariant.warehouses)) {
-          wh = foundVariant.warehouses.find((w: any) => (w.warehouse_id === 81 || w.is_hub) && Number(w.free_stock ?? w.stock ?? 0) > 0)
-            || foundVariant.warehouses.find((w: any) => Number(w.free_stock ?? w.stock ?? 0) > 0);
-        }
-
-        const stock = wh
-          ? Number(wh.free_stock ?? wh.stock ?? 0)
-          : (foundVariant.warehouses?.reduce((s: number, w: any) => s + Number(w.free_stock ?? w.stock ?? 0), 0) ?? Number(foundVariant.free_stock ?? foundVariant.stock ?? 0));
-
+        const totalAllowedStock = orderedWhs.reduce((s: number, w: any) => s + Number(w.free_stock ?? w.stock ?? 0), 0);
         const prodImg = (foundProd.images && foundProd.images.length > 0) ? foundProd.images[0] : (foundProd.image_thumb || '');
-        const currentPrice = Number(foundVariant.price || foundVariant.base_price || item.price || 0);
+        const rawCatalogPrice = Number(foundVariant.price || foundVariant.base_price || item.price || 0);
+        const currentPrice = Number(foundVariant.price || foundVariant.base_price) > 0
+          ? getVariantPrice(foundProd.collection, foundVariant.size, rawCatalogPrice, foundVariant.price_per_sqm)
+          : rawCatalogPrice;
+        const currentSqmPrice = getPricePerSqm(foundProd.collection, foundVariant.size, rawCatalogPrice, foundVariant.price_per_sqm);
         const resolvedSku = foundVariant.sku || foundVariant.article || item.sku || '';
 
-        if (stock <= 0) {
+        if (totalAllowedStock <= 0) {
           missing.push({
             name: foundProd.name || item.productName,
             size: foundVariant.size || item.size,
@@ -216,49 +226,55 @@ export function useRepeatOrder(partnerId?: string | number | null, profileId?: s
           continue;
         }
 
-        const qtyToAdd = Math.min(item.quantity, stock);
-        const resolvedWhName = wh?.warehouse_name || wh?.city || item.warehouse || 'Основной Склад Астана';
-        const resolvedWhId = wh?.warehouse_id || itemWhId || 81;
+        let remainingToAdd = Math.min(item.quantity, totalAllowedStock);
+        for (const wh of orderedWhs) {
+          if (remainingToAdd <= 0) break;
+          const whStock = Number(wh.free_stock ?? wh.stock ?? 0);
+          const allocQty = Math.min(remainingToAdd, whStock);
+          if (allocQty <= 0) continue;
 
-        // Детекция автоматической подмены склада при отсутствии на исходном складе
-        const isWarehouseSubstituted = Boolean(
-          !hadOriginalStock &&
-          item.warehouse &&
-          resolvedWhName &&
-          !resolvedWhName.toLowerCase().includes(itemWhName) &&
-          !itemWhName.includes(resolvedWhName.toLowerCase())
-        );
+          const resolvedWhName = wh.warehouse_name || wh.city || item.warehouse || 'Основной Склад Астана';
+          const resolvedWhId = wh.warehouse_id || itemWhId || 81;
+          const isWarehouseSubstituted = Boolean(
+            !isOrigWh(wh) &&
+            item.warehouse &&
+            resolvedWhName &&
+            !resolvedWhName.toLowerCase().includes(itemWhName) &&
+            !itemWhName.includes(resolvedWhName.toLowerCase())
+          );
 
-        addItem({
-          productId: String(foundProd.id),
-          item_id: foundVariant.item_id || (Number(foundVariant.id) > 0 ? Number(foundVariant.id) : undefined),
-          productName: foundProd.name,
-          collection: foundProd.collection,
-          image: prodImg,
-          size: foundVariant.size,
-          sku: resolvedSku,
-          warehouse: resolvedWhName,
-          warehouse_id: resolvedWhId,
-          price: currentPrice,
-          price_per_sqm: foundVariant.price_per_sqm,
-          area_sqm: foundVariant.area_sqm,
-          maxStock: stock,
-        }, qtyToAdd);
+          addItem({
+            productId: String(foundProd.id),
+            item_id: foundVariant.item_id || (Number(foundVariant.id) > 0 ? Number(foundVariant.id) : undefined),
+            productName: foundProd.name,
+            collection: foundProd.collection,
+            image: prodImg,
+            size: foundVariant.size,
+            sku: resolvedSku,
+            warehouse: resolvedWhName,
+            warehouse_id: resolvedWhId,
+            price: currentPrice,
+            price_per_sqm: currentSqmPrice,
+            area_sqm: foundVariant.area_sqm,
+            maxStock: whStock,
+          }, allocQty);
 
-        added.push({
-          name: foundProd.name,
-          size: foundVariant.size,
-          requestedQty: item.quantity,
-          addedQty: qtyToAdd,
-          originalWarehouse: item.warehouse,
-          warehouse: resolvedWhName,
-          isWarehouseSubstituted,
-          image: prodImg,
-          sku: resolvedSku,
-          collection: foundProd.collection,
-          price: currentPrice,
-          area_sqm: foundVariant.area_sqm,
-        });
+          added.push({
+            name: foundProd.name,
+            size: foundVariant.size,
+            requestedQty: item.quantity,
+            addedQty: allocQty,
+            originalWarehouse: item.warehouse,
+            warehouse: resolvedWhName,
+            isWarehouseSubstituted,
+            image: prodImg,
+            sku: resolvedSku,
+            collection: foundProd.collection,
+            price: currentPrice,
+            area_sqm: foundVariant.area_sqm,
+          });
+          remainingToAdd -= allocQty;
+        }
       }
 
       setRepeatResult({
@@ -272,7 +288,7 @@ export function useRepeatOrder(partnerId?: string | number | null, profileId?: s
     } finally {
       setRepeatingOrderId(null);
     }
-  }, [repeatingOrderId, partnerId, profileId, addItem]);
+  }, [repeatingOrderId, partnerId, profileId, addItem, profile, isEffectiveAdmin, getVariantPrice, getPricePerSqm]);
 
   const closeRepeatModal = useCallback(() => {
     setRepeatResult(null);

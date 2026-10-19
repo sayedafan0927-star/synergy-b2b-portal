@@ -18,8 +18,15 @@ export function AdminCounterpartiesSubTab({
   const [cpBatchLoading, setCpBatchLoading] = useState(false);
   const [cpBatchMessage, setCpBatchMessage] = useState<string | null>(null);
 
+  const isCounterpartyActive = (c: any) =>
+    c.portal_access_enabled !== false &&
+    c.portal_access_enabled !== 0 &&
+    c.status !== 'inactive' &&
+    c.is_active !== 0 &&
+    c.access !== 'disabled';
+
   const cpActiveCount = useMemo(() => {
-    return counterparties.filter(c => !isCounterpartyArchivedOrMailing(c) && c.portal_access_enabled !== false && c.status !== 'inactive').length;
+    return counterparties.filter(c => !isCounterpartyArchivedOrMailing(c) && isCounterpartyActive(c)).length;
   }, [counterparties]);
 
   const cpArchivedCount = useMemo(() => {
@@ -29,7 +36,7 @@ export function AdminCounterpartiesSubTab({
   const filteredCounterparties = useMemo(() => {
     let list = [...counterparties];
     if (cpFilter === 'active') {
-      list = list.filter(c => !isCounterpartyArchivedOrMailing(c) && c.portal_access_enabled !== false && c.status !== 'inactive');
+      list = list.filter(c => !isCounterpartyArchivedOrMailing(c) && isCounterpartyActive(c));
     } else if (cpFilter === 'archived') {
       list = list.filter(c => isCounterpartyArchivedOrMailing(c));
     }
@@ -46,7 +53,7 @@ export function AdminCounterpartiesSubTab({
   }, [counterparties, cpFilter, cpSearch]);
 
   const handleToggleCounterpartyAccess = async (counterparty: any) => {
-    const isCurrentlyDeactivated = counterparty.portal_access_enabled === false || counterparty.status === 'inactive' || counterparty.is_active === 0;
+    const isCurrentlyDeactivated = !isCounterpartyActive(counterparty);
     const newStatus = isCurrentlyDeactivated ? 1 : 0;
     setCpTogglingId(counterparty.id);
 
@@ -72,7 +79,7 @@ export function AdminCounterpartiesSubTab({
 
   const handleBatchDeactivateArchived = async () => {
     const archivedToDeactivate = counterparties.filter(
-      c => isCounterpartyArchivedOrMailing(c) && (c.portal_access_enabled !== false && c.status !== 'inactive' && c.is_active !== 0)
+      c => isCounterpartyArchivedOrMailing(c) && isCounterpartyActive(c)
     );
 
     if (archivedToDeactivate.length === 0) {
@@ -199,7 +206,7 @@ export function AdminCounterpartiesSubTab({
             <tbody className="divide-y divide-slate-100">
               {filteredCounterparties.map((c: any) => {
                 const contract = (c.contracts || [])[0];
-                const isDeactivated = c.portal_access_enabled === false || c.status === 'inactive' || c.is_active === 0;
+                const isDeactivated = !isCounterpartyActive(c);
                 const isMailingOrArchived = c.is_archived_or_mailing;
 
                 return (

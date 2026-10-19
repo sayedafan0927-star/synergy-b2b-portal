@@ -397,16 +397,28 @@ export async function enrichOrdersWithBufferedLocalOrders(
         .from('profiles')
         .select('id')
         .eq('partner_id', clientIdParam)
+        .limit(1)
         .maybeSingle();
       if (pRow?.id) {
-        q = q.eq('user_id', pRow.id);
+        q = q.or(`user_id.eq.${pRow.id},partner_id.eq.${clientIdParam}`);
       } else {
-        return;
+        q = q.eq('partner_id', clientIdParam);
       }
     }
 
     const { data: dbOrders } = await q;
     if (!Array.isArray(dbOrders) || dbOrders.length === 0) return;
+
+    for (const row of dbOrders) {
+      if (row.status === 'cancellation_pending') {
+        const doc = String(row.order_number || row.doc_number || '');
+        const matchErp = jsonData.orders.find((o: any) => String(o.id || '') === String(row.id) || (doc && String(o.doc_number || o.order_number || '') === doc));
+        if (matchErp) {
+          matchErp.status = 'cancellation_pending';
+          matchErp.status_code = 'cancellation_pending';
+        }
+      }
+    }
 
     const knownDocs = new Set(jsonData.orders.map((o: any) => String(o.doc_number || o.order_number || '')).filter(Boolean));
     const knownIds = new Set(jsonData.orders.map((o: any) => String(o.id || '')));
@@ -416,18 +428,16 @@ export async function enrichOrdersWithBufferedLocalOrders(
         const doc = String(row.order_number || row.doc_number || '');
         if (knownIds.has(String(row.id)) || (doc && knownDocs.has(doc))) return false;
         const prof = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
-        if (managerIdParam && prof?.manager_id && String(prof.manager_id) !== managerIdParam) return false;
+        if (managerIdParam && String(prof?.manager_id || '') !== managerIdParam && String(row.placed_by_id || '') !== managerIdParam) return false;
         return true;
       })
       .map((row: any) => {
         const prof = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles;
-        const rawItems = Array.isArray(row.order_items) && row.order_items.length > 0
-          ? row.order_items
-          : (Array.isArray(row.items) ? row.items : []);
+        const rawItems = Array.isArray(row.order_items) && row.order_items.length > 0 ? row.order_items : (Array.isArray(row.items) ? row.items : []);
         return {
           id: row.id,
           doc_number: row.order_number || row.doc_number || `ORD-${String(row.id).slice(0, 8)}`,
-          client_id: Number(prof?.partner_id || clientIdParam || 0) || row.user_id,
+          client_id: Number(prof?.partner_id || row.partner_id || clientIdParam || 0) || row.user_id,
           client_name: prof?.company_name || prof?.full_name || 'Клиент',
           client_phone: prof?.phone || '',
           date: row.created_at,
@@ -439,15 +449,9 @@ export async function enrichOrdersWithBufferedLocalOrders(
           total_sqm: Number(row.total_sqm || 0),
           items_count: Number(row.total_items || rawItems.length || 0),
           items: rawItems.map((it: any, idx: number) => ({
-            id: it.id || idx + 1,
-            item_id: it.item_id || it.product_id,
-            name: it.product_name || it.name || 'Ковер',
-            size: it.size || 'Стандарт',
-            sku: it.sku || '',
-            warehouse: it.warehouse || row.warehouse || 'Основной Склад Астана',
-            warehouse_id: it.warehouse_id,
-            price: Number(it.price || 0),
-            quantity: Number(it.quantity || 1),
+            id: it.id || idx + 1, item_id: it.item_id || it.product_id, name: it.product_name || it.name || 'Ковер',
+            size: it.size || 'Стандарт', sku: it.sku || '', warehouse: it.warehouse || row.warehouse || 'Основной Склад Астана',
+            warehouse_id: it.warehouse_id, price: Number(it.price || 0), quantity: Number(it.quantity || 1),
           })),
         };
       });

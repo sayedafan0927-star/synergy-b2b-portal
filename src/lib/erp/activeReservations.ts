@@ -169,14 +169,14 @@ export async function fetchActiveReservations(params?: { sku?: string; q?: strin
   if (params?.sku) {
     const qSku = params.sku.toLowerCase().trim();
     combined = combined.filter(o =>
-      o.items.some(
-        it =>
-          it.sku.toLowerCase() === qSku ||
-          it.sku.toLowerCase().includes(qSku) ||
-          qSku.includes(it.sku.toLowerCase()) ||
-          it.product_name.toLowerCase().includes(qSku) ||
-          it.collection.toLowerCase().includes(qSku)
-      )
+      o.items.some(it => {
+        const itSku = (it.sku || '').toLowerCase().trim();
+        return (
+          (itSku && (itSku === qSku || itSku.includes(qSku) || qSku.includes(itSku))) ||
+          (it.product_name || '').toLowerCase().includes(qSku) ||
+          (it.collection || '').toLowerCase().includes(qSku)
+        );
+      })
     );
   }
 

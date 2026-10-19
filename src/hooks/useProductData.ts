@@ -11,7 +11,7 @@ import { supabase } from '@/lib/supabase';
 import type { Product, StockSummary } from '@/types';
 import { calculateArea } from '@/lib/nomenclatureParser';
 import { mergeProducts } from '@/lib/catalogMerge';
-import { cacheProduct, cacheProducts, getCachedProduct } from '@/lib/productCache';
+import { cacheProduct, cacheProducts, getCachedProduct, clearProductCache } from '@/lib/productCache';
 
 // Re-export utility functions and constants for full backward compatibility
 export {
@@ -31,11 +31,13 @@ export {
   cacheProduct,
   cacheProducts,
   getCachedProduct,
+  clearProductCache,
 } from '@/lib/productCache';
 
-// Global in-memory cache for instant zero-skeleton remounting
+// Global in-memory cache for instant zero-skeleton remounting, scoped by active dealer
 let globalProductsCache: Product[] = [];
 let globalSummaryCache: StockSummary | null = null;
+let globalCacheDealerKey = '';
 
 export function useProducts(customDealerId?: string | number) {
   const authContext = useContext(AuthContext);
@@ -44,6 +46,13 @@ export function useProducts(customDealerId?: string | number) {
     authContext?.impersonatedProfile?.partner_id ??
     authContext?.profile?.partner_id ??
     undefined;
+  const dealerKey = String(effectiveDealerId ?? authContext?.profile?.id ?? 'anon');
+  if (globalCacheDealerKey !== dealerKey) {
+    globalCacheDealerKey = dealerKey;
+    globalProductsCache = [];
+    globalSummaryCache = null;
+    clearProductCache();
+  }
 
   const [products, setProducts] = useState<Product[]>(() => globalProductsCache);
   const [summary, setSummary] = useState<StockSummary | null>(() => globalSummaryCache);
@@ -337,6 +346,13 @@ export function useProduct(id: string | undefined, customDealerId?: string | num
     authContext?.impersonatedProfile?.partner_id ??
     authContext?.profile?.partner_id ??
     undefined;
+  const dealerKey = String(effectiveDealerId ?? authContext?.profile?.id ?? 'anon');
+  if (globalCacheDealerKey !== dealerKey) {
+    globalCacheDealerKey = dealerKey;
+    globalProductsCache = [];
+    globalSummaryCache = null;
+    clearProductCache();
+  }
 
   const [product, setProduct] = useState<Product | null>(() => (id ? getCachedProduct(id) : null));
   const [loading, setLoading] = useState<boolean>(() => !Boolean(id && getCachedProduct(id)));

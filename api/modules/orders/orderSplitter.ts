@@ -25,9 +25,11 @@ export function buildSplitOrdersPayload(
     const uniqueOrderToken = incomingIdempotencyKey || (`ORD-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`);
     const subDoc = `${uniqueOrderToken}-wh-${splitIdx}`;
 
+    const whId = resolveWarehouseId(whItems[0]?.warehouse_id, wh);
     splitOrdersPayload.push({
       doc_number: subDoc,
       warehouse: wh,
+      warehouse_id: whId,
       notes: `[Мультисклад ${splitIdx}/${distinctWarehouses.length}: ${wh}] ${rawComment || ''}`.trim(),
       amount: whAmount,
       items_count: whItemsCount,
@@ -39,6 +41,7 @@ export function buildSplitOrdersPayload(
         size: String(it.size || 'Стандарт'),
         sku: String(it.sku || ''),
         warehouse: wh,
+        warehouse_id: resolveWarehouseId(it.warehouse_id, it.warehouse || wh) || whId,
         price: Number(it.price) || 0,
         quantity: Number(it.quantity) || 1,
       })),

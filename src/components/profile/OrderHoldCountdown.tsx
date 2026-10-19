@@ -14,25 +14,8 @@ export function OrderHoldCountdown({
 }: OrderHoldCountdownProps) {
   const [now, setNow] = useState<number>(Date.now());
 
-  useEffect(() => {
-    if (status !== 'pending' || !rawDate) return;
-
-    // Таймер обновляется раз в секунду, если осталось меньше часа, иначе раз в 15 секунд
-    const intervalTime = 1000;
-    const timer = setInterval(() => {
-      setNow(Date.now());
-    }, intervalTime);
-
-    return () => clearInterval(timer);
-  }, [status, rawDate]);
-
-  if (status !== 'pending' || !rawDate) {
-    return null;
-  }
-
-  const createdTime = new Date(rawDate).getTime();
-  if (isNaN(createdTime)) return null;
-
+  const isHoldStatus = ['pending', 'reserved', 'confirmed'].includes(status);
+  const createdTime = rawDate ? new Date(rawDate).getTime() : NaN;
   const totalTtlMs = ttlHours * 3600 * 1000;
   const deadline = createdTime + totalTtlMs;
   const remainingMs = deadline - now;
@@ -41,6 +24,22 @@ export function OrderHoldCountdown({
   const hours = Math.max(0, Math.floor(remainingMs / (3600 * 1000)));
   const minutes = Math.max(0, Math.floor((remainingMs % (3600 * 1000)) / (60 * 1000)));
   const seconds = Math.max(0, Math.floor((remainingMs % (60 * 1000)) / 1000));
+
+  useEffect(() => {
+    if (!isHoldStatus || !rawDate || isNaN(createdTime)) return;
+
+    // Таймер обновляется раз в секунду, если осталось меньше часа, иначе раз в 15 секунд
+    const intervalTime = hours === 0 ? 1000 : 15000;
+    const timer = setInterval(() => {
+      setNow(Date.now());
+    }, intervalTime);
+
+    return () => clearInterval(timer);
+  }, [isHoldStatus, rawDate, createdTime, hours]);
+
+  if (!isHoldStatus || !rawDate || isNaN(createdTime)) {
+    return null;
+  }
 
   // Процент оставшегося времени для визуальной шкалы
   const percentRemaining = Math.max(0, Math.min(100, (remainingMs / totalTtlMs) * 100));

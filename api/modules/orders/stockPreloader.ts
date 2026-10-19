@@ -90,10 +90,14 @@ export async function preloadInventoryBalancesForOrder(
         for (const v of (p.variants || [])) {
           const vSku = String(v.sku || '').trim().toUpperCase();
           if (vSku === targetSku) {
-            const wh = (v.warehouses || []).find((w: any) => Number(w.warehouse_id) === whId);
-            if (wh) {
-              actualFreeStock = Number(wh.free_stock ?? wh.stock ?? 0);
-              actualTotalStock = Number(wh.total_stock ?? wh.free_stock ?? 0);
+            const hasWhArray = Array.isArray(v.warehouses) && v.warehouses.length > 0;
+            const matchedWh = hasWhArray ? v.warehouses.find((w: any) => Number(w.warehouse_id) === whId) : null;
+            if (matchedWh) {
+              actualFreeStock = Number(matchedWh.free_stock ?? matchedWh.stock ?? 0);
+              actualTotalStock = Number(matchedWh.total_stock ?? matchedWh.free_stock ?? 0);
+            } else if (hasWhArray) {
+              actualFreeStock = 0;
+              actualTotalStock = 0;
             } else {
               actualFreeStock = Number(v.free_stock ?? v.stock ?? 0);
               actualTotalStock = Number(v.total_stock ?? v.free_stock ?? 0);
@@ -202,9 +206,12 @@ export async function verifyItemsStockAvailability(
       for (const v of (p.variants || [])) {
         const vSku = String(v.sku || '').trim().toUpperCase();
         if (vSku === targetSku) {
-          const wh = (v.warehouses || []).find((w: any) => Number(w.warehouse_id) === whId);
-          if (wh) {
-            actualFreeStock = Number(wh.free_stock ?? wh.stock ?? 0);
+          const hasWhArray = Array.isArray(v.warehouses) && v.warehouses.length > 0;
+          const matchedWh = hasWhArray ? v.warehouses.find((w: any) => Number(w.warehouse_id) === whId) : null;
+          if (matchedWh) {
+            actualFreeStock = Number(matchedWh.free_stock ?? matchedWh.stock ?? 0);
+          } else if (hasWhArray) {
+            actualFreeStock = 0;
           } else {
             actualFreeStock = Number(v.free_stock ?? v.stock ?? 0);
           }

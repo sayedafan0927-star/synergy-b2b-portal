@@ -53,7 +53,11 @@ export async function getAuthHeaders(forceRefresh = false): Promise<Record<strin
 
   try {
     // 1. Приоритет: активная сессия портала (synergy:auth_session или synergy:demo_auth)
-    const sessionStr = sessionStorage.getItem('synergy:auth_session') || sessionStorage.getItem('synergy:demo_auth');
+    const sessionStr =
+      sessionStorage.getItem('synergy:auth_session') ||
+      localStorage.getItem('synergy:auth_session') ||
+      sessionStorage.getItem('synergy:demo_auth') ||
+      localStorage.getItem('synergy:demo_auth');
     if (sessionStr) {
       const parsedSession = JSON.parse(sessionStr);
       let token = parsedSession?.token;

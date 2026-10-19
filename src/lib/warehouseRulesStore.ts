@@ -23,7 +23,7 @@ let serverRulesCache: Record<string, ClientWarehouseSettings> | null = null;
 export async function initWarehouseRulesFromServer(): Promise<Record<string, ClientWarehouseSettings>> {
   if (typeof window === 'undefined') return {};
   try {
-    const res = await fetch('/api/warehouse-rules', { headers: getAuthHeaders() });
+    const res = await fetch('/api/warehouse-rules', { headers: await getAuthHeaders() });
     if (res.ok) {
       const contentType = res.headers.get('content-type') || '';
       if (!contentType.includes('application/json')) {

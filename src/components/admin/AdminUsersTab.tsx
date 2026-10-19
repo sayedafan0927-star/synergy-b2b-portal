@@ -28,7 +28,7 @@ export interface AdminUsersTabProps {
 }
 
 export function AdminUsersTab({ onNavigate }: AdminUsersTabProps) {
-  const { impersonateUser, user: currentUser, realIsAdmin } = useAuth();
+  const { impersonateUser, user: currentUser, profile, realIsAdmin } = useAuth();
   const managerId = currentUser?.id;
   const isAdminView = realIsAdmin;
   const [users, setUsers] = useState<Array<{
@@ -45,6 +45,8 @@ export function AdminUsersTab({ onNavigate }: AdminUsersTabProps) {
     is_archived_or_mailing?: boolean;
     showroom_warehouse_id?: number | null;
     showroom_warehouse_name?: string | null;
+    credit_limit_usd?: number;
+    debt_usd?: number;
   }>>([]);
   const [userSearch, setUserSearch] = useState('');
   const [showArchived, setShowArchived] = useState(false);
@@ -61,8 +63,9 @@ export function AdminUsersTab({ onNavigate }: AdminUsersTabProps) {
         const cpData = await fetchCounterpartiesFromErp({ limit: 300, includeArchived: true });
         if (!cancelled && cpData && cpData.success && Array.isArray(cpData.counterparties) && cpData.counterparties.length > 0) {
           const mappedUsers = cpData.counterparties.map((cp: any) => {
-            const isAccessOn = cp.portal_access_enabled !== 0 && cp.is_active !== 0 && cp.status !== 'inactive' && cp.access !== 'disabled';
+            const isAccessOn = cp.portal_access_enabled !== false && cp.portal_access_enabled !== 0 && cp.is_active !== 0 && cp.status !== 'inactive' && cp.access !== 'disabled';
             const isArchived = isCounterpartyArchivedOrMailing(cp);
+            const contractPriceType = cp.price_type || cp.contracts?.[0]?.price_type || (cp.cooperation_type === 'комиссия' ? 'commission' : 'wholesale');
             return {
               id: String(cp.id),
               full_name: cp.name,
@@ -70,13 +73,15 @@ export function AdminUsersTab({ onNavigate }: AdminUsersTabProps) {
               phone: cp.phone || '',
               role: 'client' as UserRole,
               partner_id: String(cp.id),
-              price_type: cp.cooperation_type === 'комиссия' ? 'commission' : 'wholesale',
-              manager_id: String(cp.manager_id || ''),
+              price_type: contractPriceType,
+              manager_id: String(cp.manager_id ?? cp.regional_manager?.id ?? ''),
               portal_access_enabled: isAccessOn,
               impersonation_enabled: isAccessOn,
               is_archived_or_mailing: isArchived,
               showroom_warehouse_id: cp.showroom_warehouse_id ?? cp.warehouse_id ?? (cp.id === 2833 ? 2833 : null),
               showroom_warehouse_name: cp.showroom_warehouse_name ?? cp.warehouse_name ?? (cp.id === 2833 ? 'Aya Home Store (Шымкент)' : null),
+              credit_limit_usd: cp.financials?.credit_limit_usd ?? cp.credit_limit_usd,
+              debt_usd: cp.financials?.debt_usd ?? cp.debt_usd,
             };
           });
           setUsers(mappedUsers);
@@ -143,7 +148,14 @@ export function AdminUsersTab({ onNavigate }: AdminUsersTabProps) {
   const filteredUsers = useMemo(() => {
     let clients = users.filter(user => user.role === 'client');
     if (!isAdminView && managerId) {
-      clients = clients.filter(user => user.manager_id === managerId);
+      const candidateIds = new Set<string>([
+        String(managerId),
+        String(profile?.partner_id || ''),
+        String(profile?.manager_id || ''),
+      ].filter(Boolean));
+      const uuidNumMatch = String(managerId).match(/^00000000-0000-0000-0000-0*(\d+)$/);
+      if (uuidNumMatch?.[1]) candidateIds.add(uuidNumMatch[1]);
+      clients = clients.filter(user => user.manager_id && candidateIds.has(String(user.manager_id)));
     }
     if (!showArchived) {
       clients = clients.filter(user => !user.is_archived_or_mailing);
@@ -156,7 +168,7 @@ export function AdminUsersTab({ onNavigate }: AdminUsersTabProps) {
       (user.phone || '').toLowerCase().includes(q) ||
       (user.partner_id || '').toLowerCase().includes(q)
     );
-  }, [users, userSearch, isAdminView, managerId, showArchived]);
+  }, [users, userSearch, isAdminView, managerId, profile?.partner_id, profile?.manager_id, showArchived]);
 
   return (
     <div className="space-y-6">

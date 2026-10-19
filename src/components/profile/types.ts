@@ -75,6 +75,10 @@ export const ORDER_STATUS_MAP: Record<string, { label: string; color: string }> 
     label: '🏭 Предзаказ забронирован (Ожидает поступления с фабрики)',
     color: 'bg-amber-50 text-amber-900 border-amber-300',
   },
+  waiting_approval: { label: 'На согласовании у РМ', color: 'bg-amber-50 text-amber-800 border-amber-300' },
+  partially_confirmed: { label: 'Частично подтверждён', color: 'bg-amber-50 text-amber-800 border-amber-300' },
+  cancellation_pending: { label: 'Ожидает отмены в ERP', color: 'bg-orange-50 text-orange-800 border-orange-300' },
+  pending_erp_cancel: { label: 'Ожидает отмены в ERP', color: 'bg-orange-50 text-orange-800 border-orange-300' },
   pending: { label: 'В авторезерве', color: 'bg-amber-50 text-amber-700 border-amber-200' },
   reserved: { label: 'В авторезерве', color: 'bg-amber-50 text-amber-700 border-amber-200' },
   confirmed: { label: 'В авторезерве', color: 'bg-amber-50 text-amber-700 border-amber-200' },
@@ -123,11 +127,16 @@ export function fmt2(n: number) {
 }
 
 export function fmtPrice(n: number) {
+  let isAdminUser = false;
   try {
     const cur = typeof localStorage !== 'undefined' ? localStorage.getItem('synergy_preferred_currency') : 'USD';
-    const session = typeof localStorage !== 'undefined' ? localStorage.getItem('synergy_auth_session') : null;
-    const isImp = typeof sessionStorage !== 'undefined' && Boolean(sessionStorage.getItem('synergy:impersonated_profile'));
-    let isAdminUser = false;
+    const session =
+      (typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('synergy:auth_session') : null) ||
+      (typeof localStorage !== 'undefined' ? localStorage.getItem('synergy:auth_session') : null);
+    const isImp = Boolean(
+      (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('synergy:impersonated_profile')) ||
+      (typeof localStorage !== 'undefined' && localStorage.getItem('synergy:impersonated_profile'))
+    );
     if (session && !isImp) {
       try {
         const parsed = JSON.parse(session);
@@ -138,7 +147,8 @@ export function fmtPrice(n: number) {
       return formatCurrency(n, 'KZT');
     }
   } catch {}
-  return `$${n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+  const formatted = n.toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  return isAdminUser ? `$${formatted}` : `${formatted} у.е.`;
 }
 
 export function sizeArea(size: string) {

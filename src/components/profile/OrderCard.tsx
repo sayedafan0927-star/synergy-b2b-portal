@@ -55,7 +55,7 @@ export function OrderCard({
           <span className={`badge border ${order.statusColor}`}>
             {order.status}
           </span>
-          {order.statusRaw === 'pending' && (() => {
+          {['pending', 'reserved', 'confirmed'].includes(order.statusRaw) && (() => {
             const ttl = getReservationTtlRemaining(order.rawDate || order.date, 24);
             if (!ttl) return null;
             return (
@@ -128,7 +128,7 @@ export function OrderCard({
         </div>
 
         <div className="flex items-center gap-2 ml-auto">
-          {!['cancelled', 'shipped', 'delivered'].includes(order.statusRaw) && (
+          {!['cancelled', 'shipped', 'delivered', 'cancellation_pending', 'pending_erp_cancel'].includes(order.statusRaw) && (
             <button
               type="button"
               onClick={(e) => onCancelOrder(order, e)}

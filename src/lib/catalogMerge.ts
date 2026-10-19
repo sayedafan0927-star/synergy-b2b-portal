@@ -86,7 +86,7 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
             || (v.warehouses || []).find(w => (w.warehouse_name && w.warehouse_name.includes('Астана')) || (w.city && w.city.includes('Астана')))
             || (v.warehouses || []).find(w => w.is_hub && ((w.free_stock ?? w.stock ?? 0) > 0));
 
-          const rawFree = v.free_stock !== undefined ? Number(v.free_stock) : (v.stock_free !== undefined ? Number(v.stock_free) : undefined);
+          const rawFree = v.free_stock !== undefined ? Number(v.free_stock) : ((v as any).stock_free !== undefined ? Number((v as any).stock_free) : undefined);
           const freeStock = hubWh?.free_stock !== undefined
             ? Number(hubWh.free_stock)
             : (rawFree !== undefined ? rawFree : Number(hubWh?.stock ?? v.stock ?? 0));
@@ -257,6 +257,8 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
         if (!existingSizes.has(v.size)) {
           existing.variants.push(v);
           existingSizes.add(v.size);
+          existing.min_price = Math.min(existing.min_price ?? v.base_price, v.base_price);
+          existing.max_price = Math.max(existing.max_price ?? v.base_price, v.base_price);
         } else {
           // Если размер уже есть — обновляем остатки хаба и дилерские остатки
           const targetVariant = existing.variants.find(ev => ev.size === v.size);
@@ -265,17 +267,23 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
             const incomingHub = v.warehouses.find(w => w.warehouse_id === 81 || w.is_hub);
             if (existingHub && incomingHub) {
               existingHub.stock = Math.max(existingHub.stock, incomingHub.stock);
+              existingHub.free_stock = Math.max(existingHub.free_stock ?? existingHub.stock, incomingHub.free_stock ?? incomingHub.stock);
+            } else if (!existingHub && incomingHub) {
+              targetVariant.warehouses.unshift({ ...incomingHub });
             }
             for (const w of v.warehouses) {
               if (w.warehouse_id !== 81 && !w.is_hub && w.stock > 0) {
                 const exWh = targetVariant.warehouses.find(tw => tw.warehouse_id === w.warehouse_id);
                 if (exWh) {
                   exWh.stock = Math.max(exWh.stock, w.stock);
+                  exWh.free_stock = Math.max(exWh.free_stock ?? exWh.stock, w.free_stock ?? w.stock);
                 } else {
                   targetVariant.warehouses.push({ ...w });
                 }
               }
             }
+            targetVariant.stock = targetVariant.warehouses.reduce((s, w) => s + w.stock, 0);
+            targetVariant.free_stock = targetVariant.warehouses.reduce((s, w) => s + (w.free_stock ?? w.stock), 0);
             if ((v.in_production_qty ?? 0) > (targetVariant.in_production_qty ?? 0)) {
               targetVariant.in_production_qty = v.in_production_qty;
               targetVariant.is_preorder_available = true;

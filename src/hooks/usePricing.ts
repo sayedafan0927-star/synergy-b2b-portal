@@ -3,9 +3,9 @@ import type { Product } from '@/types';
 import { parseSizeDimensions } from '@/types';
 import { getPricingTier, calculateContractPrice, type ContractPricingTier, type CalculatedPrice } from '@/lib/pricingEngine';
 
-export function useUserPricing() {
+export function useUserPricing(overridePriceType?: string | null) {
   const { profile } = useAuth();
-  const priceType = profile?.price_type ?? 'retail';
+  const priceType = overridePriceType || profile?.price_type || 'retail';
   const tier: ContractPricingTier = getPricingTier(priceType);
 
   function getVariantPrice(_collection: string, size: string, baseFallback: number, variantPerSqm?: number): number {

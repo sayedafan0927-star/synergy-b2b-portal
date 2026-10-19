@@ -59,3 +59,8 @@ export function getCachedProduct(id: string): Product | null {
   }
   return null;
 }
+
+export function clearProductCache(): void {
+  memoryProductCache.clear();
+}
+
