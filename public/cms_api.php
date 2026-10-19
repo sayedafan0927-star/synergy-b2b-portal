@@ -2,7 +2,8 @@
 /**
  * Synergy B2B Portal — Server-Side CMS Media & Content Persistence Endpoint
  * Stores site_content.json and uploaded media (Hero video, country videos, posters, icons)
- * on the production server so all visitors across all devices see updates immediately.
+ * on the production server AND automatically resizes/crops/converts images to WebP via GD
+ * so all visitors across all devices see exact-spec media immediately.
  */
 
 header('Content-Type: application/json; charset=utf-8');
@@ -105,6 +106,84 @@ function verify_admin_authorization(): bool {
     return false;
 }
 
+function get_slot_target_spec(string $slot): array {
+    if ($slot === 'heroPoster') {
+        return ['w' => 1920, 'h' => 1080, 'mode' => 'cover', 'alpha' => false];
+    }
+    if ($slot === 'heroEndCard') {
+        return ['w' => 964, 'h' => 714, 'mode' => 'contain', 'alpha' => true];
+    }
+    if ($slot === 'b2bBackgroundUrl') {
+        return ['w' => 2560, 'h' => 1138, 'mode' => 'cover', 'alpha' => false];
+    }
+    if (strpos($slot, 'cat_') === 0) {
+        return ['w' => 720, 'h' => 720, 'mode' => 'contain', 'alpha' => false];
+    }
+    if (strpos($slot, 'adv_') === 0) {
+        return ['w' => 512, 'h' => 512, 'mode' => 'contain', 'alpha' => true];
+    }
+    return ['w' => 1920, 'h' => 1080, 'mode' => 'cover', 'alpha' => false];
+}
+
+function auto_fit_image_gd(string $srcPath, string $destWebpPath, string $slot): bool {
+    if (!extension_loaded('gd') || !function_exists('imagewebp')) {
+        return false;
+    }
+    $info = @getimagesize($srcPath);
+    if (!$info || empty($info[0]) || empty($info[1])) {
+        return false;
+    }
+    $srcW = (int)$info[0];
+    $srcH = (int)$info[1];
+    $mime = isset($info['mime']) ? $info['mime'] : '';
+
+    $spec = get_slot_target_spec($slot);
+    $dstW = $spec['w'];
+    $dstH = $spec['h'];
+
+    if ($srcW === $dstW && $srcH === $dstH && $mime === 'image/webp') {
+        return @copy($srcPath, $destWebpPath);
+    }
+
+    $srcImg = null;
+    if ($mime === 'image/jpeg') {
+        $srcImg = @imagecreatefromjpeg($srcPath);
+    } elseif ($mime === 'image/png') {
+        $srcImg = @imagecreatefrompng($srcPath);
+    } elseif ($mime === 'image/webp' && function_exists('imagecreatefromwebp')) {
+        $srcImg = @imagecreatefromwebp($srcPath);
+    }
+    if (!$srcImg) {
+        return false;
+    }
+
+    $dstImg = imagecreatetruecolor($dstW, $dstH);
+    if ($spec['alpha']) {
+        imagealphablending($dstImg, false);
+        imagesavealpha($dstImg, true);
+        $transparent = imagecolorallocatealpha($dstImg, 0, 0, 0, 127);
+        imagefilledrectangle($dstImg, 0, 0, $dstW, $dstH, $transparent);
+    } else {
+        $black = imagecolorallocate($dstImg, 0, 0, 0);
+        imagefilledrectangle($dstImg, 0, 0, $dstW, $dstH, $black);
+    }
+
+    $scale = ($spec['mode'] === 'cover')
+        ? max($dstW / $srcW, $dstH / $srcH)
+        : min($dstW / $srcW, $dstH / $srcH);
+
+    $drawW = (int)round($srcW * $scale);
+    $drawH = (int)round($srcH * $scale);
+    $offsetX = (int)round(($dstW - $drawW) / 2);
+    $offsetY = (int)round(($dstH - $drawH) / 2);
+
+    imagecopyresampled($dstImg, $srcImg, $offsetX, $offsetY, 0, 0, $drawW, $drawH, $srcW, $srcH);
+    $saved = @imagewebp($dstImg, $destWebpPath, 86);
+    imagedestroy($srcImg);
+    imagedestroy($dstImg);
+    return (bool)$saved;
+}
+
 if ($action === 'get_content') {
     if (file_exists($contentFile)) {
         $raw = @file_get_contents($contentFile);
@@ -170,9 +249,9 @@ if ($action === 'upload') {
     $fileSize = (int)$_FILES['file']['size'];
     $slot = isset($_POST['slot']) ? preg_replace('/[^a-zA-Z0-9_-]/', '', (string)$_POST['slot']) : 'media';
 
-    if ($fileSize <= 0 || $fileSize > 35 * 1024 * 1024) {
+    if ($fileSize <= 0 || $fileSize > 60 * 1024 * 1024) {
         http_response_code(400);
-        echo json_encode(['success' => false, 'error' => 'Размер файла должен быть до 35 МБ'], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['success' => false, 'error' => 'Размер файла должен быть до 60 МБ'], JSON_UNESCAPED_UNICODE);
         exit;
     }
 
@@ -199,14 +278,22 @@ if ($action === 'upload') {
         }
     }
 
-    $safeFileName = ($slot ?: 'media') . '_' . time() . '_' . substr(md5(uniqid('', true)), 0, 6) . '.' . $ext;
+    $isImage = in_array($ext, ['webp', 'png', 'jpg', 'jpeg'], true);
+    $finalExt = $isImage ? 'webp' : $ext;
+    $safeFileName = ($slot ?: 'media') . '_' . time() . '_' . substr(md5(uniqid('', true)), 0, 6) . '.' . $finalExt;
     $destPublic = $publicUploadsDir . '/' . $safeFileName;
     $destBackup = $storageDir . '/' . $safeFileName;
 
-    if (!@move_uploaded_file($tmpPath, $destPublic)) {
-        http_response_code(500);
-        echo json_encode(['success' => false, 'error' => 'Не удалось сохранить файл на сервере'], JSON_UNESCAPED_UNICODE);
-        exit;
+    $processedByGd = false;
+    if ($isImage) {
+        $processedByGd = auto_fit_image_gd($tmpPath, $destPublic, $slot);
+    }
+    if (!$processedByGd) {
+        if (!@move_uploaded_file($tmpPath, $destPublic)) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'error' => 'Не удалось сохранить файл на сервере'], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
     }
     @copy($destPublic, $destBackup);
 
@@ -215,7 +302,8 @@ if ($action === 'upload') {
         'success' => true,
         'url' => $publicUrl,
         'fileName' => $safeFileName,
-        'sizeBytes' => $fileSize,
+        'sizeBytes' => @filesize($destPublic) ?: $fileSize,
+        'autoFitted' => $processedByGd,
     ], JSON_UNESCAPED_UNICODE);
     exit;
 }

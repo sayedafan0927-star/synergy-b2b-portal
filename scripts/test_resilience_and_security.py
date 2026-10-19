@@ -2625,7 +2625,11 @@ with open(os.path.join(ROOT_DIR, "src", "components", "home", "HeroBannerMedia.t
 with open(os.path.join(ROOT_DIR, "src", "contexts", "LanguageContext.tsx"), "r", encoding="utf-8") as fp:
     lc_s54 = fp.read()
 cms_php_path = os.path.join(ROOT_DIR, "public", "cms_api.php")
-test_assert(os.path.exists(cms_php_path) and "/cms_api.php?action=upload" in sms_s54 and "/cms_api.php?action=save_content" in scs_s54 and "useSiteContent" in hbm_s54 and "translationsOverride" in lc_s54, "public/cms_api.php, HeroBannerMedia.tsx, and LanguageContext.tsx persist uploaded media (/uploads/cms/) and site_content.json on the production server across all devices")
+with open(cms_php_path, "r", encoding="utf-8") as fp:
+    cms_php_s54 = fp.read()
+with open(os.path.join(ROOT_DIR, "src", "lib", "mediaAutoOptimizer.ts"), "r", encoding="utf-8") as fp:
+    mao_s54 = fp.read()
+test_assert(os.path.exists(cms_php_path) and "auto_fit_image_gd" in cms_php_s54 and "autoOptimizeImageForSlot" in mao_s54 and "autoOptimizeVideoForSlot" in mao_s54 and "/cms_api.php?action=upload" in sms_s54 and "/cms_api.php?action=save_content" in scs_s54 and "useSiteContent" in hbm_s54 and "translationsOverride" in lc_s54, "mediaAutoOptimizer.ts and public/cms_api.php automatically resize, crop/fit, compress, extract 1st-frame posters, and persist media across all devices")
 
 # ------------------------------------------------------------------------------
 # 79. Summary Report

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Video, Upload, RotateCcw, CheckCircle2, AlertTriangle, Film, Layers, Star, Save,
+  Video, Upload, RotateCcw, CheckCircle2, AlertTriangle, Film, Layers, Star, Save, Sparkles,
 } from 'lucide-react';
 import {
   SITE_MEDIA_SPECS,
@@ -10,6 +10,7 @@ import {
   type InspectedMediaMeta,
   DEFAULT_SITE_CONTENT,
 } from '@/lib/siteContentStore';
+import { autoOptimizeImageForSlot, autoOptimizeVideoForSlot } from '@/lib/mediaAutoOptimizer';
 import { useToast } from '@/contexts/ToastContext';
 import { MediaSpecsReferenceTable } from './MediaSpecsReferenceTable';
 
@@ -24,6 +25,8 @@ export function HeroAndMediaSubTab() {
   const [advantagesForm, setAdvantagesForm] = useState(content.advantages);
   const [inspected, setInspected] = useState<Record<string, InspectedMediaMeta | null>>({});
   const [uploadingSlot, setUploadingSlot] = useState<string | null>(null);
+  const [optimizeStatus, setOptimizeStatus] = useState<string>('');
+  const [autoFitEnabled, setAutoFitEnabled] = useState<boolean>(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -60,63 +63,104 @@ export function HeroAndMediaSubTab() {
 
   const handleFileUpload = async (
     slotKey: string,
-    file: File | undefined,
+    rawFile: File | undefined,
     mediaType: 'video' | 'image',
-    expectedAspect: string,
-    onResolvedUri: (uri: string) => void
+    onResolvedUri: (uri: string, autoPosterUri?: string) => void
   ) => {
-    if (!file) return;
+    if (!rawFile) return;
     setUploadingSlot(slotKey);
+    setOptimizeStatus('Анализ файла...');
     try {
-      const meta = await inspectMediaElement(file, mediaType);
-      if (meta) {
-        setInspected(prev => ({ ...prev, [slotKey]: meta }));
-        if (expectedAspect && meta.aspectRatio !== expectedAspect) {
-          toast.info(`Пропорции файла ${meta.width}×${meta.height} (${meta.aspectRatio}) отличаются от эталона (${expectedAspect}).`);
+      let fileToUpload = rawFile;
+      let summaryNote = '';
+      let autoPosterUri: string | undefined;
+
+      if (autoFitEnabled) {
+        if (mediaType === 'image') {
+          setOptimizeStatus('Авто-подгонка размера и WebP сжатие...');
+          const res = await autoOptimizeImageForSlot(slotKey, rawFile);
+          fileToUpload = res.file;
+          summaryNote = res.summaryNote;
+        } else {
+          const res = await autoOptimizeVideoForSlot(slotKey, rawFile, (_pct, stage) => {
+            setOptimizeStatus(stage);
+          });
+          fileToUpload = res.file;
+          summaryNote = res.summaryNote;
+          if (res.extractedPosterFile) {
+            setOptimizeStatus('Сохранение авто-постера 1-го кадра...');
+            const posterSlot = slotKey === 'heroVideoMp4' ? 'heroPoster' : slotKey.replace('video', 'poster');
+            autoPosterUri = await saveMediaFileToLocalCms(posterSlot, res.extractedPosterFile);
+          }
         }
       }
-      const idbUri = await saveMediaFileToLocalCms(slotKey, file);
-      onResolvedUri(idbUri);
-      toast.success(`Файл «${file.name}» загружен. Нажмите «Сохранить медиа-настройки».`);
+
+      setOptimizeStatus('Выгрузка на боевой сервер...');
+      const meta = await inspectMediaElement(fileToUpload, mediaType);
+      if (meta) {
+        setInspected(prev => ({ ...prev, [slotKey]: meta }));
+      }
+      const uploadedUri = await saveMediaFileToLocalCms(slotKey, fileToUpload);
+      onResolvedUri(uploadedUri, autoPosterUri);
+      toast.success(
+        summaryNote
+          ? `${summaryNote}. Нажмите «Сохранить медиа-настройки».`
+          : `Файл «${fileToUpload.name}» загружен. Нажмите «Сохранить медиа-настройки».`
+      );
     } catch {
       toast.error('Не удалось обработать медиафайл.');
     } finally {
       setUploadingSlot(null);
+      setOptimizeStatus('');
     }
   };
 
   const onHeroMp4File = (e: React.ChangeEvent<HTMLInputElement>) => {
-    handleFileUpload('heroVideoMp4', e.target.files?.[0], 'video', '16:9', uri => {
-      setHeroForm(p => ({ ...p, videoMp4: uri }));
+    handleFileUpload('heroVideoMp4', e.target.files?.[0], 'video', (uri, autoPosterUri) => {
+      setHeroForm(p => ({
+        ...p,
+        videoMp4: uri,
+        ...(autoPosterUri ? { posterUrl: autoPosterUri } : {}),
+      }));
     });
   };
 
   const onHeroPosterFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    handleFileUpload('heroPoster', e.target.files?.[0], 'image', '16:9', uri => {
+    handleFileUpload('heroPoster', e.target.files?.[0], 'image', uri => {
       setHeroForm(p => ({ ...p, posterUrl: uri }));
     });
   };
 
   const onHeroEndCardFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    handleFileUpload('heroEndCard', e.target.files?.[0], 'image', '4:3', uri => {
+    handleFileUpload('heroEndCard', e.target.files?.[0], 'image', uri => {
       setHeroForm(p => ({ ...p, endCardUrl: uri }));
     });
   };
 
   const onB2bBgFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    handleFileUpload('b2bBackgroundUrl', e.target.files?.[0], 'image', '21:9', uri => {
+    handleFileUpload('b2bBackgroundUrl', e.target.files?.[0], 'image', uri => {
       setB2bBg(uri);
     });
   };
 
   const onCategoryVideoFile = (idx: number, e: React.ChangeEvent<HTMLInputElement>) => {
-    handleFileUpload(`cat_video_${idx}`, e.target.files?.[0], 'video', '1:1', uri => {
-      setCategoriesForm(prev => prev.map((item, i) => (i === idx ? { ...item, video: uri } : item)));
+    handleFileUpload(`cat_video_${idx}`, e.target.files?.[0], 'video', (uri, autoPosterUri) => {
+      setCategoriesForm(prev =>
+        prev.map((item, i) =>
+          i === idx
+            ? {
+                ...item,
+                video: uri,
+                ...(autoPosterUri ? { poster: autoPosterUri, image: autoPosterUri } : {}),
+              }
+            : item
+        )
+      );
     });
   };
 
   const onAdvantageImageFile = (idx: number, e: React.ChangeEvent<HTMLInputElement>) => {
-    handleFileUpload(`adv_${idx}`, e.target.files?.[0], 'image', '1:1', uri => {
+    handleFileUpload(`adv_${idx}`, e.target.files?.[0], 'image', uri => {
       setAdvantagesForm(prev => prev.map((it, i) => (i === idx ? { ...it, image: uri } : it)));
     });
   };
@@ -145,7 +189,7 @@ export function HeroAndMediaSubTab() {
         categories: categoriesForm,
         advantages: advantagesForm,
       });
-      toast.success('Медиа-контент и настройки главной страницы сохранены!');
+      toast.success('Медиа-контент и настройки главной страницы сохранены для всех устройств!');
     } finally {
       setSaving(false);
     }
@@ -177,6 +221,32 @@ export function HeroAndMediaSubTab() {
   return (
     <div className="space-y-6">
       <MediaSpecsReferenceTable />
+
+      {/* Панель умной авто-подгонки и сжатия */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50/70 px-4 py-3">
+        <div className="flex items-center gap-2.5">
+          <Sparkles className="h-5 w-5 text-emerald-700 shrink-0" />
+          <div>
+            <p className="text-xs sm:text-sm font-bold text-emerald-950">
+              Умная авто-подгонка размеров, пропорций и авто-сжатие включены
+            </p>
+            <p className="text-[11px] text-emerald-800">
+              Если загрузить фото или видео другого размера/веса — система сама откадрирует его под точный пиксельный размер слота (`1920×1080`, `720×720`, `964×714`, `512×512`), сожмёт вес и автоматически создаст постер 1-го кадра для видео.
+            </p>
+          </div>
+        </div>
+        <label className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-emerald-900 shadow-2xs border border-emerald-200 cursor-pointer shrink-0">
+          <input type="checkbox" checked={autoFitEnabled} onChange={e => setAutoFitEnabled(e.target.checked)} className="h-4 w-4 accent-emerald-600" />
+          <span>Авто-подгонка и сжатие</span>
+        </label>
+      </div>
+
+      {uploadingSlot && optimizeStatus && (
+        <div className="rounded-xl border border-brand-200 bg-brand-50 px-4 py-3 text-xs font-bold text-brand-900 flex items-center justify-between">
+          <span>⚙️ Обработка слота «{uploadingSlot}»: {optimizeStatus}</span>
+          <span className="animate-pulse">Пожалуйста, подождите...</span>
+        </div>
+      )}
 
       <div className="card p-5 space-y-5 border border-slate-200/90">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
@@ -214,11 +284,11 @@ export function HeroAndMediaSubTab() {
           <div className="lg:col-span-7 space-y-3.5">
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-xs font-bold text-slate-700">1. Основной видеофайл MP4 (1920 × 1080 px, 16:9, H.264)</label>
+                <label className="text-xs font-bold text-slate-700">1. Основной видеофайл MP4 (авто-подгонка до 1920×1080 + авто-постер)</label>
                 <label className="inline-flex items-center gap-1 text-xs font-semibold text-brand-700 hover:text-brand-800 cursor-pointer">
                   <Upload className="h-3.5 w-3.5" />
-                  <span>{uploadingSlot === 'heroVideoMp4' ? 'Загрузка...' : 'Загрузить MP4 с диска'}</span>
-                  <input type="file" accept="video/mp4,video/webm" className="hidden" onChange={onHeroMp4File} />
+                  <span>{uploadingSlot === 'heroVideoMp4' ? 'Обработка...' : 'Загрузить видео с диска'}</span>
+                  <input type="file" accept="video/mp4,video/webm,video/quicktime" className="hidden" onChange={onHeroMp4File} />
                 </label>
               </div>
               <input type="text" value={heroForm.videoMp4} onChange={e => setHeroForm({ ...heroForm, videoMp4: e.target.value })} placeholder="/assets/hero-video-desktop-v4.mp4" className="input-field text-xs font-mono" />
@@ -226,7 +296,7 @@ export function HeroAndMediaSubTab() {
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-xs font-bold text-slate-700">2. Постер первого кадра (1920 × 1080 px, 16:9, WebP/JPG)</label>
+                <label className="text-xs font-bold text-slate-700">2. Постер первого кадра (авто-подгонка до 1920×1080 WebP)</label>
                 <label className="inline-flex items-center gap-1 text-xs font-semibold text-brand-700 hover:text-brand-800 cursor-pointer">
                   <Upload className="h-3.5 w-3.5" />
                   <span>Загрузить постер</span>
@@ -239,7 +309,7 @@ export function HeroAndMediaSubTab() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-bold text-slate-700">3. Финальная карточка (964 × 714 px, WebP)</label>
+                  <label className="text-xs font-bold text-slate-700">3. Финальная карточка (авто-подгонка 964×714)</label>
                   <label className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-700 cursor-pointer">
                     <Upload className="h-3 w-3" />
                     <span>Файл</span>
@@ -276,7 +346,7 @@ export function HeroAndMediaSubTab() {
             <Video className="h-5 w-5 text-brand-700" />
             <div>
               <h4 className="text-sm sm:text-base font-bold text-slate-900">Видео-символы стран (Турция, Иран, Китай)</h4>
-              <p className="text-xs text-slate-500">Эталон: <strong className="text-slate-800">720 × 720 px (Квадрат 1:1)</strong>, MP4 на чисто чёрном фоне (#000000)</p>
+              <p className="text-xs text-slate-500">Эталон: <strong className="text-slate-800">720 × 720 px (Квадрат 1:1)</strong>, авто-подгонка на чёрном фоне (#000000)</p>
             </div>
           </div>
           <button type="button" onClick={() => resetSiteContentSection('categories').then(() => toast.success('Видео стран сброшены'))} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 cursor-pointer">
@@ -295,8 +365,8 @@ export function HeroAndMediaSubTab() {
                   <span className="text-xs font-bold text-slate-900">{cat.name} (720×720, 1:1)</span>
                   <label className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-700 cursor-pointer">
                     <Upload className="h-3 w-3" />
-                    <span>MP4</span>
-                    <input type="file" accept="video/mp4,video/webm" className="hidden" onChange={e => onCategoryVideoFile(idx, e)} />
+                    <span>Видео</span>
+                    <input type="file" accept="video/mp4,video/webm,video/quicktime" className="hidden" onChange={e => onCategoryVideoFile(idx, e)} />
                   </label>
                 </div>
                 <div className="aspect-square w-28 mx-auto overflow-hidden rounded-lg bg-black border border-slate-800">
@@ -321,7 +391,7 @@ export function HeroAndMediaSubTab() {
 
           <div className="pt-2 border-t border-slate-100">
             <div className="flex items-center justify-between mb-1">
-              <label className="text-xs font-bold text-slate-700">Фон блока «Стать B2B-партнёром» (2560 × 1138 px, 21:9)</label>
+              <label className="text-xs font-bold text-slate-700">Фон блока «Стать B2B-партнёром» (авто-подгонка 2560×1138)</label>
               <label className="inline-flex items-center gap-1 text-xs font-semibold text-brand-700 cursor-pointer">
                 <Upload className="h-3.5 w-3.5" />
                 <span>Загрузить фон</span>
@@ -336,7 +406,7 @@ export function HeroAndMediaSubTab() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Layers className="h-4 w-4 text-brand-700" />
-              <h4 className="text-sm font-bold text-slate-900">Иконки 4 карточек преимуществ (512 × 512 px, 1:1)</h4>
+              <h4 className="text-sm font-bold text-slate-900">Иконки 4 карточек преимуществ (авто-подгонка 512×512)</h4>
             </div>
             <button type="button" onClick={() => resetSiteContentSection('advantages').then(() => toast.success('Иконки сброшены'))} className="text-[11px] font-semibold text-slate-500 hover:text-slate-800 cursor-pointer">Сбросить</button>
           </div>
