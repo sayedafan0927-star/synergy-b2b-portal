@@ -57,6 +57,7 @@ import { initOfflineQueueAutoSync } from '@/lib/offlineOrderQueue';
 import OfflineBanner from '@/components/common/OfflineBanner';
 import CookieBanner from '@/components/common/CookieBanner';
 import Preloader from '@/components/common/Preloader';
+import WhatsAppApprovalOverlay from '@/components/common/WhatsAppApprovalOverlay';
 import type { PageId } from '@/types';
 import { readCatalogState } from '@/components/catalog/useCatalogStatePersistence';
 
@@ -410,6 +411,7 @@ export default function App() {
             <CartProvider>
               <ToastProvider>
                 <RealtimeNotificationsWatcher />
+                <WhatsAppApprovalOverlay />
                 <OfflineBanner />
                 <CookieBanner onNavigate={navigate} />
                 {isPending && (

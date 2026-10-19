@@ -16,6 +16,7 @@ export const CENTRAL_WAREHOUSE_ID = 81;
 export const CENTRAL_WAREHOUSE_NAME = 'Основной Склад Астана';
 
 let serverRulesCache: Record<string, ClientWarehouseSettings> | null = null;
+let warehouseRulesEndpointAvailable = false;
 
 /**
  * Инициализация и синхронизация складских правил из базы данных PostgreSQL
@@ -27,8 +28,10 @@ export async function initWarehouseRulesFromServer(): Promise<Record<string, Cli
     if (res.ok) {
       const contentType = res.headers.get('content-type') || '';
       if (!contentType.includes('application/json')) {
+        warehouseRulesEndpointAvailable = false;
         return getAllClientWarehouseRules();
       }
+      warehouseRulesEndpointAvailable = true;
       const data = await res.json();
       if (data?.success && data?.rules) {
         serverRulesCache = data.rules;
@@ -120,20 +123,22 @@ export function saveClientWarehouseSettings(
 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(allRules));
 
-    // Персистируем настройки в PostgreSQL через защищенный серверный API
-    getAuthHeaders().then(authHeaders => {
-      if (!authHeaders['Authorization']) {
-        console.warn('[warehouseVisibility] Missing Authorization header for warehouse rules sync');
-      }
-      fetch('/api/warehouse-rules', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...authHeaders,
-        },
-        body: JSON.stringify({ clientId: cleanKey, settings: payload }),
-      }).catch(err => console.warn('[warehouseVisibility] Background sync to PostgreSQL failed:', err));
-    }).catch(() => {});
+    // Персистируем настройки в PostgreSQL через защищенный серверный API, если он смонтирован
+    if (warehouseRulesEndpointAvailable) {
+      getAuthHeaders().then(authHeaders => {
+        if (!authHeaders['Authorization']) {
+          console.warn('[warehouseVisibility] Missing Authorization header for warehouse rules sync');
+        }
+        fetch('/api/warehouse-rules', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...authHeaders,
+          },
+          body: JSON.stringify({ clientId: cleanKey, settings: payload }),
+        }).catch(err => console.warn('[warehouseVisibility] Background sync to PostgreSQL failed:', err));
+      }).catch(() => {});
+    }
 
     triggerWarehouseSettingsReload();
   } catch (err) {
@@ -156,13 +161,15 @@ export function resetClientWarehouseSettings(clientIdOrPartnerId: string | numbe
 
     localStorage.setItem(STORAGE_KEY, JSON.stringify(allRules));
 
-    // Синхронизируем сброс (удаление) с PostgreSQL
-    getAuthHeaders().then(authHeaders => {
-      fetch(`/api/warehouse-rules?client_id=${encodeURIComponent(cleanKey)}`, {
-        method: 'DELETE',
-        headers: authHeaders,
-      }).catch(err => console.warn('[warehouseVisibility] Background reset in PostgreSQL failed:', err));
-    }).catch(() => {});
+    // Синхронизируем сброс (удаление) с PostgreSQL, если API смонтирован
+    if (warehouseRulesEndpointAvailable) {
+      getAuthHeaders().then(authHeaders => {
+        fetch(`/api/warehouse-rules?client_id=${encodeURIComponent(cleanKey)}`, {
+          method: 'DELETE',
+          headers: authHeaders,
+        }).catch(err => console.warn('[warehouseVisibility] Background reset in PostgreSQL failed:', err));
+      }).catch(() => {});
+    }
 
     triggerWarehouseSettingsReload();
   } catch (err) {

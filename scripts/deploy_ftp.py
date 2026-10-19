@@ -77,45 +77,83 @@ def get_remote_file_size(ftp: ftplib.FTP, remote_path: str):
         return None
 
 
+import json
+
+CACHE_FILE = "/tmp/synergy_ftp_sha256_cache.json"
+
+
+def load_hash_cache() -> dict:
+    try:
+        if os.path.exists(CACHE_FILE):
+            with open(CACHE_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {}
+
+
+def save_hash_cache(cache: dict):
+    try:
+        with open(CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(cache, f)
+    except Exception:
+        pass
+
+
+def compute_sha256(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def sync_directory(ftp: ftplib.FTP, local_dir: str, remote_base: str, force: bool = False):
     """Syncs a local directory to a remote directory on the FTP server."""
     count = 0
     skipped = 0
     total_bytes = 0
     start_time = time.time()
-    
+    hash_cache = load_hash_cache()
+
     for root, dirs, files in os.walk(local_dir):
         # Exclude hidden files or OS junk
         files = [f for f in files if not f.startswith(".") and f != ".DS_Store"]
         dirs[:] = [d for d in dirs if not d.startswith(".") and d != "__MACOSX"]
-        
+
         rel_root = os.path.relpath(root, local_dir)
         if rel_root == ".":
             remote_dir = remote_base
         else:
             remote_dir = os.path.join(remote_base, rel_root).replace("\\", "/")
-            
+
         ensure_remote_dir(ftp, remote_dir)
-        
+
         for file in files:
             local_file = os.path.join(root, file)
             remote_file = os.path.join(remote_dir, file).replace("\\", "/")
             file_size = os.path.getsize(local_file)
-            
+            file_hash = compute_sha256(local_file)
+
             # Always upload entrypoints and manifests regardless of size
             is_critical_entry = file in ("index.html", "sw.js", "manifest.json") or file.endswith(".html")
-            
+            is_hashed_asset = remote_file.startswith("dist/assets/")
+
             if not force and not is_critical_entry:
                 rem_size = get_remote_file_size(ftp, remote_file)
                 if rem_size is not None and rem_size == file_size:
-                    skipped += 1
-                    continue
+                    if is_hashed_asset or hash_cache.get(remote_file) == file_hash:
+                        hash_cache[remote_file] = file_hash
+                        skipped += 1
+                        continue
 
             print(f"  ⬆️ Uploading: {remote_file} ({file_size} bytes)")
             upload_file(ftp, local_file, remote_file)
+            hash_cache[remote_file] = file_hash
             count += 1
             total_bytes += file_size
-            
+
+    save_hash_cache(hash_cache)
     elapsed = time.time() - start_time
     print(f"✨ Synced {count} files ({total_bytes / 1024:.1f} KB), skipped {skipped} unchanged in {elapsed:.2f}s")
 

@@ -396,18 +396,44 @@ export async function updateClientAccessInErp(clientId: number | string, accessE
 }
 
 /**
- * Принудительное онлайн-обновление актуального баланса дилера из 1C:ERP (минуя локальный кэш)
+ * Принудительное онлайн-обновление актуального баланса дилера из Synergy ERP (минуя локальный кэш)
  */
 export async function refreshLiveClientBalance(partnerId: string | number): Promise<any> {
-  const response = await erpFetch('refresh_balance', {
-    method: 'POST',
-    body: { partner_id: String(partnerId) },
+  try {
+    const response = await erpFetch('refresh_balance', {
+      method: 'POST',
+      body: { partner_id: String(partnerId) },
+    });
+
+    if (response.ok && (response.headers.get('content-type') || '').includes('application/json')) {
+      const data = await response.json();
+      if (data && data.success !== false) {
+        return data;
+      }
+    }
+  } catch {}
+
+  const cleanNumericId = Number(String(partnerId).replace(/\D+/g, '')) || undefined;
+  const debtData: any = await fetchClientDebtFromErp({
+    counterpartyId: cleanNumericId,
+    refresh: true,
+    includeInvoices: true,
   });
 
-  if (!response.ok) {
-    throw new Error(`Ошибка онлайн-запроса баланса из ERP (${response.status})`);
-  }
+  const canonicalDebt = Number(debtData?.total_debt_usd ?? debtData?.financials?.debt_usd ?? debtData?.client?.debt_usd ?? 0);
+  const rawBal = Number(debtData?.financials?.balance_usd ?? debtData?.client?.balance_usd ?? 0);
 
-  return await response.json();
+  return {
+    success: true,
+    source: 'erp_client_debt_live',
+    partner_id: String(partnerId),
+    financials: debtData?.financials || {
+      debt_usd: canonicalDebt,
+      balance_usd: rawBal !== 0 ? rawBal : -canonicalDebt,
+      overdue_usd: Number(debtData?.overdue_debt_usd ?? 0),
+      overdue_days: Number(debtData?.max_overdue_days ?? 0),
+      credit_limit_usd: Number(debtData?.client?.credit_limit_usd ?? 50000),
+    },
+  };
 }
 

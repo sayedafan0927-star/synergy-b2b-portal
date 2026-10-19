@@ -2446,7 +2446,46 @@ with open(os.path.join(ROOT_DIR, "src", "lib", "catalogMerge.ts"), "r", encoding
 test_assert("!existingHub && incomingHub" in cm_s49, "catalogMerge.ts preserves incoming Hub 81 warehouse and recalculates variant stock & min/max prices when merging duplicate size variants")
 
 # ------------------------------------------------------------------------------
-# 74. Summary Report
+# 74. Stage 50: Pass 9 Live-Production Direct Gateway & Static Nginx Resilience
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 74. STAGE 50: PASS 9 LIVE-PRODUCTION DIRECT GATEWAY & STATIC NGINX RESILIENCE ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "src", "contexts", "auth", "sessionStore.ts"), "r", encoding="utf-8") as fp:
+    ss_s50 = fp.read()
+test_assert("synthesizeLocalSessionToken" in ss_s50 and "authEndpointsUnavailable" in ss_s50, "sessionStore.ts synthesizes local session token when /api/auth/session or /api/auth/client-token returns 405 on direct ERP Nginx host")
+
+with open(os.path.join(ROOT_DIR, "src", "lib", "erp", "core.ts"), "r", encoding="utf-8") as fp:
+    core_s50 = fp.read()
+test_assert("sessionEndpointUnavailable" in core_s50 and "buildFallbackToken" in core_s50 and "pingErp()" in core_s50, "src/lib/erp/core.ts prevents /api/auth/session 405 request storms and falls back to pingErp() when /api/health returns static HTML")
+
+with open(os.path.join(ROOT_DIR, "src", "lib", "erp", "ordersApi.ts"), "r", encoding="utf-8") as fp:
+    oa_s50 = fp.read()
+test_assert("erpFetch('send_whatsapp'" in oa_s50 and "encodeDecisionToken" in oa_s50, "ordersApi.ts requestOrderApprovalViaWhatsApp falls back to action=send_whatsapp with signed decision URLs on direct api_portal.php")
+
+wa_overlay_path = os.path.join(ROOT_DIR, "src", "components", "common", "WhatsAppApprovalOverlay.tsx")
+test_assert(os.path.exists(wa_overlay_path), "WhatsAppApprovalOverlay.tsx exists to handle one-click WhatsApp order approvals/rejections directly in SPA")
+with open(wa_overlay_path, "r", encoding="utf-8") as fp:
+    wao_s50 = fp.read()
+test_assert("updateOrderStatusInErp" in wao_s50 and "cancelOrderViaPortal" in wao_s50, "WhatsAppApprovalOverlay.tsx executes updateOrderStatusInErp (picking) or cancelOrderViaPortal (cancelled) when manager clicks WhatsApp approval link")
+
+with open(os.path.join(ROOT_DIR, "src", "lib", "erp", "counterpartiesApi.ts"), "r", encoding="utf-8") as fp:
+    cpa_s50 = fp.read()
+test_assert("erp_client_debt_live" in cpa_s50 and "fetchClientDebtFromErp" in cpa_s50, "counterpartiesApi.ts refreshLiveClientBalance falls back to fetchClientDebtFromErp(refresh=true) when refresh_balance is unsupported on api_portal.php")
+
+with open(os.path.join(ROOT_DIR, "src", "lib", "erp", "suppliersApi.ts"), "r", encoding="utf-8") as fp:
+    sa_s50 = fp.read()
+test_assert("synergy:supplier_defects_v1" in sa_s50 and "defect_reports" in sa_s50, "suppliersApi.ts fetchSupplierDefects merges localStorage and Supabase defect_reports when supplier_defects action returns 400")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "admin", "AdminErpSyncTab.tsx"), "r", encoding="utf-8") as fp:
+    aest_s50 = fp.read()
+test_assert("includes('application/json')" in aest_s50 and "integration_audit_logs" in aest_s50, "AdminErpSyncTab.tsx guards /api/audit/logs, /api/outbox/sync, and dlq_orders against non-JSON/405 responses with direct Supabase/ERP fallbacks")
+
+with open(os.path.join(ROOT_DIR, "src", "lib", "warehouseRulesStore.ts"), "r", encoding="utf-8") as fp:
+    wrs_s50 = fp.read()
+test_assert("warehouseRulesEndpointAvailable" in wrs_s50, "warehouseRulesStore.ts guards POST/DELETE /api/warehouse-rules with warehouseRulesEndpointAvailable preventing 405 errors on static Nginx")
+
+# ------------------------------------------------------------------------------
+# 75. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

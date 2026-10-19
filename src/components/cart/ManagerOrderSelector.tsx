@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { UserCheck, Building2, Search, X, Loader2, Check, MessageSquare, Send, CheckCircle2, RotateCw } from 'lucide-react';
-import { fetchCounterpartiesFromErp, fetchClientOrdersFromErp, type Counterparty } from '@/lib/erpApi';
+import { fetchCounterpartiesFromErp, fetchClientOrdersFromErp, requestOrderApprovalViaWhatsApp, type Counterparty } from '@/lib/erpApi';
 import { useToast } from '@/contexts/ToastContext';
 
 interface ManagerOrderSelectorProps {
@@ -81,30 +81,25 @@ export function ManagerOrderSelector({
     setTestSuccessNotice(null);
 
     try {
-      const res = await fetch('/api/erp?action=request_approval', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          order_id: targetOrderId,
-          order_doc_number: targetDoc,
-          client_name: currentOrder?.client_name || selectedClient?.name || 'Хоум Стар ИП (Казмарт)',
-          client_phone: currentOrder?.client_phone || '87086984543',
-          manager_phone: cleanDigits,
-          total_amount: currentOrder?.total_amount || 87.56,
-          total_sqm: currentOrder?.total_sqm || 6.9,
-          items_count: currentOrder?.items_count || 1,
-          reason: 'Проверка сквозной цепочки согласования (ERP / WMS ТСД)',
-        }),
+      const data = await requestOrderApprovalViaWhatsApp({
+        orderId: targetOrderId,
+        orderDocNumber: targetDoc,
+        clientName: currentOrder?.client_name || selectedClient?.name || 'Хоум Стар ИП (Казмарт)',
+        clientPhone: currentOrder?.client_phone || '87086984543',
+        managerPhone: cleanDigits,
+        totalAmount: Number(currentOrder?.total_amount || 87.56),
+        totalSqm: Number(currentOrder?.total_sqm || 6.9),
+        itemsCount: Number(currentOrder?.items_count || 1),
+        reason: 'Проверка сквозной цепочки согласования (ERP / WMS ТСД)',
       });
 
-      const data = await res.json().catch(() => ({}));
-      if (res.ok && data.success !== false) {
+      if (data && data.success !== false) {
         toastSuccess(`Запрос на согласование заказа №${targetDoc} отправлен в WhatsApp!`);
         setTestSuccessNotice(
           `Запрос по реальному заказу №${targetDoc} (ID: ${targetOrderId}) отправлен в WhatsApp на +${cleanDigits}. Нажмите «Одобрить» на телефоне — заказ перейдет в статус «На сборке WMS» (picking) и появится в ТСД.`
         );
       } else {
-        toastError(data.error || 'Не удалось отправить согласование в WhatsApp');
+        toastError(data?.error || data?.message || 'Не удалось отправить согласование в WhatsApp');
       }
     } catch (err: any) {
       toastError(`Ошибка отправки: ${err?.message || 'сбой сети'}`);

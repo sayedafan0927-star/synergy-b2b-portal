@@ -98,6 +98,13 @@ export function CreateDefectModal({
     };
 
     try {
+      try {
+        const rawLocal = localStorage.getItem('synergy:supplier_defects_v1');
+        const listLocal = rawLocal ? JSON.parse(rawLocal) : [];
+        const nextLocal = [newDefect, ...(Array.isArray(listLocal) ? listLocal : []).filter((d: any) => d?.act_number !== newDefect.act_number)];
+        localStorage.setItem('synergy:supplier_defects_v1', JSON.stringify(nextLocal.slice(0, 100)));
+      } catch {}
+
       const { getAuthHeaders } = await import('@/lib/erp/core');
       const authHeaders = await getAuthHeaders();
       await fetch('/api/erp?action=supplier_defects', {

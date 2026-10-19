@@ -73,14 +73,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ token: ssoParam }),
         })
-          .then(res => res.json())
+          .then(res => (res.ok && (res.headers.get('content-type') || '').includes('application/json') ? res.json() : null))
           .then(data => {
             if (data?.success && data.user && data.profile) {
               const sessionToken = data.token || data.portal_session_token || ssoParam;
               setUser(data.user);
               setProfile(data.profile);
               saveAuthSession(data.user, data.profile, sessionToken);
-            } else {
+            } else if (data?.error) {
               console.warn('[AuthContext] SSO verification rejected:', data?.error);
             }
           })
@@ -103,17 +103,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
 
         if (!parsed.token && (su || sp)) {
-          const effectiveRole = sp?.role || (su as any)?.role || 'client';
-          if (!['admin', 'manager_rm', 'manager_lm', 'supplier'].includes(effectiveRole)) {
-            fetch('/api/auth/session', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ role: effectiveRole, user: su, profile: sp }),
-            })
-              .then(r => r.json())
-              .then(resData => { if (resData?.token) saveAuthSession(su, sp, resData.token); })
-              .catch(() => {});
-          }
+          const effectiveRole = (sp?.role || (su as any)?.role || 'client') as UserRole;
+          provisionSessionToken(su, sp, effectiveRole).catch(() => {});
         }
         return;
       }
@@ -333,7 +324,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         company_name: client.name,
         phone: client.phone || '',
         manager_id: client.regional_manager?.id ? String(client.regional_manager.id) : '1',
-        price_type: client.contracts?.[0]?.price_type || 'wholesale',
+        price_type: client.price_type || client.contracts?.[0]?.price_type || 'wholesale',
         is_active: true,
         status: 'active',
         debt_usd: client.financials?.debt_usd ?? client.debt_usd,

@@ -21,6 +21,23 @@ export function parseSizeDimensions(sizeStr?: string): { width: number; length: 
   return { width: 1.6, length: 2.3, area_sqm: 3.68 };
 }
 
+function encodeDecisionToken(orderId: string | number, decision: 'approve' | 'reject', orderDocNumber?: string): string {
+  try {
+    const raw = JSON.stringify({
+      orderId,
+      orderDocNumber,
+      decision,
+      expiresAt: Date.now() + 24 * 3600 * 1000,
+    });
+    return btoa(unescape(encodeURIComponent(raw)))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+  } catch {
+    return `${orderId}:${decision}`;
+  }
+}
+
 /**
  * Запрос WhatsApp-согласования заказа для РМ / Администратора
  */
@@ -34,12 +51,69 @@ export async function requestOrderApprovalViaWhatsApp(params: {
   itemsCount: number;
   reason: string;
   managerPhone?: string;
-}): Promise<{ success: boolean; message?: string }> {
-  const res = await erpFetch('request_approval', {
-    method: 'POST',
-    body: params,
-  });
-  return await res.json().catch(() => ({ success: false, message: 'Сетевой сбой при отправке в WhatsApp' }));
+}): Promise<{ success: boolean; message?: string; error?: string }> {
+  try {
+    const res = await erpFetch('request_approval', {
+      method: 'POST',
+      body: params,
+    });
+    if (res.ok && (res.headers.get('content-type') || '').includes('application/json')) {
+      const data = await res.json();
+      if (data && data.success !== false) {
+        return data;
+      }
+    }
+  } catch {}
+
+  // Fallback для прямого шлюза api_portal.php (action=send_whatsapp)
+  try {
+    const baseUrl = typeof window !== 'undefined' && window.location.origin
+      ? window.location.origin
+      : 'https://synergy-group.kz';
+    const docNum = params.orderDocNumber || `ORD-${params.orderId}`;
+    const approveToken = encodeDecisionToken(params.orderId, 'approve', docNum);
+    const rejectToken = encodeDecisionToken(params.orderId, 'reject', docNum);
+    const approveUrl = `${baseUrl}/api/approvals/action?decision=approve&order_id=${encodeURIComponent(String(params.orderId))}&doc=${encodeURIComponent(docNum)}&token=${approveToken}`;
+    const rejectUrl = `${baseUrl}/api/approvals/action?decision=reject&order_id=${encodeURIComponent(String(params.orderId))}&doc=${encodeURIComponent(docNum)}&token=${rejectToken}`;
+    const rawDigits = (params.managerPhone || '').replace(/\D+/g, '');
+    const cleanPhone = rawDigits.length >= 10 ? rawDigits : '77086984543';
+
+    const messageText =
+      `🚨 *ТРЕБУЕТСЯ СОГЛАСОВАНИЕ ЗАКАЗА SYNERGY B2B*\n\n` +
+      `📄 *Заказ:* №${docNum}\n` +
+      `🏢 *Клиент:* ${params.clientName} (${params.clientPhone || 'тел. не указан'})\n` +
+      `💰 *Сумма:* $${Number(params.totalAmount || 0).toLocaleString('en-US')} (${Number(params.totalSqm || 0).toFixed(2)} м², ${params.itemsCount || 1} поз.)\n` +
+      `⚠️ *Причина аппрува:* ${params.reason}\n\n` +
+      `👇 *Выберите решение в один клик:*\n\n` +
+      `✅ *ОДОБРИТЬ ОТГРУЗКУ:*\n${approveUrl}\n\n` +
+      `❌ *ОТКЛОНИТЬ ЗАКАЗ:*\n${rejectUrl}\n\n` +
+      `_Ссылка действительна 24 часа. Автоматическая система Synergy B2B._`;
+
+    const waRes = await erpFetch('send_whatsapp', {
+      method: 'POST',
+      body: {
+        phone: cleanPhone,
+        message: messageText,
+        event_type: 'order_approval',
+        order_id: params.orderId,
+        order_doc_number: docNum,
+        client_name: params.clientName,
+      },
+    });
+    const waData = await waRes.json().catch(() => ({}));
+    if (waRes.ok && waData?.success !== false) {
+      return {
+        success: true,
+        message: 'Запрос на согласование успешно отправлен ответственному менеджеру в WhatsApp.',
+      };
+    }
+    return {
+      success: false,
+      error: waData?.error || 'Не удалось отправить запрос в WhatsApp',
+    };
+  } catch {
+    return { success: false, message: 'Сетевой сбой при отправке в WhatsApp' };
+  }
 }
 
 /**

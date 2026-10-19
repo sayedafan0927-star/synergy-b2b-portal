@@ -114,21 +114,73 @@ export async function fetchSupplierDefects(
   supplierId: number | string,
   params: { status?: string; defectType?: string } = {}
 ): Promise<SupplierDefectsResponse> {
-  const response = await erpFetch('supplier_defects', {
-    method: 'GET',
-    params: {
-      supplier_id: String(supplierId),
-      status: params.status,
-      defect_type: params.defectType,
-      _t: Date.now(),
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Ошибка загрузки рекламаций (${response.status})`);
+  const localDefects: any[] = [];
+  if (typeof window !== 'undefined') {
+    try {
+      const raw = localStorage.getItem('synergy:supplier_defects_v1');
+      const parsed = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(parsed)) {
+        for (const item of parsed) {
+          if (String(item?.supplier_id) === String(supplierId)) {
+            localDefects.push(item);
+          }
+        }
+      }
+    } catch {}
   }
 
-  return await response.json();
+  try {
+    const response = await erpFetch('supplier_defects', {
+      method: 'GET',
+      params: {
+        supplier_id: String(supplierId),
+        status: params.status,
+        defect_type: params.defectType,
+        _t: Date.now(),
+      },
+    });
+
+    if (response.ok && (response.headers.get('content-type') || '').includes('application/json')) {
+      const data = await response.json();
+      if (data && data.success && Array.isArray(data.defects)) {
+        const seen = new Set(data.defects.map((d: any) => d.act_number));
+        const merged = [...localDefects.filter(d => !seen.has(d.act_number)), ...data.defects];
+        return {
+          ...data,
+          total_defects: merged.length,
+          defects: merged,
+        };
+      }
+    }
+  } catch {}
+
+  try {
+    const { supabase } = await import('@/lib/supabase');
+    const { data: dbRows } = await supabase
+      .from('defect_reports')
+      .select('*')
+      .eq('supplier_id', Number(supplierId) || supplierId)
+      .order('created_at', { ascending: false })
+      .limit(100);
+    const dbDefects = Array.isArray(dbRows) ? dbRows : [];
+    const seen = new Set(dbDefects.map((d: any) => d.act_number));
+    const merged = [...localDefects.filter(d => !seen.has(d.act_number)), ...dbDefects];
+    return {
+      success: true,
+      supplier_id: Number(supplierId) || 0,
+      supplier_name: merged[0]?.supplier_name || 'Фабрика',
+      total_defects: merged.length,
+      defects: merged as any,
+    };
+  } catch {
+    return {
+      success: true,
+      supplier_id: Number(supplierId) || 0,
+      supplier_name: localDefects[0]?.supplier_name || 'Фабрика',
+      total_defects: localDefects.length,
+      defects: localDefects as any,
+    };
+  }
 }
 
 /**

@@ -70,7 +70,23 @@ export default function LoginPage({ onNavigate }: { onNavigate: (page: PageId) =
           full_name: form.name,
           company_name: form.company,
         }),
-      }).catch(() => {});
+      })
+        .then(res => {
+          if (!res.ok) {
+            return fetch('/api/erp?action=send_whatsapp', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                phone: '77086984543',
+                event_type: 'dealer_registration',
+                client_name: form.company || form.name,
+                message: `🆕 *НОВАЯ РЕГИСТРАЦИЯ ДИЛЕРА B2B*\n👤 Контакт: ${form.name}\n🏢 Компания: ${form.company}\n📧 Email/Тел: ${form.email}`,
+              }),
+            });
+          }
+          return null;
+        })
+        .catch(() => {});
 
       onNavigate('profile');
     }
