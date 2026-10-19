@@ -1,3 +1,5 @@
+import { getAuthHeaders } from './erp/core';
+
 export interface MediaSpecInfo {
   slot: string;
   title: string;
@@ -105,7 +107,33 @@ function openMediaDb(): Promise<IDBDatabase> {
 
 const blobObjectUrlCache = new Map<string, string>();
 
+/**
+ * Uploads the media file to the production server (/cms_api.php?action=upload -> /uploads/cms/...)
+ * so all visitors on all devices see it immediately. Falls back to IndexedDB in local dev.
+ */
 export async function saveMediaFileToLocalCms(slotKey: string, file: File): Promise<string> {
+  try {
+    const authHeaders = await getAuthHeaders();
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('slot', slotKey);
+
+    const res = await fetch('/cms_api.php?action=upload', {
+      method: 'POST',
+      headers: authHeaders,
+      body: formData,
+    });
+    const isJson = (res.headers.get('content-type') || '').includes('application/json');
+    if (res.ok && isJson) {
+      const data = await res.json();
+      if (data?.success && data?.url) {
+        return String(data.url);
+      }
+    }
+  } catch {
+    // Fallback to IndexedDB on localhost dev server
+  }
+
   const idbUri = `idb://${slotKey}_${Date.now()}`;
   const db = await openMediaDb();
   await new Promise<void>((resolve, reject) => {

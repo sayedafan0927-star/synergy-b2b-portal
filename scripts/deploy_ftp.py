@@ -135,8 +135,8 @@ def sync_directory(ftp: ftplib.FTP, local_dir: str, remote_base: str, force: boo
             file_size = os.path.getsize(local_file)
             file_hash = compute_sha256(local_file)
 
-            # Always upload entrypoints and manifests regardless of size
-            is_critical_entry = file in ("index.html", "sw.js", "manifest.json") or file.endswith(".html")
+            # Always upload entrypoints, manifests, and PHP endpoints regardless of size
+            is_critical_entry = file in ("index.html", "sw.js", "manifest.json") or file.endswith(".html") or file.endswith(".php")
             is_hashed_asset = remote_file.startswith("dist/assets/")
 
             if not force and not is_critical_entry:

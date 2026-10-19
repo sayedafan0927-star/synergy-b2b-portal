@@ -2624,7 +2624,8 @@ with open(os.path.join(ROOT_DIR, "src", "components", "home", "HeroBannerMedia.t
     hbm_s54 = fp.read()
 with open(os.path.join(ROOT_DIR, "src", "contexts", "LanguageContext.tsx"), "r", encoding="utf-8") as fp:
     lc_s54 = fp.read()
-test_assert("useSiteContent" in hbm_s54 and "translationsOverride" in lc_s54, "HeroBannerMedia.tsx and LanguageContext.tsx dynamically apply CMS media and localization overrides")
+cms_php_path = os.path.join(ROOT_DIR, "public", "cms_api.php")
+test_assert(os.path.exists(cms_php_path) and "/cms_api.php?action=upload" in sms_s54 and "/cms_api.php?action=save_content" in scs_s54 and "useSiteContent" in hbm_s54 and "translationsOverride" in lc_s54, "public/cms_api.php, HeroBannerMedia.tsx, and LanguageContext.tsx persist uploaded media (/uploads/cms/) and site_content.json on the production server across all devices")
 
 # ------------------------------------------------------------------------------
 # 79. Summary Report

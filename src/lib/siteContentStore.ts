@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Language } from '@/i18n';
 import { fetchDisplaySettingsFromErp, saveDisplaySettingsToErp } from './erpApi';
+import { getAuthHeaders } from './erp/core';
 import {
   SITE_MEDIA_SPECS,
   type MediaSpecInfo,
@@ -183,6 +184,15 @@ export async function saveSiteContent(patch: Partial<SiteContentConfig>): Promis
   }
 
   try {
+    const authHeaders = await getAuthHeaders();
+    await fetch('/cms_api.php?action=save_content', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders },
+      body: JSON.stringify({ site_content: next }),
+    });
+  } catch {}
+
+  try {
     await saveDisplaySettingsToErp({ site_content: next } as any);
   } catch {}
 
@@ -213,16 +223,24 @@ export function useSiteContent() {
 
     if (!serverSyncInitiated) {
       serverSyncInitiated = true;
-      fetchDisplaySettingsFromErp()
-        .then(erpSettings => {
-          const remoteContent = (erpSettings as any)?.site_content;
-          if (remoteContent && typeof remoteContent === 'object') {
-            const local = getSiteContent();
-            if (!local.updatedAt || (remoteContent.updatedAt && remoteContent.updatedAt > local.updatedAt)) {
-              const merged = mergeWithDefaults(remoteContent);
+      fetch('/cms_api.php?action=get_content')
+        .then(async res => {
+          const isJson = (res.headers.get('content-type') || '').includes('application/json');
+          if (res.ok && isJson) {
+            const data = await res.json();
+            if (data?.success && data?.site_content && typeof data.site_content === 'object') {
+              const merged = mergeWithDefaults(data.site_content);
               localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
               window.dispatchEvent(new CustomEvent(EVENT_KEY, { detail: merged }));
+              return;
             }
+          }
+          const erpSettings = await fetchDisplaySettingsFromErp();
+          const remoteContent = (erpSettings as any)?.site_content;
+          if (remoteContent && typeof remoteContent === 'object') {
+            const merged = mergeWithDefaults(remoteContent);
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+            window.dispatchEvent(new CustomEvent(EVENT_KEY, { detail: merged }));
           }
         })
         .catch(() => {});
