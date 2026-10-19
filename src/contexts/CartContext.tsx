@@ -85,6 +85,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
         setItems(prevItems => {
           let updated = false;
           const next = prevItems.map(cartItem => {
+            if (cartItem.is_preorder || String(cartItem.warehouse || '').includes('Предзаказ')) {
+              return cartItem;
+            }
             const match = rawItems.find(
               (it: any) => {
                 const skuMatches =

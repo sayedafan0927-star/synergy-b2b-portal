@@ -1,4 +1,4 @@
-import { erpFetch, getAuthHeaders } from './core';
+import { erpFetch, getAuthHeaders, deduplicateRequest } from './core';
 import { buildSupplierStockFromCatalog, normalizeReleasesPayload, normalizeStockPayload } from './supplierFallback';
 import type {
   SupplierNetworkStockResponse,
@@ -8,6 +8,8 @@ import type {
   SupplierInfo,
   DiscrepancyActResponse,
 } from './types';
+
+let suppliersMemoryCache: { data: SupplierInfo[]; expiry: number } | null = null;
 
 /**
  * Запрос данных личного кабинета фабрики / поставщика (Merinos, SAYDAM и др.)
@@ -186,21 +188,28 @@ export async function fetchSupplierDefects(
 /**
  * Получение динамического списка фабрик и производителей из ERP (action=suppliers).
  */
-export async function fetchSuppliersFromErp(): Promise<SupplierInfo[]> {
-  try {
-    const response = await erpFetch('suppliers', { method: 'GET' });
-    if (!response.ok) {
-      throw new Error(`Ошибка загрузки фабрик (${response.status})`);
-    }
-
-    const data = await response.json();
-    if (data?.success && Array.isArray(data.suppliers)) {
-      return data.suppliers;
-    }
-  } catch (err) {
-    console.warn('[fetchSuppliersFromErp] Fallback on error:', err);
+export async function fetchSuppliersFromErp(forceRefresh = false): Promise<SupplierInfo[]> {
+  if (!forceRefresh && suppliersMemoryCache && suppliersMemoryCache.expiry > Date.now()) {
+    return suppliersMemoryCache.data;
   }
-  return [];
+
+  return deduplicateRequest('suppliers_list', async () => {
+    try {
+      const response = await erpFetch('suppliers', { method: 'GET' });
+      if (!response.ok) {
+        throw new Error(`Ошибка загрузки фабрик (${response.status})`);
+      }
+
+      const data = await response.json();
+      if (data?.success && Array.isArray(data.suppliers)) {
+        suppliersMemoryCache = { data: data.suppliers, expiry: Date.now() + 300000 };
+        return data.suppliers;
+      }
+    } catch (err) {
+      console.warn('[fetchSuppliersFromErp] Fallback on error:', err);
+    }
+    return suppliersMemoryCache ? suppliersMemoryCache.data : [];
+  });
 }
 
 /**

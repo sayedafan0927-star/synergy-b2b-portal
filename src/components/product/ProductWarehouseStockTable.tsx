@@ -200,8 +200,8 @@ export function ProductWarehouseStockTable({
                             <button onClick={() => onDecQty(key)} className="flex h-10 w-10 items-center justify-center rounded-l-md border border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors cursor-pointer">
                               <Minus className="h-4 w-4" />
                             </button>
-                            <input type="number" min={0} max={wh.stock} value={qty} onChange={e => onSetQty(key, parseInt(e.target.value, 10) || 0)} className="h-10 w-14 border-y border-slate-200 bg-white text-center text-sm text-slate-900 outline-none focus:border-brand-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
-                            <button onClick={() => onIncQty(key)} className="flex h-10 w-10 items-center justify-center rounded-r-md border border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors cursor-pointer">
+                            <input type="number" min={0} max={wh.stock} value={qty} onChange={e => onSetQty(key, Math.min(wh.stock, parseInt(e.target.value, 10) || 0))} className="h-10 w-14 border-y border-slate-200 bg-white text-center text-sm text-slate-900 outline-none focus:border-brand-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                            <button onClick={() => onSetQty(key, Math.min(wh.stock, qty + 1))} className="flex h-10 w-10 items-center justify-center rounded-r-md border border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors cursor-pointer">
                               <Plus className="h-4 w-4" />
                             </button>
                           </div>
@@ -438,8 +438,8 @@ export function ProductWarehouseStockTable({
                           <button onClick={() => onDecQty(key)} className="flex h-8 w-8 items-center justify-center rounded-l-md border border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors cursor-pointer">
                             <Minus className="h-3.5 w-3.5" />
                           </button>
-                          <input type="number" min={0} max={wh.stock} value={qty} onChange={e => onSetQty(key, parseInt(e.target.value, 10) || 0)} className="h-8 w-12 border-y border-slate-200 bg-white text-center text-sm text-slate-900 outline-none focus:border-brand-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
-                          <button onClick={() => onIncQty(key)} className="flex h-8 w-8 items-center justify-center rounded-r-md border border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors cursor-pointer">
+                          <input type="number" min={0} max={wh.stock} value={qty} onChange={e => onSetQty(key, Math.min(wh.stock, parseInt(e.target.value, 10) || 0))} className="h-8 w-12 border-y border-slate-200 bg-white text-center text-sm text-slate-900 outline-none focus:border-brand-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                          <button onClick={() => onSetQty(key, Math.min(wh.stock, qty + 1))} className="flex h-8 w-8 items-center justify-center rounded-r-md border border-slate-200 bg-slate-50 text-slate-500 hover:bg-slate-100 transition-colors cursor-pointer">
                             <Plus className="h-3.5 w-3.5" />
                           </button>
                         </div>

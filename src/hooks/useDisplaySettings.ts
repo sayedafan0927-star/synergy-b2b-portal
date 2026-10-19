@@ -61,24 +61,44 @@ export function useDisplaySettings() {
     loadSettings();
   }, [loadSettings]);
 
-  // Серверная синхронизация с ERP (portal_settings)
+  // Серверная синхронизация с ERP (portal_settings) — применяется для базовой роли client при отсутствии локального оверрайда
   useEffect(() => {
+    if (currentRole !== 'client') return;
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem(STORAGE_KEY);
+        if (stored && JSON.parse(stored)?.[currentRole]) return;
+      } catch {}
+    }
     let cancelled = false;
     fetchDisplaySettingsFromErp().then(erpSettings => {
       if (!cancelled && erpSettings) {
-        setSettings(prev => ({
-          ...prev,
-          show_stock: erpSettings.show_free_stock ?? prev.show_stock,
-          show_reserve: erpSettings.show_reserved_stock ?? prev.show_reserve,
-          show_total_pcs: erpSettings.show_total_stock ?? prev.show_total_pcs,
-          show_price: erpSettings.show_prices ?? prev.show_price,
-          show_sqm: erpSettings.show_price_per_sqm ?? prev.show_sqm,
-          show_showroom_warehouse: erpSettings.show_dealer_showroom ?? prev.show_showroom_warehouse,
-        }));
+        setSettings(prev => {
+          const next: DisplaySettings = {
+            ...prev,
+            show_stock: erpSettings.show_free_stock ?? prev.show_stock,
+            show_reserve: erpSettings.show_reserved_stock ?? prev.show_reserve,
+            show_total_pcs: erpSettings.show_total_stock ?? prev.show_total_pcs,
+            show_price: erpSettings.show_prices ?? prev.show_price,
+            show_sqm: erpSettings.show_price_per_sqm ?? prev.show_sqm,
+            show_showroom_warehouse: erpSettings.show_dealer_showroom ?? prev.show_showroom_warehouse,
+          };
+          if (
+            next.show_stock === prev.show_stock &&
+            next.show_reserve === prev.show_reserve &&
+            next.show_total_pcs === prev.show_total_pcs &&
+            next.show_price === prev.show_price &&
+            next.show_sqm === prev.show_sqm &&
+            next.show_showroom_warehouse === prev.show_showroom_warehouse
+          ) {
+            return prev;
+          }
+          return next;
+        });
       }
     }).catch(() => {});
     return () => { cancelled = true; };
-  }, []);
+  }, [currentRole]);
 
   useEffect(() => {
     const handler = () => {

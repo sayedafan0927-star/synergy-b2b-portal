@@ -27,10 +27,12 @@ export default function ProfilePage({
   onNavigate: (page: PageId, id?: string, tab?: string) => void;
   initialTab?: string;
 }) {
-  const { user, profile, loading, signOut, isAdmin, realIsAdmin, isManager, isSupplier } = useAuth();
+  const { user, profile, loading, signOut, isAdmin, realIsAdmin, isManager, realIsManager, isSupplier, isImpersonating } = useAuth();
   const { t } = useLanguage();
   const adminAccess = realIsAdmin;
-  const clientsAccess = realIsAdmin || isManager;
+  const clientsAccess = realIsAdmin || Boolean(realIsManager) || isManager;
+  const effectiveAdminOrders = Boolean((adminAccess || isAdmin) && !isImpersonating);
+  const effectiveManagerOrders = Boolean((isManager || realIsManager) && !isImpersonating);
 
   const [activeTab, setActiveTabState] = useState<TabId>(() => {
     const validTabs: TabId[] = ['orders', 'supplier-portal', 'admin-erp', 'admin-users', 'admin-display', 'settings'];
@@ -170,7 +172,7 @@ export default function ProfilePage({
   }
 
   const tabs: Array<{ id: TabId; label: string; icon: any; show: boolean }> = [
-    { id: 'orders', label: adminAccess ? t('profile.tab_all_orders') : isManager ? t('profile.tab_client_orders') : t('profile.tab_my_orders'), icon: Package, show: !isSupplier },
+    { id: 'orders', label: effectiveAdminOrders ? t('profile.tab_all_orders') : effectiveManagerOrders ? t('profile.tab_client_orders') : t('profile.tab_my_orders'), icon: Package, show: !isSupplier },
     { id: 'supplier-portal', label: t('profile.tab_supplier'), icon: Package, show: isSupplier || adminAccess },
     { id: 'admin-erp', label: t('profile.tab_admin_erp'), icon: Server, show: adminAccess },
     { id: 'admin-users', label: t('profile.tab_admin_users'), icon: Users, show: clientsAccess },
@@ -402,7 +404,7 @@ export default function ProfilePage({
               <OrderDetail
                 order={selectedOrder}
                 onBack={() => setSelectedOrder(null)}
-                isAdmin={adminAccess || isAdmin}
+                isAdmin={effectiveAdminOrders}
                 onUpdateOrder={(updated) => setSelectedOrder(updated)}
                 onRepeatOrder={handleRepeatOrder}
                 repeatingOrderId={repeatingOrderId}
@@ -410,8 +412,8 @@ export default function ProfilePage({
             ) : (
               <OrdersTab
                 onSelectOrder={setSelectedOrder}
-                isAdmin={adminAccess || isAdmin}
-                isManager={isManager || clientsAccess}
+                isAdmin={effectiveAdminOrders}
+                isManager={effectiveManagerOrders}
                 onRepeatOrder={handleRepeatOrder}
                 repeatingOrderId={repeatingOrderId}
               />

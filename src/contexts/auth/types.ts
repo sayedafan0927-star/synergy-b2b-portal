@@ -57,6 +57,7 @@ export interface AuthContextValue {
   isAdmin: boolean;
   realIsAdmin: boolean;
   isManager: boolean;
+  realIsManager?: boolean;
   isSupplier: boolean;
   isClient: boolean;
   b2bRole: B2BSubRole;

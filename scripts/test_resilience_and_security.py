@@ -2557,7 +2557,50 @@ with open(os.path.join(ROOT_DIR, "src", "pages", "ProfilePage.tsx"), "r", encodi
 test_assert("lazy(() => import('@/components/SupplierCabinet'))" in pp_s52 and "<Suspense" in pp_s52, "ProfilePage.tsx lazy-loads SupplierCabinet and Admin tabs with React.Suspense")
 
 # ------------------------------------------------------------------------------
-# 77. Summary Report
+# 77. Stage 53: Pass 12 Impersonation Role Scoping, Matrix Warehouse Isolation, Preorder Cart Guard & Network Resilience
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 77. STAGE 53: PASS 12 IMPERSONATION SCOPING, MATRIX WAREHOUSE ISOLATION, PREORDER GUARD & NETWORK RESILIENCE ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "src", "contexts", "AuthContext.tsx"), "r", encoding="utf-8") as fp:
+    ac_s53 = fp.read()
+with open(os.path.join(ROOT_DIR, "src", "pages", "ProfilePage.tsx"), "r", encoding="utf-8") as fp:
+    pp_s53 = fp.read()
+test_assert("realIsManager: realRole === 'manager_rm' || realRole === 'manager_lm'" in ac_s53 and "effectiveAdminOrders" in pp_s53 and "effectiveManagerOrders" in pp_s53, "AuthContext.tsx and ProfilePage.tsx preserve manager clients tab access while scoping orders view to impersonated client")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "catalog", "CatalogStockTable.tsx"), "r", encoding="utf-8") as fp:
+    cst_s53 = fp.read()
+with open(os.path.join(ROOT_DIR, "src", "pages", "CatalogPage.tsx"), "r", encoding="utf-8") as fp:
+    cat_s53 = fp.read()
+with open(os.path.join(ROOT_DIR, "src", "components", "product", "ProductWarehouseStockTable.tsx"), "r", encoding="utf-8") as fp:
+    pwst_s53 = fp.read()
+test_assert("getAllowedWarehouses" in cst_s53 and "filterClientWarehouses(" in cat_s53 and "Math.min(wh.stock, qty + 1)" in pwst_s53, "CatalogStockTable.tsx, CatalogPage.tsx, and ProductWarehouseStockTable.tsx enforce client warehouse isolation and stock ceiling on quantity increments")
+
+with open(os.path.join(ROOT_DIR, "src", "pages", "CartPage.tsx"), "r", encoding="utf-8") as fp:
+    cart_s53 = fp.read()
+with open(os.path.join(ROOT_DIR, "src", "contexts", "CartContext.tsx"), "r", encoding="utf-8") as fp:
+    cctx_s53 = fp.read()
+test_assert("includes('Предзаказ')" in cart_s53 and "inProd > 0 ? inProd" in cart_s53 and "includes('Предзаказ')" in cctx_s53, "CartPage.tsx and CartContext.tsx protect factory preorder items from false 0-stock depletion")
+
+with open(os.path.join(ROOT_DIR, "src", "lib", "erp", "displaySettingsApi.ts"), "r", encoding="utf-8") as fp:
+    dsa_s53 = fp.read()
+with open(os.path.join(ROOT_DIR, "src", "hooks", "useDisplaySettings.ts"), "r", encoding="utf-8") as fp:
+    uds_s53 = fp.read()
+test_assert("lastAttemptFailedAt" in dsa_s53 and "if (currentRole !== 'client') return;" in uds_s53, "displaySettingsApi.ts caches negative responses and useDisplaySettings.ts scopes ERP overrides to client role without redundant re-renders")
+
+with open(os.path.join(ROOT_DIR, "src", "lib", "offlineOrderQueue.ts"), "r", encoding="utf-8") as fp:
+    ooq_s53 = fp.read()
+test_assert("MAX_OFFLINE_RETRIES" in ooq_s53 and "o.status === 'syncing'" in ooq_s53, "offlineOrderQueue.ts recovers interrupted syncing orders on reload and bounds retries with MAX_OFFLINE_RETRIES")
+
+with open(os.path.join(ROOT_DIR, "src", "lib", "erp", "core.ts"), "r", encoding="utf-8") as fp:
+    core_s53 = fp.read()
+with open(os.path.join(ROOT_DIR, "src", "lib", "erp", "suppliersApi.ts"), "r", encoding="utf-8") as fp:
+    sa_s53 = fp.read()
+with open(os.path.join(ROOT_DIR, "src", "lib", "erp", "supplierFallback.ts"), "r", encoding="utf-8") as fp:
+    sf_s53 = fp.read()
+test_assert("AbortController" in core_s53 and "suppliersMemoryCache" in sa_s53 and "dist.type = 'central_hub'" in sf_s53, "erp/core.ts enforces AbortController timeout, suppliersApi.ts caches suppliers list, and supplierFallback.ts tags central_hub on Warehouse 81")
+
+# ------------------------------------------------------------------------------
+# 78. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

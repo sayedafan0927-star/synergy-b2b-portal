@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { Search, SlidersHorizontal, ChevronDown, X, LayoutGrid, Table2, Globe } from 'lucide-react';
 import type { PageId, StockSummary, Product } from '@/types';
-import { useProducts } from '@/hooks/useProductData';
+import { useProducts, filterClientWarehouses } from '@/hooks/useProductData';
 import { useUserPricing } from '@/hooks/usePricing';
 import ProductCard from '@/components/ProductCard';
 import StockSummaryBar from '@/components/StockSummaryBar';
@@ -127,7 +127,15 @@ export default function CatalogPage({
     if (selectedCountries.size > 0) result = result.filter(p => selectedCountries.has(p.country));
     if (selectedWarehouses.size > 0)
       result = result.filter(p =>
-        p.variants.some(v => v.warehouses.some(w => selectedWarehouses.has(w.warehouse_name || w.city) && w.stock > 0)),
+        p.variants.some(v =>
+          filterClientWarehouses(
+            v.warehouses,
+            profile?.showroom_warehouse_id,
+            myShowroomName,
+            isEffectiveAdmin ? true : profile,
+            displaySettings,
+          ).some(w => selectedWarehouses.has(w.warehouse_name || w.city) && w.stock > 0),
+        ),
       );
     if (selectedSizes.size > 0) result = result.filter(p => p.variants.some(v => selectedSizes.has(v.size)));
 

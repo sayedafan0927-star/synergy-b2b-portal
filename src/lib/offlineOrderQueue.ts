@@ -102,6 +102,7 @@ export function onOfflineQueueChange(callback: (orders: QueuedOfflineOrder[]) =>
 }
 
 let isProcessing = false;
+export const MAX_OFFLINE_RETRIES = 5;
 
 /**
  * Process all pending offline orders and sync them with ERP
@@ -117,7 +118,12 @@ export async function processOfflineOrderQueue(): Promise<{ synced: number; fail
   }
 
   const queue = getQueuedOfflineOrders();
-  const pending = queue.filter(o => o.status === 'pending' || o.status === 'failed');
+  const pending = queue.filter(
+    o =>
+      o.status === 'pending' ||
+      o.status === 'syncing' ||
+      (o.status === 'failed' && (o.retries || 0) < MAX_OFFLINE_RETRIES)
+  );
 
   if (pending.length === 0) {
     return { synced: 0, failed: 0 };
@@ -150,8 +156,16 @@ export async function processOfflineOrderQueue(): Promise<{ synced: number; fail
       }
     } catch (err: any) {
       order.status = 'failed';
-      order.retries = (order.retries || 0) + 1;
-      order.lastError = err?.message || 'Network error during sync';
+      const errStatus = Number(err?.status || 0);
+      const errMsg = String(err?.message || 'Network error during sync');
+      const isPermanentError =
+        errStatus === 400 ||
+        errStatus === 403 ||
+        errStatus === 409 ||
+        errStatus === 422 ||
+        /INSUFFICIENT_STOCK|CLIENT_BLOCKED|ACCOUNTANT_CANNOT_ORDER|FORBIDDEN/i.test(errMsg);
+      order.retries = isPermanentError ? MAX_OFFLINE_RETRIES : (order.retries || 0) + 1;
+      order.lastError = errMsg;
       failed++;
       console.warn(`[OfflineQueue] Failed to sync order ${order.id} (attempt ${order.retries}):`, order.lastError);
     }
@@ -182,10 +196,17 @@ export function initOfflineQueueAutoSync(): () => void {
 
   window.addEventListener('online', handleOnline);
 
-  // If already online at startup, check for any pending orders
+  // If already online at startup, check for any pending or interrupted syncing orders
   if (typeof navigator !== 'undefined' && navigator.onLine) {
     const queue = getQueuedOfflineOrders();
-    if (queue.some(o => o.status === 'pending')) {
+    if (
+      queue.some(
+        o =>
+          o.status === 'pending' ||
+          o.status === 'syncing' ||
+          (o.status === 'failed' && (o.retries || 0) < MAX_OFFLINE_RETRIES)
+      )
+    ) {
       setTimeout(() => {
         processOfflineOrderQueue().catch(err => console.error('[OfflineQueue] Startup sync error:', err));
       }, 3000);

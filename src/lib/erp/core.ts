@@ -155,9 +155,11 @@ export async function erpFetch(
     params?: Record<string, string | number | undefined | null>;
     body?: any;
     headers?: Record<string, string>;
+    timeoutMs?: number;
   } = {}
 ): Promise<Response> {
   const method = options.method || 'GET';
+  const timeoutMs = options.timeoutMs ?? 12000;
   const q = new URLSearchParams();
   q.set('action', action);
   if (options.params) {
@@ -186,12 +188,23 @@ export async function erpFetch(
     requestHeaders['Content-Type'] = 'application/json';
   }
 
+  const fetchWithTimeout = async (hdrs: Record<string, string>) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(proxyEndpoint, {
+        method,
+        headers: hdrs,
+        body: options.body ? JSON.stringify(options.body) : undefined,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
   // Все обращения осуществляются строго через защищенный серверный шлюз
-  let response = await fetch(proxyEndpoint, {
-    method,
-    headers: requestHeaders,
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
+  let response = await fetchWithTimeout(requestHeaders);
 
   // Self-Healing Session: при 401 прозрачно обновляем токен и повторяем запрос 1 раз
   if (response.status === 401 && typeof window !== 'undefined') {
@@ -202,11 +215,7 @@ export async function erpFetch(
           ...requestHeaders,
           ...refreshedHeaders,
         };
-        response = await fetch(proxyEndpoint, {
-          method,
-          headers: retryHeaders,
-          body: options.body ? JSON.stringify(options.body) : undefined,
-        });
+        response = await fetchWithTimeout(retryHeaders);
       }
     } catch (retryErr) {
       console.warn('[erpFetch] 401 self-healing retry notice:', retryErr);

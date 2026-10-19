@@ -144,11 +144,12 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
       const wh = variant.warehouses.find(w => (w.warehouse_name || w.city) === item.warehouse || w.warehouse_id === item.warehouse_id);
       const isPreorderItem = Boolean(
         item.is_preorder ||
-        item.warehouse === 'Предзаказ (Фабрика)' ||
+        String(item.warehouse || '').includes('Предзаказ') ||
         ((variant.free_stock ?? 0) === 0 && Number(variant.in_production_qty ?? 0) > 0)
       );
+      const inProd = Number(variant.in_production_qty ?? 0);
       const latestStock = isPreorderItem
-        ? Number(variant.in_production_qty ?? item.maxStock ?? 0)
+        ? (inProd > 0 ? inProd : (item.maxStock && item.maxStock > 0 ? item.maxStock : 999))
         : (wh ? (typeof wh.free_stock === 'number' ? wh.free_stock : wh.stock ?? 0) : undefined);
 
       return {
@@ -365,7 +366,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
     }`;
 
     const effectiveWarehouseId = items.find(it => (it as any).warehouse_id)?.warehouse_id || 81;
-    const hasPreorderItems = items.some(it => Boolean(it.is_preorder || it.warehouse === 'Предзаказ (Фабрика)'));
+    const hasPreorderItems = items.some(it => Boolean(it.is_preorder || String(it.warehouse || '').includes('Предзаказ')));
 
     const orderPayload = {
       user_id: effectiveProfile?.id,
@@ -389,7 +390,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
       hold_wms: requiresApproval,
       status: requiresApproval ? 'waiting_approval' : 'pending',
       items: items.map(item => {
-        const itemIsPreorder = Boolean(item.is_preorder || item.warehouse === 'Предзаказ (Фабрика)');
+        const itemIsPreorder = Boolean(item.is_preorder || String(item.warehouse || '').includes('Предзаказ'));
         return {
           item_id: item.item_id,
           productId: item.productId,

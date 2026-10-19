@@ -9,6 +9,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useUserPricing } from '@/hooks/usePricing';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
+import { filterClientWarehouses } from '@/hooks/useProductData';
 import ProductImage from '@/components/ProductImage';
 import { getTotalStock, sizeArea } from './types';
 
@@ -25,12 +26,22 @@ export function CatalogStockTable({
 }: CatalogStockTableProps) {
   const { t } = useLanguage();
   const { addItem, items } = useCart();
-  const { user } = useAuth();
+  const { user, profile, isAdmin, isImpersonating } = useAuth();
+  const isEffectiveAdmin = isAdmin && !isImpersonating;
+  const clientContext = isEffectiveAdmin ? true : profile;
+  const myShowroomId = profile?.showroom_warehouse_id ?? undefined;
+  const myShowroomName = profile?.showroom_warehouse_name || 'В моем магазине';
   const { currency, formatPrice, currencyUnitLabel } = useCurrency();
   const pricing = useUserPricing();
   const { settings } = useDisplaySettings();
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [addedKeys, setAddedKeys] = useState<Record<string, boolean>>({});
+
+  const getAllowedWarehouses = useCallback(
+    (warehouses: Warehouse[]) =>
+      filterClientWarehouses(warehouses, myShowroomId, myShowroomName, clientContext, settings),
+    [myShowroomId, myShowroomName, clientContext, settings],
+  );
 
   const allSizes = useMemo(() => {
     const set = new Set<string>();
@@ -67,7 +78,7 @@ export function CatalogStockTable({
     (product: Product, variant: ProductVariant, wh: Warehouse, isPreorder = false) => {
       const whLabel = wh.warehouse_name || wh.city;
       const key = cellKey(product.id, variant.sku, whLabel);
-      const qty = quantities[key] ?? 0;
+      const qty = Math.min(wh.stock, quantities[key] ?? 0);
       if (qty < 1 || wh.stock < 1) return;
       const price = pricing.getVariantPrice(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
       const pricePerSqm = pricing.getPricePerSqm(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
@@ -126,7 +137,8 @@ export function CatalogStockTable({
           if (settings.show_sqm) cells.push('');
           return cells;
         }
-        const wh = variant.warehouses.find(w => (w.warehouse_name || w.city) === warehouse);
+        const allowedWhs = getAllowedWarehouses(variant.warehouses);
+        const wh = allowedWhs.find(w => (w.warehouse_name || w.city) === warehouse);
         const stock = wh?.stock ?? 0;
         const { w, h } = parseSizeDimensions(size);
         const sqm = stock * w * h;
@@ -225,7 +237,8 @@ export function CatalogStockTable({
                                       let pcs = 0;
                                       let sqm = 0;
                                       product.variants.forEach(v => {
-                                        const wh = v.warehouses.find(w => (w.warehouse_name || w.city) === selectedWarehouse);
+                                        const allowedWhs = getAllowedWarehouses(v.warehouses);
+                                        const wh = allowedWhs.find(w => (w.warehouse_name || w.city) === selectedWarehouse);
                                         if (wh) {
                                           pcs += wh.stock;
                                           const { w: vw, h: vh } = parseSizeDimensions(v.size);
@@ -259,7 +272,8 @@ export function CatalogStockTable({
                               </td>
                             );
                           }
-                          const wh = variant.warehouses.find(w => (w.warehouse_name || w.city) === selectedWarehouse);
+                          const allowedWhs = getAllowedWarehouses(variant.warehouses);
+                          const wh = allowedWhs.find(w => (w.warehouse_name || w.city) === selectedWarehouse);
                           const inProdQty = Number(variant.in_production_qty ?? 0);
                           const isPreorderCell = (!wh || wh.stock === 0) && inProdQty > 0;
                           const effectiveWh: Warehouse | undefined = wh && wh.stock > 0
@@ -275,7 +289,7 @@ export function CatalogStockTable({
                             : undefined;
 
                           if (!effectiveWh || effectiveWh.stock === 0) {
-                            const totalForSize = variant.warehouses.reduce((s, w) => s + w.stock, 0);
+                            const totalForSize = allowedWhs.reduce((s, w) => s + w.stock, 0);
                             return (
                               <td key={size} className="py-2 px-2 text-center border-l border-slate-50">
                                 {totalForSize > 0 ? (

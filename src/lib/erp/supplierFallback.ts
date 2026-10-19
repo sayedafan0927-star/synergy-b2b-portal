@@ -106,6 +106,7 @@ export function normalizeStockPayload(
           (dist.warehouse_name && String(dist.warehouse_name).includes('Астана')) ||
           dist.type === 'central_hub'
         ) {
+          dist.type = 'central_hub';
           dist.city = 'Астана';
           if (!dist.warehouse_name || String(dist.warehouse_name).includes('Алматы')) {
             dist.warehouse_name = 'Основной Склад Астана';

@@ -419,6 +419,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAdmin: realRole === 'admin',
         realIsAdmin: realRole === 'admin',
         isManager: role === 'manager_rm' || role === 'manager_lm',
+        realIsManager: realRole === 'manager_rm' || realRole === 'manager_lm',
         isSupplier: role === 'supplier',
         isClient: role === 'client' || !role,
         b2bRole,
