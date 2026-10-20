@@ -110,13 +110,13 @@ export function CartItemsTable({
           <table className="w-full text-left text-xs border-collapse">
             <thead className="sticky top-0 bg-slate-50/95 backdrop-blur-xs border-b border-slate-200 z-10 text-[11px] font-bold text-slate-600 uppercase tracking-wider">
               <tr>
-                <th className="py-2.5 px-3 min-w-[200px]">{t('cart.table_product')}</th>
-                <th className="py-2.5 px-2 text-center min-w-[90px]">{t('cart.table_size')}</th>
-                <th className="py-2.5 px-2.5 min-w-[130px]">{t('cart.table_warehouse')}</th>
-                <th className="py-2.5 px-2 text-right min-w-[95px]">{t('cart.table_price')}</th>
-                <th className="py-2.5 px-2 text-center min-w-[130px]">{t('cart.table_qty')}</th>
-                <th className="py-2.5 px-3 text-right min-w-[110px]">{t('cart.table_sum')}</th>
-                <th className="py-2.5 px-2 text-center w-10"></th>
+                <th className="py-2.5 px-3 min-w-[240px]">{t('cart.table_product')}</th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap">{t('cart.table_size')}</th>
+                <th className="py-2.5 px-2.5 whitespace-nowrap">{t('cart.table_warehouse')}</th>
+                <th className="py-2.5 px-2 text-right whitespace-nowrap">{t('cart.table_price')}</th>
+                <th className="py-2.5 px-2 text-center whitespace-nowrap">{t('cart.table_qty')}</th>
+                <th className="py-2.5 px-3 text-right whitespace-nowrap">{t('cart.table_sum')}</th>
+                <th className="py-2.5 px-2 text-center w-9"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -149,11 +149,11 @@ export function CartItemsTable({
                           width={40}
                           className="h-9 w-9 shrink-0 rounded-md object-contain bg-slate-50 border border-slate-200/80 p-0.5"
                         />
-                        <div className="min-w-0">
-                          <p className="font-bold text-slate-900 text-xs truncate max-w-[180px] sm:max-w-[240px]">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-bold text-slate-900 text-xs leading-snug break-words">
                             {item.productName}
                           </p>
-                          <div className="flex items-center gap-1.5 text-[10.5px] text-slate-500 mt-0.5">
+                          <div className="flex flex-wrap items-center gap-1.5 text-[10.5px] text-slate-500 mt-0.5">
                             <span className="font-mono bg-slate-100 px-1 py-0.2 rounded text-slate-600">
                               {item.sku || 'SKU'}
                             </span>
@@ -194,7 +194,7 @@ export function CartItemsTable({
                           )}
                         </div>
                       ) : (
-                        <p className="text-xs font-semibold text-slate-800 truncate max-w-[120px]" title={item.warehouse}>
+                        <p className="text-xs font-semibold text-slate-800" title={item.warehouse}>
                           {item.warehouse}
                         </p>
                       )}
