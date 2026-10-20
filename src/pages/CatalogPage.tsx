@@ -402,6 +402,16 @@ export default function CatalogPage({
           >
             🏭 В производстве (Доступно к предзаказу){inProductionCount > 0 ? ` (${inProductionCount})` : ''}
           </button>
+          {profile && !isShowroomMode && profile.role !== 'supplier' && (
+            <button
+              type="button"
+              onClick={() => setPriceListModalOpen(true)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 shadow-xs transition-all cursor-pointer"
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" />
+              <span>Скачать прайс-лист (Excel · у.е./м²)</span>
+            </button>
+          )}
         </div>
       </CatalogPetroglyphHero>
 

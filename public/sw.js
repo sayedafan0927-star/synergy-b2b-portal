@@ -1,4 +1,4 @@
-const CACHE_NAME = 'synergy-b2b-v26';
+const CACHE_NAME = 'synergy-b2b-v27';
 const STATIC_ASSETS = [
   '/favicon.svg',
   '/manifest.json',

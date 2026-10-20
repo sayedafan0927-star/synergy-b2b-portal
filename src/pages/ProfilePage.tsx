@@ -166,18 +166,30 @@ export default function ProfilePage({
     <section className="min-h-screen bg-slate-50 pt-20 pb-24 lg:pb-8">
       <div className="container-w space-y-6">
         {/* Page header */}
-        <div className="flex items-center justify-between gap-3 border-b border-slate-200/80 pb-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 pb-4">
           <div>
             <h1 className="text-xl sm:text-2xl font-bold text-slate-900">{t('profile.title')}</h1>
             <p className="text-xs sm:text-sm text-slate-500">{t('profile.subtitle')}</p>
           </div>
-          <button
-            onClick={handleSignOut}
-            className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium text-red-600 hover:bg-red-50 transition-colors cursor-pointer shrink-0"
-          >
-            <LogOut className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-            {t('nav.logout')}
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {!isShowroomMode && profile.role !== 'supplier' && (
+              <button
+                type="button"
+                onClick={() => setPriceListModalOpen(true)}
+                className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-bold text-white hover:bg-emerald-700 transition-colors cursor-pointer shadow-xs"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                <span>{profile.role === 'client' || isImpersonating ? 'Скачать прайс-лист (Excel)' : 'Выгрузить прайс-лист (Excel)'}</span>
+              </button>
+            )}
+            <button
+              onClick={handleSignOut}
+              className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+            >
+              <LogOut className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              {t('nav.logout')}
+            </button>
+          </div>
         </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
