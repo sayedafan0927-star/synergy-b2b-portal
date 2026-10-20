@@ -13,7 +13,7 @@ import {
   FilterDrawer, CatalogFilterSidebar, CatalogStockTable,
   CatalogLoadingSkeleton, CatalogLoadError, StockReservationsModal,
   ActiveFilterChips, useCatalogStatePersistence, useSmartFacets, DecklePaperWrapper,
-  CatalogPetroglyphHero, getTotalStock, sizeArea,
+  CatalogPetroglyphHero, CatalogWarehouseModeBar, getTotalStock, sizeArea,
   type SortOption, type ViewMode,
 } from '@/components/catalog';
 import { tokenizeSearchQuery, matchesSearchTokens } from '@/lib/searchNormalization';
@@ -100,7 +100,11 @@ export default function CatalogPage({
   const hasVariantStock = (v: Product['variants'][number]) => {
     const whs = filterClientWarehouses(
       v.warehouses, profile?.showroom_warehouse_id, myShowroomName, isEffectiveAdmin ? true : profile, displaySettings,
-    ).filter(w => matchesSelectedWarehouses(w, selectedWarehouses, profile?.showroom_warehouse_id, myShowroomName));
+    ).filter(w =>
+      selectedWarehouses.size > 0
+        ? matchesSelectedWarehouses(w, selectedWarehouses, profile?.showroom_warehouse_id, myShowroomName)
+        : (w.warehouse_id === 81 || w.is_hub || (w.warehouse_name || '').includes('Астана'))
+    );
     return whs.some(w => w.stock > 0) || (!selectedWarehouses.size && Number(v.in_production_qty ?? 0) > 0);
   };
 
@@ -133,7 +137,7 @@ export default function CatalogPage({
     if (selectedCollections.size > 0) result = result.filter(p => selectedCollections.has(p.collection));
     if (selectedManufacturers.size > 0) result = result.filter(p => selectedManufacturers.has(p.manufacturer));
     if (selectedCountries.size > 0) result = result.filter(p => selectedCountries.has(p.country));
-    if (selectedWarehouses.size > 0)
+    if (selectedWarehouses.size > 0) {
       result = result.filter(p =>
         p.variants.some(v =>
           filterClientWarehouses(
@@ -141,6 +145,9 @@ export default function CatalogPage({
           ).some(w => matchesSelectedWarehouses(w, selectedWarehouses, profile?.showroom_warehouse_id, myShowroomName) && w.stock > 0),
         ),
       );
+    } else if (!onlyInProduction && (!isEffectiveAdmin || adminStockFilter === 'in_stock') && hideOutOfStockSetting) {
+      result = result.filter(p => p.variants.some(v => hasVariantStock(v)));
+    }
     if (selectedSizes.size > 0) result = result.filter(p => p.variants.some(v => selectedSizes.has(v.size) && hasVariantStock(v)));
 
     // Sub-10ms Homoglyph, Dimension & Layout Normalized Search
@@ -401,6 +408,16 @@ export default function CatalogPage({
           </button>
         </div>
       </CatalogPetroglyphHero>
+
+        <CatalogWarehouseModeBar
+          allWarehouses={allWarehouses}
+          selectedWarehouses={selectedWarehouses}
+          onSelectWarehouse={wh => setSelectedWarehouses(wh ? new Set([wh]) : new Set())}
+          onlyInProduction={onlyInProduction}
+          onSetOnlyInProduction={setOnlyInProduction}
+          inProductionCount={inProductionCount}
+          myShowroomName={myShowroomName}
+        />
 
         {/* RugsUSA Size Clustering Bar (Pattern 3) activeClusterQuickFilter disabled per user request to prevent mobile layout overflow */}
 

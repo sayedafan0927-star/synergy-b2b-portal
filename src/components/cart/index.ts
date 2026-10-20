@@ -4,4 +4,5 @@ export { CartSubtotalsPanel } from './CartSubtotalsPanel';
 export { CartCheckoutForm } from './CartCheckoutForm';
 export { ManagerOrderSelector } from './ManagerOrderSelector';
 export { ExcelBulkOrderModal } from './ExcelBulkOrderModal';
+export { CartOrderStreamsBar } from './CartOrderStreamsBar';
 export * from './types';

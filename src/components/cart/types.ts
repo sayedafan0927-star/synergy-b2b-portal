@@ -353,3 +353,73 @@ export function formatPhone(value: string): string {
   }
   return res;
 }
+
+export type CartOrderStreamType = 'hub' | 'consignment' | 'preorder';
+
+export interface CartOrderStream {
+  id: string;
+  type: CartOrderStreamType;
+  title: string;
+  subtitle: string;
+  warehouseName: string;
+  warehouseId?: number;
+  items: CartItem[];
+  totalQty: number;
+  totalSqm: number;
+  totalAmount: number;
+}
+
+export function buildCartOrderStreams(
+  items: CartItem[],
+  isConsignmentFn: (it: CartItem) => boolean
+): CartOrderStream[] {
+  const map = new Map<string, CartOrderStream>();
+
+  for (const item of items) {
+    const isPre = Boolean(item.is_preorder || String(item.warehouse || '').includes('Предзаказ'));
+    const whName = item.warehouse || 'Основной Склад Астана';
+    const isCons = !isPre && (
+      isConsignmentFn(item) ||
+      (item.warehouse_id !== undefined && item.warehouse_id !== 81 && !whName.includes('Астана') && !whName.includes('Основной'))
+    );
+
+    const streamId = isPre ? 'preorder' : isCons ? `consignment::${whName}` : 'hub::81';
+    const existing = map.get(streamId);
+    const itemSqm = calcSqm(item.size, item.quantity);
+    const itemSum = item.price * item.quantity;
+
+    if (existing) {
+      existing.items.push(item);
+      existing.totalQty += item.quantity;
+      existing.totalSqm += itemSqm;
+      existing.totalAmount += itemSum;
+    } else {
+      map.set(streamId, {
+        id: streamId,
+        type: isPre ? 'preorder' : isCons ? 'consignment' : 'hub',
+        title: isPre
+          ? 'Предзаказ с фабрики (В производстве)'
+          : isCons
+          ? `Списание со склада: ${whName}`
+          : 'Основной Склад Астана',
+        subtitle: isPre
+          ? 'Отдельный заказ на бронь производственной квоты фабрики'
+          : isCons
+          ? 'Отдельный заказ на реализацию / списание проданного товара со склада'
+          : 'Отгрузка со свободного остатка центрального склада Астана',
+        warehouseName: isPre ? 'Предзаказ (Фабрика)' : isCons ? whName : 'Основной Склад Астана',
+        warehouseId: isPre ? 81 : isCons ? item.warehouse_id : 81,
+        items: [item],
+        totalQty: item.quantity,
+        totalSqm: itemSqm,
+        totalAmount: itemSum,
+      });
+    }
+  }
+
+  const orderWeight = (t: CartOrderStreamType) => (t === 'hub' ? 0 : t === 'consignment' ? 1 : 2);
+  return Array.from(map.values()).sort((a, b) => {
+    const diff = orderWeight(a.type) - orderWeight(b.type);
+    return diff !== 0 ? diff : a.warehouseName.localeCompare(b.warehouseName);
+  });
+}

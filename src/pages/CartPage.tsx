@@ -21,6 +21,7 @@ import {
   CartSuccessModal,
   CartItemsTable,
   CartCheckoutForm,
+  CartOrderStreamsBar,
   ExcelBulkOrderModal,
   CITIES,
   DEFAULT_CHECKOUT_PHONE,
@@ -28,6 +29,7 @@ import {
   isValidPhone,
   formatPhone,
   buildEnrichedConflictItems,
+  buildCartOrderStreams,
   parseInsufficientStockError,
   syncCartItemWithProduct,
   type StockConflictItem,
@@ -62,15 +64,28 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
   const [rawConflictItems, setRawConflictItems] = useState<StockConflictItem[]>([]);
   const conflictOverridesRef = useRef<Map<string, number>>(new Map());
   const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
+  const [activeStreamId, setActiveStreamId] = useState<string>('');
+  const [lastSubmittedOrder, setLastSubmittedOrder] = useState<{ docNumber: string; title: string } | null>(null);
+
+  const orderStreams = useMemo(() => buildCartOrderStreams(items, isConsignmentWarehouseItem), [items]);
+  const activeStream = useMemo(
+    () => orderStreams.find(s => s.id === activeStreamId) || orderStreams[0] || null,
+    [orderStreams, activeStreamId]
+  );
+  const activeItems = activeStream ? activeStream.items : items;
+  const activeTotalItems = activeStream ? activeStream.totalQty : totalItems;
+  const activeTotalSqm = activeStream ? activeStream.totalSqm : totalSqm;
+  const activeTotalPrice = activeStream ? activeStream.totalAmount : totalPrice;
 
   const effectiveProfile = isImpersonating && impersonatedProfile ? impersonatedProfile : profile;
   const isStaff = !isImpersonating && (profile?.role === 'admin' || profile?.role === 'manager_rm' || profile?.role === 'manager_lm');
   const [checkoutMode, setCheckoutMode] = useState<'manager_self' | 'dealer_client'>('manager_self');
   const [selectedClient, setSelectedClient] = useState<any | null>(null);
 
-  const consignmentItem = useMemo(() => items.find(it => isConsignmentWarehouseItem(it)), [items]);
+  const consignmentItem = useMemo(() => activeItems.find(it => isConsignmentWarehouseItem(it)), [activeItems]);
   const isConsignmentOrder = Boolean(consignmentItem);
   const consignmentWarehouseName = consignmentItem?.warehouse || '';
+  const wasConsignmentRef = useRef(false);
 
   const { getVariantPrice, getPricePerSqm } = useUserPricing(
     selectedClient?.price_type || (debtReport as any)?.client?.price_type
@@ -134,9 +149,16 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
     }
   }, [selectedClient, effectiveProfile]);
 
-  // Если товар положен со склада комиссионера — не спрашиваем на кого резерв, автоматически подтягиваем контрагента этого склада
+  // Если выбран поток склада комиссионера — автоматически подтягиваем контрагента этого склада; при переключении на хаб/предзаказ сбрасываем
   useEffect(() => {
-    if (!isConsignmentOrder || !consignmentItem) return;
+    if (!isConsignmentOrder || !consignmentItem) {
+      if (wasConsignmentRef.current) {
+        wasConsignmentRef.current = false;
+        handleSelectClient(null, checkoutMode);
+      }
+      return;
+    }
+    wasConsignmentRef.current = true;
     let active = true;
     resolveConsignmentWarehouseOwner((consignmentItem as any)?.warehouse_id, consignmentItem.warehouse).then(owner => {
       if (!active) return;
@@ -156,7 +178,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
       }
     });
     return () => { active = false; };
-  }, [isConsignmentOrder, consignmentItem?.warehouse, (consignmentItem as any)?.warehouse_id, consignmentWarehouseName]);
+  }, [isConsignmentOrder, consignmentItem?.warehouse, (consignmentItem as any)?.warehouse_id, consignmentWarehouseName, handleSelectClient, checkoutMode]);
 
   // Автоматическая подстановка данных профиля (строго только для самого клиента или режима "На себя", без перезаписи телефона контрагента!)
   useEffect(() => {
@@ -215,21 +237,21 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
     }
   }, [products, items, syncItemPrices, getVariantPrice, getPricePerSqm, toastInfo, selectedClient?.id, effectiveProfile?.id, effectiveProfile?.price_type]);
 
-  const conflictItems = useMemo(() => buildEnrichedConflictItems(items, rawConflictItems), [items, rawConflictItems]);
-  const hasDepletedItems = useMemo(() => items.some(it => it.maxStock === 0), [items]);
+  const conflictItems = useMemo(() => buildEnrichedConflictItems(activeItems, rawConflictItems), [activeItems, rawConflictItems]);
+  const hasDepletedItems = useMemo(() => activeItems.some(it => it.maxStock === 0), [activeItems]);
   const hasOverStockItems = useMemo(
-    () => items.some(it => typeof it.maxStock === 'number' && it.maxStock > 0 && it.quantity > it.maxStock),
-    [items]
+    () => activeItems.some(it => typeof it.maxStock === 'number' && it.maxStock > 0 && it.quantity > it.maxStock),
+    [activeItems]
   );
-  const hasZeroPriceItems = useMemo(() => items.some(it => !it.price || it.price <= 0), [items]);
+  const hasZeroPriceItems = useMemo(() => activeItems.some(it => !it.price || it.price <= 0), [activeItems]);
 
   const handleRemoveUnavailableItems = useCallback(() => {
-    const problematicItems = items.filter(it => (!it.price || it.price <= 0) || it.maxStock === 0);
+    const problematicItems = activeItems.filter(it => (!it.price || it.price <= 0) || it.maxStock === 0);
     problematicItems.forEach(it => removeItem(it.productId, it.size, it.warehouse));
     setSubmitError(null); setStockConflictDetails(null); setRawConflictItems([]);
     conflictOverridesRef.current.clear();
     if (problematicItems.length > 0) toastInfo(`Удалено позиций: ${problematicItems.length}. Корзина обновлена.`);
-  }, [items, removeItem, toastInfo]);
+  }, [activeItems, removeItem, toastInfo]);
 
   const handleAutoAdjustQuantities = useCallback(() => {
     let adjustedCount = 0;
@@ -237,17 +259,17 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
       const cSku = String(c.sku || '').trim().toLowerCase();
       const cItemId = Number(c.item_id) || 0;
       const avail = typeof c.available_qty === 'number' ? Math.max(0, c.available_qty) : 0;
-      for (const it of items) {
+      for (const it of activeItems) {
         const itSku = String(it.sku || '').trim().toLowerCase();
         const itProdId = String(it.productId || '').trim().toLowerCase();
         const itItemId = Number(it.item_id) || 0;
-        if ((itItemId > 0 && cItemId > 0 && itItemId === cItemId) || (cSku && (itSku === cSku || itProdId === cSku)) || items.length === 1) {
+        if ((itItemId > 0 && cItemId > 0 && itItemId === cItemId) || (cSku && (itSku === cSku || itProdId === cSku)) || activeItems.length === 1) {
           if (avail === 0) { removeItem(it.productId, it.size, it.warehouse); adjustedCount++; }
           else if (it.quantity > avail) { updateQuantity(it.productId, it.size, it.warehouse, avail); adjustedCount++; }
         }
       }
     }
-    for (const it of items) {
+    for (const it of activeItems) {
       if (typeof it.maxStock === 'number') {
         if (it.maxStock === 0) { removeItem(it.productId, it.size, it.warehouse); adjustedCount++; }
         else if (it.quantity > it.maxStock) { updateQuantity(it.productId, it.size, it.warehouse, it.maxStock); adjustedCount++; }
@@ -258,7 +280,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
     if (adjustedCount > 0) {
       toastInfo(`Скорректировано позиций: ${adjustedCount}. Количество выровнено по доступным остаткам складов.`, 'Остатки актуализированы');
     }
-  }, [items, conflictItems, removeItem, updateQuantity, toastInfo]);
+  }, [activeItems, conflictItems, removeItem, updateQuantity, toastInfo]);
 
   const isAdmin = profile?.role === 'admin';
   const isManagerSelfOrder = isStaff && !isConsignmentOrder && checkoutMode === 'manager_self';
@@ -269,14 +291,14 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
     debtReport?.client?.credit_limit_usd || debtReport?.financials?.credit_limit_usd ||
     debtReport?.credit_limit_usd || debtReport?.contracts?.[0]?.credit_limit_usd || effectiveProfile?.credit_limit_usd || 0
   );
-  const totalExposure = currentDebt + totalPrice;
+  const totalExposure = currentDebt + activeTotalPrice;
   const exceedsLimit = creditLimit > 0 && totalExposure > creditLimit;
   const hasOverdue = overdueDebt > 0;
   const requiresApproval = !isAdmin && !isManagerSelfOrder && (isBlocked || exceedsLimit || hasOverdue);
 
   const warehousesInCart = useMemo(() => {
     const map = new Map<string, { count: number; totalAmount: number }>();
-    for (const item of items) {
+    for (const item of activeItems) {
       const whName = item.warehouse || 'Основной Склад Астана';
       const existing = map.get(whName) || { count: 0, totalAmount: 0 };
       existing.count += item.quantity;
@@ -284,7 +306,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
       map.set(whName, existing);
     }
     return map;
-  }, [items]);
+  }, [activeItems]);
 
   const hasMultipleWarehouses = warehousesInCart.size > 1;
 
@@ -345,9 +367,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
     }
 
     if (typeof window !== 'undefined' && !isStaff && isValidPhone(clientPhone)) {
-      try {
-        localStorage.setItem(CHECKOUT_PHONE_STORAGE_KEY, clientPhone.trim());
-      } catch {}
+      try { localStorage.setItem(CHECKOUT_PHONE_STORAGE_KEY, clientPhone.trim()); } catch {}
     }
 
     setSubmitting(true);
@@ -360,23 +380,17 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
       : (selectedClient?.id || (effectiveProfile?.partner_id ? Number(effectiveProfile.partner_id) || effectiveProfile.partner_id : undefined));
 
     const whSummaryTag = hasMultipleWarehouses
-      ? ` [МУЛЬТИСКЛАД: ${Array.from(warehousesInCart.entries())
-          .map(([w, d]) => `${w} (${d.count} шт, ${d.totalAmount.toFixed(0)} у.е.)`)
-          .join(', ')}]`
+      ? ` [МУЛЬТИСКЛАД: ${Array.from(warehousesInCart.entries()).map(([w, d]) => `${w} (${d.count} шт, ${d.totalAmount.toFixed(0)} у.е.)`).join(', ')}]`
       : '';
     const managerTag = isManagerSelfOrder
       ? ` [ВНУТРЕННИЙ ЗАКАЗ: ${profile?.full_name || 'Менеджер'} - Переброска на клиента в ERP]`
       : (selectedClient ? ` [ОФОРМЛЕНО МЕНЕДЖЕРОМ: ${profile?.full_name || 'РМ'} ДЛЯ ${selectedClient.name} (ID: ${selectedClient.id})]` : '');
     const fullComment = `${orderComment.trim()}${whSummaryTag}${managerTag}${
-      requiresApproval
-        ? ' [ТРЕБУЕТСЯ АППРУВ В WHATSAPP: ' +
-          (isBlocked ? 'Стоп-лист' : exceedsLimit ? 'Превышение кредитного лимита' : 'Просроченная задолженность') +
-          ']'
-        : ''
+      requiresApproval ? ' [ТРЕБУЕТСЯ АППРУВ В WHATSAPP: ' + (isBlocked ? 'Стоп-лист' : exceedsLimit ? 'Превышение кредитного лимита' : 'Просроченная задолженность') + ']' : ''
     }`;
 
-    const effectiveWarehouseId = items.find(it => (it as any).warehouse_id)?.warehouse_id || 81;
-    const hasPreorderItems = items.some(it => Boolean(it.is_preorder || String(it.warehouse || '').includes('Предзаказ')));
+    const effectiveWarehouseId = activeItems.find(it => (it as any).warehouse_id)?.warehouse_id || 81;
+    const hasPreorderItems = activeItems.some(it => Boolean(it.is_preorder || String(it.warehouse || '').includes('Предзаказ')));
 
     const orderPayload = {
       user_id: effectiveProfile?.id,
@@ -396,7 +410,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
       is_held: requiresApproval,
       hold_wms: requiresApproval,
       status: requiresApproval ? 'waiting_approval' : 'pending',
-      items: items.map(item => {
+      items: activeItems.map(item => {
         const itemIsPreorder = Boolean(item.is_preorder || String(item.warehouse || '').includes('Предзаказ'));
         return {
           item_id: item.item_id,
@@ -422,13 +436,28 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
       return;
     }
 
+    const completeStreamOrCart = (docNum: string) => {
+      const hasRemainingStreams = items.length > activeItems.length;
+      if (hasRemainingStreams) {
+        activeItems.forEach(it => removeItem(it.productId, it.size, it.warehouse));
+        setLastSubmittedOrder({ docNumber: docNum, title: activeStream?.title || 'Заказ' });
+        toastInfo(`Заказ №${docNum} (${activeStream?.title}) отправлен в ERP! Вы можете сразу оформить следующий поток.`, 'Поток оформлен');
+      } else {
+        clearCart();
+        setLastSubmittedOrder(null);
+        setOrderDocNumber(docNum);
+      }
+      setStockConflictDetails(null);
+      setRawConflictItems([]);
+      conflictOverridesRef.current.clear();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       const queued = enqueueOfflineOrder(orderPayload);
-      clearCart();
       setIsOfflineQueued(true);
-      setOrderDocNumber(queued.id);
+      completeStreamOrCart(queued.id);
       setSubmitting(false);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 
@@ -444,13 +473,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
         setIsOfflineQueued(false);
         setIsWaitingApproval(!isAdmin && (requiresApproval || Boolean((data.order as any)?.requires_approval)));
         setIsPartiallyConfirmed(Boolean(data.is_partially_confirmed || data.status === 'partially_confirmed' || (receivedSplits && receivedSplits.some((s: any) => s.status === 'failed' || s.status === 'cancelled' || s.success === false))));
-
-        clearCart();
-        setOrderDocNumber(docNum);
-        setStockConflictDetails(null);
-        setRawConflictItems([]);
-        conflictOverridesRef.current.clear();
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        completeStreamOrCart(docNum);
       } else {
         throw new Error(data.error || (data as any)?.message || 'Не удалось создать заказ');
       }
@@ -463,17 +486,15 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
 
       if (isNetworkIssue) {
         const queued = enqueueOfflineOrder(orderPayload);
-        clearCart();
         setIsOfflineQueued(true);
-        setOrderDocNumber(queued.id);
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        completeStreamOrCart(queued.id);
         return;
       }
 
       if (err.code === 'INSUFFICIENT_STOCK' || err.details?.code === 'INSUFFICIENT_STOCK') {
         invalidateClientCatalogCache();
         setActiveCollection(null);
-        const parsed = parseInsufficientStockError(err, items);
+        const parsed = parseInsufficientStockError(err, activeItems);
         setSubmitError(parsed.formattedMessage);
         setStockConflictDetails(parsed.primaryDetails);
         setRawConflictItems(parsed.conflicts);
@@ -492,7 +513,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
           const matched = parsed.conflicts.find(c => {
             const cSku = String(c.sku || '').trim().toLowerCase();
             const cItemId = Number(c.item_id) || 0;
-            return (itItemId > 0 && cItemId > 0 && itItemId === cItemId) || (cSku && (itSku === cSku || itProdId === cSku)) || items.length === 1;
+            return (itItemId > 0 && cItemId > 0 && itItemId === cItemId) || (cSku && (itSku === cSku || itProdId === cSku)) || activeItems.length === 1;
           });
           if (matched) {
             const avail = typeof matched.available_qty === 'number' ? Math.max(0, matched.available_qty) : 0;
@@ -533,6 +554,13 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
             <span>{t('cart.excel_order')}</span>
           </button>
         </div>
+
+        <CartOrderStreamsBar
+          streams={orderStreams}
+          activeStreamId={activeStream?.id || ''}
+          onSelectStream={id => { setActiveStreamId(id); setActiveCollection(null); setSubmitError(null); setRawConflictItems([]); }}
+          lastSubmittedOrder={lastSubmittedOrder}
+        />
 
         {(hasDepletedItems || conflictItems.length > 0) && (
           <div className="mb-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 rounded-lg border-2 border-red-300 bg-red-50 px-3.5 py-2.5 text-xs text-red-900 animate-in fade-in shadow-xs">
@@ -578,14 +606,14 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           <div className="lg:col-span-7 xl:col-span-8">
             <CartItemsTable
-              items={items}
+              items={activeItems}
               activeCollection={activeCollection}
               onSelectCollection={setActiveCollection}
               sizeAsc={sizeAsc}
               onToggleSizeSort={() => setSizeAsc(s => !s)}
               onUpdateQuantity={updateQuantity}
               onRemoveItem={removeItem}
-              onClearCart={clearCart}
+              onClearCart={() => activeItems.forEach(it => removeItem(it.productId, it.size, it.warehouse))}
               conflictItems={conflictItems}
             />
           </div>
@@ -597,7 +625,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
               clientCompany={clientCompany} setClientCompany={setClientCompany}
               selectedCity={selectedCity} setSelectedCity={setSelectedCity}
               orderComment={orderComment} setOrderComment={setOrderComment}
-              totalItems={totalItems} totalSqm={totalSqm} totalPrice={totalPrice}
+              totalItems={activeTotalItems} totalSqm={activeTotalSqm} totalPrice={activeTotalPrice}
               submitting={submitting} submitError={submitError} stockConflictDetails={stockConflictDetails}
               conflictItems={conflictItems}
               hasDepletedItems={hasDepletedItems} hasOverStockItems={hasOverStockItems} hasZeroPriceItems={hasZeroPriceItems}

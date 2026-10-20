@@ -188,7 +188,7 @@ export function useSmartFacets({
         if (v.size) {
           const whs = selectedWarehouses.size > 0
             ? (v.warehouses || []).filter(w => matchesSet(selectedWarehouses, w.warehouse_name || w.city))
-            : (v.warehouses || []);
+            : (v.warehouses || []).filter(w => w.warehouse_id === 81 || w.is_hub || (w.warehouse_name || '').includes('Астана'));
           const hasStock =
             whs.some(w => (w.stock || 0) > 0 || (w.free_stock || 0) > 0) ||
             (selectedWarehouses.size === 0 && (v.in_production_qty ?? 0) > 0);
@@ -245,8 +245,17 @@ export function useSmartFacets({
     selectedManufacturers,
   ]);
 
-  // 5. Available Warehouses
+  // 5. Available Warehouses (Основной Склад Астана всегда первым)
   const allWarehouses = useMemo(() => {
+    const sortHubFirst = (arr: string[]) =>
+      arr.sort((a, b) => {
+        const aHub = a.includes('Астана') || a.includes('Основной');
+        const bHub = b.includes('Астана') || b.includes('Основной');
+        if (aHub && !bHub) return -1;
+        if (!aHub && bHub) return 1;
+        return a.localeCompare(b);
+      });
+
     const matching = baseProducts.filter(p =>
       productMatches(p, {
         category: selectedCategory,
@@ -270,7 +279,7 @@ export function useSmartFacets({
         }
       }
       for (const w of selectedWarehouses) set.add(w);
-      return Array.from(set).sort();
+      return sortHubFirst(Array.from(set));
     }
 
     const uniqueRawWarehouses: Warehouse[] = [];
@@ -289,7 +298,7 @@ export function useSmartFacets({
     const visible = filterWarehousesForClient(uniqueRawWarehouses, profile, myShowroomName);
     const set = new Set<string>(visible.map(w => w.warehouse_name || w.city).filter(Boolean));
     for (const w of selectedWarehouses) set.add(w);
-    const names = Array.from(set).sort();
+    const names = sortHubFirst(Array.from(set));
     return names.length > 0 ? names : ['Основной Склад Астана'];
   }, [
     baseProducts,

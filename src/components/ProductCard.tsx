@@ -100,7 +100,9 @@ function ProductCard({ product, onNavigate, selectedWarehouses, onlyInProduction
 
   const getVariantClientWarehouses = (variant: ProductVariant) => {
     const rows = filterClientWarehouses(variant.warehouses, myShowroomId, myShowroomName, clientContext, displaySettings);
-    if (!hasSelectedWarehouses) return rows;
+    if (!hasSelectedWarehouses) {
+      return rows.filter(w => w.warehouse_id === 81 || w.is_hub || (w.warehouse_name || '').includes('Астана'));
+    }
     return rows.filter(w => matchesSelectedWarehouses(w, selectedWarehouses, myShowroomId, myShowroomName));
   };
 

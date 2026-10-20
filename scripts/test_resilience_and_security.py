@@ -2700,7 +2700,50 @@ with open(os.path.join(ROOT_DIR, "src", "lib", "xlsxParser.ts"), "r", encoding="
 test_assert("MAX_XLSX_FILE_BYTES" in xp_s56 and "MAX_UNCOMPRESSED_XML_BYTES" in xp_s56, "xlsxParser.ts enforces 10 MB file size and 15 MB streaming decompression limits against Zip bombs")
 
 # ------------------------------------------------------------------------------
-# 81. Summary Report
+# 81. Stage 57: Pass 15 Warehouse & Order Stream Isolation and 409 Conflict Red Highlighting
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 81. STAGE 57: PASS 15 WAREHOUSE & ORDER STREAM ISOLATION & 409 CONFLICT HIGHLIGHTING ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "src", "lib", "catalogMerge.ts"), "r", encoding="utf-8") as fp:
+    cm_s57 = fp.read()
+with open(os.path.join(ROOT_DIR, "src", "lib", "erp", "ordersApi.ts"), "r", encoding="utf-8") as fp:
+    oa_s57 = fp.read()
+test_assert("w.warehouse_id === 81" in cm_s57 and "Number(item.warehouse_id || defaultWarehouseId || 81)" in oa_s57, "catalogMerge.ts preserves Central Hub 81 entry when depleted and ordersApi.ts preserves each item's warehouse_id")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "catalog", "CatalogWarehouseModeBar.tsx"), "r", encoding="utf-8") as fp:
+    cwmb_s57 = fp.read()
+with open(os.path.join(ROOT_DIR, "src", "pages", "CatalogPage.tsx"), "r", encoding="utf-8") as fp:
+    catp_s57 = fp.read()
+test_assert("CatalogWarehouseModeBar" in cwmb_s57 and "CatalogWarehouseModeBar" in catp_s57 and "w.warehouse_id === 81 || w.is_hub" in catp_s57, "CatalogPage.tsx renders CatalogWarehouseModeBar and scopes default catalog stock to Central Hub 81 unless a specific warehouse or preorder mode is explicitly selected")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "ProductCard.tsx"), "r", encoding="utf-8") as fp:
+    pc_s57 = fp.read()
+with open(os.path.join(ROOT_DIR, "src", "pages", "ProductPage.tsx"), "r", encoding="utf-8") as fp:
+    pp_s57 = fp.read()
+with open(os.path.join(ROOT_DIR, "src", "components", "catalog", "useSmartFacets.ts"), "r", encoding="utf-8") as fp:
+    usf_s57 = fp.read()
+test_assert("w.warehouse_id === 81 || w.is_hub" in pc_s57 and "w.warehouse_id === 81 || w.is_hub" in pp_s57 and "w.warehouse_id === 81 || w.is_hub" in usf_s57, "ProductCard.tsx, ProductPage.tsx, and useSmartFacets.ts isolate default stock and size facets to Central Hub 81")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "cart", "CartOrderStreamsBar.tsx"), "r", encoding="utf-8") as fp:
+    cosb_s57 = fp.read()
+with open(os.path.join(ROOT_DIR, "src", "components", "cart", "types.ts"), "r", encoding="utf-8") as fp:
+    ct_s57 = fp.read()
+with open(os.path.join(ROOT_DIR, "src", "pages", "CartPage.tsx"), "r", encoding="utf-8") as fp:
+    cp_s57 = fp.read()
+test_assert("buildCartOrderStreams" in ct_s57 and "CartOrderStreamsBar" in cosb_s57 and "CartOrderStreamsBar" in cp_s57 and "completeStreamOrCart" in cp_s57, "CartPage.tsx isolates Hub 81, Consignment Warehouse, and Factory Preorder streams via buildCartOrderStreams and CartOrderStreamsBar")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "cart", "CartItemsTable.tsx"), "r", encoding="utf-8") as fp:
+    cit_s57 = fp.read()
+with open(os.path.join(ROOT_DIR, "src", "components", "cart", "CartCheckoutForm.tsx"), "r", encoding="utf-8") as fp:
+    ccf_s57 = fp.read()
+test_assert("data-stock-conflict={hasStockConflict ? 'true' : undefined}" in cit_s57 and "c.productName" in ccf_s57, "CartItemsTable.tsx and CartCheckoutForm.tsx highlight 409 stock conflict rows in red and display full nomenclature details")
+
+with open(os.path.join(ROOT_DIR, "docs", "standards", "ORDER_LIFECYCLE_AND_STOCK_RESERVATIONS.md"), "r", encoding="utf-8") as fp:
+    ol_doc_s57 = fp.read()
+test_assert("CatalogWarehouseModeBar" in ol_doc_s57 and "CartOrderStreamsBar" in ol_doc_s57, "ORDER_LIFECYCLE_AND_STOCK_RESERVATIONS.md standardizes B2B Warehouse & Order Stream Isolation rules")
+
+# ------------------------------------------------------------------------------
+# 82. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

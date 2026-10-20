@@ -247,7 +247,7 @@ export default function ProductPage({
       const clientWhs = filterClientWarehouses(v.warehouses, myShowroomId, myShowroomName, clientContext, displaySettings);
       const whs = hasSelectedWarehouses
         ? clientWhs.filter(w => matchesSelectedWarehouses(w, selectedWarehouses, myShowroomId, myShowroomName))
-        : clientWhs;
+        : clientWhs.filter(w => w.warehouse_id === 81 || w.is_hub || (w.warehouse_name || '').includes('Астана'));
       const stock = whs.reduce((sum, w) => sum + w.stock, 0);
       return {
         ...v,
