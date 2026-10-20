@@ -54,8 +54,14 @@ export {
 
 export {
   fetchRegionalManagersFromErp,
+  isCounterpartyWarehouseStub,
   isCounterpartyArchivedOrMailing,
   isCounterpartyActive,
+  deduplicateAndEnrichCounterparties,
+  isConsignmentWarehouseItem,
+  searchCounterpartiesSmart,
+  normalizePhoneForSearch,
+  resolveConsignmentWarehouseOwner,
   fetchCounterpartiesFromErp,
   authenticateClientViaErp,
   broadcastClientDeactivated,

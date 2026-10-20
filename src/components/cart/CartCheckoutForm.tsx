@@ -41,6 +41,8 @@ interface CartCheckoutFormProps {
   isAccountant?: boolean;
   isStaff?: boolean;
   isAdmin?: boolean;
+  isConsignmentOrder?: boolean;
+  consignmentWarehouseName?: string;
   checkoutMode?: 'manager_self' | 'dealer_client';
   setCheckoutMode?: (mode: 'manager_self' | 'dealer_client') => void;
   selectedClient?: any | null;
@@ -84,6 +86,8 @@ export function CartCheckoutForm({
   isAccountant = false,
   isStaff = false,
   isAdmin = false,
+  isConsignmentOrder = false,
+  consignmentWarehouseName = '',
   checkoutMode = 'manager_self',
   setCheckoutMode,
   selectedClient = null,
@@ -329,16 +333,29 @@ export function CartCheckoutForm({
         </div>
       )}
 
-      {/* ─── 3.5. Селектор режима оформления для менеджеров и администраторов ─── */}
-      {isStaff && setCheckoutMode && onSelectClient && (
-        <ManagerOrderSelector
-          checkoutMode={checkoutMode || 'manager_self'}
-          setCheckoutMode={setCheckoutMode}
-          selectedClient={selectedClient || null}
-          onSelectClient={onSelectClient}
-          managerName={managerName}
-          isAdmin={isAdmin}
-        />
+      {/* ─── 3.5. Селектор режима оформления (скрывается для товаров со склада комиссионера) ─── */}
+      {isConsignmentOrder ? (
+        <div className="rounded-xl border border-indigo-200 bg-indigo-50/70 px-3.5 py-2.5 text-xs text-indigo-950 space-y-1 shadow-2xs">
+          <div className="flex items-center gap-1.5 font-bold text-indigo-900">
+            <Boxes className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
+            <span>Товар со склада комиссионера</span>
+          </div>
+          <p className="text-[11px] text-indigo-800 leading-tight">
+            Оформление напрямую со склада <strong>«{consignmentWarehouseName || 'Склад комиссионера'}»</strong>
+            {selectedClient?.name ? ` (${selectedClient.name})` : ''}. Выбор резерва не требуется.
+          </p>
+        </div>
+      ) : (
+        isStaff && setCheckoutMode && onSelectClient && (
+          <ManagerOrderSelector
+            checkoutMode={checkoutMode || 'manager_self'}
+            setCheckoutMode={setCheckoutMode}
+            selectedClient={selectedClient || null}
+            onSelectClient={onSelectClient}
+            managerName={managerName}
+            isAdmin={isAdmin}
+          />
+        )
       )}
 
       {/* ─── 4. Реквизиты и адрес доставки ─── */}

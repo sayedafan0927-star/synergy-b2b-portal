@@ -3,7 +3,13 @@ import { ShoppingCart, ArrowLeft, PackageOpen, AlertCircle, Trash2, FileSpreadsh
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
 import type { PageId } from '@/types';
-import { submitOrderToErp, fetchClientDebtFromErp, type SplitSubOrder } from '@/lib/erpApi';
+import {
+  submitOrderToErp,
+  fetchClientDebtFromErp,
+  isConsignmentWarehouseItem,
+  resolveConsignmentWarehouseOwner,
+  type SplitSubOrder,
+} from '@/lib/erpApi';
 import { enqueueOfflineOrder } from '@/lib/offlineOrderQueue';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -21,6 +27,12 @@ import {
   isValidPhone,
   formatPhone,
 } from '@/components/cart';
+
+function extractCounterpartyPhone(client: any): string {
+  const raw = String(client?.phone || client?.portal_login || client?.contact_phone || '').trim();
+  if (!raw) return '';
+  return isValidPhone(raw) ? formatPhone(raw) : raw;
+}
 
 export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, productId?: string) => void }) {
   const { currency } = useCurrency();
@@ -40,7 +52,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
   const [activeCollection, setActiveCollection] = useState<string | null>(null);
   const [sizeAsc, setSizeAsc] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState(null as string | null);
   const [stockConflictDetails, setStockConflictDetails] = useState<{ available_qty?: number; requested_qty?: number; sku?: string } | null>(null);
   const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
 
@@ -48,6 +60,11 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
   const isStaff = profile?.role === 'admin' || profile?.role === 'manager_rm' || profile?.role === 'manager_lm';
   const [checkoutMode, setCheckoutMode] = useState<'manager_self' | 'dealer_client'>('manager_self');
   const [selectedClient, setSelectedClient] = useState<any | null>(null);
+
+  const consignmentItem = useMemo(() => items.find(it => isConsignmentWarehouseItem(it)), [items]);
+  const isConsignmentOrder = Boolean(consignmentItem);
+  const consignmentWarehouseName = consignmentItem?.warehouse || '';
+
   const { getVariantPrice, getPricePerSqm } = useUserPricing(
     selectedClient?.price_type || (debtReport as any)?.client?.price_type
   );
@@ -55,7 +72,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
   const [clientName, setClientName] = useState(() => effectiveProfile?.full_name ?? '');
   const [clientPhone, setClientPhone] = useState(() => {
     if (effectiveProfile?.phone && isValidPhone(effectiveProfile.phone)) return formatPhone(effectiveProfile.phone);
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && !isStaff) {
       try {
         const stored = localStorage.getItem(CHECKOUT_PHONE_STORAGE_KEY);
         if (isValidPhone(stored)) return formatPhone(stored);
@@ -69,65 +86,116 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
   const [selectedCity, setSelectedCity] = useState(CITIES[0]);
   const [orderComment, setOrderComment] = useState('');
 
-  // Выбор клиента для менеджера / возврат на заказ под собой
-  const handleSelectClient = useCallback((client: any | null) => {
+  // Выбор клиента для менеджера: строго затягиваем телефон и реквизиты самого контрагента (не РМ/ЛМ!)
+  const handleSelectClient = useCallback((client: any | null, modeOverride?: 'manager_self' | 'dealer_client') => {
+    const activeMode = modeOverride ?? checkoutMode;
     setSelectedClient(client);
     if (client) {
       setClientName(client.name || '');
       setClientCompany(client.name || '');
-      if (client.phone && isValidPhone(client.phone)) setClientPhone(formatPhone(client.phone));
+      setClientPhone(extractCounterpartyPhone(client));
       if (client.city) {
         const matchedCity = CITIES.find(c => c.toLowerCase() === client.city.toLowerCase());
         if (matchedCity) setSelectedCity(matchedCity);
       }
+    } else if (activeMode === 'dealer_client') {
+      setClientName('');
+      setClientCompany('');
+      setClientPhone('');
+      setDebtReport(null);
     } else {
       setClientName(effectiveProfile?.full_name || 'Менеджер Synergy');
       setClientCompany('Synergy Group (Внутренний заказ)');
       setClientPhone(effectiveProfile?.phone && isValidPhone(effectiveProfile.phone) ? formatPhone(effectiveProfile.phone) : DEFAULT_CHECKOUT_PHONE);
       setDebtReport(null);
     }
-  }, [effectiveProfile]);
+  }, [effectiveProfile, checkoutMode]);
 
-  // Автоматическая подстановка и актуализация контактных данных при загрузке профиля
+  const handleSetCheckoutMode = useCallback((mode: 'manager_self' | 'dealer_client') => {
+    setCheckoutMode(mode);
+    if (mode === 'dealer_client' && !selectedClient) {
+      setClientName('');
+      setClientCompany('');
+      setClientPhone('');
+      setDebtReport(null);
+    } else if (mode === 'manager_self') {
+      setSelectedClient(null);
+      setClientName(effectiveProfile?.full_name || 'Менеджер Synergy');
+      setClientCompany('Synergy Group (Внутренний заказ)');
+      setClientPhone(effectiveProfile?.phone && isValidPhone(effectiveProfile.phone) ? formatPhone(effectiveProfile.phone) : DEFAULT_CHECKOUT_PHONE);
+      setDebtReport(null);
+    }
+  }, [selectedClient, effectiveProfile]);
+
+  // Если товар положен со склада комиссионера — не спрашиваем на кого резерв, автоматически подтягиваем контрагента этого склада
   useEffect(() => {
-    if (effectiveProfile && (!isStaff || checkoutMode === 'dealer_client')) {
+    if (!isConsignmentOrder || !consignmentItem) return;
+    let active = true;
+    resolveConsignmentWarehouseOwner((consignmentItem as any)?.warehouse_id, consignmentItem.warehouse).then(owner => {
+      if (!active) return;
+      if (owner) {
+        setSelectedClient(owner);
+        setClientName(owner.name || consignmentWarehouseName);
+        setClientCompany(owner.name || consignmentWarehouseName);
+        const ownerPhone = extractCounterpartyPhone(owner);
+        if (ownerPhone) setClientPhone(ownerPhone);
+        if (owner.city) {
+          const matchedCity = CITIES.find(c => c.toLowerCase() === owner.city!.toLowerCase());
+          if (matchedCity) setSelectedCity(matchedCity);
+        }
+      } else {
+        setClientName(consignmentWarehouseName);
+        setClientCompany(consignmentWarehouseName);
+      }
+    });
+    return () => { active = false; };
+  }, [isConsignmentOrder, consignmentItem?.warehouse, (consignmentItem as any)?.warehouse_id, consignmentWarehouseName]);
+
+  // Автоматическая подстановка данных профиля (строго только для самого клиента или режима "На себя", без перезаписи телефона контрагента!)
+  useEffect(() => {
+    if (!effectiveProfile || isConsignmentOrder) return;
+    if (!isStaff || isImpersonating) {
       if (effectiveProfile.full_name && !clientName) setClientName(effectiveProfile.full_name);
       if (effectiveProfile.company_name && !clientCompany) setClientCompany(effectiveProfile.company_name);
       if (isValidPhone(effectiveProfile.phone)) setClientPhone(formatPhone(effectiveProfile.phone));
     }
-  }, [effectiveProfile, isStaff, checkoutMode]);
+  }, [effectiveProfile, isStaff, isImpersonating, isConsignmentOrder]);
 
   const handleClientPhoneChange = useCallback((value: string) => {
     const formatted = formatPhone(value);
     setClientPhone(formatted);
-    if (typeof window !== 'undefined' && isValidPhone(formatted)) {
+    if (typeof window !== 'undefined' && !isStaff && isValidPhone(formatted)) {
       try {
         localStorage.setItem(CHECKOUT_PHONE_STORAGE_KEY, formatted);
       } catch {}
     }
-  }, []);
+  }, [isStaff]);
 
-  // Загрузка финансового состояния клиента (кредитный лимит, просрочки)
+  // Загрузка финансового состояния клиента (кредитный лимит, просрочки) и дозаполнение телефона контрагента из карточки долга
   useEffect(() => {
-    if (isStaff && checkoutMode === 'manager_self') {
+    if (isStaff && !isImpersonating && !isConsignmentOrder && checkoutMode === 'manager_self') {
       setDebtReport(null);
       return;
     }
-    const targetPhone = selectedClient?.phone || effectiveProfile?.phone;
-    const targetPartnerId = selectedClient?.id || effectiveProfile?.partner_id;
+    const targetPhone = selectedClient ? selectedClient.phone : effectiveProfile?.phone;
+    const targetPartnerId = selectedClient ? selectedClient.id : effectiveProfile?.partner_id;
     if (!targetPartnerId && !targetPhone) return;
     fetchClientDebtFromErp({
       phone: targetPhone,
       counterpartyId: Number(targetPartnerId) || undefined,
-      search: selectedClient?.name || effectiveProfile?.full_name || effectiveProfile?.company_name,
+      search: selectedClient ? selectedClient.name : (effectiveProfile?.full_name || effectiveProfile?.company_name),
     })
       .then(res => {
         if (res?.success && res.found) {
           setDebtReport(res);
+          const debtClientPhone = extractCounterpartyPhone((res as any)?.client);
+          if (selectedClient && debtClientPhone && !extractCounterpartyPhone(selectedClient)) {
+            setClientPhone(debtClientPhone);
+          }
         }
       })
       .catch(err => console.warn('Debt check notice:', err));
-  }, [profile, isImpersonating, impersonatedProfile, isStaff, checkoutMode, selectedClient]);
+  }, [profile, isImpersonating, impersonatedProfile, isStaff, isConsignmentOrder, checkoutMode, selectedClient]);
 
   // Автоматическая тихая синхронизация цен и курса валют при входе в корзину и смене контрагента
   useEffect(() => {
@@ -182,12 +250,9 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
   const handleAutoAdjustQuantities = useCallback(() => {
     let adjustedCount = 0;
 
-    // 1. Точечный конфликт от сервера при нехватке остатка (INSUFFICIENT_STOCK)
     if (stockConflictDetails) {
       const targetSku = String(stockConflictDetails.sku || '').trim().toLowerCase();
-      const avail = typeof stockConflictDetails.available_qty === 'number'
-        ? Math.max(0, stockConflictDetails.available_qty)
-        : 0;
+      const avail = typeof stockConflictDetails.available_qty === 'number' ? Math.max(0, stockConflictDetails.available_qty) : 0;
 
       for (const it of items) {
         const itSku = String(it.sku || '').trim().toLowerCase();
@@ -205,7 +270,6 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
       }
     }
 
-    // 2. Сквозная автокоррекция позиций, где запрошено больше фактического maxStock
     for (const it of items) {
       if (typeof it.maxStock === 'number') {
         if (it.maxStock === 0) {
@@ -225,26 +289,20 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
     }
   }, [items, stockConflictDetails, removeItem, updateQuantity, toastInfo]);
 
-  // Проверка финансовых блокировок и условий (администраторы и заказы менеджеров на себя освобождены)
   const isAdmin = profile?.role === 'admin';
-  const isManagerSelfOrder = isStaff && checkoutMode === 'manager_self';
+  const isManagerSelfOrder = isStaff && !isConsignmentOrder && checkoutMode === 'manager_self';
   const isBlocked = !isAdmin && !isManagerSelfOrder && debtReport?.client?.is_blocked_for_shipment === true;
   const overdueDebt = debtReport?.financials?.overdue_usd || 0;
   const currentDebt = debtReport?.financials?.total_debt_usd || debtReport?.client?.debt_usd || 0;
   const creditLimit = Number(
-    debtReport?.client?.credit_limit_usd ||
-    debtReport?.financials?.credit_limit_usd ||
-    debtReport?.credit_limit_usd ||
-    debtReport?.contracts?.[0]?.credit_limit_usd ||
-    effectiveProfile?.credit_limit_usd ||
-    0
+    debtReport?.client?.credit_limit_usd || debtReport?.financials?.credit_limit_usd ||
+    debtReport?.credit_limit_usd || debtReport?.contracts?.[0]?.credit_limit_usd || effectiveProfile?.credit_limit_usd || 0
   );
   const totalExposure = currentDebt + totalPrice;
   const exceedsLimit = creditLimit > 0 && totalExposure > creditLimit;
   const hasOverdue = overdueDebt > 0;
   const requiresApproval = !isAdmin && !isManagerSelfOrder && (isBlocked || exceedsLimit || hasOverdue);
 
-  // Анализ распределения товаров по складам для мультискладских заказов
   const warehousesInCart = useMemo(() => {
     const map = new Map<string, { count: number; totalAmount: number }>();
     for (const item of items) {
@@ -262,19 +320,13 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
   if (orderDocNumber) {
     return (
       <CartSuccessModal
-        orderDocNumber={orderDocNumber}
-        splitOrders={splitOrders}
-        isOfflineQueued={isOfflineQueued}
-        isServerBuffered={isServerBuffered}
-        isWaitingApproval={isWaitingApproval}
-        isPartiallyConfirmed={isPartiallyConfirmed}
+        orderDocNumber={orderDocNumber} splitOrders={splitOrders}
+        isOfflineQueued={isOfflineQueued} isServerBuffered={isServerBuffered}
+        isWaitingApproval={isWaitingApproval} isPartiallyConfirmed={isPartiallyConfirmed}
         onContinueShopping={() => {
-          setOrderDocNumber(null);
-          setSplitOrders(null);
-          setIsOfflineQueued(false);
-          setIsServerBuffered(false);
-          setIsWaitingApproval(false);
-          setIsPartiallyConfirmed(false);
+          setOrderDocNumber(null); setSplitOrders(null);
+          setIsOfflineQueued(false); setIsServerBuffered(false);
+          setIsWaitingApproval(false); setIsPartiallyConfirmed(false);
           onNavigate('catalog');
         }}
       />
@@ -304,11 +356,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
             </button>
           </div>
         </div>
-
-        <ExcelBulkOrderModal
-          isOpen={isExcelModalOpen}
-          onClose={() => setIsExcelModalOpen(false)}
-        />
+        <ExcelBulkOrderModal isOpen={isExcelModalOpen} onClose={() => setIsExcelModalOpen(false)} />
       </div>
     );
   }
@@ -318,23 +366,20 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
       setSubmitError('Для оформления оптового заказа необходимо войти в личный кабинет.');
       return;
     }
-
     if (isAccountant) {
       setSubmitError('Учетная запись бухгалтера имеет доступ только к просмотру и сверкам. Оформление заказов доступно закупщику или руководителю компании.');
       return;
     }
-
     if (hasZeroPriceItems) {
       setSubmitError('В корзине есть позиции с неустановленной ценой (0 у.е.). Обратитесь к менеджеру или удалите их для оформления заказа.');
       return;
     }
-
     if (!clientName.trim() || !clientPhone.trim()) {
       setSubmitError('Укажите имя и телефон для оформления заказа');
       return;
     }
 
-    if (typeof window !== 'undefined' && isValidPhone(clientPhone)) {
+    if (typeof window !== 'undefined' && !isStaff && isValidPhone(clientPhone)) {
       try {
         localStorage.setItem(CHECKOUT_PHONE_STORAGE_KEY, clientPhone.trim());
       } catch {}
@@ -344,7 +389,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
     setSubmitError(null);
 
     const effectiveProfile = isImpersonating && impersonatedProfile ? impersonatedProfile : profile;
-    const isManagerSelfOrder = isStaff && checkoutMode === 'manager_self';
+    const isManagerSelfOrder = isStaff && !isConsignmentOrder && checkoutMode === 'manager_self';
     const clientId = isManagerSelfOrder
       ? undefined
       : (selectedClient?.id || (effectiveProfile?.partner_id ? Number(effectiveProfile.partner_id) || effectiveProfile.partner_id : undefined));
@@ -375,10 +420,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
       warehouse_id: effectiveWarehouseId,
       currency: currency || 'USD',
       is_preorder: hasPreorderItems ? true : undefined,
-      buyer: {
-        name: clientCompany.trim() || clientName.trim(),
-        phone: clientPhone.trim(),
-      },
+      buyer: { name: clientCompany.trim() || clientName.trim(), phone: clientPhone.trim() },
       client_name: clientName.trim(),
       client_phone: clientPhone.trim(),
       client_company: clientCompany.trim(),
@@ -427,7 +469,6 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
 
     try {
       const data = await submitOrderToErp(orderPayload);
-
       const docNum = data.order?.doc_number || (data as any)?.doc_number || data.order_number || data.split_orders?.[0]?.doc_number || ((data as any)?.ingest_uuid ? `ORD-BUF-${String((data as any).ingest_uuid).replace(/^ingest_/, '').slice(0, 8).toUpperCase()}` : null) || 'ORD-NEW';
       const isOrderSuccess = Boolean(data.success && (docNum || data.order?.doc_number || data.split_orders?.length || data.status === 'accepted' || (data as any)?.ingest_uuid));
 
@@ -554,7 +595,6 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* Левая колонка: товары и размеры */}
           <div className="lg:col-span-7 xl:col-span-8">
             <CartItemsTable
               items={items}
@@ -568,58 +608,32 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
             />
           </div>
 
-          {/* Правая колонка: форма оформления и финансовые лимиты (всегда в поле зрения) */}
           <div className="lg:col-span-5 xl:col-span-4 lg:sticky lg:top-20 z-10 self-start">
             <CartCheckoutForm
-              clientName={clientName}
-              setClientName={setClientName}
-              clientPhone={clientPhone}
-              setClientPhone={handleClientPhoneChange}
-              clientCompany={clientCompany}
-              setClientCompany={setClientCompany}
-              selectedCity={selectedCity}
-              setSelectedCity={setSelectedCity}
-              orderComment={orderComment}
-              setOrderComment={setOrderComment}
-              totalItems={totalItems}
-              totalSqm={totalSqm}
-              totalPrice={totalPrice}
-              submitting={submitting}
-              submitError={submitError}
-              stockConflictDetails={stockConflictDetails}
-              hasDepletedItems={hasDepletedItems}
-              hasOverStockItems={hasOverStockItems}
-              hasZeroPriceItems={hasZeroPriceItems}
-              onRemoveUnavailableItems={handleRemoveUnavailableItems}
-              onAutoAdjustQuantities={handleAutoAdjustQuantities}
-              isAuthenticated={Boolean(user)}
-              onLoginRedirect={() => onNavigate('login')}
-              onSubmit={handleSubmit}
-              hasMultipleWarehouses={hasMultipleWarehouses}
-              warehousesInCart={warehousesInCart}
-              requiresApproval={requiresApproval}
-              isBlocked={isBlocked}
-              exceedsLimit={exceedsLimit}
-              creditLimit={creditLimit}
-              currentDebt={currentDebt}
-              overdueDebt={overdueDebt}
-              isAccountant={isAccountant}
-              isStaff={isStaff}
-              isAdmin={isAdmin}
-              checkoutMode={checkoutMode}
-              setCheckoutMode={setCheckoutMode}
-              selectedClient={selectedClient}
-              onSelectClient={handleSelectClient}
+              clientName={clientName} setClientName={setClientName}
+              clientPhone={clientPhone} setClientPhone={handleClientPhoneChange}
+              clientCompany={clientCompany} setClientCompany={setClientCompany}
+              selectedCity={selectedCity} setSelectedCity={setSelectedCity}
+              orderComment={orderComment} setOrderComment={setOrderComment}
+              totalItems={totalItems} totalSqm={totalSqm} totalPrice={totalPrice}
+              submitting={submitting} submitError={submitError} stockConflictDetails={stockConflictDetails}
+              hasDepletedItems={hasDepletedItems} hasOverStockItems={hasOverStockItems} hasZeroPriceItems={hasZeroPriceItems}
+              onRemoveUnavailableItems={handleRemoveUnavailableItems} onAutoAdjustQuantities={handleAutoAdjustQuantities}
+              isAuthenticated={Boolean(user)} onLoginRedirect={() => onNavigate('login')} onSubmit={handleSubmit}
+              hasMultipleWarehouses={hasMultipleWarehouses} warehousesInCart={warehousesInCart}
+              requiresApproval={requiresApproval} isBlocked={isBlocked} exceedsLimit={exceedsLimit}
+              creditLimit={creditLimit} currentDebt={currentDebt} overdueDebt={overdueDebt}
+              isAccountant={isAccountant} isStaff={isStaff} isAdmin={isAdmin}
+              isConsignmentOrder={isConsignmentOrder} consignmentWarehouseName={consignmentWarehouseName}
+              checkoutMode={checkoutMode} setCheckoutMode={handleSetCheckoutMode}
+              selectedClient={selectedClient} onSelectClient={handleSelectClient}
               managerName={profile?.full_name}
             />
           </div>
         </div>
       </div>
 
-      <ExcelBulkOrderModal
-        isOpen={isExcelModalOpen}
-        onClose={() => setIsExcelModalOpen(false)}
-      />
+      <ExcelBulkOrderModal isOpen={isExcelModalOpen} onClose={() => setIsExcelModalOpen(false)} />
     </section>
   );
 }

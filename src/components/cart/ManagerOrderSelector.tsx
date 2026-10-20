@@ -1,6 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { UserCheck, Building2, Search, X, Loader2, Check, MessageSquare, Send, CheckCircle2, RotateCw } from 'lucide-react';
-import { fetchCounterpartiesFromErp, fetchClientOrdersFromErp, requestOrderApprovalViaWhatsApp, type Counterparty } from '@/lib/erpApi';
+import {
+  fetchCounterpartiesFromErp, fetchClientOrdersFromErp, requestOrderApprovalViaWhatsApp,
+  searchCounterpartiesSmart, isCounterpartyActive, type Counterparty,
+} from '@/lib/erpApi';
 import { useToast } from '@/contexts/ToastContext';
 
 interface ManagerOrderSelectorProps {
@@ -13,20 +16,16 @@ interface ManagerOrderSelectorProps {
 }
 
 export function ManagerOrderSelector({
-  checkoutMode,
-  setCheckoutMode,
-  selectedClient,
-  onSelectClient,
-  managerName,
-  isAdmin = false,
+  checkoutMode, setCheckoutMode, selectedClient, onSelectClient, managerName, isAdmin = false,
 }: ManagerOrderSelectorProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<Counterparty[]>([]);
+  const [allActiveClients, setAllActiveClients] = useState<Counterparty[]>([]);
   const [searching, setSearching] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Admin WhatsApp approval testing states for real orders
   const [showTestBox, setShowTestBox] = useState(false);
   const [testPhone, setTestPhone] = useState('87086984543');
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
@@ -44,26 +43,18 @@ export function ManagerOrderSelector({
       if (res && Array.isArray(res.orders)) {
         setRecentOrders(res.orders);
         if (res.orders.length > 0) {
-          // Preselect latest pending order if any, else latest order
           const pending = res.orders.find((o: any) => o.status_code === 'pending');
-          if (pending) {
-            setSelectedOrderId(String(pending.id));
-          } else if (!selectedOrderId) {
-            setSelectedOrderId(String(res.orders[0].id));
-          }
+          if (pending) setSelectedOrderId(String(pending.id));
+          else if (!selectedOrderId) setSelectedOrderId(String(res.orders[0].id));
         }
       }
-    } catch {
-      // Non-blocking
-    } finally {
+    } catch {} finally {
       setLoadingOrders(false);
     }
   }, [selectedOrderId]);
 
   useEffect(() => {
-    if (isAdmin && showTestBox) {
-      loadRecentOrders();
-    }
+    if (isAdmin && showTestBox) loadRecentOrders();
   }, [isAdmin, showTestBox, loadRecentOrders]);
 
   const handleSendTestApproval = async () => {
@@ -72,14 +63,12 @@ export function ManagerOrderSelector({
       toastError('Укажите корректный номер телефона (например, 87086984543)');
       return;
     }
-
     const currentOrder = recentOrders.find((o: any) => String(o.id) === String(selectedOrderId));
     const targetOrderId = currentOrder ? currentOrder.id : (Number(selectedOrderId) || 55);
     const targetDoc = currentOrder?.doc_number || `ORD-${targetOrderId}`;
 
     setIsSendingTest(true);
     setTestSuccessNotice(null);
-
     try {
       const data = await requestOrderApprovalViaWhatsApp({
         orderId: targetOrderId,
@@ -92,7 +81,6 @@ export function ManagerOrderSelector({
         itemsCount: Number(currentOrder?.items_count || 1),
         reason: 'Проверка сквозной цепочки согласования (ERP / WMS ТСД)',
       });
-
       if (data && data.success !== false) {
         toastSuccess(`Запрос на согласование заказа №${targetDoc} отправлен в WhatsApp!`);
         setTestSuccessNotice(
@@ -108,41 +96,27 @@ export function ManagerOrderSelector({
     }
   };
 
-  // Debounced counterparty search
   useEffect(() => {
-    if (!dropdownOpen || searchQuery.trim().length < 2) {
-      setSearchResults([]);
-      setSearching(false);
-      return;
-    }
-
     let active = true;
     setSearching(true);
-    const timer = setTimeout(async () => {
-      try {
-        const res = await fetchCounterpartiesFromErp({ search: searchQuery.trim(), limit: 15 });
-        if (active && res.success && Array.isArray(res.counterparties)) {
-          setSearchResults(res.counterparties);
+    fetchCounterpartiesFromErp({ includeArchived: false })
+      .then(res => {
+        if (active && res?.success && Array.isArray(res.counterparties)) {
+          setAllActiveClients(res.counterparties.filter((c: any) => isCounterpartyActive(c)));
         }
-      } catch {
-        if (active) setSearchResults([]);
-      } finally {
-        if (active) setSearching(false);
-      }
-    }, 300);
+      })
+      .catch(() => { if (active) setAllActiveClients([]); })
+      .finally(() => { if (active) setSearching(false); });
+    return () => { active = false; };
+  }, []);
 
-    return () => {
-      active = false;
-      clearTimeout(timer);
-    };
-  }, [searchQuery, dropdownOpen]);
+  const searchResults = useMemo(() => searchCounterpartiesSmart(allActiveClients, searchQuery, 60), [allActiveClients, searchQuery]);
 
-  // Click outside to close dropdown
+  useEffect(() => { setHighlightedIndex(0); }, [searchQuery, dropdownOpen]);
+
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setDropdownOpen(false);
-      }
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) setDropdownOpen(false);
     }
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -288,6 +262,7 @@ export function ManagerOrderSelector({
           onClick={() => {
             setCheckoutMode('dealer_client');
             setDropdownOpen(true);
+            setTimeout(() => searchInputRef.current?.focus(), 20);
           }}
           className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md font-semibold transition-all cursor-pointer ${
             checkoutMode === 'dealer_client'
@@ -316,7 +291,7 @@ export function ManagerOrderSelector({
           {selectedClient ? (
             <div className="flex items-center justify-between p-2.5 rounded-lg bg-white border border-brand-300 shadow-2xs">
               <div className="min-w-0 pr-2">
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 flex-wrap">
                   <span className="font-bold text-xs text-slate-900 truncate">{selectedClient.name}</span>
                   {selectedClient.city && (
                     <span className="px-1.5 py-0.5 rounded text-[10px] bg-brand-50 text-brand-700 border border-brand-200/60 font-semibold">
@@ -324,9 +299,11 @@ export function ManagerOrderSelector({
                     </span>
                   )}
                 </div>
-                <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-2">
+                <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
                   <span>ID: {selectedClient.id}</span>
-                  {selectedClient.phone && <span>тел: {selectedClient.phone}</span>}
+                  {(selectedClient.phone || selectedClient.portal_login) && (
+                    <span className="font-mono text-slate-700">тел: {selectedClient.phone || selectedClient.portal_login}</span>
+                  )}
                 </div>
               </div>
               <button
@@ -335,6 +312,7 @@ export function ManagerOrderSelector({
                   onSelectClient(null);
                   setSearchQuery('');
                   setDropdownOpen(true);
+                  setTimeout(() => searchInputRef.current?.focus(), 20);
                 }}
                 className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
                 title="Сменить клиента"
@@ -346,6 +324,7 @@ export function ManagerOrderSelector({
             <div className="relative">
               <div className="relative">
                 <input
+                  ref={searchInputRef}
                   type="text"
                   value={searchQuery}
                   onChange={e => {
@@ -353,7 +332,26 @@ export function ManagerOrderSelector({
                     setDropdownOpen(true);
                   }}
                   onFocus={() => setDropdownOpen(true)}
-                  placeholder="Начните вводить название, БИН или телефон клиента..."
+                  onKeyDown={e => {
+                    if (!dropdownOpen) {
+                      if (e.key === 'ArrowDown' || e.key === 'Enter') setDropdownOpen(true);
+                      return;
+                    }
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      setHighlightedIndex(prev => (searchResults.length > 0 ? (prev + 1) % searchResults.length : 0));
+                    } else if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      setHighlightedIndex(prev => (searchResults.length > 0 ? (prev - 1 + searchResults.length) % searchResults.length : 0));
+                    } else if (e.key === 'Enter' && searchResults[highlightedIndex]) {
+                      e.preventDefault();
+                      onSelectClient(searchResults[highlightedIndex]);
+                      setDropdownOpen(false);
+                    } else if (e.key === 'Escape') {
+                      setDropdownOpen(false);
+                    }
+                  }}
+                  placeholder="Поиск по названию, ИП/ТОО, городу, телефону или ID..."
                   className="input-field text-xs h-9 py-1 pl-8 pr-7 bg-white w-full border-slate-200 focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
                 />
                 <Search className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-3 pointer-events-none" />
@@ -362,7 +360,10 @@ export function ManagerOrderSelector({
                 ) : searchQuery ? (
                   <button
                     type="button"
-                    onClick={() => setSearchQuery('')}
+                    onClick={() => {
+                      setSearchQuery('');
+                      searchInputRef.current?.focus();
+                    }}
                     className="absolute right-2 top-2.5 text-slate-400 hover:text-slate-600 cursor-pointer"
                   >
                     <X className="h-3.5 w-3.5" />
@@ -371,48 +372,65 @@ export function ManagerOrderSelector({
               </div>
 
               {dropdownOpen && (
-                <div className="absolute z-30 left-0 right-0 mt-1 max-h-56 overflow-y-auto rounded-lg bg-white border border-slate-200 shadow-lg divide-y divide-slate-100 text-xs">
-                  {searching && (
+                <div className="absolute z-30 left-0 right-0 mt-1 max-h-64 overflow-y-auto rounded-lg bg-white border border-slate-200 shadow-lg divide-y divide-slate-100 text-xs">
+                  <div className="px-2.5 py-1.5 bg-slate-50 text-[10px] font-semibold text-slate-500 flex items-center justify-between sticky top-0 z-10 border-b border-slate-100">
+                    <span>
+                      {searchQuery.trim()
+                        ? `Найдено активных клиентов: ${searchResults.length}`
+                        : `Активные контрагенты (${allActiveClients.length})`}
+                    </span>
+                    <span className="text-emerald-700">Только действующие</span>
+                  </div>
+
+                  {searching && allActiveClients.length === 0 && (
                     <div className="p-3 text-center text-slate-400 flex items-center justify-center gap-2">
                       <Loader2 className="h-3.5 w-3.5 animate-spin text-brand-600" />
-                      <span>Поиск в базе ERP...</span>
+                      <span>Загрузка активных клиентов...</span>
                     </div>
                   )}
 
-                  {!searching && searchResults.length === 0 && searchQuery.trim().length >= 2 && (
+                  {!searching && searchResults.length === 0 && (
                     <div className="p-3 text-center text-slate-400">
-                      Клиенты по запросу «{searchQuery}» не найдены
+                      Активные клиенты по запросу «{searchQuery}» не найдены
                     </div>
                   )}
 
-                  {!searching && searchQuery.trim().length < 2 && (
-                    <div className="p-2.5 text-center text-slate-400 text-[11px]">
-                      Введите минимум 2 символа для поиска дилера
-                    </div>
-                  )}
-
-                  {!searching &&
-                    searchResults.map(cp => (
-                      <button
-                        key={cp.id}
-                        type="button"
-                        onClick={() => {
-                          onSelectClient(cp);
-                          setDropdownOpen(false);
-                        }}
-                        className="w-full text-left p-2.5 hover:bg-brand-50/70 transition-colors flex items-center justify-between cursor-pointer group"
-                      >
-                        <div className="min-w-0 pr-2">
-                          <div className="font-semibold text-slate-900 truncate">{cp.name}</div>
-                          <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-2">
-                            <span>ID: {cp.id}</span>
-                            {cp.city && <span>г. {cp.city}</span>}
-                            {cp.phone && <span>тел: {cp.phone}</span>}
-                          </div>
+                  {searchResults.map((cp, idx) => (
+                    <button
+                      key={cp.id}
+                      type="button"
+                      onMouseEnter={() => setHighlightedIndex(idx)}
+                      onClick={() => {
+                        onSelectClient(cp);
+                        setDropdownOpen(false);
+                      }}
+                      className={`w-full text-left p-2.5 transition-colors flex items-center justify-between cursor-pointer group ${
+                        idx === highlightedIndex ? 'bg-brand-50/80' : 'hover:bg-brand-50/60'
+                      }`}
+                    >
+                      <div className="min-w-0 pr-2">
+                        <div className="font-semibold text-slate-900 truncate flex items-center gap-1.5">
+                          <span className="truncate">{cp.name}</span>
+                          {cp.city && (
+                            <span className="shrink-0 px-1.5 py-0.2 rounded text-[10px] bg-slate-100 text-slate-700 font-medium">
+                              г. {cp.city}
+                            </span>
+                          )}
                         </div>
-                        <Check className="h-4 w-4 text-brand-600 opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </button>
-                    ))}
+                        <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
+                          <span>ID: {cp.id}</span>
+                          {(cp.phone || cp.portal_login) && (
+                            <span className="font-mono text-slate-600">тел: {cp.phone || cp.portal_login}</span>
+                          )}
+                        </div>
+                      </div>
+                      <Check
+                        className={`h-4 w-4 text-brand-600 shrink-0 transition-opacity ${
+                          idx === highlightedIndex ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                        }`}
+                      />
+                    </button>
+                  ))}
                 </div>
               )}
             </div>

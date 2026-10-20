@@ -1,6 +1,11 @@
 import { useState, useMemo } from 'react';
 import { Search, Power } from 'lucide-react';
-import { updateClientAccessInErp, broadcastClientDeactivated, isCounterpartyArchivedOrMailing } from '@/lib/erpApi';
+import {
+  updateClientAccessInErp,
+  broadcastClientDeactivated,
+  isCounterpartyArchivedOrMailing,
+  searchCounterpartiesSmart,
+} from '@/lib/erpApi';
 import { formatPriceType } from '@/lib/pricingEngine';
 
 export interface AdminCounterpartiesSubTabProps {
@@ -41,13 +46,7 @@ export function AdminCounterpartiesSubTab({
       list = list.filter(c => isCounterpartyArchivedOrMailing(c));
     }
     if (cpSearch.trim()) {
-      const q = cpSearch.toLowerCase().trim();
-      list = list.filter(c =>
-        (c.name || '').toLowerCase().includes(q) ||
-        (c.city || '').toLowerCase().includes(q) ||
-        (c.phone || '').includes(q) ||
-        String(c.id).includes(q)
-      );
+      return searchCounterpartiesSmart(list, cpSearch);
     }
     return list;
   }, [counterparties, cpFilter, cpSearch]);

@@ -17,6 +17,7 @@ import {
   updateClientAccessInErp,
   broadcastClientDeactivated,
   isCounterpartyArchivedOrMailing,
+  searchCounterpartiesSmart,
 } from '@/lib/erpApi';
 import { getClientWarehouseSettings } from '@/lib/warehouseVisibility';
 import { formatPriceType } from '@/lib/pricingEngine';
@@ -36,6 +37,8 @@ export function AdminUsersTab({ onNavigate }: AdminUsersTabProps) {
     full_name: string;
     company_name: string;
     phone: string;
+    city?: string;
+    bin?: string;
     role: UserRole;
     partner_id: string | null;
     price_type: string;
@@ -50,6 +53,7 @@ export function AdminUsersTab({ onNavigate }: AdminUsersTabProps) {
   }>>([]);
   const [userSearch, setUserSearch] = useState('');
   const [showArchived, setShowArchived] = useState(false);
+  const [onlyMyAssigned, setOnlyMyAssigned] = useState(false);
   const [loading, setLoading] = useState(true);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -60,7 +64,7 @@ export function AdminUsersTab({ onNavigate }: AdminUsersTabProps) {
     async function loadUsers() {
       setLoading(true);
       try {
-        const cpData = await fetchCounterpartiesFromErp({ limit: 300, includeArchived: true });
+        const cpData = await fetchCounterpartiesFromErp({ limit: 1000, includeArchived: true });
         if (!cancelled && cpData && cpData.success && Array.isArray(cpData.counterparties) && cpData.counterparties.length > 0) {
           const mappedUsers = cpData.counterparties.map((cp: any) => {
             const isAccessOn = cp.portal_access_enabled !== false && cp.portal_access_enabled !== 0 && cp.is_active !== 0 && cp.status !== 'inactive' && cp.access !== 'disabled';
@@ -70,7 +74,9 @@ export function AdminUsersTab({ onNavigate }: AdminUsersTabProps) {
               id: String(cp.id),
               full_name: cp.name,
               company_name: cp.name,
-              phone: cp.phone || '',
+              phone: cp.phone || cp.portal_login || '',
+              city: cp.city || '',
+              bin: cp.bin || '',
               role: 'client' as UserRole,
               partner_id: String(cp.id),
               price_type: contractPriceType,
@@ -147,7 +153,7 @@ export function AdminUsersTab({ onNavigate }: AdminUsersTabProps) {
 
   const filteredUsers = useMemo(() => {
     let clients = users.filter(user => user.role === 'client');
-    if (!isAdminView && managerId) {
+    if (!isAdminView && onlyMyAssigned && managerId) {
       const candidateIds = new Set<string>([
         String(managerId),
         String(profile?.partner_id || ''),
@@ -158,17 +164,11 @@ export function AdminUsersTab({ onNavigate }: AdminUsersTabProps) {
       clients = clients.filter(user => user.manager_id && candidateIds.has(String(user.manager_id)));
     }
     if (!showArchived) {
-      clients = clients.filter(user => !user.is_archived_or_mailing);
+      clients = clients.filter(user => !user.is_archived_or_mailing && user.portal_access_enabled !== false);
     }
     if (!userSearch.trim()) return clients;
-    const q = userSearch.toLowerCase().trim();
-    return clients.filter(user =>
-      (user.full_name || '').toLowerCase().includes(q) ||
-      (user.company_name || '').toLowerCase().includes(q) ||
-      (user.phone || '').toLowerCase().includes(q) ||
-      (user.partner_id || '').toLowerCase().includes(q)
-    );
-  }, [users, userSearch, isAdminView, managerId, profile?.partner_id, profile?.manager_id, showArchived]);
+    return searchCounterpartiesSmart(clients, userSearch);
+  }, [users, userSearch, isAdminView, onlyMyAssigned, managerId, profile?.partner_id, profile?.manager_id, showArchived]);
 
   return (
     <div className="space-y-6">
@@ -176,15 +176,26 @@ export function AdminUsersTab({ onNavigate }: AdminUsersTabProps) {
         <div className="flex items-center gap-3">
           <Users className="h-5 w-5 text-slate-500" />
           <div>
-            <h2 className="text-lg font-bold text-slate-900">Мои клиенты ({filteredUsers.length})</h2>
+            <h2 className="text-lg font-bold text-slate-900">Активные контрагенты ({filteredUsers.length})</h2>
             <p className="text-sm text-slate-500">
-              {isAdminView
-                ? 'Все клиенты портала. Включите доступ и зайдите под клиентом.'
-                : 'Клиенты, закреплённые за вами. Включите доступ и зайдите под клиентом.'}
+              Единый справочник действующих клиентов портала и корзины.
             </p>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {!isAdminView && profile?.role === 'manager_rm' && (
+            <button
+              type="button"
+              onClick={() => setOnlyMyAssigned(!onlyMyAssigned)}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors cursor-pointer ${
+                onlyMyAssigned
+                  ? 'bg-brand-50 text-brand-800 border-brand-300'
+                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              {onlyMyAssigned ? 'Показать всех активных' : 'Только закрепленные за мной'}
+            </button>
+          )}
           {isAdminView && (
             <button
               type="button"
@@ -204,7 +215,7 @@ export function AdminUsersTab({ onNavigate }: AdminUsersTabProps) {
               type="text"
               value={userSearch}
               onChange={e => setUserSearch(e.target.value)}
-              placeholder="Поиск по имени, компании..."
+              placeholder="Поиск по названию, городу, тел, ID..."
               className="input-field pl-9 py-1 text-xs"
             />
           </div>

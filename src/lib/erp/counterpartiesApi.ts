@@ -1,5 +1,14 @@
 import { erpFetch, deduplicateRequest } from './core';
-import type { ErpClientAuthResult, ClientDebtReport } from './types';
+import type { ErpClientAuthResult, ClientDebtReport, Counterparty } from './types';
+import {
+  isCounterpartyWarehouseStub, isCounterpartyArchivedOrMailing, isCounterpartyActive,
+  deduplicateAndEnrichCounterparties, isConsignmentWarehouseItem, searchCounterpartiesSmart, normalizePhoneForSearch,
+} from './counterpartyFilterAndSearch';
+
+export {
+  isCounterpartyWarehouseStub, isCounterpartyArchivedOrMailing, isCounterpartyActive,
+  deduplicateAndEnrichCounterparties, isConsignmentWarehouseItem, searchCounterpartiesSmart, normalizePhoneForSearch,
+};
 
 const CP_CACHE_TTL_MS = 15 * 1000;
 const cpMemoryCache = new Map<string, { timestamp: number; data: any }>();
@@ -14,9 +23,7 @@ export async function fetchRegionalManagersFromErp() {
     const response = await erpFetch('regional_managers', { method: 'GET' });
     if (response.ok) {
       const data = await response.json();
-      if (data && data.success && Array.isArray(data.managers)) {
-        return data;
-      }
+      if (data && data.success && Array.isArray(data.managers)) return data;
     }
   } catch (err) {
     console.warn('[fetchRegionalManagersFromErp] Primary endpoint failed, falling back to sync_bundle:', err);
@@ -24,9 +31,7 @@ export async function fetchRegionalManagersFromErp() {
 
   // Self-Healing Fallback: получаем менеджеров из живого пакета синхронизации ERP (action=sync_bundle)
   const bundleResp = await erpFetch('sync_bundle', { method: 'GET' });
-  if (!bundleResp.ok) {
-    throw new Error(`Ошибка загрузки регионалов (${bundleResp.status})`);
-  }
+  if (!bundleResp.ok) throw new Error(`Ошибка загрузки регионалов (${bundleResp.status})`);
 
   const bundle = await bundleResp.json();
   const rawManagers: any[] = Array.isArray(bundle?.managers) ? bundle.managers : [];
@@ -42,7 +47,6 @@ export async function fetchRegionalManagersFromErp() {
     const cities = Array.from(
       new Set(assignedClients.map((c: any) => c.city).filter((city: any) => city && !String(city).toLowerCase().includes('заполним')))
     );
-
     return {
       id: m.id,
       name: m.name || m.username || 'Менеджер ERP',
@@ -54,106 +58,115 @@ export async function fetchRegionalManagersFromErp() {
     };
   });
 
-  return {
-    success: true,
-    count: managers.length,
-    managers,
-  };
+  return { success: true, count: managers.length, managers };
 }
 
 /**
- * Проверка, является ли контрагент архивным, рассылочным (dummy) или деактивированным.
+ * Загружает полный дедуплицированный реестр контрагентов из ERP (объединяя counterparties и sync_bundle,
+ * чтобы избежать усечения 200 строк на стороне api_portal.php и сбоя регистрозависимого LIKE для кириллицы).
  */
-export function isCounterpartyArchivedOrMailing(c: any): boolean {
-  if (!c) return true;
-  const name = String(c.name || '').toLowerCase().trim();
-  const city = String(c.city || '').toLowerCase().trim();
-  const status = String(c.status || '').toLowerCase().trim();
-  const access = String(c.access || '').toLowerCase().trim();
+async function loadMasterCounterparties(): Promise<{
+  all: Counterparty[];
+  warehouseOwnerMap: Map<number, Counterparty>;
+  warehouseNameOwnerMap: Map<string, Counterparty>;
+}> {
+  const masterKey = 'cp_master_full_v2';
+  const cached = cpMemoryCache.get(masterKey);
+  if (cached && Date.now() - cached.timestamp < CP_CACHE_TTL_MS) return cached.data;
 
-  if (
-    ['inactive', 'archived', 'archive', 'disabled', 'deleted'].includes(status) ||
-    access === 'disabled' ||
-    c.is_active === 0 || c.is_active === false || c.is_active === '0' ||
-    c.portal_access_enabled === 0 || c.portal_access_enabled === false || c.portal_access_enabled === '0' ||
-    c.is_archived === true || c.is_archived === 1 || c.archived === true || c.archived === 1
-  ) {
-    return true;
-  }
+  return deduplicateRequest(masterKey, async () => {
+    const [cpResp, bundleResp] = await Promise.allSettled([
+      erpFetch('counterparties', { method: 'GET', params: { limit: 1000 } }),
+      erpFetch('sync_bundle', { method: 'GET' }),
+    ]);
+    const combinedRaw: any[] = [];
+    if (cpResp.status === 'fulfilled' && cpResp.value.ok) {
+      const cpData = await cpResp.value.json().catch(() => null);
+      if (cpData && Array.isArray(cpData.counterparties)) combinedRaw.push(...cpData.counterparties);
+    }
+    if (bundleResp.status === 'fulfilled' && bundleResp.value.ok) {
+      const bundleData = await bundleResp.value.json().catch(() => null);
+      if (bundleData && Array.isArray(bundleData.counterparties)) combinedRaw.push(...bundleData.counterparties);
+    }
+    if (combinedRaw.length === 0) throw new Error('Ошибка загрузки контрагентов из ERP');
 
-  return (
-    name.includes('рассылк') ||
-    city.includes('заполним позже') ||
-    name.includes('архив') ||
-    name.includes('[архив]') ||
-    name.includes('(архив)') ||
-    name.startsWith('для рассылки')
-  );
-}
-
-export function isCounterpartyActive(c: any): boolean {
-  return !isCounterpartyArchivedOrMailing(c);
+    const enriched = deduplicateAndEnrichCounterparties(combinedRaw);
+    cpMemoryCache.set(masterKey, { timestamp: Date.now(), data: enriched });
+    return enriched;
+  });
 }
 
 /**
- * Получение списка контрагентов и их договоров (с возможностью поиска по телефону/названию).
- * По умолчанию возвращает СТРОГО действующих активных клиентов (без архива и рассылок).
+ * Получение списка контрагентов и их договоров (с умным поиском по названию/телефону/БИН/городу/ID).
+ * По умолчанию возвращает СТРОГО действующих активных клиентов (без складов, архива, тестов и рассылок).
  */
 export async function fetchCounterpartiesFromErp(params: {
-  search?: string;
-  phone?: string;
-  managerId?: number;
-  limit?: number;
-  includeArchived?: boolean;
+  search?: string; phone?: string; managerId?: number; limit?: number; includeArchived?: boolean;
 } = {}) {
   const cleanPhone = params.phone ? params.phone.replace(/[^\d+]/g, '') : undefined;
   const cacheKey = `cp_${params.search || ''}_${cleanPhone || ''}_${params.managerId || ''}_${params.limit || ''}_${params.includeArchived ? '1' : '0'}`;
   const cached = cpMemoryCache.get(cacheKey);
-  if (cached && Date.now() - cached.timestamp < CP_CACHE_TTL_MS) {
-    return cached.data;
-  }
+  if (cached && Date.now() - cached.timestamp < CP_CACHE_TTL_MS) return cached.data;
 
   return deduplicateRequest(cacheKey, async () => {
-    const response = await erpFetch('counterparties', {
-      method: 'GET',
-      params: {
-        search: params.search,
-        phone: cleanPhone || undefined,
-        manager_id: params.managerId,
-        limit: params.limit,
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Ошибка загрузки контрагентов (${response.status})`);
-    }
-
-    const data = await response.json();
-    if (data && Array.isArray(data.counterparties)) {
-      const tagged = data.counterparties.map((c: any) => {
-        const isArchived = isCounterpartyArchivedOrMailing(c);
-        return {
-          ...c,
-          is_archived_or_mailing: isArchived,
-          is_acting_client: !isArchived,
-        };
+    const { all } = await loadMasterCounterparties();
+    let baseList = params.includeArchived ? all : all.filter(c => c.is_acting_client);
+    if (params.managerId) {
+      const targetMgr = Number(params.managerId);
+      baseList = baseList.filter(c => {
+        const rmId = Number(c.regional_manager?.id ?? c.manager_id ?? 0);
+        return rmId === targetMgr || rmId === 0;
       });
-
-      data.counterparties = params.includeArchived ? tagged : tagged.filter((c: any) => c.is_acting_client);
-      data.count = data.counterparties.length;
-      data.total_raw_count = tagged.length;
-      data.active_count = tagged.filter((c: any) => c.is_acting_client).length;
-      data.archived_count = tagged.filter((c: any) => c.is_archived_or_mailing).length;
     }
+    const effectiveQuery = [params.search, cleanPhone].filter(Boolean).join(' ').trim();
+    const matched = effectiveQuery
+      ? searchCounterpartiesSmart(baseList, effectiveQuery, params.limit)
+      : (params.limit ? baseList.slice(0, params.limit) : baseList);
+
+    const data = {
+      success: true,
+      counterparties: matched,
+      count: matched.length,
+      total_raw_count: all.length,
+      active_count: all.filter(c => c.is_acting_client).length,
+      archived_count: all.filter(c => c.is_archived_or_mailing).length,
+    };
     cpMemoryCache.set(cacheKey, { timestamp: Date.now(), data });
     return data;
   });
 }
 
 /**
- * Прямая аутентификация клиента в Synergy ERP.
- * Вызывает production-эндпоинт action=login с проверкой активности и возвратом showroom_warehouse_id.
+ * Находит контрагента-владельца для партнерского склада (склада комиссионера) по ID или названию склада.
  */
+export async function resolveConsignmentWarehouseOwner(
+  warehouseId?: number | null,
+  warehouseName?: string | null
+): Promise<Counterparty | null> {
+  try {
+    const { all, warehouseOwnerMap, warehouseNameOwnerMap } = await loadMasterCounterparties();
+    if (warehouseId && warehouseOwnerMap.has(Number(warehouseId))) {
+      return warehouseOwnerMap.get(Number(warehouseId)) || null;
+    }
+    const cleanName = String(warehouseName || '').trim().toLowerCase();
+    if (cleanName && warehouseNameOwnerMap.has(cleanName)) {
+      return warehouseNameOwnerMap.get(cleanName) || null;
+    }
+    if (cleanName) {
+      const prefix = cleanName.split(/[(\s]/)[0].replace(/[^a-zа-яё0-9]/gi, '');
+      if (prefix.length >= 4) {
+        const found = all.find(
+          c => c.is_acting_client && String(c.name || '').toLowerCase().includes(prefix)
+        );
+        if (found) return found;
+      }
+    }
+  } catch (err) {
+    console.warn('[resolveConsignmentWarehouseOwner] Error resolving owner:', err);
+  }
+  return null;
+}
+
 export async function authenticateClientViaErp(login: string, password: string): Promise<ErpClientAuthResult> {
   const cleanPhone = login.replace(/[^\d+]/g, '').trim();
   const cleanLogin = cleanPhone || login.trim();
@@ -166,8 +179,7 @@ export async function authenticateClientViaErp(login: string, password: string):
     });
     let data = await response.json().catch(() => null);
 
-    // Если введён номер телефона, который одновременно привязан к клиенту в 1С и к сотруднику ERP (например, 87086984543 -> afan),
-    // шлюз ERP проверяет пароль клиента первым. Проверяем справочник сотрудников по телефону и повторяем вход по логину сотрудника.
+    // Если введён номер телефона, привязанный одновременно к клиенту и сотруднику ERP, повторяем вход по логину сотрудника
     const inputDigits = cleanPhone.replace(/\D+/g, '');
     if ((!response.ok || !data?.success) && inputDigits.length >= 10) {
       try {
@@ -334,9 +346,6 @@ export async function authenticateClientViaErp(login: string, password: string):
   };
 }
 
-/**
- * Оповещение всех вкладок браузера о деактивации клиента в ERP.
- */
 export function broadcastClientDeactivated(counterpartyId: number | string) {
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new CustomEvent('synergy:client-deactivated', { detail: { counterparty_id: counterpartyId } }));
@@ -391,6 +400,7 @@ export async function updateClientAccessInErp(clientId: number | string, accessE
     body: { client_id: numClientId, access_enabled: isEnabled },
   });
   if (!response.ok) throw new Error(`Ошибка изменения доступа клиента в ERP (${response.status})`);
+  cpMemoryCache.clear();
   return { success: true };
 }
 
