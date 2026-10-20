@@ -6,7 +6,7 @@ import {
   isCounterpartyArchivedOrMailing,
   searchCounterpartiesSmart,
 } from '@/lib/erpApi';
-import { formatPriceType } from '@/lib/pricingEngine';
+import { formatPriceType, resolveContractPriceType } from '@/lib/pricingEngine';
 
 export interface AdminCounterpartiesSubTabProps {
   counterparties: any[];
@@ -235,7 +235,7 @@ export function AdminCounterpartiesSubTab({
                     </td>
                     <td className="py-2 px-3">
                       {(() => {
-                        const rawType = contract?.price_type || c.price_type || 'standard';
+                        const rawType = resolveContractPriceType(c, c.contracts, contract?.price_type || c.price_type || 'price_deferred');
                         return (
                           <span
                             className="badge bg-brand-50 text-brand-700 font-medium text-[10px] whitespace-nowrap"

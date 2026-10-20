@@ -46,7 +46,11 @@ export function useProducts(customDealerId?: string | number) {
     authContext?.impersonatedProfile?.partner_id ??
     authContext?.profile?.partner_id ??
     undefined;
-  const dealerKey = String(effectiveDealerId ?? authContext?.profile?.id ?? 'anon');
+  const effectivePriceType =
+    authContext?.impersonatedProfile?.price_type ??
+    authContext?.profile?.price_type ??
+    undefined;
+  const dealerKey = `${String(effectiveDealerId ?? authContext?.profile?.id ?? 'anon')}_${String(effectivePriceType ?? 'default')}`;
   if (globalCacheDealerKey !== dealerKey) {
     globalCacheDealerKey = dealerKey;
     globalProductsCache = [];
@@ -245,7 +249,7 @@ export function useProducts(customDealerId?: string | number) {
     async function load() {
       try {
         const bypassCache = reloadCounter > 0;
-        const erpData = await fetchCatalogFromErp(effectiveDealerId, undefined, bypassCache);
+        const erpData = await fetchCatalogFromErp(effectiveDealerId, effectivePriceType, bypassCache);
         if (!cancelled && erpData && erpData.success && Array.isArray(erpData.products) && erpData.products.length > 0) {
           const merged = mergeProducts(erpData.products as Product[]);
           cacheProducts(merged);
@@ -277,7 +281,7 @@ export function useProducts(customDealerId?: string | number) {
     return () => {
       cancelled = true;
     };
-  }, [reloadCounter, effectiveDealerId]);
+  }, [reloadCounter, effectiveDealerId, effectivePriceType]);
 
   return { products, summary, loading, error };
 }

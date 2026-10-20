@@ -20,7 +20,7 @@ import {
   searchCounterpartiesSmart,
 } from '@/lib/erpApi';
 import { getClientWarehouseSettings } from '@/lib/warehouseVisibility';
-import { formatPriceType } from '@/lib/pricingEngine';
+import { formatPriceType, resolveContractPriceType } from '@/lib/pricingEngine';
 import { ClientWarehouseModal } from './ClientWarehouseModal';
 import { ClientDemoPanel } from './ClientDemoPanel';
 
@@ -69,7 +69,7 @@ export function AdminUsersTab({ onNavigate }: AdminUsersTabProps) {
           const mappedUsers = cpData.counterparties.map((cp: any) => {
             const isAccessOn = cp.portal_access_enabled !== false && cp.portal_access_enabled !== 0 && cp.is_active !== 0 && cp.status !== 'inactive' && cp.access !== 'disabled';
             const isArchived = isCounterpartyArchivedOrMailing(cp);
-            const contractPriceType = cp.price_type || cp.contracts?.[0]?.price_type || (cp.cooperation_type === 'комиссия' ? 'commission' : 'wholesale');
+            const contractPriceType = resolveContractPriceType(cp, cp.contracts, 'price_deferred');
             return {
               id: String(cp.id),
               full_name: cp.name,

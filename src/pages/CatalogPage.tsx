@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { Search, SlidersHorizontal, ChevronDown, X, LayoutGrid, Table2, Globe } from 'lucide-react';
+import { Search, SlidersHorizontal, ChevronDown, X, LayoutGrid, Table2, Globe, FileSpreadsheet } from 'lucide-react';
 import type { PageId, StockSummary, Product } from '@/types';
 import { useProducts, filterClientWarehouses } from '@/hooks/useProductData';
 import { useUserPricing } from '@/hooks/usePricing';
@@ -7,11 +7,12 @@ import ProductCard from '@/components/ProductCard';
 import StockSummaryBar from '@/components/StockSummaryBar';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useShowroomMode } from '@/contexts/ShowroomModeContext';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
 import { isProductInStockForUser, getClientWarehouseSettings, matchesSelectedWarehouses } from '@/lib/warehouseVisibility';
 import {
   FilterDrawer, CatalogFilterSidebar, CatalogStockTable,
-  CatalogLoadingSkeleton, CatalogLoadError, StockReservationsModal,
+  CatalogLoadingSkeleton, CatalogLoadError, StockReservationsModal, PriceListExportModal,
   ActiveFilterChips, useCatalogStatePersistence, useSmartFacets, DecklePaperWrapper,
   CatalogPetroglyphHero, getTotalStock, sizeArea,
   type SortOption, type ViewMode,
@@ -19,20 +20,16 @@ import {
 import { tokenizeSearchQuery, matchesSearchTokens } from '@/lib/searchNormalization';
 
 export default function CatalogPage({
-  onNavigate,
-  initialCollection,
-  initialCountry,
-  initialSearch,
+  onNavigate, initialCollection, initialCountry, initialSearch,
 }: {
   onNavigate: (page: PageId, productId?: string) => void;
-  initialCollection?: string;
-  initialCountry?: string;
-  initialSearch?: string;
+  initialCollection?: string; initialCountry?: string; initialSearch?: string;
 }) {
   const { t } = useLanguage();
   const { products, summary: serverSummary, loading, error: loadError } = useProducts();
   const pricing = useUserPricing();
   const { profile, isAdmin, isImpersonating } = useAuth();
+  const { isShowroomMode } = useShowroomMode();
   const isEffectiveAdmin = isAdmin && !isImpersonating;
   const { settings: displaySettings } = useDisplaySettings();
   const myShowroomName = profile?.showroom_warehouse_name || 'В моем магазине';
@@ -49,6 +46,7 @@ export default function CatalogPage({
   } = useCatalogStatePersistence({ initialCollection, initialCountry, initialSearch });
 
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [priceListModalOpen, setPriceListModalOpen] = useState(false);
   const [reservationsModalOpen, setReservationsModalOpen] = useState(false);
   const [reservationsTab, setReservationsTab] = useState<'all' | 'processing' | 'pending' | 'expired'>('all');
   const [stockWarehouse, setStockWarehouse] = useState('');
@@ -497,6 +495,16 @@ export default function CatalogPage({
           </div>
 
           <div className="flex items-center justify-between sm:justify-end gap-2.5">
+            {profile && !isShowroomMode && profile.role !== 'supplier' && (
+              <button
+                type="button"
+                onClick={() => setPriceListModalOpen(true)}
+                className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50/80 px-3 py-2 text-xs font-bold text-emerald-800 hover:bg-emerald-100 transition-colors cursor-pointer shadow-2xs shrink-0"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-700" />
+                <span>Прайс-лист (Excel)</span>
+              </button>
+            )}
             {viewMode === 'grid' && (
               <div className="relative">
                 <select
@@ -556,11 +564,7 @@ export default function CatalogPage({
         </div>
 
         <div className="flex items-start">
-          <CatalogFilterSidebar
-            open={drawerOpen}
-            onClose={() => setDrawerOpen(false)}
-            {...filterProps}
-          />
+          <CatalogFilterSidebar open={drawerOpen} onClose={() => setDrawerOpen(false)} {...filterProps} />
 
           <div className="flex-1 min-w-0 w-full transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]">
             {filteredProducts.length > 0 ? (
@@ -584,22 +588,14 @@ export default function CatalogPage({
                   {hasMore && (
                     <div className="mt-8 flex flex-col items-center gap-3">
                       <div ref={sentinelRef} className="h-1" />
-                      <button
-                        type="button"
-                        onClick={() => setVisibleCount(c => c + 12)}
-                        className="btn-secondary cursor-pointer"
-                      >
+                      <button type="button" onClick={() => setVisibleCount(c => c + 12)} className="btn-secondary cursor-pointer">
                         {t('common.show_more')} ({filteredProducts.length - visibleCount})
                       </button>
                     </div>
                   )}
                 </>
               ) : (
-                <CatalogStockTable
-                  filteredProducts={filteredProducts}
-                  selectedWarehouse={stockWarehouse}
-                  onNavigate={handleProductNavigate}
-                />
+                <CatalogStockTable filteredProducts={filteredProducts} selectedWarehouse={stockWarehouse} onNavigate={handleProductNavigate} />
               )
             ) : (
               <div className="flex flex-col items-center justify-center py-24 text-center">
@@ -616,11 +612,8 @@ export default function CatalogPage({
           </div>
         </div>
 
-        <FilterDrawer
-          open={drawerOpen}
-          onClose={() => setDrawerOpen(false)}
-          {...filterProps}
-        />
+        <FilterDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} {...filterProps} />
+        <PriceListExportModal open={priceListModalOpen} onClose={() => setPriceListModalOpen(false)} fallbackProducts={products} />
 
       {canViewStockDetails && (
         <StockReservationsModal

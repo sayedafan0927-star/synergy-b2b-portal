@@ -1,11 +1,12 @@
 import { useState, useMemo, useEffect, lazy, Suspense } from 'react';
-import { Package, Settings, User, Users, LogOut, DollarSign, Eye, Server, FileText, Film } from 'lucide-react';
+import { Package, Settings, User, Users, LogOut, DollarSign, Eye, Server, FileText, Film, FileSpreadsheet } from 'lucide-react';
 import type { PageId } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { fetchClientDebtFromErp, type ClientDebtReport, fetchReconciliationReportFromErp } from '@/lib/erpApi';
 import { useShowroomMode } from '@/contexts/ShowroomModeContext';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { formatPriceType } from '@/lib/pricingEngine';
+import { formatPriceType, resolveContractPriceType } from '@/lib/pricingEngine';
+import { PriceListExportModal } from '@/components/catalog/PriceListExportModal';
 import LoginPage from './LoginPage';
 import {
   type Order, roleName, roleColor, fmtPrice,
@@ -61,13 +62,9 @@ export default function ProfilePage({
   const [clientDebt, setClientDebt] = useState<ClientDebtReport | null>(null);
   const [loadingDebt, setLoadingDebt] = useState<boolean>(false);
   const { isShowroomMode } = useShowroomMode();
-  const {
-    repeatingOrderId,
-    repeatResult,
-    handleRepeatOrder,
-    closeRepeatModal,
-  } = useRepeatOrder(profile?.partner_id, profile?.id);
+  const { repeatingOrderId, repeatResult, handleRepeatOrder, closeRepeatModal } = useRepeatOrder(profile?.partner_id, profile?.id);
   const [reconciliationModalOpen, setReconciliationModalOpen] = useState(false);
+  const [priceListModalOpen, setPriceListModalOpen] = useState(false);
   const [reconciliationPeriod, setReconciliationPeriod] = useState<'month' | 'quarter' | 'year'>('month');
   const [reconciliationLoading, setReconciliationLoading] = useState(false);
   const [reconciliationData, setReconciliationData] = useState<any | null>(null);
@@ -76,28 +73,14 @@ export default function ProfilePage({
     setReconciliationModalOpen(true);
     setReconciliationPeriod(period);
     setReconciliationLoading(true);
-
     try {
       const now = new Date();
-      let daysAgo = 30;
-      if (period === 'quarter') daysAgo = 90;
-      if (period === 'year') daysAgo = 365;
-
+      const daysAgo = period === 'quarter' ? 90 : period === 'year' ? 365 : 30;
       const startDate = new Date(now.getTime() - daysAgo * 86400000).toISOString().split('T')[0];
       const endDate = now.toISOString().split('T')[0];
       const partnerId = profile?.partner_id || profile?.id || '';
-
-      const data = await fetchReconciliationReportFromErp({
-        partnerId: String(partnerId),
-        startDate,
-        endDate,
-      });
-
-      if (data && data.success) {
-        setReconciliationData(data.report || data);
-      } else {
-        setReconciliationData(null);
-      }
+      const data = await fetchReconciliationReportFromErp({ partnerId: String(partnerId), startDate, endDate });
+      setReconciliationData(data?.success ? (data.report || data) : null);
     } catch (e) {
       console.warn('[Profile] Reconciliation report fetch failed:', e);
       setReconciliationData(null);
@@ -229,8 +212,22 @@ export default function ProfilePage({
               {profile.price_type && profile.role === 'client' && !isShowroomMode && (
                 <div className="flex items-center gap-2">
                   <DollarSign className="h-3.5 w-3.5 text-slate-400" />
-                  <span>{t('profile.price_type_label')} <strong className="text-slate-700">{formatPriceType(profile.price_type)}</strong></span>
+                  <span>{t('profile.price_type_label')} <strong className="text-slate-700">{formatPriceType(resolveContractPriceType(clientDebt?.client || profile, clientDebt?.contracts, profile.price_type))}</strong></span>
                 </div>
+              )}
+              {!isShowroomMode && profile.role !== 'supplier' && (
+                <button
+                  type="button"
+                  onClick={() => setPriceListModalOpen(true)}
+                  className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/90 px-3 py-2 text-xs font-bold text-emerald-800 hover:bg-emerald-100 transition-colors cursor-pointer"
+                >
+                  <FileSpreadsheet className="h-4 w-4 text-emerald-700 shrink-0" />
+                  <span>
+                    {profile.role === 'client' || isImpersonating
+                      ? 'Скачать прайс-лист (Excel)'
+                      : 'Выгрузка прайс-листа ERP (Excel)'}
+                  </span>
+                </button>
               )}
             </div>
           </div>
@@ -454,6 +451,12 @@ export default function ProfilePage({
         onPeriodChange={handleOpenReconciliationModal}
         loading={reconciliationLoading}
         data={reconciliationData}
+      />
+
+      <PriceListExportModal
+        open={priceListModalOpen}
+        onClose={() => setPriceListModalOpen(false)}
+        clientContracts={clientDebt?.contracts}
       />
       </div>
     </section>

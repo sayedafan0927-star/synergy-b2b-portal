@@ -34,10 +34,18 @@ export function getPricingTier(rawPriceType?: string | null): ContractPricingTie
 
   const str = rawPriceType.toLowerCase().trim();
 
-  // Цены из 1С:ERP (price_deferred, price_opt, wholesale) уже рассчитаны 1С по договору и являются финальными
+  // Цены из 1С:ERP (price_deferred, price_commission, price_cash, price_opt, wholesale) уже рассчитаны 1С по договору и являются финальными
   if (
     str === 'wholesale' ||
+    str === 'price_wholesale' ||
     str === 'price_deferred' ||
+    str === 'deferred' ||
+    str === 'price_commission' ||
+    str === 'commission' ||
+    str === 'consignment' ||
+    str === 'price_cash' ||
+    str === 'cash' ||
+    str === 'prepayment' ||
     str === 'price_opt' ||
     str === 'оптовая' ||
     str === 'standard' ||
@@ -45,8 +53,8 @@ export function getPricingTier(rawPriceType?: string | null): ContractPricingTie
     str === 'базовая цена'
   ) {
     return {
-      code: 'standard',
-      label: 'Оптовая цена ERP',
+      code: str.includes('commission') || str === 'consignment' ? 'commission' : str.includes('cash') || str === 'prepayment' ? 'cash' : 'standard',
+      label: formatPriceType(rawPriceType),
       discountPercent: 0,
       badgeColor: 'bg-slate-100 text-slate-700',
     };
@@ -200,6 +208,7 @@ export function formatPriceType(rawPriceType?: string | null): string {
     opt2: 'Опт 2',
     opt3: 'Опт 3',
     retail: 'Розничная',
+    price_commission: 'Комиссионная',
     commission: 'Комиссионная',
     dealer: 'Дилерская',
     standard: 'Базовая',
@@ -217,9 +226,111 @@ export function formatPriceType(rawPriceType?: string | null): string {
   if (str.includes('cash') || str.includes('факт') || str.includes('налич')) return 'По факту';
   if (str.includes('retail') || str.includes('розниц')) return 'Розничная';
   if (str.includes('dealer') || str.includes('дилер')) return 'Дилерская';
-  if (str.includes('commission') || str.includes('комисс')) return 'Комиссионная';
+  if (str.includes('commission') || str.includes('комисс') || str.includes('consignment') || str.includes('реализац')) return 'Комиссионная';
   if (str.includes('vip') || str.includes('вип')) return 'VIP';
 
   return rawPriceType;
+}
+
+/**
+ * Нормализация кода вида цены для запроса к шлюзу ERP (price_deferred, price_commission, price_cash, price_wholesale)
+ */
+export function normalizeToErpPriceType(rawPriceType?: string | null): string {
+  if (!rawPriceType) return 'price_deferred';
+  const str = String(rawPriceType).toLowerCase().trim();
+
+  if (
+    str === 'price_commission' ||
+    str === 'commission' ||
+    str === 'consignment' ||
+    str.includes('комисс') ||
+    str.includes('реализац')
+  ) {
+    return 'price_commission';
+  }
+
+  if (
+    str === 'price_cash' ||
+    str === 'cash' ||
+    str === 'prepayment' ||
+    str.includes('налич') ||
+    str.includes('по факту') ||
+    str.includes('предоплат')
+  ) {
+    return 'price_cash';
+  }
+
+  if (str === 'price_wholesale' || str === 'wholesale' || str === 'price_opt' || str.includes('опт')) {
+    return 'price_wholesale';
+  }
+
+  if (str === 'price_deferred' || str === 'deferred' || str.includes('отсроч')) {
+    return 'price_deferred';
+  }
+
+  return str || 'price_deferred';
+}
+
+/**
+ * Определение продажного вида цены клиента по данным договора и карточки контрагента из ERP
+ */
+export function resolveContractPriceType(
+  clientOrCounterparty?: any,
+  contracts?: any[] | null,
+  fallbackPriceType?: string | null
+): string {
+  const c = clientOrCounterparty || {};
+  const ctList = Array.isArray(contracts) ? contracts : (Array.isArray(c.contracts) ? c.contracts : []);
+  const defaultContract = ctList.find((ct: any) => ct?.is_default) || ctList[0] || null;
+
+  const rawContractType = String(defaultContract?.contract_type || c.contract_type || '').toLowerCase().trim();
+  const rawContractName = String(defaultContract?.contract_number || defaultContract?.name || '').toLowerCase().trim();
+  const rawCoopType = String(c.cooperation_type || '').toLowerCase().trim();
+  const rawExplicitPt = String(
+    defaultContract?.price_type || c.price_type || fallbackPriceType || ''
+  ).toLowerCase().trim();
+
+  if (
+    rawExplicitPt === 'price_commission' ||
+    rawExplicitPt === 'commission' ||
+    rawExplicitPt === 'consignment' ||
+    rawContractType === 'consignment' ||
+    rawContractType === 'commission' ||
+    rawContractType === 'комиссия' ||
+    rawContractName.includes('комисс') ||
+    rawContractName.includes('реализац') ||
+    rawCoopType === 'комиссия' ||
+    rawCoopType === 'consignment'
+  ) {
+    return 'price_commission';
+  }
+
+  if (
+    rawExplicitPt === 'price_cash' ||
+    rawExplicitPt === 'cash' ||
+    rawExplicitPt === 'prepayment' ||
+    rawContractType === 'cash' ||
+    rawContractType === 'prepayment' ||
+    rawContractName.includes('налич') ||
+    rawContractName.includes('по факту') ||
+    rawContractName.includes('предоплат')
+  ) {
+    return 'price_cash';
+  }
+
+  if (
+    rawExplicitPt === 'price_deferred' ||
+    rawExplicitPt === 'deferred' ||
+    rawContractType === 'deferred' ||
+    rawContractName.includes('отсроч')
+  ) {
+    return 'price_deferred';
+  }
+
+  if (rawExplicitPt === 'price_wholesale' || rawExplicitPt === 'wholesale') {
+    return 'price_wholesale';
+  }
+
+  return normalizeToErpPriceType(rawExplicitPt || fallbackPriceType || 'price_deferred');
 }
 

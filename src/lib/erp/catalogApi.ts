@@ -1,5 +1,6 @@
 import { erpFetch, deduplicateRequest, pingErp } from './core';
 import { fetchCounterpartiesFromErp, fetchRegionalManagersFromErp } from './counterpartiesApi';
+import { normalizeToErpPriceType } from '@/lib/pricingEngine';
 import type { PaginatedCatalogParams, PaginatedCatalogResult, ErpSyncReport } from './types';
 
 // ─── Stale-While-Revalidate Catalog Cache (60s fresh TTL, 300s stale TTL; 5m normalized metadata cache) ───
@@ -61,7 +62,8 @@ async function getNormalizedVariantMap(queryParams: Record<string, string | unde
  * Использует Stale-While-Revalidate (SWR) кэширование, поддержку ?refresh=1 и дедупликацию параллельных запросов.
  */
 export async function fetchCatalogFromErp(dealerId?: string | number, priceType?: string, bypassCache = false) {
-  const cacheKey = `catalog_${dealerId || 'public'}_${priceType || 'default'}`;
+  const normalizedPriceType = priceType ? normalizeToErpPriceType(priceType) : undefined;
+  const cacheKey = `catalog_${dealerId || 'public'}_${normalizedPriceType || 'default'}`;
 
   // 1. Проверяем свежий кэш в памяти (SWR: мгновенный возврат и тихое фоновое обновление после 60с)
   if (!bypassCache) {
@@ -72,7 +74,7 @@ export async function fetchCatalogFromErp(dealerId?: string | number, priceType?
         return cached.data;
       }
       if (age < CATALOG_STALE_TTL_MS) {
-        void fetchCatalogFromErp(dealerId, priceType, true).catch(() => {});
+        void fetchCatalogFromErp(dealerId, normalizedPriceType, true).catch(() => {});
         return cached.data;
       }
     }
@@ -85,8 +87,8 @@ export async function fetchCatalogFromErp(dealerId?: string | number, priceType?
   // 2. Дедупликация параллельных запросов
   return deduplicateRequest(requestKey, async () => {
     const queryParams = {
-      dealer_id: dealerId ? String(dealerId) : undefined,
-      price_type: priceType || undefined,
+      partner_id: dealerId ? String(dealerId) : undefined,
+      price_type: normalizedPriceType || undefined,
       refresh: bypassCache ? '1' : undefined,
     };
 
