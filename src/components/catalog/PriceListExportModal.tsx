@@ -86,6 +86,28 @@ export function PriceListExportModal({
 
   const effectivePriceType = isStaffMode ? selectedStaffType : resolvedClientPriceType;
 
+  // Фоновый прогрев прайс-листа при заходе в Личный кабинет (чтобы открытие окна занимало 0 мс)
+  useEffect(() => {
+    if (!profile || open) return;
+    const cached = getCachedPriceListRows(effectivePriceType, isStaffMode);
+    if (cached && cached.length > 0) {
+      setRows(cached);
+      return;
+    }
+    const timer = setTimeout(() => {
+      fetchErpPriceListRows({
+        priceType: effectivePriceType,
+        isStaff: isStaffMode,
+        fallbackProducts: fallbackProductsRef.current,
+      })
+        .then(data => {
+          if (data.length > 0) setRows(data);
+        })
+        .catch(() => {});
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [profile, open, effectivePriceType, isStaffMode]);
+
   useEffect(() => {
     if (!open) return;
 
@@ -103,6 +125,12 @@ export function PriceListExportModal({
       priceType: effectivePriceType,
       isStaff: isStaffMode,
       fallbackProducts: fallbackProductsRef.current,
+      onPartialRows: partial => {
+        if (!cancelled && partial.length > 0) {
+          setRows(partial);
+          setLoading(false);
+        }
+      },
     })
       .then(data => {
         if (!cancelled) setRows(data);

@@ -5,9 +5,18 @@ import { useState, useEffect } from 'react';
  */
 export function registerServiceWorker() {
   if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+    // При смене управляющего Service Worker обновляем страницу для применения новых хешей ассетов
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!refreshing) {
+        refreshing = true;
+        window.location.reload();
+      }
+    });
+
     window.addEventListener('load', () => {
       navigator.serviceWorker
-        .register('/sw.js')
+        .register('/sw.js', { updateViaCache: 'none' })
         .then((reg) => {
           console.log('[PWA] Service Worker registered with scope:', reg.scope);
           
@@ -27,15 +36,6 @@ export function registerServiceWorker() {
                   newWorker.postMessage({ type: 'SKIP_WAITING' });
                 }
               });
-            }
-          });
-
-          // При смене управляющего Service Worker обновляем страницу для применения новых хешей ассетов
-          let refreshing = false;
-          navigator.serviceWorker.addEventListener('controllerchange', () => {
-            if (!refreshing) {
-              refreshing = true;
-              window.location.reload();
             }
           });
 

@@ -198,8 +198,9 @@ export async function fetchErpPriceListRows(options: {
   priceType: string; // 'all' (только для ЛМ/РМ/Админ) или код вида цены ('price_deferred', 'price_commission', 'price_cash')
   isStaff: boolean;
   fallbackProducts?: Product[];
+  onPartialRows?: (rows: CollectionPriceRow[]) => void;
 }): Promise<CollectionPriceRow[]> {
-  const { priceType, isStaff, fallbackProducts = [] } = options;
+  const { priceType, isStaff, fallbackProducts = [], onPartialRows } = options;
 
   const cachedRows = getCachedPriceListRows(priceType, isStaff);
   if (cachedRows) {
@@ -207,10 +208,27 @@ export async function fetchErpPriceListRows(options: {
   }
 
   if (isStaff && priceType === 'all') {
+    const defPromise = fetchLightweightCatalogByPriceType('price_deferred').catch(() => []);
+    const commPromise = fetchLightweightCatalogByPriceType('price_commission').catch(() => []);
+    const cashPromise = fetchLightweightCatalogByPriceType('price_cash').catch(() => []);
+
+    if (onPartialRows) {
+      defPromise.then(defList => {
+        if (defList.length > 0 && !getCachedPriceListRows('all', true)) {
+          const partial = buildCollectionPriceRows(defList, 'price_deferred', {
+            price_deferred: defList,
+            price_commission: defList,
+            price_cash: defList,
+          });
+          if (partial.length > 0) onPartialRows(partial);
+        }
+      });
+    }
+
     const [defProdsRaw, commProdsRaw, cashProdsRaw] = await Promise.all([
-      fetchLightweightCatalogByPriceType('price_deferred').catch(() => []),
-      fetchLightweightCatalogByPriceType('price_commission').catch(() => []),
-      fetchLightweightCatalogByPriceType('price_cash').catch(() => []),
+      defPromise,
+      commPromise,
+      cashPromise,
     ]);
 
     const defProds = defProdsRaw.length > 0 ? defProdsRaw : fallbackProducts;

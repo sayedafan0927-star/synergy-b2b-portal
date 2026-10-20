@@ -1,4 +1,4 @@
-const CACHE_NAME = 'synergy-b2b-v28';
+const CACHE_NAME = 'synergy-b2b-v29';
 const STATIC_ASSETS = [
   '/favicon.svg',
   '/manifest.json',
@@ -39,7 +39,7 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch: Stale-While-Revalidate for catalog queries, Network-First for navigation & app shell
+// Fetch: Network-First for navigation & app shell, bypass all /api/ routes
 self.addEventListener('fetch', (event) => {
   const { request } = event;
 
@@ -77,41 +77,8 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Handle Catalog API caching (Stale-While-Revalidate)
-  if (url.pathname.includes('/api/erp') && (url.search.includes('action=catalog') || url.search.includes('action=product'))) {
-    event.respondWith(
-      (async () => {
-        const cache = await caches.open(CACHE_NAME);
-        const cachedResponse = await cache.match(request);
-        const fetchPromise = fetch(request)
-          .then((networkResponse) => {
-            if (networkResponse && networkResponse.status === 200) {
-              cache.put(request, networkResponse.clone());
-            }
-            return networkResponse;
-          })
-          .catch(() => null);
-
-        if (cachedResponse) {
-          return cachedResponse;
-        }
-
-        const networkRes = await fetchPromise;
-        if (networkRes) {
-          return networkRes;
-        }
-
-        return new Response(JSON.stringify({ error: 'Offline', items: [] }), {
-          status: 503,
-          headers: { 'Content-Type': 'application/json' }
-        });
-      })()
-    );
-    return;
-  }
-
-  // CRITICAL: Bypass all other API routes completely - never intercept serverless functions with App Shell fallback
-  if (url.pathname.startsWith('/api/')) {
+  // CRITICAL: Bypass all API routes completely - never intercept /api/erp or cms_api.php in Service Worker
+  if (url.pathname.startsWith('/api/') || url.pathname.endsWith('.php')) {
     return;
   }
 
@@ -126,7 +93,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       (async () => {
         try {
-          return await fetch(request, { cache: 'no-cache' });
+          return await fetch(request.url, { cache: 'no-cache' });
         } catch {
           const cached =
             (await caches.match(request)) ||
