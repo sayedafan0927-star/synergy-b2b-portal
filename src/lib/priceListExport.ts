@@ -283,6 +283,7 @@ export interface ExportPriceListOptions {
   rows: CollectionPriceRow[];
   priceType: string; // 'all' или конкретный вид цены
   isStaff: boolean;
+  showFactory?: boolean;
   clientName?: string;
   contractNumber?: string;
 }
@@ -292,7 +293,7 @@ export interface ExportPriceListOptions {
  * Строго: Коллекция и Цена за 1 м² в у.е. (вместо долларов пишется у.е.)
  */
 export function exportPriceListToExcel(options: ExportPriceListOptions): void {
-  const { rows, priceType, isStaff, clientName, contractNumber } = options;
+  const { rows, priceType, isStaff, showFactory = false, clientName, contractNumber } = options;
   const exportAllTypes = isStaff && priceType === 'all';
   const dateStr = new Date().toLocaleDateString('ru-RU');
   const priceTypeLabel = exportAllTypes
@@ -300,6 +301,7 @@ export function exportPriceListToExcel(options: ExportPriceListOptions): void {
     : formatPriceType(priceType);
 
   const colCount = exportAllTypes ? 7 : 5;
+  const originHeader = showFactory ? 'Фабрика / Страна' : 'Страна';
 
   const tableRowsHtml = rows
     .map((r, idx) => {
@@ -310,7 +312,7 @@ export function exportPriceListToExcel(options: ExportPriceListOptions): void {
         r.material && r.material !== '—' ? r.material : '',
       ].filter(Boolean);
       const specsStr = specsParts.length > 0 ? specsParts.join(' • ') : '—';
-      const originStr = r.manufacturer && r.manufacturer !== '—' ? `${r.manufacturer} (${r.country})` : r.country;
+      const originStr = showFactory && r.manufacturer && r.manufacturer !== '—' ? `${r.manufacturer} (${r.country})` : r.country;
 
       if (exportAllTypes) {
         const pCash = formatSqmPriceUe(r.pricesByType['price_cash'] || r.pricePerSqm);
@@ -342,7 +344,7 @@ export function exportPriceListToExcel(options: ExportPriceListOptions): void {
     ? `<tr style="background:#003365;color:#FFFFFF;font-weight:bold;">
         <th style="border:1px solid #002244;padding:10px;width:50px;text-align:center;">№</th>
         <th style="border:1px solid #002244;padding:10px;width:220px;text-align:left;">Коллекция</th>
-        <th style="border:1px solid #002244;padding:10px;width:210px;text-align:left;">Фабрика / Страна</th>
+        <th style="border:1px solid #002244;padding:10px;width:210px;text-align:left;">${originHeader}</th>
         <th style="border:1px solid #002244;padding:10px;width:260px;text-align:left;">Характеристики</th>
         <th style="border:1px solid #002244;padding:10px;width:165px;text-align:right;">Цена за 1 м² — По факту (у.е.)</th>
         <th style="border:1px solid #002244;padding:10px;width:165px;text-align:right;">Цена за 1 м² — Отсрочка (у.е.)</th>
@@ -351,7 +353,7 @@ export function exportPriceListToExcel(options: ExportPriceListOptions): void {
     : `<tr style="background:#003365;color:#FFFFFF;font-weight:bold;">
         <th style="border:1px solid #002244;padding:10px;width:50px;text-align:center;">№</th>
         <th style="border:1px solid #002244;padding:10px;width:240px;text-align:left;">Коллекция</th>
-        <th style="border:1px solid #002244;padding:10px;width:220px;text-align:left;">Фабрика / Страна</th>
+        <th style="border:1px solid #002244;padding:10px;width:220px;text-align:left;">${originHeader}</th>
         <th style="border:1px solid #002244;padding:10px;width:280px;text-align:left;">Характеристики</th>
         <th style="border:1px solid #002244;padding:10px;width:190px;text-align:right;">Цена за 1 м² (у.е.)</th>
       </tr>`;
@@ -404,10 +406,11 @@ export function exportPriceListToExcel(options: ExportPriceListOptions): void {
  * Выгрузка прайс-листа в формате CSV (разделитель точка с запятой, кодировка UTF-8 с BOM для Excel)
  */
 export function exportPriceListToCsv(options: ExportPriceListOptions): void {
-  const { rows, priceType, isStaff, clientName } = options;
+  const { rows, priceType, isStaff, showFactory = false, clientName } = options;
   const exportAllTypes = isStaff && priceType === 'all';
   const dateStr = new Date().toLocaleDateString('ru-RU');
   const priceTypeLabel = exportAllTypes ? 'Все продажные виды цен ERP' : formatPriceType(priceType);
+  const originHeader = showFactory ? 'Фабрика / Страна' : 'Страна';
 
   const lines: string[] = [];
   lines.push(`"ПРАЙС-ЛИСТ КОЛЛЕКЦИЙ SYNERGY GROUP";""`);
@@ -420,18 +423,18 @@ export function exportPriceListToCsv(options: ExportPriceListOptions): void {
   lines.push('');
 
   if (exportAllTypes) {
-    lines.push('"№";"Коллекция";"Фабрика / Страна";"Цена за 1 м² — По факту (у.е.)";"Цена за 1 м² — Отсрочка (у.е.)";"Цена за 1 м² — Комиссия (у.е.)"');
+    lines.push(`"№";"Коллекция";"${originHeader}";"Цена за 1 м² — По факту (у.е.)";"Цена за 1 м² — Отсрочка (у.е.)";"Цена за 1 м² — Комиссия (у.е.)"`);
     rows.forEach((r, idx) => {
-      const origin = r.manufacturer && r.manufacturer !== '—' ? `${r.manufacturer} (${r.country})` : r.country;
+      const origin = showFactory && r.manufacturer && r.manufacturer !== '—' ? `${r.manufacturer} (${r.country})` : r.country;
       const pCash = formatSqmPriceUe(r.pricesByType['price_cash'] || r.pricePerSqm);
       const pDef = formatSqmPriceUe(r.pricesByType['price_deferred'] || r.pricePerSqm);
       const pComm = formatSqmPriceUe(r.pricesByType['price_commission'] || r.pricePerSqm);
       lines.push(`"${idx + 1}";"${r.collection.replace(/"/g, '""')}";"${origin.replace(/"/g, '""')}";"${pCash}";"${pDef}";"${pComm}"`);
     });
   } else {
-    lines.push('"№";"Коллекция";"Фабрика / Страна";"Цена за 1 м² (у.е.)"');
+    lines.push(`"№";"Коллекция";"${originHeader}";"Цена за 1 м² (у.е.)"`);
     rows.forEach((r, idx) => {
-      const origin = r.manufacturer && r.manufacturer !== '—' ? `${r.manufacturer} (${r.country})` : r.country;
+      const origin = showFactory && r.manufacturer && r.manufacturer !== '—' ? `${r.manufacturer} (${r.country})` : r.country;
       const pVal = formatSqmPriceUe(r.pricePerSqm);
       lines.push(`"${idx + 1}";"${r.collection.replace(/"/g, '""')}";"${origin.replace(/"/g, '""')}";"${pVal}"`);
     });

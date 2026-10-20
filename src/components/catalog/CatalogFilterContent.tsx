@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { Search } from 'lucide-react';
 import { parseSizeDimensions } from '@/types';
+import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import type { FilterDrawerProps } from './types';
 import { FilterSection, CheckItem } from './FilterDrawer';
@@ -37,6 +38,8 @@ export function CatalogFilterContent({
   allSizes,
 }: CatalogFilterContentProps) {
   const { t } = useLanguage();
+  const { isAdmin, isImpersonating, profile } = useAuth();
+  const isAdminView = Boolean(!isImpersonating && (isAdmin || profile?.role === 'admin'));
   const rugSizes = useMemo(
     () =>
       allSizes.filter(s => {
@@ -125,11 +128,13 @@ export function CatalogFilterContent({
           )}
         </FilterSection>
 
-        <FilterSection title={t('catalog.filter_manufacturer')}>
-          {allManufacturers.map(m => (
-            <CheckItem key={m} label={m} checked={selectedManufacturers.has(m)} onToggle={() => toggleManufacturer(m)} />
-          ))}
-        </FilterSection>
+        {isAdminView && (
+          <FilterSection title={t('catalog.filter_manufacturer')}>
+            {allManufacturers.map(m => (
+              <CheckItem key={m} label={m} checked={selectedManufacturers.has(m)} onToggle={() => toggleManufacturer(m)} />
+            ))}
+          </FilterSection>
+        )}
 
         <FilterSection title={t('catalog.filter_country')}>
           {allCountries.map(c => (

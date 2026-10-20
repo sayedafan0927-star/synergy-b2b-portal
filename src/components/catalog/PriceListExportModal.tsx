@@ -30,6 +30,7 @@ export function PriceListExportModal({
   clientContracts,
 }: PriceListExportModalProps) {
   const { profile, isAdmin, isManager, isImpersonating } = useAuth();
+  const isAdminView = Boolean(!isImpersonating && (isAdmin || profile?.role === 'admin'));
   const isStaffMode = Boolean(
     !isImpersonating &&
       profile &&
@@ -150,10 +151,10 @@ export function PriceListExportModal({
     return rows.filter(
       r =>
         r.collection.toLowerCase().includes(q) ||
-        r.manufacturer.toLowerCase().includes(q) ||
+        (isAdminView && r.manufacturer.toLowerCase().includes(q)) ||
         r.country.toLowerCase().includes(q)
     );
-  }, [rows, search]);
+  }, [rows, search, isAdminView]);
 
   if (!open) return null;
 
@@ -165,6 +166,7 @@ export function PriceListExportModal({
       rows: filteredRows,
       priceType: effectivePriceType,
       isStaff: isStaffMode,
+      showFactory: isAdminView,
       clientName,
       contractNumber: resolvedContractName || undefined,
     });
@@ -175,6 +177,7 @@ export function PriceListExportModal({
       rows: filteredRows,
       priceType: effectivePriceType,
       isStaff: isStaffMode,
+      showFactory: isAdminView,
       clientName,
       contractNumber: resolvedContractName || undefined,
     });
@@ -276,7 +279,7 @@ export function PriceListExportModal({
                 type="text"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Поиск по коллекции или фабрике..."
+                placeholder={isAdminView ? 'Поиск по коллекции или фабрике...' : 'Поиск по коллекции...'}
                 className="w-full rounded-lg border border-slate-200 bg-slate-50 pl-8 pr-3 py-1.5 text-xs text-slate-800 focus:border-brand-500 focus:bg-white outline-none"
               />
             </div>
@@ -304,7 +307,7 @@ export function PriceListExportModal({
                   <tr className="bg-[#003365] text-white font-semibold">
                     <th className="py-2.5 px-3 text-center w-10">№</th>
                     <th className="py-2.5 px-3.5">Коллекция</th>
-                    <th className="py-2.5 px-3">Фабрика / Страна</th>
+                    <th className="py-2.5 px-3">{isAdminView ? 'Фабрика / Страна' : 'Страна'}</th>
                     <th className="py-2.5 px-3 hidden sm:table-cell">Характеристики</th>
                     {isAllTypesView ? (
                       <>
@@ -323,7 +326,7 @@ export function PriceListExportModal({
                       <td className="py-2.5 px-3 text-center text-slate-400 font-mono">{idx + 1}</td>
                       <td className="py-2.5 px-3.5 font-bold text-slate-900 text-sm">{row.collection}</td>
                       <td className="py-2.5 px-3 text-slate-600">
-                        {row.manufacturer !== '—' ? `${row.manufacturer} (${row.country})` : row.country}
+                        {isAdminView && row.manufacturer !== '—' ? `${row.manufacturer} (${row.country})` : row.country}
                       </td>
                       <td className="py-2.5 px-3 text-slate-500 hidden sm:table-cell">
                         {[

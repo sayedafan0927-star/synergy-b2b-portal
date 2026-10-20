@@ -202,9 +202,13 @@ export default function ProductPage({
 
     if (product.characteristics && product.characteristics.length > 0) {
       for (const c of product.characteristics) {
-        if (c.name && c.value && !seen.has(c.name.trim().toLowerCase())) {
+        const keyLower = c.name ? c.name.trim().toLowerCase() : '';
+        if (!isEffectiveAdmin && (keyLower.includes('производит') || keyLower.includes('фабрик') || keyLower.includes('manufacturer'))) {
+          continue;
+        }
+        if (c.name && c.value && !seen.has(keyLower)) {
           list.push({ label: c.name.trim(), value: c.value.trim() });
-          seen.add(c.name.trim().toLowerCase());
+          seen.add(keyLower);
         }
       }
     }
@@ -214,7 +218,7 @@ export default function ProductPage({
       { label: 'Артикул / Дизайн', value: product.article },
       { label: 'Цвет', value: product.color },
       { label: 'Форма', value: product.shape_label || product.shape },
-      { label: 'Производитель', value: product.manufacturer },
+      ...(isEffectiveAdmin ? [{ label: 'Производитель', value: product.manufacturer }] : []),
       { label: 'Страна производства', value: product.country },
       { label: 'Материал', value: product.material },
       { label: 'Стиль', value: product.style },
@@ -230,7 +234,7 @@ export default function ProductPage({
     }
 
     return list;
-  }, [product]);
+  }, [product, isEffectiveAdmin]);
 
   const selectedWarehouses = useMemo(() => readCatalogState()?.selectedWarehouses || [], [productId]);
   const hasSelectedWarehouses = selectedWarehouses.length > 0;

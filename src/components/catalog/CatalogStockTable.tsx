@@ -116,7 +116,7 @@ export function CatalogStockTable({
   function exportCollectionToExcel(collection: string, prods: Product[], sizes: string[], warehouse: string) {
     const BOM = '\uFEFF';
     const sep = '\t';
-    const headerParts = ['Товар', 'Производитель'];
+    const headerParts = isEffectiveAdmin ? ['Товар', 'Производитель'] : ['Товар'];
     if (settings.show_price) headerParts.push('$/м²');
     headerParts.push(
       ...sizes.flatMap(s => {
@@ -154,7 +154,7 @@ export function CatalogStockTable({
         if (settings.show_sqm) cells.push(sqm.toFixed(2));
         return cells;
       });
-      const rowParts = [product.name, product.manufacturer];
+      const rowParts = isEffectiveAdmin ? [product.name, product.manufacturer] : [product.name];
       if (settings.show_price) rowParts.push(`${pricePerSqm.toFixed(2)}`);
       rowParts.push(...sizeCells);
       if (settings.show_total_pcs) rowParts.push(String(totalPcs));
@@ -235,7 +235,7 @@ export function CatalogStockTable({
                                 <p className="text-xs font-semibold text-slate-900 truncate max-w-[180px] sm:max-w-[220px] lg:max-w-[280px] hover:text-brand-700 transition-colors">
                                   {product.name}
                                 </p>
-                                <p className="text-[10px] text-slate-400">{product.manufacturer}</p>
+                                {isEffectiveAdmin && <p className="text-[10px] text-slate-400">{product.manufacturer}</p>}
                                 {(settings.show_total_pcs || settings.show_sqm) && (
                                   <p className="text-[10px] text-slate-400">
                                     {(() => {
