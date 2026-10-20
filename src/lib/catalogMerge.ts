@@ -82,14 +82,15 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
             : (Number(v.base_price) > 0 ? Number(v.base_price) : Math.round(vPricePerSqm * area * 100) / 100);
 
           // Ищем центральный хаб (ID 81 / Основной Склад Астана)
+          const hasWarehouseBreakdown = Array.isArray(v.warehouses) && v.warehouses.length > 0;
           const hubWh = (v.warehouses || []).find(w => w.warehouse_id === 81)
             || (v.warehouses || []).find(w => (w.warehouse_name && w.warehouse_name.includes('Астана')) || (w.city && w.city.includes('Астана')))
             || (v.warehouses || []).find(w => w.is_hub && ((w.free_stock ?? w.stock ?? 0) > 0));
 
           const rawFree = v.free_stock !== undefined ? Number(v.free_stock) : ((v as any).stock_free !== undefined ? Number((v as any).stock_free) : undefined);
-          const freeStock = hubWh?.free_stock !== undefined
-            ? Number(hubWh.free_stock)
-            : (rawFree !== undefined ? rawFree : Number(hubWh?.stock ?? v.stock ?? 0));
+          const freeStock = hubWh
+            ? Number(hubWh.free_stock ?? hubWh.stock ?? 0)
+            : (hasWarehouseBreakdown ? 0 : (rawFree !== undefined ? rawFree : Number(v.stock ?? 0)));
           const hubStock = freeStock;
 
           // Партнерские шоурумы сохраняем только с реальным ненулевым остатком

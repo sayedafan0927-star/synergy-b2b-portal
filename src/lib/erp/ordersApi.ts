@@ -153,7 +153,7 @@ export async function submitOrderToErp(payload: CreateOrderPayload): Promise<Erp
       const area_sqm = item.area_sqm ?? dims.area_sqm;
       const resolvedQty = item.quantity ?? item.qty ?? 1;
       const itemObj: Record<string, any> = {
-        item_id: item.item_id || (Number(item.productId) > 0 ? Number(item.productId) : undefined),
+        ...(Number(item.item_id) > 0 ? { item_id: Number(item.item_id) } : {}),
         sku: item.sku,
         size: item.size,
         warehouse: item.warehouse || 'Основной Склад Астана',
@@ -257,7 +257,12 @@ export async function submitOrderToErp(payload: CreateOrderPayload): Promise<Erp
         details.available_qty = Number(details.free_stock ?? details.stock);
       }
 
+      const insufficientList = Array.isArray(errorData?.insufficient_items) && errorData.insufficient_items.length > 0
+        ? errorData.insufficient_items
+        : (details.sku || details.item_id ? [details] : []);
+
       (err as any).details = details;
+      (err as any).insufficient_items = insufficientList;
       throw err;
     }
     throw new Error(data.error || (data as any)?.message || `Ошибка сервера (${lastResponse.status})`);

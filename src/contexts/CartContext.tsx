@@ -9,7 +9,17 @@ interface CartContextValue {
   addItem: (item: Omit<CartItem, 'quantity'>, qty?: number) => void;
   removeItem: (productId: string, size: string, warehouse: string) => void;
   updateQuantity: (productId: string, size: string, warehouse: string, qty: number) => void;
-  syncItemPrices: (updater: (item: CartItem) => { price: number; price_per_sqm?: number; maxStock?: number } | null) => number;
+  syncItemPrices: (
+    updater: (item: CartItem) => {
+      price: number;
+      price_per_sqm?: number;
+      maxStock?: number;
+      item_id?: number;
+      warehouse?: string;
+      warehouse_id?: number;
+      keepQuantityOnConflict?: boolean;
+    } | null
+  ) => number;
   clearCart: () => void;
   totalItems: number;
   totalPrice: number;
@@ -169,7 +179,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
     }));
   }, []);
 
-  const syncItemPrices = useCallback((updater: (item: CartItem) => { price: number; price_per_sqm?: number; maxStock?: number } | null) => {
+  const syncItemPrices = useCallback((
+    updater: (item: CartItem) => {
+      price: number;
+      price_per_sqm?: number;
+      maxStock?: number;
+      item_id?: number;
+      warehouse?: string;
+      warehouse_id?: number;
+      keepQuantityOnConflict?: boolean;
+    } | null
+  ) => {
     let updatedCount = 0;
     setItems(prev => {
       const next = prev.map(item => {
@@ -178,16 +198,24 @@ export function CartProvider({ children }: { children: ReactNode }) {
         const priceChanged = Math.abs(item.price - patch.price) >= 0.01;
         const sqmChanged = patch.price_per_sqm !== undefined && Math.abs((item.price_per_sqm ?? 0) - patch.price_per_sqm) >= 0.01;
         const stockChanged = patch.maxStock !== undefined && item.maxStock !== patch.maxStock;
-        if (priceChanged || sqmChanged || stockChanged) {
+        const itemIdChanged = patch.item_id !== undefined && item.item_id !== patch.item_id;
+        const whChanged = patch.warehouse !== undefined && item.warehouse !== patch.warehouse;
+        const whIdChanged = patch.warehouse_id !== undefined && item.warehouse_id !== patch.warehouse_id;
+        if (priceChanged || sqmChanged || stockChanged || itemIdChanged || whChanged || whIdChanged) {
           updatedCount++;
-          const clampedQty = patch.maxStock !== undefined
-            ? (patch.maxStock > 0 ? Math.min(item.quantity, patch.maxStock) : 0)
+          const clampedQty = patch.keepQuantityOnConflict
+            ? Math.max(1, item.quantity)
+            : patch.maxStock !== undefined
+            ? (patch.maxStock > 0 ? Math.min(item.quantity, patch.maxStock) : Math.max(1, item.quantity))
             : item.quantity;
           return {
             ...item,
             price: patch.price,
             price_per_sqm: patch.price_per_sqm ?? item.price_per_sqm,
             maxStock: patch.maxStock ?? item.maxStock,
+            item_id: patch.item_id ?? item.item_id,
+            warehouse: patch.warehouse ?? item.warehouse,
+            warehouse_id: patch.warehouse_id ?? item.warehouse_id,
             quantity: clampedQty,
           };
         }

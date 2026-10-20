@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { ShoppingCart, ArrowLeft, PackageOpen, AlertCircle, Trash2, FileSpreadsheet } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -8,6 +8,7 @@ import {
   fetchClientDebtFromErp,
   isConsignmentWarehouseItem,
   resolveConsignmentWarehouseOwner,
+  invalidateClientCatalogCache,
   type SplitSubOrder,
 } from '@/lib/erpApi';
 import { enqueueOfflineOrder } from '@/lib/offlineOrderQueue';
@@ -26,6 +27,10 @@ import {
   CHECKOUT_PHONE_STORAGE_KEY,
   isValidPhone,
   formatPhone,
+  buildEnrichedConflictItems,
+  parseInsufficientStockError,
+  syncCartItemWithProduct,
+  type StockConflictItem,
 } from '@/components/cart';
 
 function extractCounterpartyPhone(client: any): string {
@@ -54,6 +59,8 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null as string | null);
   const [stockConflictDetails, setStockConflictDetails] = useState<{ available_qty?: number; requested_qty?: number; sku?: string } | null>(null);
+  const [rawConflictItems, setRawConflictItems] = useState<StockConflictItem[]>([]);
+  const conflictOverridesRef = useRef<Map<string, number>>(new Map());
   const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
 
   const effectiveProfile = isImpersonating && impersonatedProfile ? impersonatedProfile : profile;
@@ -197,41 +204,18 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
       .catch(err => console.warn('Debt check notice:', err));
   }, [profile, isImpersonating, impersonatedProfile, isStaff, isConsignmentOrder, checkoutMode, selectedClient]);
 
-  // Автоматическая тихая синхронизация цен и курса валют при входе в корзину и смене контрагента
+  // Автоматическая тихая синхронизация цен и курса валют (для предзаказа: inProd > 0 ? inProd)
   useEffect(() => {
     if (!products || products.length === 0 || items.length === 0) return;
-
-    const count = syncItemPrices(item => {
-      const prod = products.find(p => p.id === item.productId || p.variants.some(v => v.sku === item.sku));
-      if (!prod) return null;
-      const variant = prod.variants.find(v => v.sku === item.sku || v.size === item.size);
-      if (!variant) return null;
-
-      const latestPrice = getVariantPrice(prod.collection, variant.size, variant.base_price, variant.price_per_sqm);
-      const latestSqmPrice = getPricePerSqm(prod.collection, variant.size, variant.base_price, variant.price_per_sqm);
-      const wh = variant.warehouses.find(w => (w.warehouse_name || w.city) === item.warehouse || w.warehouse_id === item.warehouse_id);
-      const isPreorderItem = Boolean(
-        item.is_preorder ||
-        String(item.warehouse || '').includes('Предзаказ') ||
-        ((variant.free_stock ?? 0) === 0 && Number(variant.in_production_qty ?? 0) > 0)
-      );
-      const inProd = Number(variant.in_production_qty ?? 0);
-      const latestStock = isPreorderItem
-        ? (inProd > 0 ? inProd : (item.maxStock && item.maxStock > 0 ? item.maxStock : 999))
-        : (wh ? (typeof wh.free_stock === 'number' ? wh.free_stock : wh.stock ?? 0) : undefined);
-
-      return {
-        price: latestPrice,
-        price_per_sqm: latestSqmPrice,
-        maxStock: latestStock !== undefined ? Math.max(0, latestStock) : undefined,
-      };
-    });
-
+    const count = syncItemPrices(item =>
+      syncCartItemWithProduct(item, products, getVariantPrice, getPricePerSqm, conflictOverridesRef.current)
+    );
     if (count > 0) {
       toastInfo(`Цены и доступные остатки для ${count} поз. в корзине актуализированы по прайсу Synergy ERP`, 'Синхронизация цен');
     }
   }, [products, items, syncItemPrices, getVariantPrice, getPricePerSqm, toastInfo, selectedClient?.id, effectiveProfile?.id, effectiveProfile?.price_type]);
 
+  const conflictItems = useMemo(() => buildEnrichedConflictItems(items, rawConflictItems), [items, rawConflictItems]);
   const hasDepletedItems = useMemo(() => items.some(it => it.maxStock === 0), [items]);
   const hasOverStockItems = useMemo(
     () => items.some(it => typeof it.maxStock === 'number' && it.maxStock > 0 && it.quantity > it.maxStock),
@@ -242,52 +226,39 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
   const handleRemoveUnavailableItems = useCallback(() => {
     const problematicItems = items.filter(it => (!it.price || it.price <= 0) || it.maxStock === 0);
     problematicItems.forEach(it => removeItem(it.productId, it.size, it.warehouse));
-    if (problematicItems.length > 0) {
-      toastInfo(`Удалено позиций: ${problematicItems.length}. Корзина обновлена.`);
-    }
+    setSubmitError(null); setStockConflictDetails(null); setRawConflictItems([]);
+    conflictOverridesRef.current.clear();
+    if (problematicItems.length > 0) toastInfo(`Удалено позиций: ${problematicItems.length}. Корзина обновлена.`);
   }, [items, removeItem, toastInfo]);
 
   const handleAutoAdjustQuantities = useCallback(() => {
     let adjustedCount = 0;
-
-    if (stockConflictDetails) {
-      const targetSku = String(stockConflictDetails.sku || '').trim().toLowerCase();
-      const avail = typeof stockConflictDetails.available_qty === 'number' ? Math.max(0, stockConflictDetails.available_qty) : 0;
-
+    for (const c of conflictItems) {
+      const cSku = String(c.sku || '').trim().toLowerCase();
+      const cItemId = Number(c.item_id) || 0;
+      const avail = typeof c.available_qty === 'number' ? Math.max(0, c.available_qty) : 0;
       for (const it of items) {
         const itSku = String(it.sku || '').trim().toLowerCase();
         const itProdId = String(it.productId || '').trim().toLowerCase();
-        const isTarget = (targetSku && (itSku === targetSku || itProdId === targetSku)) || items.length === 1;
-        if (isTarget) {
-          if (avail === 0) {
-            removeItem(it.productId, it.size, it.warehouse);
-            adjustedCount++;
-          } else if (it.quantity > avail) {
-            updateQuantity(it.productId, it.size, it.warehouse, avail);
-            adjustedCount++;
-          }
+        const itItemId = Number(it.item_id) || 0;
+        if ((itItemId > 0 && cItemId > 0 && itItemId === cItemId) || (cSku && (itSku === cSku || itProdId === cSku)) || items.length === 1) {
+          if (avail === 0) { removeItem(it.productId, it.size, it.warehouse); adjustedCount++; }
+          else if (it.quantity > avail) { updateQuantity(it.productId, it.size, it.warehouse, avail); adjustedCount++; }
         }
       }
     }
-
     for (const it of items) {
       if (typeof it.maxStock === 'number') {
-        if (it.maxStock === 0) {
-          removeItem(it.productId, it.size, it.warehouse);
-          adjustedCount++;
-        } else if (it.quantity > it.maxStock) {
-          updateQuantity(it.productId, it.size, it.warehouse, it.maxStock);
-          adjustedCount++;
-        }
+        if (it.maxStock === 0) { removeItem(it.productId, it.size, it.warehouse); adjustedCount++; }
+        else if (it.quantity > it.maxStock) { updateQuantity(it.productId, it.size, it.warehouse, it.maxStock); adjustedCount++; }
       }
     }
-
-    setSubmitError(null);
-    setStockConflictDetails(null);
+    setSubmitError(null); setStockConflictDetails(null); setRawConflictItems([]);
+    conflictOverridesRef.current.clear();
     if (adjustedCount > 0) {
       toastInfo(`Скорректировано позиций: ${adjustedCount}. Количество выровнено по доступным остаткам складов.`, 'Остатки актуализированы');
     }
-  }, [items, stockConflictDetails, removeItem, updateQuantity, toastInfo]);
+  }, [items, conflictItems, removeItem, updateQuantity, toastInfo]);
 
   const isAdmin = profile?.role === 'admin';
   const isManagerSelfOrder = isStaff && !isConsignmentOrder && checkoutMode === 'manager_self';
@@ -343,14 +314,8 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
           <h1 className="font-display text-2xl font-bold text-slate-900">{t('cart.empty_title')}</h1>
           <p className="mt-2 text-slate-500">{t('cart.empty_desc')}</p>
           <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-            <button type="button" onClick={() => onNavigate('catalog')} className="btn-primary cursor-pointer">
-              {t('cart.back_to_catalog')}
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsExcelModalOpen(true)}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 text-xs font-semibold shadow-2xs transition-all cursor-pointer"
-            >
+            <button type="button" onClick={() => onNavigate('catalog')} className="btn-primary cursor-pointer">{t('cart.back_to_catalog')}</button>
+            <button type="button" onClick={() => setIsExcelModalOpen(true)} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 text-xs font-semibold shadow-2xs transition-all cursor-pointer">
               <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
               <span>{t('cart.excel_order')}</span>
             </button>
@@ -483,6 +448,8 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
         clearCart();
         setOrderDocNumber(docNum);
         setStockConflictDetails(null);
+        setRawConflictItems([]);
+        conflictOverridesRef.current.clear();
         window.scrollTo({ top: 0, behavior: 'smooth' });
       } else {
         throw new Error(data.error || (data as any)?.message || 'Не удалось создать заказ');
@@ -503,21 +470,43 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
         return;
       }
 
-      setSubmitError(err.message || 'Ошибка оформления заказа');
       if (err.code === 'INSUFFICIENT_STOCK' || err.details?.code === 'INSUFFICIENT_STOCK') {
-        const details = err.details || {};
-        setStockConflictDetails(details);
-        const targetSku = String(details.sku || '').trim().toLowerCase();
-        const avail = typeof details.available_qty === 'number' ? Math.max(0, details.available_qty) : 0;
+        invalidateClientCatalogCache();
+        setActiveCollection(null);
+        const parsed = parseInsufficientStockError(err, items);
+        setSubmitError(parsed.formattedMessage);
+        setStockConflictDetails(parsed.primaryDetails);
+        setRawConflictItems(parsed.conflicts);
+
+        for (const c of parsed.conflicts) {
+          const avail = typeof c.available_qty === 'number' ? Math.max(0, c.available_qty) : 0;
+          if (c.sku) conflictOverridesRef.current.set(String(c.sku).trim().toLowerCase(), avail);
+          if (c.productId) conflictOverridesRef.current.set(String(c.productId).trim().toLowerCase(), avail);
+          if (c.item_id) conflictOverridesRef.current.set(String(c.item_id), avail);
+        }
+
         syncItemPrices(item => {
           const itSku = String(item.sku || '').trim().toLowerCase();
           const itProdId = String(item.productId || '').trim().toLowerCase();
-          if ((targetSku && (itSku === targetSku || itProdId === targetSku)) || items.length === 1) {
-            return { price: item.price, price_per_sqm: item.price_per_sqm, maxStock: avail };
+          const itItemId = Number(item.item_id) || 0;
+          const matched = parsed.conflicts.find(c => {
+            const cSku = String(c.sku || '').trim().toLowerCase();
+            const cItemId = Number(c.item_id) || 0;
+            return (itItemId > 0 && cItemId > 0 && itItemId === cItemId) || (cSku && (itSku === cSku || itProdId === cSku)) || items.length === 1;
+          });
+          if (matched) {
+            const avail = typeof matched.available_qty === 'number' ? Math.max(0, matched.available_qty) : 0;
+            return { price: item.price, price_per_sqm: item.price_per_sqm, maxStock: avail, keepQuantityOnConflict: true };
           }
           return null;
         });
+
+        setTimeout(() => {
+          const el = document.querySelector('[data-stock-conflict="true"]');
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 80);
       } else {
+        setSubmitError(err.message || 'Ошибка оформления заказа');
         setStockConflictDetails(null);
       }
     } finally {
@@ -530,11 +519,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
       <div className="container-w">
         <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <button
-              type="button"
-              onClick={() => onNavigate('catalog')}
-              className="inline-flex items-center gap-1 text-xs font-semibold text-brand-700 hover:text-brand-800 mb-2 cursor-pointer"
-            >
+            <button type="button" onClick={() => onNavigate('catalog')} className="inline-flex items-center gap-1 text-xs font-semibold text-brand-700 hover:text-brand-800 mb-2 cursor-pointer">
               <ArrowLeft className="h-3.5 w-3.5" />
               {t('cart.back_to_catalog')}
             </button>
@@ -543,31 +528,31 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
               {t('cart.title')}
             </h1>
           </div>
-
-          <button
-            type="button"
-            onClick={() => setIsExcelModalOpen(true)}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 text-xs font-semibold shadow-2xs transition-all cursor-pointer self-start sm:self-auto"
-          >
+          <button type="button" onClick={() => setIsExcelModalOpen(true)} className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 text-xs font-semibold shadow-2xs transition-all cursor-pointer self-start sm:self-auto">
             <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
             <span>{t('cart.excel_order')}</span>
           </button>
         </div>
 
-        {hasDepletedItems && (
-          <div className="mb-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 rounded-lg border border-rose-200 bg-rose-50 px-3.5 py-2.5 text-xs text-rose-800 animate-in fade-in">
-            <div className="flex items-center gap-2.5">
-              <AlertCircle className="h-4 w-4 text-rose-600 shrink-0" />
+        {(hasDepletedItems || conflictItems.length > 0) && (
+          <div className="mb-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 rounded-lg border-2 border-red-300 bg-red-50 px-3.5 py-2.5 text-xs text-red-900 animate-in fade-in shadow-xs">
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="h-4 w-4 text-red-600 shrink-0 mt-0.5" />
               <div>
-                <span className="font-bold text-rose-900">{t('cart.some_items_depleted')} </span>
-                <span className="text-rose-700 text-[11px]">{t('cart.depleted_banner_desc')}</span>
+                <span className="font-bold text-red-900">{t('cart.some_items_depleted')} </span>
+                <span className="text-red-800 text-[11px]">{t('cart.depleted_banner_desc')}</span>
+                {conflictItems.length > 0 && (
+                  <div className="mt-1 flex flex-wrap gap-1.5">
+                    {conflictItems.map((c, idx) => (
+                      <span key={`${c.sku || idx}`} className="inline-flex items-center gap-1 rounded bg-red-100 border border-red-300 px-2 py-0.5 text-[11px] font-bold text-red-900">
+                        {c.productName || `SKU ${c.sku}`} ({c.size || '—'}, арт. {c.sku}) — доступно: {c.available_qty ?? 0} шт.
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
-            <button
-              type="button"
-              onClick={handleRemoveUnavailableItems}
-              className="shrink-0 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs transition-colors cursor-pointer shadow-xs"
-            >
+            <button type="button" onClick={handleAutoAdjustQuantities} className="shrink-0 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md bg-red-600 hover:bg-red-700 text-white font-bold text-xs transition-colors cursor-pointer shadow-xs">
               <Trash2 className="h-3.5 w-3.5" />
               <span>{t('cart.remove_unavailable_btn', 'Удалить недоступные')}</span>
             </button>
@@ -583,11 +568,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
                 <span className="text-amber-800 text-[11px]">{t('cart.zero_price_items_desc')}</span>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={handleRemoveUnavailableItems}
-              className="shrink-0 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition-colors cursor-pointer shadow-xs"
-            >
+            <button type="button" onClick={handleRemoveUnavailableItems} className="shrink-0 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition-colors cursor-pointer shadow-xs">
               <Trash2 className="h-3.5 w-3.5" />
               <span>{t('cart.remove_zero_price_btn', 'Удалить позиции без цены')}</span>
             </button>
@@ -605,6 +586,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
               onUpdateQuantity={updateQuantity}
               onRemoveItem={removeItem}
               onClearCart={clearCart}
+              conflictItems={conflictItems}
             />
           </div>
 
@@ -617,6 +599,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
               orderComment={orderComment} setOrderComment={setOrderComment}
               totalItems={totalItems} totalSqm={totalSqm} totalPrice={totalPrice}
               submitting={submitting} submitError={submitError} stockConflictDetails={stockConflictDetails}
+              conflictItems={conflictItems}
               hasDepletedItems={hasDepletedItems} hasOverStockItems={hasOverStockItems} hasZeroPriceItems={hasZeroPriceItems}
               onRemoveUnavailableItems={handleRemoveUnavailableItems} onAutoAdjustQuantities={handleAutoAdjustQuantities}
               isAuthenticated={Boolean(user)} onLoginRedirect={() => onNavigate('login')} onSubmit={handleSubmit}

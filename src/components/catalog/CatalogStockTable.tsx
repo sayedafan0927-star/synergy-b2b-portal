@@ -90,7 +90,7 @@ export function CatalogStockTable({
       addItem(
         {
           productId: product.id,
-          item_id: (variant as any).item_id || (Number(variant.id) > 0 ? Number(variant.id) : (Number(product.id) > 0 ? Number(product.id) : undefined)),
+          item_id: (variant as any).item_id || (Number(variant.id) > 0 ? Number(variant.id) : undefined),
           productName: product.name,
           collection: product.collection,
           image: product.images[0],

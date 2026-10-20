@@ -4,7 +4,7 @@ import { calcSqm, formatProductionEta } from '@/types';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import ProductImage from '@/components/ProductImage';
-import { fmt2, calcSizeSubtotals, calcCollectionSubtotals, type SizeSubtotal } from './types';
+import { fmt2, calcSizeSubtotals, calcCollectionSubtotals, matchCartItemConflict, type SizeSubtotal, type StockConflictItem } from './types';
 import { CartSubtotalsPanel } from './CartSubtotalsPanel';
 
 interface CartItemsTableProps {
@@ -16,6 +16,7 @@ interface CartItemsTableProps {
   onUpdateQuantity: (productId: string, size: string, warehouse: string, qty: number) => void;
   onRemoveItem: (productId: string, size: string, warehouse: string) => void;
   onClearCart: () => void;
+  conflictItems?: StockConflictItem[] | null;
 }
 
 export function CartItemsTable({
@@ -27,6 +28,7 @@ export function CartItemsTable({
   onUpdateQuantity,
   onRemoveItem,
   onClearCart,
+  conflictItems = null,
 }: CartItemsTableProps) {
   const { formatPrice: fmtPrice } = useCurrency();
   const { t } = useLanguage();
@@ -72,19 +74,23 @@ export function CartItemsTable({
                 {t('common.all')} ({items.reduce((s, it) => s + it.quantity, 0)})
               </button>
               {collections.map(col => {
-                const colQty = items.filter(it => it.collection === col).reduce((s, it) => s + it.quantity, 0);
+                const colItems = items.filter(it => it.collection === col);
+                const colQty = colItems.reduce((s, it) => s + it.quantity, 0);
+                const colHasConflict = colItems.some(it => Boolean(matchCartItemConflict(it, conflictItems)));
                 return (
                   <button
                     key={col}
                     type="button"
                     onClick={() => onSelectCollection(col)}
                     className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors cursor-pointer ${
-                      effectiveActiveCollection === col
+                      colHasConflict
+                        ? 'bg-red-600 text-white ring-2 ring-red-300 shadow-xs'
+                        : effectiveActiveCollection === col
                         ? 'bg-brand-700 text-white shadow-2xs'
                         : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
                     }`}
                   >
-                    {col} ({colQty})
+                    {colHasConflict ? `⚠️ ${col}` : col} ({colQty})
                   </button>
                 );
               })}
@@ -124,83 +130,89 @@ export function CartItemsTable({
                 const key = `${item.productId}-${item.size}-${item.warehouse}`;
                 const sqm = calcSqm(item.size, item.quantity);
                 const lineTotal = item.price * item.quantity;
-                const isDepleted = item.maxStock === 0;
+                const conflict = matchCartItemConflict(item, conflictItems);
+                const effectiveAvail = conflict?.available_qty !== undefined ? conflict.available_qty : item.maxStock;
+                const isDepleted = effectiveAvail === 0;
+                const isOverStock = typeof effectiveAvail === 'number' && effectiveAvail > 0 && item.quantity > effectiveAvail;
+                const hasStockConflict = Boolean(conflict) || isDepleted || isOverStock;
                 const isZeroPrice = !item.price || item.price <= 0;
 
                 return (
                   <tr
                     key={key}
-                    className={`transition-colors hover:bg-slate-50/80 ${
-                      isDepleted
-                        ? 'bg-rose-50/60 text-rose-900'
+                    data-stock-conflict={hasStockConflict ? 'true' : undefined}
+                    className={`transition-colors ${
+                      hasStockConflict
+                        ? 'bg-red-50/95 hover:bg-red-100/90 text-red-950 ring-2 ring-inset ring-red-500 border-l-4 border-l-red-600'
                         : isZeroPrice
-                        ? 'bg-amber-50/50 text-amber-950'
-                        : 'text-slate-800'
+                        ? 'bg-amber-50/50 hover:bg-amber-50/80 text-amber-950'
+                        : 'hover:bg-slate-50/80 text-slate-800'
                     }`}
                   >
                     {/* Товар / Артикул с компактным превью */}
-                    <td className="py-2 px-3">
-                      <div className="flex items-center gap-2.5">
+                    <td className="py-2.5 px-3">
+                      <div className="flex items-start gap-2.5">
                         <ProductImage
                           src={item.image}
                           alt={item.productName}
                           loading="lazy"
                           decoding="async"
                           width={40}
-                          className="h-9 w-9 shrink-0 rounded-md object-contain bg-slate-50 border border-slate-200/80 p-0.5"
+                          className={`h-10 w-10 shrink-0 rounded-md object-contain bg-slate-50 p-0.5 ${
+                            hasStockConflict ? 'border-2 border-red-500 ring-2 ring-red-200' : 'border border-slate-200/80'
+                          }`}
                         />
                         <div className="min-w-0 flex-1">
-                          <p className="font-bold text-slate-900 text-xs leading-snug break-words">
+                          <p className={`text-xs leading-snug break-words ${hasStockConflict ? 'font-extrabold text-red-900' : 'font-bold text-slate-900'}`}>
                             {item.productName}
                           </p>
                           <div className="flex flex-wrap items-center gap-1.5 text-[10.5px] text-slate-500 mt-0.5">
-                            <span className="font-mono bg-slate-100 px-1 py-0.2 rounded text-slate-600">
-                              {item.sku || 'SKU'}
-                            </span>
-                            {isDepleted && (
-                              <span className="inline-flex items-center text-rose-600 font-semibold gap-0.5">
-                                <AlertCircle className="h-3 w-3" /> {t('cart.out_of_stock', 'Закончился на складе')}
-                              </span>
+                            {item.collection && (
+                              <span className={`px-1.5 py-0.2 rounded font-semibold ${hasStockConflict ? 'bg-red-100 text-red-800' : 'bg-slate-100 text-slate-700'}`}>{item.collection}</span>
                             )}
-                            {isZeroPrice && !isDepleted && (
+                            <span className={`font-mono px-1.5 py-0.2 rounded ${hasStockConflict ? 'bg-red-600 text-white font-bold' : 'bg-slate-100 text-slate-600'}`}>SKU: {item.sku || '—'}</span>
+                            {isZeroPrice && !hasStockConflict && (
                               <span className="inline-flex items-center text-amber-700 font-semibold gap-0.5">
                                 <AlertTriangle className="h-3 w-3" /> {t('cart.price_pending', 'Цена не установлена')}
                               </span>
                             )}
                           </div>
+                          {hasStockConflict && (
+                            <div className="mt-1.5 flex items-start gap-1.5 rounded-md bg-red-600/10 border border-red-400 px-2 py-1 text-[11px] font-bold text-red-800">
+                              <AlertCircle className="h-3.5 w-3.5 text-red-600 shrink-0 mt-0.5" />
+                              <div>
+                                <span>{isDepleted ? `Закончился на складе: «${item.productName}» (${item.size})` : `Недостаточно остатка: «${item.productName}» (${item.size})`}</span>
+                                <span className="block text-[10.5px] font-semibold text-red-700">
+                                  Доступно на складе: {effectiveAvail ?? 0} {t('common.pcs')} • Запрошено: {conflict?.requested_qty ?? item.quantity} {t('common.pcs')}
+                                </span>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </td>
 
                     {/* Размер и площадь */}
                     <td className="py-2 px-2 text-center whitespace-nowrap">
-                      <span className="inline-block px-2 py-0.5 rounded-md font-bold text-slate-800 bg-slate-100 border border-slate-200/80 text-[11px]">
+                      <span className={`inline-block px-2 py-0.5 rounded-md font-bold text-[11px] ${hasStockConflict ? 'bg-red-100 text-red-900 border border-red-300' : 'text-slate-800 bg-slate-100 border border-slate-200/80'}`}>
                         {item.size}
                       </span>
-                      <p className="text-[10px] text-slate-500 mt-0.5 font-medium">{fmt2(sqm)} {t('common.sqm')}</p>
+                      <p className={`text-[10px] mt-0.5 font-medium ${hasStockConflict ? 'text-red-700' : 'text-slate-500'}`}>{fmt2(sqm)} {t('common.sqm')}</p>
                     </td>
 
                     {/* Склад */}
                     <td className="py-2 px-2.5 whitespace-nowrap">
                       {item.is_preorder || item.warehouse === 'Предзаказ (Фабрика)' ? (
                         <div>
-                          <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 border border-amber-200 px-1.5 py-0.5 text-[10px] font-bold text-amber-900">
-                            🏭 В производстве
-                          </span>
-                          {item.production_eta && (
-                            <p className="text-[10px] text-amber-800 mt-0.5">
-                              Выход: ~{formatProductionEta(item.production_eta)}
-                            </p>
-                          )}
+                          <span className="inline-flex items-center gap-1 rounded-md bg-amber-50 border border-amber-200 px-1.5 py-0.5 text-[10px] font-bold text-amber-900">🏭 В производстве</span>
+                          {item.production_eta && <p className="text-[10px] text-amber-800 mt-0.5">Выход: ~{formatProductionEta(item.production_eta)}</p>}
                         </div>
                       ) : (
-                        <p className="text-xs font-semibold text-slate-800" title={item.warehouse}>
-                          {item.warehouse}
-                        </p>
+                        <p className={`text-xs font-semibold ${hasStockConflict ? 'text-red-900' : 'text-slate-800'}`} title={item.warehouse}>{item.warehouse}</p>
                       )}
-                      {item.maxStock !== undefined && (
-                        <p className="text-[10px] text-slate-500 font-medium">
-                          {t('cart.free_qty')} <strong className="text-slate-700">{item.maxStock} {t('common.pcs')}</strong>
+                      {effectiveAvail !== undefined && (
+                        <p className={`text-[10.5px] font-bold mt-0.5 ${hasStockConflict ? 'inline-block rounded bg-red-600 text-white px-1.5 py-0.5' : 'text-slate-500 font-medium'}`}>
+                          {t('cart.free_qty')} <strong>{effectiveAvail} {t('common.pcs')}</strong>
                         </p>
                       )}
                     </td>
@@ -211,17 +223,15 @@ export function CartItemsTable({
                         <span className="text-xs font-semibold text-amber-700">{t('cart.price_pending')}</span>
                       ) : (
                         <div>
-                          <p className="font-bold text-slate-900 text-xs">{fmtPrice(item.price)}</p>
-                          {item.price_per_sqm ? (
-                            <p className="text-[10px] text-slate-500">{fmtPrice(item.price_per_sqm)}/{t('common.sqm')}</p>
-                          ) : null}
+                          <p className={`font-bold text-xs ${hasStockConflict ? 'text-red-900' : 'text-slate-900'}`}>{fmtPrice(item.price)}</p>
+                          {item.price_per_sqm ? <p className={`text-[10px] ${hasStockConflict ? 'text-red-700' : 'text-slate-500'}`}>{fmtPrice(item.price_per_sqm)}/{t('common.sqm')}</p> : null}
                         </div>
                       )}
                     </td>
 
-                    {/* Ввод количества (с поддержкой Tab, прямого набора и touch-кнопок) */}
+                    {/* Ввод количества */}
                     <td className="py-2 px-2 text-center whitespace-nowrap">
-                      <div className="inline-flex items-center rounded-lg border border-slate-300 bg-white shadow-2xs">
+                      <div className={`inline-flex items-center rounded-lg bg-white shadow-2xs ${hasStockConflict ? 'border-2 border-red-500 ring-2 ring-red-200' : 'border border-slate-300'}`}>
                         <button
                           type="button"
                           onClick={() => onUpdateQuantity(item.productId, item.size, item.warehouse, item.quantity - 1)}
@@ -234,16 +244,16 @@ export function CartItemsTable({
                         <input
                           type="number"
                           min="1"
-                          max={item.maxStock || 9999}
+                          max={effectiveAvail || 9999}
                           value={item.quantity}
                           disabled={isDepleted}
                           onChange={e => handleQtyInputChange(item, e.target.value)}
-                          className="w-11 text-center font-bold text-xs text-slate-900 focus:outline-hidden py-1 border-x border-slate-200"
+                          className={`w-11 text-center font-bold text-xs focus:outline-hidden py-1 border-x ${hasStockConflict ? 'text-red-700 border-red-300 bg-red-50/40' : 'text-slate-900 border-slate-200'}`}
                         />
                         <button
                           type="button"
                           onClick={() => onUpdateQuantity(item.productId, item.size, item.warehouse, item.quantity + 1)}
-                          disabled={isDepleted || (item.maxStock !== undefined && item.quantity >= item.maxStock)}
+                          disabled={isDepleted || (item.maxStock !== undefined && item.quantity >= item.maxStock) || (effectiveAvail !== undefined && item.quantity >= effectiveAvail)}
                           className="h-7 w-7 flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer rounded-r-md"
                           title="+"
                         >
@@ -257,7 +267,7 @@ export function CartItemsTable({
                       {isZeroPrice ? (
                         <span className="text-xs font-semibold text-amber-700">{t('cart.price_pending')}</span>
                       ) : (
-                        <span className="text-xs font-extrabold text-brand-700">{fmtPrice(lineTotal)}</span>
+                        <span className={`text-xs font-extrabold ${hasStockConflict ? 'text-red-700' : 'text-brand-700'}`}>{fmtPrice(lineTotal)}</span>
                       )}
                     </td>
 
@@ -267,7 +277,7 @@ export function CartItemsTable({
                         type="button"
                         onClick={() => onRemoveItem(item.productId, item.size, item.warehouse)}
                         title="Удалить позицию"
-                        className="p-1 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                        className={`p-1.5 rounded-md transition-colors cursor-pointer ${hasStockConflict ? 'bg-red-600 text-white hover:bg-red-700 shadow-2xs' : 'text-slate-400 hover:text-rose-600 hover:bg-rose-50'}`}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -283,16 +293,10 @@ export function CartItemsTable({
                     ? `${t('cart.collection_subtotal_label', 'Итого по коллекции')} ${effectiveActiveCollection}:`
                     : `${t('cart.all_collections_subtotal_label', 'Итого по всем коллекциям')}:`}
                 </td>
-                <td className="py-2.5 px-2 text-center font-bold text-slate-800 whitespace-nowrap">
-                  {fmt2(displayedTotalSqm)} {t('common.sqm')}
-                </td>
+                <td className="py-2.5 px-2 text-center font-bold text-slate-800 whitespace-nowrap">{fmt2(displayedTotalSqm)} {t('common.sqm')}</td>
                 <td colSpan={2} className="py-2.5 px-2"></td>
-                <td className="py-2.5 px-2 text-center font-bold text-slate-900 whitespace-nowrap">
-                  {displayedTotalQty} {t('common.pcs')}
-                </td>
-                <td className="py-2.5 px-3 text-right font-extrabold text-brand-700 whitespace-nowrap">
-                  {fmtPrice(displayedTotalSum)}
-                </td>
+                <td className="py-2.5 px-2 text-center font-bold text-slate-900 whitespace-nowrap">{displayedTotalQty} {t('common.pcs')}</td>
+                <td className="py-2.5 px-3 text-right font-extrabold text-brand-700 whitespace-nowrap">{fmtPrice(displayedTotalSum)}</td>
                 <td className="py-2.5 px-2"></td>
               </tr>
             </tfoot>
@@ -306,16 +310,33 @@ export function CartItemsTable({
           const key = `${item.productId}-${item.size}-${item.warehouse}`;
           const sqm = calcSqm(item.size, item.quantity);
           const lineTotal = item.price * item.quantity;
-          const isDepleted = item.maxStock === 0;
+          const conflict = matchCartItemConflict(item, conflictItems);
+          const effectiveAvail = conflict?.available_qty !== undefined ? conflict.available_qty : item.maxStock;
+          const isDepleted = effectiveAvail === 0;
+          const isOverStock = typeof effectiveAvail === 'number' && effectiveAvail > 0 && item.quantity > effectiveAvail;
+          const hasStockConflict = Boolean(conflict) || isDepleted || isOverStock;
           const isZeroPrice = !item.price || item.price <= 0;
 
           return (
             <div
               key={key}
-              className={`card p-3.5 flex flex-col gap-3 rounded-xl border border-slate-200 bg-white shadow-xs ${
-                isDepleted ? 'bg-rose-50/70 border-rose-200' : isZeroPrice ? 'bg-amber-50/60 border-amber-200' : ''
+              data-stock-conflict={hasStockConflict ? 'true' : undefined}
+              className={`card p-3.5 flex flex-col gap-3 rounded-xl border bg-white shadow-xs ${
+                hasStockConflict ? 'bg-red-50/95 border-2 border-red-500 ring-2 ring-red-500/20' : isZeroPrice ? 'bg-amber-50/60 border-amber-200' : 'border-slate-200'
               }`}
             >
+              {hasStockConflict && (
+                <div className="flex items-start gap-2 rounded-lg bg-red-600 text-white px-3 py-2 text-xs font-bold shadow-2xs">
+                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <div className="min-w-0 flex-1">
+                    <p className="leading-snug">{isDepleted ? 'Закончился на складе:' : 'Недостаточно остатка:'} {item.productName} ({item.size})</p>
+                    <p className="text-[11px] font-semibold text-red-100 mt-0.5">
+                      SKU: {item.sku} • Доступно: {effectiveAvail ?? 0} {t('common.pcs')} (в заказе: {conflict?.requested_qty ?? item.quantity} {t('common.pcs')})
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <div className="flex items-start gap-3">
                 <ProductImage
                   src={item.image}
@@ -323,19 +344,19 @@ export function CartItemsTable({
                   loading="lazy"
                   decoding="async"
                   width={64}
-                  className="h-16 w-16 shrink-0 rounded-lg object-contain bg-slate-50 border border-slate-200 p-1"
+                  className={`h-16 w-16 shrink-0 rounded-lg object-contain bg-slate-50 p-1 ${hasStockConflict ? 'border-2 border-red-500' : 'border border-slate-200'}`}
                 />
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs sm:text-sm font-bold text-slate-900 leading-snug line-clamp-2">{item.productName}</p>
-                  <p className="text-[11px] text-slate-500 font-mono mt-0.5">{item.sku}</p>
+                  <p className={`text-xs sm:text-sm leading-snug line-clamp-2 ${hasStockConflict ? 'font-extrabold text-red-900' : 'font-bold text-slate-900'}`}>{item.productName}</p>
+                  <p className={`text-[11px] font-mono mt-0.5 ${hasStockConflict ? 'font-bold text-red-700' : 'text-slate-500'}`}>SKU: {item.sku}</p>
                   <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
-                    <span className="badge text-[10px] font-bold py-0.5 px-2 bg-slate-100 text-slate-800">{item.size} ({fmt2(sqm)} {t('common.sqm')})</span>
-                    <span className="text-[10.5px] px-1.5 py-0.5 rounded bg-brand-50 text-brand-800 font-medium">
-                      {item.warehouse}
+                    <span className={`badge text-[10px] font-bold py-0.5 px-2 ${hasStockConflict ? 'bg-red-100 text-red-900 border border-red-300' : 'bg-slate-100 text-slate-800'}`}>
+                      {item.size} ({fmt2(sqm)} {t('common.sqm')})
                     </span>
-                    {typeof item.maxStock === 'number' && (
-                      <span className="text-[10px] text-slate-500">
-                        {item.maxStock === 0 ? `❌ ${t('cart.out_of_stock')}` : `${t('cart.free_qty')} ${item.maxStock} ${t('common.pcs')}`}
+                    <span className="text-[10.5px] px-1.5 py-0.5 rounded bg-brand-50 text-brand-800 font-medium">{item.warehouse}</span>
+                    {typeof effectiveAvail === 'number' && (
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${hasStockConflict ? 'bg-red-600 text-white' : 'text-slate-500 font-normal'}`}>
+                        {effectiveAvail === 0 ? `❌ ${t('cart.out_of_stock')}` : `${t('cart.free_qty')} ${effectiveAvail} ${t('common.pcs')}`}
                       </span>
                     )}
                   </div>
@@ -343,7 +364,7 @@ export function CartItemsTable({
                 <button
                   type="button"
                   onClick={() => onRemoveItem(item.productId, item.size, item.warehouse)}
-                  className="h-8 w-8 flex items-center justify-center rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer shrink-0"
+                  className={`h-8 w-8 flex items-center justify-center rounded-lg transition-colors cursor-pointer shrink-0 ${hasStockConflict ? 'bg-red-600 text-white hover:bg-red-700' : 'text-slate-400 hover:text-rose-600 hover:bg-rose-50'}`}
                   title="Remove"
                   aria-label="Remove"
                 >
@@ -352,7 +373,7 @@ export function CartItemsTable({
               </div>
 
               <div className="flex items-center justify-between border-t border-slate-100 pt-2.5">
-                <div className="flex items-center rounded-lg border border-slate-300 bg-white shadow-2xs">
+                <div className={`flex items-center rounded-lg bg-white shadow-2xs ${hasStockConflict ? 'border-2 border-red-500' : 'border border-slate-300'}`}>
                   <button
                     type="button"
                     onClick={() => onUpdateQuantity(item.productId, item.size, item.warehouse, item.quantity - 1)}
@@ -363,11 +384,11 @@ export function CartItemsTable({
                   >
                     <Minus className="h-3.5 w-3.5" />
                   </button>
-                  <span className="w-9 text-center font-bold text-xs text-slate-900">{item.quantity}</span>
+                  <span className={`w-9 text-center font-bold text-xs ${hasStockConflict ? 'text-red-700' : 'text-slate-900'}`}>{item.quantity}</span>
                   <button
                     type="button"
                     onClick={() => onUpdateQuantity(item.productId, item.size, item.warehouse, item.quantity + 1)}
-                    disabled={isDepleted || (item.maxStock !== undefined && item.quantity >= item.maxStock)}
+                    disabled={isDepleted || (effectiveAvail !== undefined && item.quantity >= effectiveAvail)}
                     className="h-8 w-8 flex items-center justify-center text-slate-600 hover:text-slate-900 hover:bg-slate-100 disabled:opacity-30 disabled:pointer-events-none transition-colors rounded-r-lg"
                     title="+"
                     aria-label="+"
@@ -376,10 +397,8 @@ export function CartItemsTable({
                   </button>
                 </div>
                 <div className="text-right">
-                  <div className="text-[11px] text-slate-500">
-                    {fmtPrice(item.price)} / {t('common.pcs')}
-                  </div>
-                  <div className="font-extrabold text-brand-700 text-sm sm:text-base">
+                  <div className="text-[11px] text-slate-500">{fmtPrice(item.price)} / {t('common.pcs')}</div>
+                  <div className={`font-extrabold text-sm sm:text-base ${hasStockConflict ? 'text-red-700' : 'text-brand-700'}`}>
                     {isZeroPrice ? t('cart.price_pending') : fmtPrice(lineTotal)}
                   </div>
                 </div>

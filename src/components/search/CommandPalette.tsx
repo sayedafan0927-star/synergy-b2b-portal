@@ -248,13 +248,20 @@ export function CommandPalette({ isOpen, onClose, onNavigate }: CommandPalettePr
     const targetVariant = variant || product.variants.find(v => (v.stock || v.free_stock || 0) > 0) || product.variants[0];
     if (!targetVariant) return;
 
+    const stockWh = (targetVariant.warehouses || []).find(w => Number(w.free_stock ?? w.stock ?? 0) > 0) || targetVariant.warehouses?.[0];
+    const whStock = Number(stockWh?.free_stock ?? stockWh?.stock ?? targetVariant.free_stock ?? targetVariant.stock ?? 0);
+    const inProdQty = Number(targetVariant.in_production_qty ?? 0);
+    const isPreorder = whStock <= 0 && inProdQty > 0;
+    const availStock = isPreorder ? inProdQty : whStock;
+    if (availStock <= 0) return;
+
     const price = getVariantPrice(product.collection, targetVariant.size, targetVariant.base_price, targetVariant.price_per_sqm);
-    const primaryWarehouse = targetVariant.warehouses?.[0]?.warehouse_name || 'Основной Склад Астана';
-    const primaryWhId = targetVariant.warehouses?.[0]?.warehouse_id || 81;
+    const primaryWarehouse = isPreorder ? 'Предзаказ (Фабрика)' : (stockWh?.warehouse_name || stockWh?.city || 'Основной Склад Астана');
+    const primaryWhId = isPreorder ? 81 : (stockWh?.warehouse_id || 81);
 
     addItem({
       productId: product.id,
-      item_id: targetVariant.item_id,
+      item_id: targetVariant.item_id || (Number(targetVariant.id) > 0 ? Number(targetVariant.id) : undefined),
       productName: product.name,
       collection: product.collection,
       image: product.images[0] || '',
@@ -265,7 +272,9 @@ export function CommandPalette({ isOpen, onClose, onNavigate }: CommandPalettePr
       price,
       price_per_sqm: targetVariant.price_per_sqm,
       area_sqm: targetVariant.area_sqm,
-      maxStock: targetVariant.free_stock ?? targetVariant.stock,
+      maxStock: availStock,
+      is_preorder: isPreorder || undefined,
+      production_eta: isPreorder ? (targetVariant.production_eta ?? product.production_eta ?? null) : undefined,
     }, 1);
 
     setAddedVariantSku(targetVariant.sku);

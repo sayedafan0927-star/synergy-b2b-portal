@@ -128,8 +128,8 @@ function ProductCard({ product, onNavigate, selectedWarehouses, onlyInProduction
   const oldPricePerSqm = activeVariantForSale?.old_price_per_sqm || product.old_price_per_sqm || null;
 
   const handleAdd = (variant: ProductVariant) => {
-    const warehouse = getVariantClientWarehouse(variant);
-    const stock = getVariantClientStock(variant);
+    const clientWarehouses = getVariantClientWarehouses(variant).filter(w => w.stock > 0);
+    const stock = clientWarehouses.reduce((sum, w) => sum + w.stock, 0);
     const inProdQty = Number(variant.in_production_qty ?? 0);
     const isPreorder = stock <= 0 && inProdQty > 0;
     const availableQty = isPreorder ? inProdQty : stock;
@@ -142,24 +142,50 @@ function ProductCard({ product, onNavigate, selectedWarehouses, onlyInProduction
     const quantity = Math.min(quantities[variant.sku] ?? 1, availableQty);
     const price = getVariantPrice(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
     const itemSqmPrice = getPricePerSqm(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
+    const resolvedItemId = (variant as any).item_id || (Number(variant.id) > 0 ? Number(variant.id) : undefined);
 
-    addItem({
-      productId: product.id,
-      item_id: (variant as any).item_id || (Number(variant.id) > 0 ? Number(variant.id) : (Number(product.id) > 0 ? Number(product.id) : undefined)),
-      productName: product.name,
-      collection: product.collection,
-      image: activeImage,
-      size: variant.size,
-      sku: variant.sku,
-      warehouse: isPreorder ? 'Предзаказ (Фабрика)' : (warehouse?.warehouse_name || warehouse?.city || 'Основной Склад Астана'),
-      warehouse_id: warehouse?.warehouse_id || 81,
-      price,
-      price_per_sqm: itemSqmPrice,
-      area_sqm: variant.area_sqm,
-      maxStock: availableQty,
-      is_preorder: isPreorder || undefined,
-      production_eta: isPreorder ? (variant.production_eta ?? product.production_eta ?? null) : undefined,
-    }, quantity);
+    if (isPreorder) {
+      addItem({
+        productId: product.id,
+        item_id: resolvedItemId,
+        productName: product.name,
+        collection: product.collection,
+        image: activeImage,
+        size: variant.size,
+        sku: variant.sku,
+        warehouse: 'Предзаказ (Фабрика)',
+        warehouse_id: 81,
+        price,
+        price_per_sqm: itemSqmPrice,
+        area_sqm: variant.area_sqm,
+        maxStock: inProdQty,
+        is_preorder: true,
+        production_eta: variant.production_eta ?? product.production_eta ?? null,
+      }, quantity);
+    } else {
+      let remaining = quantity;
+      for (const wh of clientWarehouses) {
+        if (remaining <= 0) break;
+        const allocQty = Math.min(remaining, wh.stock);
+        if (allocQty <= 0) continue;
+        addItem({
+          productId: product.id,
+          item_id: resolvedItemId,
+          productName: product.name,
+          collection: product.collection,
+          image: activeImage,
+          size: variant.size,
+          sku: variant.sku,
+          warehouse: wh.warehouse_name || wh.city || 'Основной Склад Астана',
+          warehouse_id: wh.warehouse_id || 81,
+          price,
+          price_per_sqm: itemSqmPrice,
+          area_sqm: variant.area_sqm,
+          maxStock: wh.stock,
+        }, allocQty);
+        remaining -= allocQty;
+      }
+    }
     setAddedSku(variant.sku);
     window.setTimeout(() => setAddedSku(current => current === variant.sku ? null : current), 1400);
   };
