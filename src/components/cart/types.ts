@@ -233,9 +233,10 @@ export function syncCartItemWithProduct(
     return { price: latestPrice, price_per_sqm: latestSqmPrice, item_id: resolvedItemId, maxStock: Math.max(0, preStock) };
   }
 
-  const wh = variant.warehouses.find(
-    (w: any) => (w.warehouse_name || w.city) === item.warehouse || w.warehouse_id === item.warehouse_id
-  );
+  const wh =
+    variant.warehouses.find((w: any) => (w.warehouse_name || w.city) === item.warehouse) ||
+    (!item.warehouse ? variant.warehouses.find((w: any) => w.warehouse_id === item.warehouse_id) : undefined);
+
   if (wh) {
     const whStock = typeof wh.free_stock === 'number' ? wh.free_stock : (wh.stock ?? 0);
     return {
@@ -245,19 +246,6 @@ export function syncCartItemWithProduct(
       warehouse_id: wh.warehouse_id || item.warehouse_id,
       maxStock: Math.max(0, whStock),
       keepQuantityOnConflict: whStock === 0,
-    };
-  }
-
-  const fallbackWh = variant.warehouses.find((w: any) => (typeof w.free_stock === 'number' ? w.free_stock : (w.stock ?? 0)) > 0);
-  if (fallbackWh) {
-    const fbStock = typeof fallbackWh.free_stock === 'number' ? fallbackWh.free_stock : (fallbackWh.stock ?? 0);
-    return {
-      price: latestPrice,
-      price_per_sqm: latestSqmPrice,
-      item_id: resolvedItemId,
-      warehouse: fallbackWh.warehouse_name || fallbackWh.city,
-      warehouse_id: fallbackWh.warehouse_id,
-      maxStock: Math.max(0, fbStock),
     };
   }
 
