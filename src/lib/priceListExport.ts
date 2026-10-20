@@ -1,4 +1,4 @@
-import { fetchCatalogFromErp } from '@/lib/erp/catalogApi';
+import { erpFetch, deduplicateRequest } from '@/lib/erp/core';
 import { triggerFileDownload } from '@/lib/erp/suppliersApi';
 import {
   calculateContractPrice,
@@ -8,6 +8,45 @@ import {
 } from '@/lib/pricingEngine';
 import type { Product } from '@/types';
 import { parseSizeDimensions } from '@/types';
+
+const PRICE_LIST_CACHE_TTL_MS = 5 * 60 * 1000;
+const priceTypeProductsCache = new Map<string, { timestamp: number; products: any[] }>();
+const priceListRowsCache = new Map<string, { timestamp: number; rows: CollectionPriceRow[] }>();
+
+async function fetchLightweightCatalogByPriceType(priceType: string): Promise<any[]> {
+  const normalizedPt = normalizeToErpPriceType(priceType);
+  const cached = priceTypeProductsCache.get(normalizedPt);
+  if (cached && Date.now() - cached.timestamp < PRICE_LIST_CACHE_TTL_MS && cached.products.length > 0) {
+    return cached.products;
+  }
+
+  return deduplicateRequest(`pricelist_catalog_${normalizedPt}`, async () => {
+    const res = await erpFetch('catalog', {
+      method: 'GET',
+      params: { price_type: normalizedPt },
+    });
+    if (!res || !res.ok) return cached?.products || [];
+    const data = await res.json();
+    const list = Array.isArray(data?.products)
+      ? data.products
+      : Array.isArray(data?.designs)
+      ? data.designs
+      : [];
+    if (list.length > 0) {
+      priceTypeProductsCache.set(normalizedPt, { timestamp: Date.now(), products: list });
+    }
+    return list;
+  });
+}
+
+export function getCachedPriceListRows(priceType: string, isStaff: boolean): CollectionPriceRow[] | null {
+  const cacheKey = isStaff && priceType === 'all' ? 'staff_all' : normalizeToErpPriceType(priceType);
+  const cached = priceListRowsCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < PRICE_LIST_CACHE_TTL_MS && cached.rows.length > 0) {
+    return cached.rows;
+  }
+  return null;
+}
 
 export interface ErpSellingPriceTypeOption {
   code: string;
@@ -162,28 +201,56 @@ export async function fetchErpPriceListRows(options: {
 }): Promise<CollectionPriceRow[]> {
   const { priceType, isStaff, fallbackProducts = [] } = options;
 
+  const cachedRows = getCachedPriceListRows(priceType, isStaff);
+  if (cachedRows) {
+    return cachedRows;
+  }
+
   if (isStaff && priceType === 'all') {
-    const [deferredRes, commissionRes, cashRes] = await Promise.all([
-      fetchCatalogFromErp(undefined, 'price_deferred').catch(() => null),
-      fetchCatalogFromErp(undefined, 'price_commission').catch(() => null),
-      fetchCatalogFromErp(undefined, 'price_cash').catch(() => null),
+    const [defProdsRaw, commProdsRaw, cashProdsRaw] = await Promise.all([
+      fetchLightweightCatalogByPriceType('price_deferred').catch(() => []),
+      fetchLightweightCatalogByPriceType('price_commission').catch(() => []),
+      fetchLightweightCatalogByPriceType('price_cash').catch(() => []),
     ]);
 
-    const defProds = deferredRes?.products || fallbackProducts;
-    const commProds = commissionRes?.products || fallbackProducts;
-    const cashProds = cashRes?.products || defProds;
+    const defProds = defProdsRaw.length > 0 ? defProdsRaw : fallbackProducts;
+    const commProds = commProdsRaw.length > 0 ? commProdsRaw : fallbackProducts;
+    const cashProds = cashProdsRaw.length > 0 ? cashProdsRaw : defProds;
 
-    return buildCollectionPriceRows(defProds, 'price_deferred', {
+    const now = Date.now();
+    const allRows = buildCollectionPriceRows(defProds, 'price_deferred', {
       price_deferred: defProds,
       price_commission: commProds,
       price_cash: cashProds,
     });
+
+    if (allRows.length > 0) {
+      priceListRowsCache.set('staff_all', { timestamp: now, rows: allRows });
+      priceListRowsCache.set('price_deferred', {
+        timestamp: now,
+        rows: buildCollectionPriceRows(defProds, 'price_deferred', { price_deferred: defProds }),
+      });
+      priceListRowsCache.set('price_commission', {
+        timestamp: now,
+        rows: buildCollectionPriceRows(commProds, 'price_commission', { price_commission: commProds }),
+      });
+      priceListRowsCache.set('price_cash', {
+        timestamp: now,
+        rows: buildCollectionPriceRows(cashProds, 'price_cash', { price_cash: cashProds }),
+      });
+    }
+
+    return allRows;
   }
 
   const normalizedPt = normalizeToErpPriceType(priceType);
-  const res = await fetchCatalogFromErp(undefined, normalizedPt).catch(() => null);
-  const prods = res?.products?.length ? res.products : fallbackProducts;
-  return buildCollectionPriceRows(prods, normalizedPt, { [normalizedPt]: prods });
+  const fetchedProds = await fetchLightweightCatalogByPriceType(normalizedPt).catch(() => []);
+  const prods = fetchedProds.length > 0 ? fetchedProds : fallbackProducts;
+  const rows = buildCollectionPriceRows(prods, normalizedPt, { [normalizedPt]: prods });
+  if (rows.length > 0) {
+    priceListRowsCache.set(normalizedPt, { timestamp: Date.now(), rows });
+  }
+  return rows;
 }
 
 function escapeHtml(val: string | number): string {

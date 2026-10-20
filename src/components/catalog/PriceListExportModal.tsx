@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { X, Download, FileSpreadsheet, Search, ShieldCheck, Layers, Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { fetchClientDebtFromErp } from '@/lib/erpApi';
@@ -6,12 +6,15 @@ import { formatPriceType, normalizeToErpPriceType, resolveContractPriceType } fr
 import {
   ERP_SELLING_PRICE_TYPES,
   fetchErpPriceListRows,
+  getCachedPriceListRows,
   exportPriceListToExcel,
   exportPriceListToCsv,
   formatSqmPriceUe,
   type CollectionPriceRow,
 } from '@/lib/priceListExport';
 import type { Product } from '@/types';
+
+const EMPTY_PRODUCTS: Product[] = [];
 
 export interface PriceListExportModalProps {
   open: boolean;
@@ -23,7 +26,7 @@ export interface PriceListExportModalProps {
 export function PriceListExportModal({
   open,
   onClose,
-  fallbackProducts = [],
+  fallbackProducts = EMPTY_PRODUCTS,
   clientContracts,
 }: PriceListExportModalProps) {
   const { profile, isAdmin, isManager, isImpersonating } = useAuth();
@@ -41,6 +44,9 @@ export function PriceListExportModal({
   const [rows, setRows] = useState<CollectionPriceRow[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [search, setSearch] = useState<string>('');
+
+  const fallbackProductsRef = useRef<Product[]>(fallbackProducts);
+  fallbackProductsRef.current = fallbackProducts;
 
   // Для клиента подтягиваем актуальный вид цены напрямую из его договора ERP
   useEffect(() => {
@@ -82,13 +88,21 @@ export function PriceListExportModal({
 
   useEffect(() => {
     if (!open) return;
+
+    const cached = getCachedPriceListRows(effectivePriceType, isStaffMode);
+    if (cached && cached.length > 0) {
+      setRows(cached);
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
     setLoading(true);
 
     fetchErpPriceListRows({
       priceType: effectivePriceType,
       isStaff: isStaffMode,
-      fallbackProducts,
+      fallbackProducts: fallbackProductsRef.current,
     })
       .then(data => {
         if (!cancelled) setRows(data);
@@ -100,7 +114,7 @@ export function PriceListExportModal({
     return () => {
       cancelled = true;
     };
-  }, [open, effectivePriceType, isStaffMode, fallbackProducts]);
+  }, [open, effectivePriceType, isStaffMode]);
 
   const filteredRows = useMemo(() => {
     const q = search.trim().toLowerCase();

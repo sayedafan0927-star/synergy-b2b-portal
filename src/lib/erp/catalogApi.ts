@@ -19,12 +19,13 @@ async function getNormalizedVariantMap(queryParams: Record<string, string | unde
   if (!bypassCache && normalizedVariantCache && Date.now() - normalizedVariantCache.timestamp < NORMALIZED_TTL_MS) {
     return normalizedVariantCache.map;
   }
-  const map = new Map<string, any>();
-  try {
-    const normResponse = await erpFetch('catalog_normalized', {
-      method: 'GET',
-      params: queryParams,
-    });
+  return deduplicateRequest(`catalog_normalized_map_${bypassCache ? 'refresh' : 'cached'}`, async () => {
+    const map = new Map<string, any>();
+    try {
+      const normResponse = await erpFetch('catalog_normalized', {
+        method: 'GET',
+        params: queryParams,
+      });
     if (normResponse && normResponse.ok) {
       const normData = await normResponse.json();
       const normDesigns = normData?.designs || normData?.products || [];
@@ -51,10 +52,11 @@ async function getNormalizedVariantMap(queryParams: Record<string, string | unde
         normalizedVariantCache = { timestamp: Date.now(), map };
       }
     }
-  } catch {
-    if (normalizedVariantCache) return normalizedVariantCache.map;
-  }
-  return map;
+    } catch {
+      if (normalizedVariantCache) return normalizedVariantCache.map;
+    }
+    return map;
+  });
 }
 
 /**
