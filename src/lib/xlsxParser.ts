@@ -3,15 +3,42 @@
  * Extracts text rows from xl/sharedStrings.xml and xl/worksheets/sheet1.xml.
  */
 
+const MAX_XLSX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB max .xlsx archive
+const MAX_UNCOMPRESSED_XML_BYTES = 15 * 1024 * 1024; // 15 MB max decompressed XML
+
 async function inflateRaw(data: Uint8Array): Promise<string> {
   if (typeof DecompressionStream === 'undefined') {
     throw new Error('DecompressionStream is not supported in this browser');
   }
   const ds = new DecompressionStream('deflate-raw');
   const writer = ds.writable.getWriter();
-  writer.write(data);
-  writer.close();
-  return await new Response(ds.readable).text();
+  writer.write(data).catch(() => {});
+  writer.close().catch(() => {});
+
+  const reader = ds.readable.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value) {
+      totalBytes += value.byteLength;
+      if (totalBytes > MAX_UNCOMPRESSED_XML_BYTES) {
+        await reader.cancel().catch(() => {});
+        throw new Error('XLSX XML exceeds maximum safe uncompressed size (15 MB)');
+      }
+      chunks.push(value);
+    }
+  }
+
+  const combined = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const c of chunks) {
+    combined.set(c, offset);
+    offset += c.byteLength;
+  }
+  return new TextDecoder('utf-8').decode(combined);
 }
 
 function colRefToIndex(ref: string): number {
@@ -25,6 +52,9 @@ function colRefToIndex(ref: string): number {
 }
 
 export async function parseXlsxFileToLines(file: File): Promise<string[]> {
+  if (file.size > MAX_XLSX_FILE_BYTES) {
+    throw new Error('Размер Excel-файла превышает допустимый лимит 10 МБ');
+  }
   const buffer = await file.arrayBuffer();
   const view = new DataView(buffer);
   const decoder = new TextDecoder('utf-8');

@@ -2663,7 +2663,44 @@ with open(os.path.join(ROOT_DIR, "src", "lib", "mediaAutoOptimizer.ts"), "r", en
 test_assert("hasImpersonationBanner" in ab_s55 and "stream.getTracks().forEach(t => t.stop())" in mao_s55, "AnnouncementBar.tsx handles header/impersonation offsets internally and mediaAutoOptimizer.ts stops captureStream tracks and video decoder in finally")
 
 # ------------------------------------------------------------------------------
-# 80. Summary Report
+# 80. Stage 56: Pass 14 CMS Auto-Persistence, iOS Video Compatibility, Offline Queue Isolation, CSV & XLSX Guards
+# ------------------------------------------------------------------------------
+print(f"\n{BOLD}{BLUE}--- 80. STAGE 56: PASS 14 CMS AUTO-SAVE, IOS VIDEO GUARD, OFFLINE ISOLATION, CSV & XLSX SECURITY ---{RESET}")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "admin", "content", "HeroAndMediaSubTab.tsx"), "r", encoding="utf-8") as fp:
+    hms_s56 = fp.read()
+with open(os.path.join(ROOT_DIR, "public", "cms_api.php"), "r", encoding="utf-8") as fp:
+    cms_php_s56 = fp.read()
+test_assert("await saveSiteContent({ hero: nextHero })" in hms_s56 and "array_replace_recursive" in cms_php_s56, "HeroAndMediaSubTab.tsx auto-persists uploaded media immediately and cms_api.php merges existing site_content.json safely")
+
+with open(os.path.join(ROOT_DIR, "src", "lib", "mediaAutoOptimizer.ts"), "r", encoding="utf-8") as fp:
+    mao_s56 = fp.read()
+with open(os.path.join(ROOT_DIR, "src", "components", "home", "HeroBannerMedia.tsx"), "r", encoding="utf-8") as fp:
+    hbm_s56 = fp.read()
+test_assert("isInputMp4 && !chosenMime.includes('mp4')" in mao_s56 and "activeMp4.endsWith('.webm')" in hbm_s56, "mediaAutoOptimizer.ts preserves MP4 container for iOS Safari compatibility and HeroBannerMedia.tsx dynamically resolves video source MIME type")
+
+with open(os.path.join(ROOT_DIR, "src", "components", "layout", "CurtainNavigationDrawer.tsx"), "r", encoding="utf-8") as fp:
+    cnd_s56 = fp.read()
+with open(os.path.join(ROOT_DIR, "src", "pages", "LegalPage.tsx"), "r", encoding="utf-8") as fp:
+    lp_s56 = fp.read()
+test_assert("useSiteContent" in cnd_s56 and "content.contacts.whatsappIntl" in cnd_s56 and "useSiteContent" in lp_s56 and "c.companyLegalName" in lp_s56, "CurtainNavigationDrawer.tsx and LegalPage.tsx dynamically reflect CMS contacts and legal company details")
+
+with open(os.path.join(ROOT_DIR, "src", "lib", "offlineOrderQueue.ts"), "r", encoding="utf-8") as fp:
+    ooq_s56 = fp.read()
+test_assert("isOrderOwnedByCurrentSession" in ooq_s56 and "getRawQueue" in ooq_s56, "offlineOrderQueue.ts isolates queued offline orders per logged-in client/user session")
+
+with open(os.path.join(ROOT_DIR, "src", "lib", "erp", "ordersApi.ts"), "r", encoding="utf-8") as fp:
+    oa_s56 = fp.read()
+with open(os.path.join(ROOT_DIR, "src", "lib", "erp", "reconciliationApi.ts"), "r", encoding="utf-8") as fp:
+    ra_s56 = fp.read()
+test_assert("sanitizeCsvCell" in oa_s56 and "sanitizeCsvCell" in ra_s56, "ordersApi.ts and reconciliationApi.ts sanitize CSV export cells against Excel Formula Injection")
+
+with open(os.path.join(ROOT_DIR, "src", "lib", "xlsxParser.ts"), "r", encoding="utf-8") as fp:
+    xp_s56 = fp.read()
+test_assert("MAX_XLSX_FILE_BYTES" in xp_s56 and "MAX_UNCOMPRESSED_XML_BYTES" in xp_s56, "xlsxParser.ts enforces 10 MB file size and 15 MB streaming decompression limits against Zip bombs")
+
+# ------------------------------------------------------------------------------
+# 81. Summary Report
 # ------------------------------------------------------------------------------
 print(f"\n{BOLD}{BLUE}===================================================================={RESET}")
 total = passed_tests + failed_tests

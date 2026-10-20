@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { X, Phone, MessageCircle, Eye, EyeOff } from 'lucide-react';
 import type { PageId } from '@/types';
 import { type Language, SUPPORTED_LANGUAGES } from '@/contexts/LanguageContext';
+import { useSiteContent } from '@/lib/siteContentStore';
 
 interface CurtainNavigationDrawerProps {
   isOpen: boolean;
@@ -31,6 +32,7 @@ export default function CurtainNavigationDrawer({
   setLanguage,
   t,
 }: CurtainNavigationDrawerProps) {
+  const { content } = useSiteContent();
   // Lock body scroll and handle Escape key
   useEffect(() => {
     if (isOpen) {
@@ -184,7 +186,7 @@ export default function CurtainNavigationDrawer({
           <div className="flex items-center justify-center gap-4">
             {/* WhatsApp */}
             <a
-              href={`https://wa.me/77785806866?text=${encodeURIComponent(defaultWaMsg)}`}
+              href={`https://wa.me/${content.contacts.whatsappIntl}?text=${encodeURIComponent(defaultWaMsg)}`}
               target="_blank"
               rel="noopener noreferrer"
               className="flex h-11 w-11 items-center justify-center rounded-full border border-white/25 text-white/80 hover:text-[#4ade80] hover:border-[#4ade80] hover:bg-white/5 transition-all duration-200 cursor-pointer"
@@ -196,9 +198,9 @@ export default function CurtainNavigationDrawer({
 
             {/* Phone */}
             <a
-              href="tel:+77785806866"
+              href={`tel:${content.contacts.phoneRaw}`}
               className="flex h-11 w-11 items-center justify-center rounded-full border border-white/25 text-white/80 hover:text-amber-300 hover:border-amber-300 hover:bg-white/5 transition-all duration-200 cursor-pointer"
-              title="+7 (778) 580-68-66"
+              title={content.contacts.phoneDisplay}
               aria-label="Телефон"
             >
               <Phone className="h-5 w-5" />

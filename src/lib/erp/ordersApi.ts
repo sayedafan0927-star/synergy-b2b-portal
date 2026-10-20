@@ -362,13 +362,18 @@ export async function cancelOrderViaPortal(params: {
   throw err;
 }
 
+export function sanitizeCsvCell(val: unknown): string {
+  const s = String(val ?? '').replace(/"/g, '""');
+  return /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
+}
+
 export function exportOrderToCsv(order: any): void {
   if (!order) return;
   const docNum = String(order.orderNumber || order.id || 'order');
   const rows: string[] = [];
-  rows.push(`"Спецификация оптового заказа";"${docNum}";"Дата: ${order.date || ''}"`);
-  rows.push(`"Контрагент:";"${String(order.clientCompany || order.clientName || 'Клиент').replace(/"/g, '""')}";"Склад:";"${String(order.warehouse || 'Основной Склад Астана').replace(/"/g, '""')}"`);
-  rows.push(`"Статус:";"${String(order.status || '').replace(/"/g, '""')}"`);
+  rows.push(`"Спецификация оптового заказа";"${sanitizeCsvCell(docNum)}";"Дата: ${sanitizeCsvCell(order.date || '')}"`);
+  rows.push(`"Контрагент:";"${sanitizeCsvCell(order.clientCompany || order.clientName || 'Клиент')}";"Склад:";"${sanitizeCsvCell(order.warehouse || 'Основной Склад Астана')}"`);
+  rows.push(`"Статус:";"${sanitizeCsvCell(order.status || '')}"`);
   rows.push('');
   rows.push('"№";"Коллекция";"Наименование";"Артикул / SKU";"Размер";"Склад";"Кол-во (шт)";"Цена за ед.";"Сумма"');
 
@@ -377,7 +382,7 @@ export function exportOrderToCsv(order: any): void {
     const qty = Number(it.quantity || 1);
     const price = Number(it.price || 0);
     const lineSum = (qty * price).toFixed(2);
-    rows.push(`"${idx + 1}";"${String(it.collection || '').replace(/"/g, '""')}";"${String(it.productName || '').replace(/"/g, '""')}";"${String(it.sku || '').replace(/"/g, '""')}";"${String(it.size || '').replace(/"/g, '""')}";"${String(it.warehouse || order.warehouse || '').replace(/"/g, '""')}";"${qty}";"${price.toFixed(2)}";"${lineSum}"`);
+    rows.push(`"${idx + 1}";"${sanitizeCsvCell(it.collection || '')}";"${sanitizeCsvCell(it.productName || '')}";"${sanitizeCsvCell(it.sku || '')}";"${sanitizeCsvCell(it.size || '')}";"${sanitizeCsvCell(it.warehouse || order.warehouse || '')}";"${qty}";"${price.toFixed(2)}";"${lineSum}"`);
   });
 
   rows.push('');

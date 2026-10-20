@@ -269,8 +269,13 @@ export default function HeroBannerMedia({ onNavigate, isReady = true, isActive =
           }}
           className="w-full h-full object-cover object-[center_28%] sm:object-[center_24%] transform-gpu pointer-events-none"
         >
-          <source src={activeMp4} type="video/mp4" />
-          {activeWebm && activeMp4 === VIDEO_MP4 && <source src={activeWebm} type="video/webm" />}
+          <source
+            src={activeMp4}
+            type={activeMp4.endsWith('.webm') ? 'video/webm' : activeMp4.startsWith('blob:') ? undefined : 'video/mp4'}
+          />
+          {activeWebm && (activeMp4 === VIDEO_MP4 || activeWebm !== VIDEO_WEBM) && (
+            <source src={activeWebm} type="video/webm" />
+          )}
         </video>
 
         {/* 

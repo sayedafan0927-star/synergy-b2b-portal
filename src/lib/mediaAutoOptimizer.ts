@@ -252,8 +252,9 @@ export async function autoOptimizeVideoForSlot(
       'video/webm;codecs=vp8',
       'video/webm',
     ];
+    const isInputMp4 = file.type === 'video/mp4' || file.name.toLowerCase().endsWith('.mp4');
     const chosenMime = mimeCandidates.find(m => MediaRecorder.isTypeSupported(m)) || '';
-    if (!chosenMime) {
+    if (!chosenMime || (isInputMp4 && !chosenMime.includes('mp4'))) {
       return {
         file,
         wasOptimized: false,
@@ -264,7 +265,7 @@ export async function autoOptimizeVideoForSlot(
         originalSizeBytes: file.size,
         finalSizeBytes: file.size,
         extractedPosterFile,
-        summaryNote: `Загружен оригинал ${origW}×${origH} px (+ создан постер ${targetW}×${targetH} px)`,
+        summaryNote: `Сохранён MP4 для 100% совместимости с iOS/Safari ${origW}×${origH} px (+ создан постер ${targetW}×${targetH} px)`,
       };
     }
 

@@ -65,7 +65,7 @@ export function HeroAndMediaSubTab() {
     slotKey: string,
     rawFile: File | undefined,
     mediaType: 'video' | 'image',
-    onResolvedUri: (uri: string, autoPosterUri?: string) => void
+    onResolvedUri: (uri: string, autoPosterUri?: string) => Promise<void> | void
   ) => {
     if (!rawFile) return;
     setUploadingSlot(slotKey);
@@ -95,17 +95,17 @@ export function HeroAndMediaSubTab() {
         }
       }
 
-      setOptimizeStatus('Выгрузка на боевой сервер...');
+      setOptimizeStatus('Выгрузка и сохранение на боевом сервере...');
       const meta = await inspectMediaElement(fileToUpload, mediaType);
       if (meta) {
         setInspected(prev => ({ ...prev, [slotKey]: meta }));
       }
       const uploadedUri = await saveMediaFileToLocalCms(slotKey, fileToUpload);
-      onResolvedUri(uploadedUri, autoPosterUri);
+      await onResolvedUri(uploadedUri, autoPosterUri);
       toast.success(
         summaryNote
-          ? `${summaryNote}. Нажмите «Сохранить медиа-настройки».`
-          : `Файл «${fileToUpload.name}» загружен. Нажмите «Сохранить медиа-настройки».`
+          ? `${summaryNote}. Изменения сразу опубликованы на сайте!`
+          : `Файл «${fileToUpload.name}» загружен и сразу опубликован на сайте!`
       );
     } catch {
       toast.error('Не удалось обработать медиафайл.');
@@ -116,52 +116,51 @@ export function HeroAndMediaSubTab() {
   };
 
   const onHeroMp4File = (e: React.ChangeEvent<HTMLInputElement>) => {
-    handleFileUpload('heroVideoMp4', e.target.files?.[0], 'video', (uri, autoPosterUri) => {
-      setHeroForm(p => ({
-        ...p,
-        videoMp4: uri,
-        ...(autoPosterUri ? { posterUrl: autoPosterUri } : {}),
-      }));
+    handleFileUpload('heroVideoMp4', e.target.files?.[0], 'video', async (uri, autoPosterUri) => {
+      const nextHero = { ...heroForm, videoMp4: uri, ...(autoPosterUri ? { posterUrl: autoPosterUri } : {}) };
+      setHeroForm(nextHero);
+      await saveSiteContent({ hero: nextHero });
     });
   };
 
   const onHeroPosterFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    handleFileUpload('heroPoster', e.target.files?.[0], 'image', uri => {
-      setHeroForm(p => ({ ...p, posterUrl: uri }));
+    handleFileUpload('heroPoster', e.target.files?.[0], 'image', async uri => {
+      const nextHero = { ...heroForm, posterUrl: uri };
+      setHeroForm(nextHero);
+      await saveSiteContent({ hero: nextHero });
     });
   };
 
   const onHeroEndCardFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    handleFileUpload('heroEndCard', e.target.files?.[0], 'image', uri => {
-      setHeroForm(p => ({ ...p, endCardUrl: uri }));
+    handleFileUpload('heroEndCard', e.target.files?.[0], 'image', async uri => {
+      const nextHero = { ...heroForm, endCardUrl: uri };
+      setHeroForm(nextHero);
+      await saveSiteContent({ hero: nextHero });
     });
   };
 
   const onB2bBgFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    handleFileUpload('b2bBackgroundUrl', e.target.files?.[0], 'image', uri => {
+    handleFileUpload('b2bBackgroundUrl', e.target.files?.[0], 'image', async uri => {
       setB2bBg(uri);
+      await saveSiteContent({ b2bBackgroundUrl: uri });
     });
   };
 
   const onCategoryVideoFile = (idx: number, e: React.ChangeEvent<HTMLInputElement>) => {
-    handleFileUpload(`cat_video_${idx}`, e.target.files?.[0], 'video', (uri, autoPosterUri) => {
-      setCategoriesForm(prev =>
-        prev.map((item, i) =>
-          i === idx
-            ? {
-                ...item,
-                video: uri,
-                ...(autoPosterUri ? { poster: autoPosterUri, image: autoPosterUri } : {}),
-              }
-            : item
-        )
+    handleFileUpload(`cat_video_${idx}`, e.target.files?.[0], 'video', async (uri, autoPosterUri) => {
+      const nextCats = categoriesForm.map((item, i) =>
+        i === idx ? { ...item, video: uri, ...(autoPosterUri ? { poster: autoPosterUri, image: autoPosterUri } : {}) } : item
       );
+      setCategoriesForm(nextCats);
+      await saveSiteContent({ categories: nextCats });
     });
   };
 
   const onAdvantageImageFile = (idx: number, e: React.ChangeEvent<HTMLInputElement>) => {
-    handleFileUpload(`adv_${idx}`, e.target.files?.[0], 'image', uri => {
-      setAdvantagesForm(prev => prev.map((it, i) => (i === idx ? { ...it, image: uri } : it)));
+    handleFileUpload(`adv_${idx}`, e.target.files?.[0], 'image', async uri => {
+      const nextAdvs = advantagesForm.map((it, i) => (i === idx ? { ...it, image: uri } : it));
+      setAdvantagesForm(nextAdvs);
+      await saveSiteContent({ advantages: nextAdvs });
     });
   };
 

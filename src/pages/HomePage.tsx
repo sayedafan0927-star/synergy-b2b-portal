@@ -218,7 +218,10 @@ export default function HomePage({
                         style={{ willChange: 'transform' }}
                         className={`h-full w-full object-contain mix-blend-screen transition-transform duration-500 ${mediaScale}`}
                       >
-                        <source src={catVideo} type="video/mp4" />
+                        <source
+                          src={catVideo}
+                          type={catVideo.endsWith('.webm') ? 'video/webm' : catVideo.startsWith('blob:') ? undefined : 'video/mp4'}
+                        />
                       </video>
                     ) : (
                       <img

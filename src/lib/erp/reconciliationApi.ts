@@ -147,14 +147,19 @@ export async function fetchReconciliationReportFromErp(params: {
   };
 }
 
+function sanitizeCsvCell(val: unknown): string {
+  const s = String(val ?? '').replace(/"/g, '""');
+  return /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
+}
+
 export function exportReconciliationToCsv(data: any, counterpartyName?: string): void {
   if (!data) return;
   const cpName = counterpartyName || data.counterparty?.name || 'Оптовый партнер';
   const dateFrom = data.period?.date_from || '';
   const dateTo = data.period?.date_to || '';
   const rows: string[] = [];
-  rows.push(`"Акт сверки взаимных расчетов";"${cpName.replace(/"/g, '""')}"`);
-  rows.push(`"Период:";"${dateFrom} — ${dateTo}"`);
+  rows.push(`"Акт сверки взаимных расчетов";"${sanitizeCsvCell(cpName)}"`);
+  rows.push(`"Период:";"${sanitizeCsvCell(dateFrom)} — ${sanitizeCsvCell(dateTo)}"`);
   rows.push(`"Входящее сальдо:";"${data.initial_balance ?? '0.00'}";"Отгрузки (Дебет):";"${data.total_debit ?? '0.00'}";"Оплаты (Кредит):";"${data.total_credit ?? '0.00'}";"Конечное сальдо:";"${data.final_balance ?? '0.00'}"`);
   rows.push('');
   rows.push('"№";"Дата";"Документ";"Номер документа";"Отгрузка (Дебет)";"Оплата (Кредит)"');
@@ -163,7 +168,7 @@ export function exportReconciliationToCsv(data: any, counterpartyName?: string):
   txs.forEach((tx, idx) => {
     const debit = Number(tx.debit || 0) > 0 ? Number(tx.debit).toFixed(2) : '0.00';
     const credit = Number(tx.credit || 0) > 0 ? Number(tx.credit).toFixed(2) : '0.00';
-    rows.push(`"${idx + 1}";"${tx.date || ''}";"${String(tx.doc_type || '').replace(/"/g, '""')}";"${String(tx.doc_number || '').replace(/"/g, '""')}";"${debit}";"${credit}"`);
+    rows.push(`"${idx + 1}";"${sanitizeCsvCell(tx.date || '')}";"${sanitizeCsvCell(tx.doc_type || '')}";"${sanitizeCsvCell(tx.doc_number || '')}";"${debit}";"${credit}"`);
   });
 
   const csvContent = '\uFEFF' + rows.join('\r\n');

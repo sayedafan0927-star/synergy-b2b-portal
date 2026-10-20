@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { ArrowLeft, RotateCcw, Truck, ShieldCheck, FileText, CheckCircle2, Clock, MapPin, Building, CreditCard } from 'lucide-react';
+import { useSiteContent } from '@/lib/siteContentStore';
 import type { PageId } from '@/types';
 
 export type LegalDocType = 'delivery' | 'returns' | 'privacy' | 'terms';
@@ -9,17 +10,18 @@ interface LegalPageProps {
   onNavigate: (page: PageId) => void;
 }
 
-const COMPANY_INFO = {
-  name: 'ТОО «Синэнергия Груп»',
-  bin: '250140013808',
-  legalAddress: 'Республика Казахстан, г. Астана, район Байконыр, шоссе Алаш, здание 13, индекс 010000',
-  warehouseAddress: 'Республика Казахстан, г. Астана, 69-ый проезд, 20-ое строение',
-  phone: '+7 (778) 580-68-66',
-  email: 'synergiya.group@gmail.com',
-  workingHours: 'Пн — Пт: 09:00 — 17:00, Сб — Вс: выходной',
-};
-
 export default function LegalPage({ initialDoc = 'returns', onNavigate }: LegalPageProps) {
+  const { content } = useSiteContent();
+  const c = content.contacts;
+  const COMPANY_INFO = {
+    name: c.companyLegalName,
+    bin: c.bin,
+    legalAddress: c.legalAddress,
+    warehouseAddress: c.warehouseAddress,
+    phone: c.phoneDisplay,
+    email: c.email,
+    workingHours: `Пн — Пт: ${c.weekdaysHours}, Сб — Вс: ${c.weekendHours}`,
+  };
   const [activeDoc, setActiveDoc] = useState<LegalDocType>(initialDoc);
 
   useEffect(() => {

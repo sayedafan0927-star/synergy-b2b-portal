@@ -14,10 +14,7 @@ export interface QueuedOfflineOrder {
 const STORAGE_KEY = 'synergy:offline_order_queue';
 const EVENT_KEY = 'synergy:offline-queue-updated';
 
-/**
- * Returns all queued offline orders from localStorage
- */
-export function getQueuedOfflineOrders(): QueuedOfflineOrder[] {
+function getRawQueue(): QueuedOfflineOrder[] {
   if (typeof window === 'undefined' || !window.localStorage) return [];
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -30,11 +27,51 @@ export function getQueuedOfflineOrders(): QueuedOfflineOrder[] {
   }
 }
 
+export function isOrderOwnedByCurrentSession(order: QueuedOfflineOrder): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    const rawSess = sessionStorage.getItem('synergy:auth_session') || localStorage.getItem('synergy:auth_session');
+    if (!rawSess) return false;
+    const sess = JSON.parse(rawSess);
+    const realProfile = sess?.profile;
+    const realUser = sess?.user;
+    if (!realProfile && !realUser) return false;
+
+    const rawImp = sessionStorage.getItem('synergy:impersonated_profile') || localStorage.getItem('synergy:impersonated_profile');
+    const impProfile = rawImp ? JSON.parse(rawImp) : null;
+    const activeProfile = impProfile || realProfile;
+    const realRole = String(realProfile?.role || realUser?.role || 'client');
+
+    if ((realRole === 'admin' || realRole === 'manager_rm' || realRole === 'manager_lm') && !impProfile) {
+      return true;
+    }
+
+    const activePartnerId = String(activeProfile?.partner_id || '');
+    const activeUserId = String(activeProfile?.id || realUser?.id || '');
+    const orderClientId = String(order.payload?.client_id || (order.payload as any)?.partner_id || '');
+    const orderUserId = String(order.payload?.user_id || '');
+
+    if (activePartnerId && orderClientId && activePartnerId === orderClientId) return true;
+    if (activeUserId && orderUserId && activeUserId === orderUserId) return true;
+    if (activeUserId && orderClientId && activeUserId === `erp-client-${orderClientId}`) return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Returns queued offline orders scoped to the currently logged-in user/client
+ */
+export function getQueuedOfflineOrders(): QueuedOfflineOrder[] {
+  return getRawQueue().filter(isOrderOwnedByCurrentSession);
+}
+
 function saveQueue(list: QueuedOfflineOrder[]): void {
   if (typeof window === 'undefined' || !window.localStorage) return;
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-    window.dispatchEvent(new CustomEvent(EVENT_KEY, { detail: list }));
+    window.dispatchEvent(new CustomEvent(EVENT_KEY, { detail: list.filter(isOrderOwnedByCurrentSession) }));
   } catch (err) {
     console.error('[OfflineQueue] Failed to save queue to localStorage:', err);
   }
@@ -44,7 +81,7 @@ function saveQueue(list: QueuedOfflineOrder[]): void {
  * Add a new order payload to the offline sync queue
  */
 export function enqueueOfflineOrder(payload: CreateOrderPayload): QueuedOfflineOrder {
-  const queue = getQueuedOfflineOrders();
+  const queue = getRawQueue();
   const id = `OFFLINE-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
 
   const payloadWithIdemp: CreateOrderPayload = {
@@ -70,7 +107,7 @@ export function enqueueOfflineOrder(payload: CreateOrderPayload): QueuedOfflineO
  * Remove an order from the queue
  */
 export function removeQueuedOrder(id: string): void {
-  const queue = getQueuedOfflineOrders().filter(o => o.id !== id);
+  const queue = getRawQueue().filter(o => o.id !== id);
   saveQueue(queue);
 }
 
@@ -78,7 +115,7 @@ export function removeQueuedOrder(id: string): void {
  * Clear synced orders from the queue
  */
 export function clearCompletedOrders(): void {
-  const queue = getQueuedOfflineOrders().filter(o => o.status !== 'synced');
+  const queue = getRawQueue().filter(o => o.status !== 'synced');
   saveQueue(queue);
 }
 
@@ -105,7 +142,7 @@ let isProcessing = false;
 export const MAX_OFFLINE_RETRIES = 5;
 
 /**
- * Process all pending offline orders and sync them with ERP
+ * Process all pending offline orders belonging to the current session and sync them with ERP
  */
 export async function processOfflineOrderQueue(): Promise<{ synced: number; failed: number }> {
   if (isProcessing) {
@@ -117,12 +154,13 @@ export async function processOfflineOrderQueue(): Promise<{ synced: number; fail
     return { synced: 0, failed: 0 };
   }
 
-  const queue = getQueuedOfflineOrders();
+  const queue = getRawQueue();
   const pending = queue.filter(
     o =>
-      o.status === 'pending' ||
-      o.status === 'syncing' ||
-      (o.status === 'failed' && (o.retries || 0) < MAX_OFFLINE_RETRIES)
+      isOrderOwnedByCurrentSession(o) &&
+      (o.status === 'pending' ||
+        o.status === 'syncing' ||
+        (o.status === 'failed' && (o.retries || 0) < MAX_OFFLINE_RETRIES))
   );
 
   if (pending.length === 0) {

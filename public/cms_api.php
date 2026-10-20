@@ -334,6 +334,20 @@ if ($action === 'save_content') {
         exit;
     }
 
+    if (file_exists($contentFile)) {
+        $existingRaw = @file_get_contents($contentFile);
+        $existingDecoded = $existingRaw ? json_decode($existingRaw, true) : null;
+        if (is_array($existingDecoded)) {
+            $incomingSkus = isset($siteContent['featuredSkus']) && is_array($siteContent['featuredSkus'])
+                ? $siteContent['featuredSkus']
+                : null;
+            $siteContent = array_replace_recursive($existingDecoded, $siteContent);
+            if ($incomingSkus !== null) {
+                $siteContent['featuredSkus'] = $incomingSkus;
+            }
+        }
+    }
+
     $siteContent = sanitize_site_content_payload($siteContent);
     $siteContent['updatedAt'] = gmdate('Y-m-d\TH:i:s\Z');
     $encoded = json_encode($siteContent, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
