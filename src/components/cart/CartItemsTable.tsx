@@ -1,11 +1,11 @@
-import { useState } from 'react';
-import { Trash2, Plus, Minus, ArrowUpDown, Filter, AlertTriangle, AlertCircle, LayoutGrid, Table } from 'lucide-react';
+import { Trash2, Plus, Minus, Filter, AlertTriangle, AlertCircle } from 'lucide-react';
 import type { CartItem } from '@/types';
 import { calcSqm, formatProductionEta } from '@/types';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import ProductImage from '@/components/ProductImage';
-import { fmt2, calcSizeSubtotals, type SizeSubtotal } from './types';
+import { fmt2, calcSizeSubtotals, calcCollectionSubtotals, type SizeSubtotal } from './types';
+import { CartSubtotalsPanel } from './CartSubtotalsPanel';
 
 interface CartItemsTableProps {
   items: CartItem[];
@@ -32,10 +32,16 @@ export function CartItemsTable({
   const { t } = useLanguage();
 
   const collections = Array.from(new Set(items.map(it => it.collection))).filter(Boolean);
-  const displayedItems = activeCollection ? items.filter(it => it.collection === activeCollection) : items;
+  const effectiveActiveCollection = activeCollection && collections.includes(activeCollection) ? activeCollection : null;
+  const displayedItems = effectiveActiveCollection ? items.filter(it => it.collection === effectiveActiveCollection) : items;
 
   const rawSubtotals = calcSizeSubtotals(displayedItems);
   const sizeSubtotals: SizeSubtotal[] = sizeAsc ? rawSubtotals : [...rawSubtotals].reverse();
+  const collectionSubtotals = calcCollectionSubtotals(items, sizeAsc);
+
+  const displayedTotalQty = displayedItems.reduce((acc, it) => acc + it.quantity, 0);
+  const displayedTotalSqm = displayedItems.reduce((acc, it) => acc + calcSqm(it.size, it.quantity), 0);
+  const displayedTotalSum = displayedItems.reduce((acc, it) => acc + it.price * it.quantity, 0);
 
   const handleQtyInputChange = (item: CartItem, rawVal: string) => {
     const val = parseInt(rawVal.replace(/\D+/g, ''), 10);
@@ -49,7 +55,7 @@ export function CartItemsTable({
       {/* Коллекции / быстрые фильтры и кнопка очистки */}
       <div className="flex flex-wrap items-center justify-between gap-2.5">
         <div className="flex flex-wrap items-center gap-1.5">
-          {collections.length > 1 && (
+          {collections.length >= 1 && (
             <>
               <span className="text-xs text-slate-500 mr-1 flex items-center gap-1 font-medium">
                 <Filter className="h-3 w-3" /> {t('catalog.filter_collection')}:
@@ -58,27 +64,30 @@ export function CartItemsTable({
                 type="button"
                 onClick={() => onSelectCollection(null)}
                 className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors cursor-pointer ${
-                  activeCollection === null
+                  effectiveActiveCollection === null
                     ? 'bg-brand-700 text-white shadow-2xs'
                     : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
                 }`}
               >
-                {t('common.all')} ({items.length})
+                {t('common.all')} ({items.reduce((s, it) => s + it.quantity, 0)})
               </button>
-              {collections.map(col => (
-                <button
-                  key={col}
-                  type="button"
-                  onClick={() => onSelectCollection(col)}
-                  className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors cursor-pointer ${
-                    activeCollection === col
-                      ? 'bg-brand-700 text-white shadow-2xs'
-                    : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-                  }`}
-                >
-                  {col} ({items.filter(it => it.collection === col).length})
-                </button>
-              ))}
+              {collections.map(col => {
+                const colQty = items.filter(it => it.collection === col).reduce((s, it) => s + it.quantity, 0);
+                return (
+                  <button
+                    key={col}
+                    type="button"
+                    onClick={() => onSelectCollection(col)}
+                    className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors cursor-pointer ${
+                      effectiveActiveCollection === col
+                        ? 'bg-brand-700 text-white shadow-2xs'
+                        : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    {col} ({colQty})
+                  </button>
+                );
+              })}
             </>
           )}
         </div>
@@ -267,6 +276,26 @@ export function CartItemsTable({
                 );
               })}
             </tbody>
+            <tfoot className="bg-slate-50/95 border-t border-slate-200 text-xs">
+              <tr>
+                <td className="py-2.5 px-3 font-bold text-slate-800">
+                  {effectiveActiveCollection
+                    ? `${t('cart.collection_subtotal_label', 'Итого по коллекции')} ${effectiveActiveCollection}:`
+                    : `${t('cart.all_collections_subtotal_label', 'Итого по всем коллекциям')}:`}
+                </td>
+                <td className="py-2.5 px-2 text-center font-bold text-slate-800 whitespace-nowrap">
+                  {fmt2(displayedTotalSqm)} {t('common.sqm')}
+                </td>
+                <td colSpan={2} className="py-2.5 px-2"></td>
+                <td className="py-2.5 px-2 text-center font-bold text-slate-900 whitespace-nowrap">
+                  {displayedTotalQty} {t('common.pcs')}
+                </td>
+                <td className="py-2.5 px-3 text-right font-extrabold text-brand-700 whitespace-nowrap">
+                  {fmtPrice(displayedTotalSum)}
+                </td>
+                <td className="py-2.5 px-2"></td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       </div>
@@ -360,33 +389,15 @@ export function CartItemsTable({
         })}
       </div>
 
-      {/* ─── 3. Сводный подытог по размерам ─── */}
-      {sizeSubtotals.length > 1 && (
-        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs">
-          <div className="flex items-center justify-between mb-2">
-            <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-600">{t('cart.size_subtotals_title')}</h4>
-            <button
-              type="button"
-              onClick={onToggleSizeSort}
-              className="text-xs text-brand-700 hover:text-brand-800 font-semibold inline-flex items-center gap-1 cursor-pointer"
-            >
-              <ArrowUpDown className="h-3 w-3" />
-              <span>{sizeAsc ? t('cart.sort_asc') : t('cart.sort_desc')}</span>
-            </button>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-xs">
-            {sizeSubtotals.map(st => (
-              <div key={st.size} className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100">
-                <span className="font-bold text-slate-800">{st.size}</span>
-                <div className="flex items-center gap-2.5 text-slate-600">
-                  <span className="font-medium">{st.qty} {t('common.pcs')}</span>
-                  <span className="font-bold text-slate-900">{fmtPrice(st.sum)}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* ─── 3. Сводные подытоги по размерам и по каждой коллекции (штуки, квадратура, сумма) ─── */}
+      <CartSubtotalsPanel
+        sizeSubtotals={sizeSubtotals}
+        collectionSubtotals={collectionSubtotals}
+        activeCollection={effectiveActiveCollection}
+        onSelectCollection={onSelectCollection}
+        sizeAsc={sizeAsc}
+        onToggleSizeSort={onToggleSizeSort}
+      />
     </div>
   );
 }

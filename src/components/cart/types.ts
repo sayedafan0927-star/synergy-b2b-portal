@@ -26,6 +26,15 @@ export interface SizeSubtotal {
   area: number;
 }
 
+export interface CollectionSubtotal {
+  collection: string;
+  qty: number;
+  sqm: number;
+  sum: number;
+  positionsCount: number;
+  sizes: SizeSubtotal[];
+}
+
 export function calcSizeSubtotals(list: CartItem[]): SizeSubtotal[] {
   const map = new Map<string, SizeSubtotal>();
   for (const item of list) {
@@ -41,6 +50,33 @@ export function calcSizeSubtotals(list: CartItem[]): SizeSubtotal[] {
     }
   }
   return Array.from(map.values()).sort((a, b) => a.area - b.area);
+}
+
+export function calcCollectionSubtotals(list: CartItem[], sizeAsc = true): CollectionSubtotal[] {
+  const grouped = new Map<string, CartItem[]>();
+  for (const item of list) {
+    const col = item.collection || 'Без коллекции';
+    const arr = grouped.get(col) || [];
+    arr.push(item);
+    grouped.set(col, arr);
+  }
+  const result: CollectionSubtotal[] = [];
+  for (const [collection, colItems] of grouped.entries()) {
+    const rawSizes = calcSizeSubtotals(colItems);
+    const sizes = sizeAsc ? rawSizes : [...rawSizes].reverse();
+    const qty = colItems.reduce((acc, it) => acc + it.quantity, 0);
+    const sqm = colItems.reduce((acc, it) => acc + calcSqm(it.size, it.quantity), 0);
+    const sum = colItems.reduce((acc, it) => acc + it.price * it.quantity, 0);
+    result.push({
+      collection,
+      qty,
+      sqm,
+      sum,
+      positionsCount: colItems.length,
+      sizes,
+    });
+  }
+  return result;
 }
 
 export const CITIES = ['Астана', 'Алматы', 'Шымкент'];
