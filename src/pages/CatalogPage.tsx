@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { Search, SlidersHorizontal, ChevronDown, X, LayoutGrid, Table2, Globe, FileSpreadsheet } from 'lucide-react';
+import { Search, SlidersHorizontal, ChevronDown, X, LayoutGrid, Table2, Globe } from 'lucide-react';
 import type { PageId, StockSummary, Product } from '@/types';
 import { useProducts, filterClientWarehouses } from '@/hooks/useProductData';
 import { useUserPricing } from '@/hooks/usePricing';
@@ -7,12 +7,11 @@ import ProductCard from '@/components/ProductCard';
 import StockSummaryBar from '@/components/StockSummaryBar';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { useShowroomMode } from '@/contexts/ShowroomModeContext';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
 import { isProductInStockForUser, getClientWarehouseSettings, matchesSelectedWarehouses } from '@/lib/warehouseVisibility';
 import {
   FilterDrawer, CatalogFilterSidebar, CatalogStockTable,
-  CatalogLoadingSkeleton, CatalogLoadError, StockReservationsModal, PriceListExportModal,
+  CatalogLoadingSkeleton, CatalogLoadError, StockReservationsModal,
   ActiveFilterChips, useCatalogStatePersistence, useSmartFacets, DecklePaperWrapper,
   CatalogPetroglyphHero, getTotalStock, sizeArea,
   type SortOption, type ViewMode,
@@ -29,7 +28,6 @@ export default function CatalogPage({
   const { products, summary: serverSummary, loading, error: loadError } = useProducts();
   const pricing = useUserPricing();
   const { profile, isAdmin, isImpersonating } = useAuth();
-  const { isShowroomMode } = useShowroomMode();
   const isEffectiveAdmin = isAdmin && !isImpersonating;
   const { settings: displaySettings } = useDisplaySettings();
   const myShowroomName = profile?.showroom_warehouse_name || 'В моем магазине';
@@ -46,7 +44,6 @@ export default function CatalogPage({
   } = useCatalogStatePersistence({ initialCollection, initialCountry, initialSearch });
 
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [priceListModalOpen, setPriceListModalOpen] = useState(false);
   const [reservationsModalOpen, setReservationsModalOpen] = useState(false);
   const [reservationsTab, setReservationsTab] = useState<'all' | 'processing' | 'pending' | 'expired'>('all');
   const [stockWarehouse, setStockWarehouse] = useState('');
@@ -402,16 +399,6 @@ export default function CatalogPage({
           >
             🏭 В производстве (Доступно к предзаказу){inProductionCount > 0 ? ` (${inProductionCount})` : ''}
           </button>
-          {profile && !isShowroomMode && profile.role !== 'supplier' && (
-            <button
-              type="button"
-              onClick={() => setPriceListModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-700 shadow-xs transition-all cursor-pointer"
-            >
-              <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" />
-              <span>Скачать прайс-лист (Excel · у.е./м²)</span>
-            </button>
-          )}
         </div>
       </CatalogPetroglyphHero>
 
@@ -505,16 +492,6 @@ export default function CatalogPage({
           </div>
 
           <div className="flex items-center justify-between sm:justify-end gap-2.5">
-            {profile && !isShowroomMode && profile.role !== 'supplier' && (
-              <button
-                type="button"
-                onClick={() => setPriceListModalOpen(true)}
-                className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50/80 px-3 py-2 text-xs font-bold text-emerald-800 hover:bg-emerald-100 transition-colors cursor-pointer shadow-2xs shrink-0"
-              >
-                <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-700" />
-                <span>Прайс-лист (Excel)</span>
-              </button>
-            )}
             {viewMode === 'grid' && (
               <div className="relative">
                 <select
@@ -623,7 +600,6 @@ export default function CatalogPage({
         </div>
 
         <FilterDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} {...filterProps} />
-        <PriceListExportModal open={priceListModalOpen} onClose={() => setPriceListModalOpen(false)} fallbackProducts={products} />
 
       {canViewStockDetails && (
         <StockReservationsModal
