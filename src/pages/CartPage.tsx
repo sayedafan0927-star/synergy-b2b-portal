@@ -57,7 +57,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
   const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
 
   const effectiveProfile = isImpersonating && impersonatedProfile ? impersonatedProfile : profile;
-  const isStaff = profile?.role === 'admin' || profile?.role === 'manager_rm' || profile?.role === 'manager_lm';
+  const isStaff = !isImpersonating && (profile?.role === 'admin' || profile?.role === 'manager_rm' || profile?.role === 'manager_lm');
   const [checkoutMode, setCheckoutMode] = useState<'manager_self' | 'dealer_client'>('manager_self');
   const [selectedClient, setSelectedClient] = useState<any | null>(null);
 
