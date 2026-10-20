@@ -8,7 +8,7 @@ import { useLanguage, type Language } from '@/contexts/LanguageContext';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
 import { filterClientWarehouses } from '@/hooks/useProductData';
-import { isWarehouseVisibleForClient } from '@/lib/warehouseVisibility';
+import { isWarehouseVisibleForClient, matchesSelectedWarehouses } from '@/lib/warehouseVisibility';
 import { Lock } from 'lucide-react';
 import ProductCardQuickSizes from '@/components/product/ProductCardQuickSizes';
 import ProductCardCarousel from '@/components/product/ProductCardCarousel';
@@ -22,6 +22,8 @@ const prefetchProductPage = () => {
 interface ProductCardProps {
   product: Product;
   onNavigate: (page: PageId, productId?: string) => void;
+  selectedWarehouses?: Set<string> | string[];
+  onlyInProduction?: boolean;
 }
 
 function getMainWarehouseStock(variant: ProductVariant) {
@@ -29,7 +31,7 @@ function getMainWarehouseStock(variant: ProductVariant) {
     w.warehouse_id === 81 || w.is_hub || (w.warehouse_name && (w.warehouse_name.includes('Астана') || w.warehouse_name.toLowerCase().includes('основной')))
   );
   if (mainHub) return Math.max(0, typeof mainHub.free_stock === 'number' ? mainHub.free_stock : (mainHub.stock ?? 0));
-  return Math.max(0, typeof variant.free_stock === 'number' ? variant.free_stock : (variant.stock ?? 0));
+  return 0;
 }
 
 export function formatProductTitle(product: { name: string; article?: string; color?: string; category?: string; collection: string }, lang: Language | string = 'ru'): string {
@@ -62,7 +64,7 @@ export function formatProductTitle(product: { name: string; article?: string; co
   return isRunner ? `${prefix} ${base}` : base;
 }
 
-function ProductCard({ product, onNavigate }: ProductCardProps) {
+function ProductCard({ product, onNavigate, selectedWarehouses, onlyInProduction = false }: ProductCardProps) {
   const { user, profile, isAdmin, isImpersonating } = useAuth();
   const isEffectiveAdmin = isAdmin && !isImpersonating;
   const clientContext = isEffectiveAdmin ? true : profile;
@@ -82,31 +84,48 @@ function ProductCard({ product, onNavigate }: ProductCardProps) {
   const showShowroom = isEffectiveAdmin || Boolean(myShowroomId && isWarehouseVisibleForClient({ warehouse_id: myShowroomId, warehouse_name: myShowroomName }, profile));
   const hasShowroom = Boolean(user && myShowroomId && showShowroom);
 
+  const hasSelectedWarehouses = Boolean(
+    selectedWarehouses && (Array.isArray(selectedWarehouses) ? selectedWarehouses.length > 0 : selectedWarehouses.size > 0)
+  );
+
   // Изображения для карусели
   const validImages = (product.images || []).filter(img => typeof img === 'string' && img.trim().length > 0 && !img.includes('unsplash.com'));
   const allImages = validImages.length > 0 ? validImages : (product.image_thumb ? [product.image_thumb] : []);
   const [currentImgIndex, setCurrentImgIndex] = useState(0);
   const activeImage = allImages[currentImgIndex] || allImages[0] || product.image_thumb || '';
 
-  const sizeCount = product.variants.length;
-  const pricePerSqm = getMinPricePerSqm(product);
-  const activeVariantForSale = product.variants.find(v => (v.price_per_sqm ?? 0) === pricePerSqm) || product.variants[0];
-  const isOnSale = Boolean(activeVariantForSale?.is_on_sale || product.is_on_sale);
-  const oldPricePerSqm = activeVariantForSale?.old_price_per_sqm || product.old_price_per_sqm || null;
-
   const setQuantity = (sku: string, value: number) => {
     setQuantities(previous => ({ ...previous, [sku]: Math.max(1, value || 1) }));
   };
 
-  const getVariantClientStock = (variant: ProductVariant) => {
+  const getVariantClientWarehouses = (variant: ProductVariant) => {
     const rows = filterClientWarehouses(variant.warehouses, myShowroomId, myShowroomName, clientContext, displaySettings);
-    return rows.reduce((sum, w) => sum + w.stock, 0);
+    if (!hasSelectedWarehouses) return rows;
+    return rows.filter(w => matchesSelectedWarehouses(w, selectedWarehouses, myShowroomId, myShowroomName));
+  };
+
+  const getVariantClientStock = (variant: ProductVariant) => {
+    return getVariantClientWarehouses(variant).reduce((sum, w) => sum + w.stock, 0);
   };
 
   const getVariantClientWarehouse = (variant: ProductVariant) => {
-    const rows = filterClientWarehouses(variant.warehouses, myShowroomId, myShowroomName, clientContext, displaySettings);
+    const rows = getVariantClientWarehouses(variant);
     return rows.find(w => w.stock > 0) || rows[0] || null;
   };
+
+  const inStockVariants = product.variants.filter(v => getVariantClientStock(v) > 0);
+  const inProdVariants = product.variants.filter(v => Number(v.in_production_qty ?? 0) > 0);
+  const availableVariantsForCard = onlyInProduction
+    ? inProdVariants
+    : (inStockVariants.length > 0 ? inStockVariants : (!hasSelectedWarehouses ? inProdVariants : []));
+  const sizeCount = availableVariantsForCard.length;
+
+  const pricePerSqm = getMinPricePerSqm(product);
+  const activeVariantForSale = availableVariantsForCard.find(v => (v.price_per_sqm ?? 0) === pricePerSqm)
+    || availableVariantsForCard[0]
+    || product.variants[0];
+  const isOnSale = Boolean(activeVariantForSale?.is_on_sale || product.is_on_sale);
+  const oldPricePerSqm = activeVariantForSale?.old_price_per_sqm || product.old_price_per_sqm || null;
 
   const handleAdd = (variant: ProductVariant) => {
     const warehouse = getVariantClientWarehouse(variant);
@@ -144,6 +163,26 @@ function ProductCard({ product, onNavigate }: ProductCardProps) {
     setAddedSku(variant.sku);
     window.setTimeout(() => setAddedSku(current => current === variant.sku ? null : current), 1400);
   };
+
+  const selectedWarehouseRows = (() => {
+    if (!hasSelectedWarehouses) return [];
+    const map = new Map<string, { name: string; qty: number; sqm: number; isShowroom: boolean; isHub: boolean }>();
+    for (const v of product.variants) {
+      const { w: vw, h: vh } = parseSizeDimensions(v.size);
+      const area = v.area_sqm || (vw * vh) || 1;
+      for (const wh of getVariantClientWarehouses(v)) {
+        if (wh.stock <= 0) continue;
+        const name = wh.warehouse_name || wh.city || 'Склад';
+        const isShowroom = Boolean(myShowroomId && wh.warehouse_id === myShowroomId);
+        const isHub = Boolean(wh.warehouse_id === 81 || wh.is_hub || name.includes('Астана'));
+        const prev = map.get(name) || { name, qty: 0, sqm: 0, isShowroom, isHub };
+        prev.qty += wh.stock;
+        prev.sqm = Math.round((prev.sqm + wh.stock * area) * 10) / 10;
+        map.set(name, prev);
+      }
+    }
+    return Array.from(map.values());
+  })();
 
   const totalShowroomQty = hasShowroom
     ? product.variants.reduce((sum, v) => {
@@ -241,7 +280,7 @@ function ProductCard({ product, onNavigate }: ProductCardProps) {
           </button>
         </div>
 
-        {/* Склады: свой склад (если привязан) + центральный склад Астана или статус В производстве */}
+        {/* Склады: выбранный склад (при активном фильтре) или свой склад + центральный склад Астана */}
         {totalStockForCard === 0 && totalInProductionQty > 0 ? (
           <div className="mt-2 flex flex-col gap-0.5 border-t border-slate-100 pt-2 min-h-[38px] justify-center text-xs">
             <div className="flex items-center justify-between gap-1">
@@ -258,6 +297,30 @@ function ProductCard({ product, onNavigate }: ProductCardProps) {
                 <span className="font-medium shrink-0">~{cardProductionEta}</span>
               </div>
             )}
+          </div>
+        ) : hasSelectedWarehouses && selectedWarehouseRows.length > 0 ? (
+          <div className="mt-2 flex flex-col gap-1 border-t border-slate-100 pt-2 min-h-[38px] justify-center">
+            {selectedWarehouseRows.map(row => (
+              <div key={row.name} className="flex items-center justify-between text-xs gap-1">
+                <span
+                  className={`inline-flex items-center gap-1 truncate max-w-[115px] sm:max-w-[140px] ${
+                    row.isShowroom ? 'font-semibold text-emerald-700' : 'font-medium text-slate-600'
+                  }`}
+                  title={row.name}
+                >
+                  {row.isShowroom ? '🏪' : '🏢'}{' '}
+                  {row.isHub
+                    ? (language === 'kz' ? 'Астана қоймасы' : language === 'tr' ? 'Astana Deposu' : language === 'en' ? 'Astana Hub' : 'Склад Астана')
+                    : row.name}:
+                </span>
+                <span className={`font-bold shrink-0 ${row.isShowroom ? 'text-emerald-800' : 'text-slate-900'}`}>
+                  {row.qty} {t('common.pcs')}{' '}
+                  <span className={`font-normal hidden sm:inline ${row.isShowroom ? 'text-emerald-600' : 'text-slate-500'}`}>
+                    ({row.sqm} {t('common.sqm')})
+                  </span>
+                </span>
+              </div>
+            ))}
           </div>
         ) : user ? (
           <div className="mt-2 flex flex-col gap-1 border-t border-slate-100 pt-2 min-h-[38px] justify-center">
@@ -348,6 +411,7 @@ function ProductCard({ product, onNavigate }: ProductCardProps) {
       {sizesOpen && (
         <ProductCardQuickSizes
           product={product}
+          variants={availableVariantsForCard}
           isEffectiveAdmin={isEffectiveAdmin}
           quantities={quantities}
           addedSku={addedSku}

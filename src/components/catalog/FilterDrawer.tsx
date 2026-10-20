@@ -69,7 +69,10 @@ export function FilterDrawer(props: FilterDrawerProps) {
 
   useEffect(() => {
     if (!open) return;
-    document.body.style.overflow = 'hidden';
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
+    if (isMobile) {
+      document.body.style.overflow = 'hidden';
+    }
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };

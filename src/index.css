@@ -11,20 +11,20 @@
     scroll-behavior: smooth;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    overflow-x: hidden;
+    overflow-x: clip;
     width: 100%;
     max-width: 100%;
   }
 
   body {
     @apply font-body text-slate-800 bg-white;
-    overflow-x: hidden;
+    overflow-x: clip;
     width: 100%;
     max-width: 100%;
   }
 
   #root {
-    overflow-x: hidden;
+    overflow-x: clip;
     width: 100%;
     max-width: 100%;
     min-height: 100vh;

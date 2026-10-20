@@ -3,7 +3,8 @@ import { ChevronRight, ArrowLeft, PackageSearch, Loader2, Lock } from 'lucide-re
 import type { PageId, ProductVariant, Warehouse } from '@/types';
 import { parseSizeDimensions } from '@/types';
 import { useProduct, filterClientWarehouses } from '@/hooks/useProductData';
-import { isWarehouseVisibleForClient, isProductInStockForUser } from '@/lib/warehouseVisibility';
+import { isWarehouseVisibleForClient, isProductInStockForUser, matchesSelectedWarehouses } from '@/lib/warehouseVisibility';
+import { readCatalogState } from '@/components/catalog/useCatalogStatePersistence';
 import { useUserPricing } from '@/hooks/usePricing';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
 import { useCart } from '@/contexts/CartContext';
@@ -231,21 +232,49 @@ export default function ProductPage({
     return list;
   }, [product]);
 
+  const selectedWarehouses = useMemo(() => readCatalogState()?.selectedWarehouses || [], [productId]);
+  const hasSelectedWarehouses = selectedWarehouses.length > 0;
+  const myShowroomId = profile?.showroom_warehouse_id;
+  const myShowroomName = profile?.showroom_warehouse_name || 'В моем магазине';
+
+  const scopedVariants = useMemo(() => {
+    if (!product?.variants) return [];
+    const mapped = product.variants.map(v => {
+      const clientWhs = filterClientWarehouses(v.warehouses, myShowroomId, myShowroomName, clientContext, displaySettings);
+      const whs = hasSelectedWarehouses
+        ? clientWhs.filter(w => matchesSelectedWarehouses(w, selectedWarehouses, myShowroomId, myShowroomName))
+        : clientWhs;
+      const stock = whs.reduce((sum, w) => sum + w.stock, 0);
+      return {
+        ...v,
+        warehouses: whs,
+        stock,
+        free_stock: stock,
+        in_production_qty: hasSelectedWarehouses ? 0 : v.in_production_qty,
+      };
+    });
+    const inStock = mapped.filter(v => v.stock > 0);
+    if (inStock.length > 0) return inStock;
+    const inProd = mapped.filter(v => Number(v.in_production_qty ?? 0) > 0);
+    if (!hasSelectedWarehouses && inProd.length > 0) return inProd;
+    return mapped;
+  }, [product, myShowroomId, myShowroomName, clientContext, displaySettings, hasSelectedWarehouses, selectedWarehouses]);
+
   const availableShapes = useMemo(() => {
-    if (!product?.variants) return ['Прямоугольный'];
-    const shapes = Array.from(new Set(product.variants.map(v => getVariantShape(v, product.name, product.category || ''))));
+    if (!scopedVariants.length || !product) return ['Прямоугольный'];
+    const shapes = Array.from(new Set(scopedVariants.map(v => getVariantShape(v, product.name, product.category || ''))));
     return shapes.length > 0 ? shapes : ['Прямоугольный'];
-  }, [product]);
+  }, [scopedVariants, product]);
 
   const activeShape = selectedShape && availableShapes.includes(selectedShape)
     ? selectedShape
     : (availableShapes[0] || 'Прямоугольный');
 
   const variantsForShape = useMemo(() => {
-    if (!product?.variants) return [];
-    const matched = product.variants.filter(v => getVariantShape(v, product.name, product.category || '') === activeShape);
-    return matched.length > 0 ? matched : product.variants;
-  }, [product, activeShape]);
+    if (!scopedVariants.length || !product) return [];
+    const matched = scopedVariants.filter(v => getVariantShape(v, product.name, product.category || '') === activeShape);
+    return matched.length > 0 ? matched : scopedVariants;
+  }, [scopedVariants, product, activeShape]);
 
   if (loading) {
     return (
@@ -273,27 +302,27 @@ export default function ProductPage({
 
   const activeVariant = variantsForShape.find(v => v.size === selectedSize)
     || variantsForShape[0]
+    || scopedVariants[0]
     || product.variants[0];
 
   const mainPricePerSqm = activeVariant
     ? pricing.getPricePerSqm(product.collection, activeVariant.size, activeVariant.base_price, activeVariant.price_per_sqm)
     : pricing.getMinPricePerSqm(product);
 
-  const myShowroomId = profile?.showroom_warehouse_id;
-  const myShowroomName = profile?.showroom_warehouse_name || 'В моем магазине';
+  const isHubVisible = (isEffectiveAdmin || isWarehouseVisibleForClient({ warehouse_id: 81, warehouse_name: 'Основной Склад Астана' }, profile))
+    && (!hasSelectedWarehouses || matchesSelectedWarehouses({ warehouse_id: 81, warehouse_name: 'Основной Склад Астана', is_hub: true }, selectedWarehouses, myShowroomId, myShowroomName));
+  const isShowroomVisible = (isEffectiveAdmin || Boolean(myShowroomId && isWarehouseVisibleForClient({ warehouse_id: myShowroomId, warehouse_name: myShowroomName }, profile)))
+    && (!hasSelectedWarehouses || matchesSelectedWarehouses({ warehouse_id: myShowroomId ?? undefined, warehouse_name: myShowroomName }, selectedWarehouses, myShowroomId, myShowroomName));
 
-  const isHubVisible = isEffectiveAdmin || isWarehouseVisibleForClient({ warehouse_id: 81, warehouse_name: 'Основной Склад Астана' }, profile);
-  const isShowroomVisible = isEffectiveAdmin || Boolean(myShowroomId && isWarehouseVisibleForClient({ warehouse_id: myShowroomId, warehouse_name: myShowroomName }, profile));
-
-  const hasDealerStock = Boolean(user && isShowroomVisible && (product.variants.some(v => v.dealer_stock) || myShowroomId));
-  const totalShowroomQty = isShowroomVisible ? product.variants.reduce((sum, v) => {
+  const hasDealerStock = Boolean(user && (isShowroomVisible || (hasSelectedWarehouses && isHubVisible)) && (product.variants.some(v => v.dealer_stock) || myShowroomId || hasSelectedWarehouses));
+  const totalShowroomQty = isShowroomVisible ? scopedVariants.reduce((sum, v) => {
     if (myShowroomId) {
       const wh = v.warehouses.find(w => w.warehouse_id === myShowroomId);
       return sum + (wh?.stock || 0);
     }
     return sum + (v.dealer_stock?.in_showroom_qty || 0);
   }, 0) : 0;
-  const totalShowroomSqm = isShowroomVisible ? Math.round(product.variants.reduce((sum, v) => {
+  const totalShowroomSqm = isShowroomVisible ? Math.round(scopedVariants.reduce((sum, v) => {
     if (myShowroomId) {
       const wh = v.warehouses.find(w => w.warehouse_id === myShowroomId);
       const { w, h } = parseSizeDimensions(v.size);
@@ -302,11 +331,11 @@ export default function ProductPage({
     }
     return sum + (v.dealer_stock?.in_showroom_sqm || 0);
   }, 0) * 10) / 10 : 0;
-  const totalInTransitQty = isShowroomVisible ? product.variants.reduce((sum, v) => sum + (v.dealer_stock?.in_transit_qty || 0), 0) : 0;
-  const totalInTransitSqm = isShowroomVisible ? Math.round(product.variants.reduce((sum, v) => sum + (v.dealer_stock?.in_transit_sqm || 0), 0) * 10) / 10 : 0;
-  const totalHubQty = isHubVisible ? product.variants.reduce((sum, v) => {
+  const totalInTransitQty = (isShowroomVisible && !hasSelectedWarehouses) ? scopedVariants.reduce((sum, v) => sum + (v.dealer_stock?.in_transit_qty || 0), 0) : 0;
+  const totalInTransitSqm = (isShowroomVisible && !hasSelectedWarehouses) ? Math.round(scopedVariants.reduce((sum, v) => sum + (v.dealer_stock?.in_transit_sqm || 0), 0) * 10) / 10 : 0;
+  const totalHubQty = isHubVisible ? scopedVariants.reduce((sum, v) => {
     const hub = v.warehouses.find(w => w.warehouse_id === 81 || w.is_hub || (w.warehouse_name && w.warehouse_name.includes('Астана')));
-    return sum + (hub ? hub.stock : (v.dealer_stock?.available_hub_qty || 0));
+    return sum + (hub ? hub.stock : (!hasSelectedWarehouses ? (v.dealer_stock?.available_hub_qty || 0) : 0));
   }, 0) : 0;
 
   const isOutOfStockForClient = product ? !isProductInStockForUser(product, profile, false, true) : false;
@@ -417,35 +446,33 @@ export default function ProductPage({
               <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50/50 p-4">
                 <p className="text-xs font-bold uppercase tracking-wider text-emerald-900 mb-2.5 flex items-center gap-1.5">
                   <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                  Персональные остатки дилера
+                  {hasSelectedWarehouses ? `Остатки (${selectedWarehouses.join(', ')})` : 'Персональные остатки дилера'}
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                  <div className="rounded-lg bg-white p-3 border border-emerald-200/80 shadow-xs">
-                    <p className="text-[11px] font-semibold text-emerald-800">
-                      🏪 В наличии в магазине
-                    </p>
-                    <p className="text-lg font-bold text-emerald-950 mt-0.5">
-                      {totalShowroomQty} <span className="text-xs font-normal text-emerald-700">шт ({totalShowroomSqm} м²)</span>
-                    </p>
-                  </div>
-
-                  <div className="rounded-lg bg-white p-3 border border-indigo-200/80 shadow-xs">
-                    <p className="text-[11px] font-semibold text-indigo-800">
-                      🚚 В пути ко мне
-                    </p>
-                    <p className="text-lg font-bold text-indigo-950 mt-0.5">
-                      {totalInTransitQty} <span className="text-xs font-normal text-indigo-700">шт ({totalInTransitSqm} м²)</span>
-                    </p>
-                  </div>
-
-                  <div className="rounded-lg bg-white p-3 border border-slate-200/80 shadow-xs">
-                    <p className="text-[11px] font-semibold text-slate-700">
-                      🏢 Основной Склад Астана
-                    </p>
-                    <p className="text-lg font-bold text-slate-900 mt-0.5">
-                      {totalHubQty} <span className="text-xs font-normal text-slate-500">шт</span>
-                    </p>
-                  </div>
+                  {isShowroomVisible && (
+                    <div className="rounded-lg bg-white p-3 border border-emerald-200/80 shadow-xs">
+                      <p className="text-[11px] font-semibold text-emerald-800">🏪 {myShowroomName}</p>
+                      <p className="text-lg font-bold text-emerald-950 mt-0.5">
+                        {totalShowroomQty} <span className="text-xs font-normal text-emerald-700">шт ({totalShowroomSqm} м²)</span>
+                      </p>
+                    </div>
+                  )}
+                  {isShowroomVisible && !hasSelectedWarehouses && (
+                    <div className="rounded-lg bg-white p-3 border border-indigo-200/80 shadow-xs">
+                      <p className="text-[11px] font-semibold text-indigo-800">🚚 В пути ко мне</p>
+                      <p className="text-lg font-bold text-indigo-950 mt-0.5">
+                        {totalInTransitQty} <span className="text-xs font-normal text-indigo-700">шт ({totalInTransitSqm} м²)</span>
+                      </p>
+                    </div>
+                  )}
+                  {isHubVisible && (
+                    <div className="rounded-lg bg-white p-3 border border-slate-200/80 shadow-xs">
+                      <p className="text-[11px] font-semibold text-slate-700">🏢 Основной Склад Астана</p>
+                      <p className="text-lg font-bold text-slate-900 mt-0.5">
+                        {totalHubQty} <span className="text-xs font-normal text-slate-500">шт</span>
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -455,7 +482,7 @@ export default function ProductPage({
         {/* DESKTOP VARIANT TABLE */}
         <ProductWarehouseStockTable
           product={product}
-          variants={product.variants}
+          variants={variantsForShape}
           quantities={quantities}
           addedKeys={addedKeys}
           cartCountByKey={cartCountByKey}
@@ -546,23 +573,27 @@ export default function ProductPage({
             <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3.5 mb-4">
               <p className="text-xs font-bold uppercase tracking-wider text-emerald-900 mb-2 flex items-center gap-1.5">
                 <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                Ваши персональные остатки
+                {hasSelectedWarehouses ? `Остатки (${selectedWarehouses.join(', ')})` : 'Ваши персональные остатки'}
               </p>
               <div className="space-y-1.5 text-xs">
-                <div className="flex items-center justify-between font-semibold text-emerald-800">
-                  <span>🏪 В наличии в магазине:</span>
-                  <span>{totalShowroomQty} шт ({totalShowroomSqm} м²)</span>
-                </div>
-                {totalInTransitQty > 0 && (
+                {isShowroomVisible && (
+                  <div className="flex items-center justify-between font-semibold text-emerald-800">
+                    <span>🏪 {myShowroomName}:</span>
+                    <span>{totalShowroomQty} шт ({totalShowroomSqm} м²)</span>
+                  </div>
+                )}
+                {isShowroomVisible && !hasSelectedWarehouses && totalInTransitQty > 0 && (
                   <div className="flex items-center justify-between font-medium text-indigo-800">
                     <span>🚚 В пути:</span>
                     <span>{totalInTransitQty} шт ({totalInTransitSqm} м²)</span>
                   </div>
                 )}
-                <div className="flex items-center justify-between text-slate-600">
-                  <span>🏢 Основной Склад Астана:</span>
-                  <span className="font-medium">{totalHubQty} шт</span>
-                </div>
+                {isHubVisible && (
+                  <div className="flex items-center justify-between text-slate-600">
+                    <span>🏢 Основной Склад Астана:</span>
+                    <span className="font-medium">{totalHubQty} шт</span>
+                  </div>
+                )}
               </div>
             </div>
           )}

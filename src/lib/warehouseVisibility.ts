@@ -18,6 +18,38 @@ export function isCentralWarehouse(w: { warehouse_id?: number; warehouse_name?: 
   return name.includes('астана') || name.includes('основной') || city.includes('астана');
 }
 
+export function matchesSelectedWarehouses(
+  w: { warehouse_id?: number; warehouse_name?: string; city?: string; is_hub?: boolean },
+  selectedWarehouses?: Set<string> | string[] | null,
+  showroomWarehouseId?: number | null,
+  showroomWarehouseName?: string | null
+): boolean {
+  if (!selectedWarehouses) return true;
+  const list = Array.isArray(selectedWarehouses) ? selectedWarehouses : Array.from(selectedWarehouses);
+  if (list.length === 0) return true;
+
+  const targetNames = new Set(list.map(s => s.trim().toLowerCase()).filter(Boolean));
+  if (targetNames.size === 0) return true;
+
+  const wName = (w.warehouse_name || '').trim().toLowerCase();
+  const wCity = (w.city || '').trim().toLowerCase();
+  if ((wName && targetNames.has(wName)) || (wCity && targetNames.has(wCity))) {
+    return true;
+  }
+
+  if (isCentralWarehouse(w)) {
+    for (const t of targetNames) {
+      if (t.includes('астана') || t.includes('основной')) return true;
+    }
+  }
+
+  if (showroomWarehouseId && w.warehouse_id === showroomWarehouseId && showroomWarehouseName) {
+    if (targetNames.has(showroomWarehouseName.trim().toLowerCase())) return true;
+  }
+
+  return false;
+}
+
 /**
  * Проверка: виден ли конкретный склад для указанного профиля клиента.
  * 

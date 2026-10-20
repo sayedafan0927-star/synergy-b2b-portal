@@ -1,3 +1,4 @@
+import { useRef, useState, useEffect } from 'react';
 import { Filter, ChevronLeft } from 'lucide-react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import type { FilterDrawerProps } from './types';
@@ -6,10 +7,34 @@ import { CatalogFilterContent } from './CatalogFilterContent';
 export function CatalogFilterSidebar(props: FilterDrawerProps) {
   const { open, onClose, activeFilterCount } = props;
   const { t } = useLanguage();
+  const asideRef = useRef<HTMLElement>(null);
+  const [sidebarHeight, setSidebarHeight] = useState<string>('calc(100vh - 7rem)');
+
+  useEffect(() => {
+    if (!open || typeof window === 'undefined') return;
+    const updateHeight = () => {
+      if (!asideRef.current) return;
+      const rect = asideRef.current.getBoundingClientRect();
+      const topOffset = Math.max(96, rect.top);
+      const available = Math.max(360, Math.floor(window.innerHeight - topOffset - 16));
+      setSidebarHeight(`${available}px`);
+    };
+    updateHeight();
+    const raf = requestAnimationFrame(updateHeight);
+    window.addEventListener('scroll', updateHeight, { passive: true });
+    window.addEventListener('resize', updateHeight, { passive: true });
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('scroll', updateHeight);
+      window.removeEventListener('resize', updateHeight);
+    };
+  }, [open]);
 
   return (
     <aside
-      className={`hidden lg:flex shrink-0 flex-col rounded-2xl bg-white shadow-xs sticky top-24 h-[calc(100vh-7rem)] max-h-[calc(100vh-7rem)] overflow-hidden transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-[width,margin,opacity,transform] z-20 ${
+      ref={asideRef}
+      style={open ? { height: sidebarHeight, maxHeight: sidebarHeight } : undefined}
+      className={`hidden lg:flex shrink-0 flex-col rounded-2xl bg-white shadow-xs sticky top-24 h-[calc(100vh-7rem)] max-h-[calc(100vh-7rem)] overflow-hidden transition-[width,margin,opacity,transform] duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-[width,margin,opacity,transform] z-20 ${
         open
           ? 'w-72 xl:w-80 opacity-100 translate-x-0 border border-slate-200/90 mr-6'
           : 'w-0 opacity-0 -translate-x-6 border-0 pointer-events-none mr-0'
@@ -19,7 +44,7 @@ export function CatalogFilterSidebar(props: FilterDrawerProps) {
       // @ts-expect-error React 18 inert attribute support
       inert={!open ? '' : undefined}
     >
-      <div className="w-72 xl:w-80 flex flex-col min-h-0 flex-1">
+      <div className="w-72 xl:w-80 flex flex-col min-h-0 flex-1 h-full">
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 shrink-0 bg-white">
           <div className="flex items-center gap-2">
             <Filter className="h-4.5 w-4.5 text-brand-700" />

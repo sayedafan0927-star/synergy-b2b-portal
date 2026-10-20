@@ -8,7 +8,7 @@ import StockSummaryBar from '@/components/StockSummaryBar';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
-import { isProductInStockForUser, getClientWarehouseSettings } from '@/lib/warehouseVisibility';
+import { isProductInStockForUser, getClientWarehouseSettings, matchesSelectedWarehouses } from '@/lib/warehouseVisibility';
 import {
   FilterDrawer, CatalogFilterSidebar, CatalogStockTable,
   CatalogLoadingSkeleton, CatalogLoadError, StockReservationsModal,
@@ -85,15 +85,29 @@ export default function CatalogPage({
   });
 
   useEffect(() => {
+    if (selectedWarehouses.size > 0) {
+      const firstSelected = [...selectedWarehouses][0];
+      if (firstSelected && stockWarehouse !== firstSelected) {
+        setStockWarehouse(firstSelected);
+        return;
+      }
+    }
     if (allWarehouses.length > 0 && (!stockWarehouse || !allWarehouses.includes(stockWarehouse))) {
       setStockWarehouse(allWarehouses[0]);
     }
-  }, [allWarehouses, stockWarehouse]);
+  }, [allWarehouses, stockWarehouse, selectedWarehouses]);
 
   const inProductionCount = useMemo(
     () => baseProducts.filter(p => p.variants.some(v => (v.in_production_qty ?? 0) > 0)).length,
     [baseProducts],
   );
+
+  const hasVariantStock = (v: Product['variants'][number]) => {
+    const whs = filterClientWarehouses(
+      v.warehouses, profile?.showroom_warehouse_id, myShowroomName, isEffectiveAdmin ? true : profile, displaySettings,
+    ).filter(w => matchesSelectedWarehouses(w, selectedWarehouses, profile?.showroom_warehouse_id, myShowroomName));
+    return whs.some(w => w.stock > 0) || (!selectedWarehouses.size && Number(v.in_production_qty ?? 0) > 0);
+  };
 
   const filteredProducts = useMemo(() => {
     let result = [...baseProducts];
@@ -110,16 +124,15 @@ export default function CatalogPage({
       );
     }
 
-    // RugsUSA Pattern 3: Size Clustering Engine
     if (activeClusterQuickFilter !== 'all') {
       if (activeClusterQuickFilter === 'runner') {
-        result = result.filter(p => p.variants.some(v => v.is_runner));
+        result = result.filter(p => p.variants.some(v => v.is_runner && hasVariantStock(v)));
       } else {
-        result = result.filter(p => p.variants.some(v => v.size_cluster === activeClusterQuickFilter));
+        result = result.filter(p => p.variants.some(v => v.size_cluster === activeClusterQuickFilter && hasVariantStock(v)));
       }
     }
     if (selectedClusters.size > 0) {
-      result = result.filter(p => p.variants.some(v => v.size_cluster && selectedClusters.has(v.size_cluster)));
+      result = result.filter(p => p.variants.some(v => v.size_cluster && selectedClusters.has(v.size_cluster) && hasVariantStock(v)));
     }
 
     if (selectedCollections.size > 0) result = result.filter(p => selectedCollections.has(p.collection));
@@ -129,15 +142,11 @@ export default function CatalogPage({
       result = result.filter(p =>
         p.variants.some(v =>
           filterClientWarehouses(
-            v.warehouses,
-            profile?.showroom_warehouse_id,
-            myShowroomName,
-            isEffectiveAdmin ? true : profile,
-            displaySettings,
-          ).some(w => selectedWarehouses.has(w.warehouse_name || w.city) && w.stock > 0),
+            v.warehouses, profile?.showroom_warehouse_id, myShowroomName, isEffectiveAdmin ? true : profile, displaySettings,
+          ).some(w => matchesSelectedWarehouses(w, selectedWarehouses, profile?.showroom_warehouse_id, myShowroomName) && w.stock > 0),
         ),
       );
-    if (selectedSizes.size > 0) result = result.filter(p => p.variants.some(v => selectedSizes.has(v.size)));
+    if (selectedSizes.size > 0) result = result.filter(p => p.variants.some(v => selectedSizes.has(v.size) && hasVariantStock(v)));
 
     // Sub-10ms Homoglyph, Dimension & Layout Normalized Search
     if (searchQuery.trim()) {
@@ -207,34 +216,35 @@ export default function CatalogPage({
       return serverSummary;
     }
 
-    let freeQty = 0;
-    let freeSqm = 0;
-    let reservedQty = 0;
-    let reservedSqm = 0;
-    let toShipQty = 0;
-    let toShipSqm = 0;
-    let totalQty = 0;
-    let totalSqm = 0;
+    let freeQty = 0, freeSqm = 0, reservedQty = 0, reservedSqm = 0, toShipQty = 0, toShipSqm = 0, totalQty = 0, totalSqm = 0;
 
     for (const p of filteredProducts) {
       for (const v of p.variants) {
         const area = v.area_sqm || sizeArea(v.size) || 1;
-        const free = v.free_stock || 0;
-        const res = v.reserved_stock || 0;
-        const toShip = v.to_ship_stock || 0;
-        const total = v.total_stock || free + res + toShip;
-
-        freeQty += free;
-        freeSqm += free * area;
-
-        reservedQty += res;
-        reservedSqm += res * area;
-
-        toShipQty += toShip;
-        toShipSqm += v.to_ship_sqm || toShip * area;
-
-        totalQty += total;
-        totalSqm += total * area;
+        if (selectedWarehouses.size > 0) {
+          const matchingWhs = filterClientWarehouses(
+            v.warehouses, profile?.showroom_warehouse_id, myShowroomName, isEffectiveAdmin ? true : profile, displaySettings,
+          ).filter(w => matchesSelectedWarehouses(w, selectedWarehouses, profile?.showroom_warehouse_id, myShowroomName));
+          for (const w of matchingWhs) {
+            const free = w.free_stock ?? w.stock ?? 0;
+            const res = w.reserved_stock ?? 0;
+            const toShip = w.to_ship_stock ?? 0;
+            const total = w.total_stock ?? (free + res + toShip);
+            freeQty += free; freeSqm += free * area;
+            reservedQty += res; reservedSqm += res * area;
+            toShipQty += toShip; toShipSqm += w.to_ship_sqm || toShip * area;
+            totalQty += total; totalSqm += total * area;
+          }
+        } else {
+          const free = v.free_stock || 0;
+          const res = v.reserved_stock || 0;
+          const toShip = v.to_ship_stock || 0;
+          const total = v.total_stock || free + res + toShip;
+          freeQty += free; freeSqm += free * area;
+          reservedQty += res; reservedSqm += res * area;
+          toShipQty += toShip; toShipSqm += v.to_ship_sqm || toShip * area;
+          totalQty += total; totalSqm += total * area;
+        }
       }
     }
 
@@ -250,13 +260,8 @@ export default function CatalogPage({
       total_stock_sqm: Math.round(totalSqm * 100) / 100,
     };
   }, [
-    filteredProducts,
-    serverSummary,
-    activeFilterCount,
-    searchQuery,
-    selectedCategory,
-    selectedCollections.size,
-    selectedCountries.size,
+    filteredProducts, serverSummary, activeFilterCount, searchQuery,
+    selectedCategory, selectedCollections.size, selectedCountries.size, selectedWarehouses,
   ]);
 
   const catalogReservedSkus = useMemo(() => {
@@ -566,7 +571,13 @@ export default function CatalogPage({
                       drawerOpen ? 'lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5' : 'lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6'
                     } gap-4 lg:gap-6`}>
                       {visibleProducts.map(p => (
-                        <ProductCard key={p.id} product={p} onNavigate={handleProductNavigate} />
+                        <ProductCard
+                          key={p.id}
+                          product={p}
+                          onNavigate={handleProductNavigate}
+                          selectedWarehouses={selectedWarehouses}
+                          onlyInProduction={onlyInProduction}
+                        />
                       ))}
                     </div>
                   </div>

@@ -62,7 +62,7 @@ export function CatalogFilterContent({
 
   return (
     <div className="flex flex-col min-h-0 flex-1 h-full">
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 thin-scrollbar">
+      <div className="min-h-0 flex-1 overflow-y-auto px-5 thin-scrollbar">
         <div className="py-4 border-b border-slate-100">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
@@ -85,6 +85,13 @@ export function CatalogFilterContent({
           )}
         </div>
 
+        {/* СКЛАДЫ — на первом месте для мгновенного доступа без сворачивания других секций */}
+        <FilterSection title={t('catalog.filter_warehouse')} defaultOpen={true}>
+          {allWarehouses.map(w => (
+            <CheckItem key={w} label={w} checked={selectedWarehouses.has(w)} onToggle={() => toggleWarehouse(w)} />
+          ))}
+        </FilterSection>
+
         {/* КЛАСТЕРЫ РАЗМЕРОВ */}
         <FilterSection title={t('catalog.filter_clusters') || 'КЛАСТЕРЫ РАЗМЕРОВ'} defaultOpen={true}>
           <CheckItem label={t('catalog.cluster_small')} checked={selectedClusters.has('small')} onToggle={() => toggleCluster('small')} />
@@ -93,7 +100,7 @@ export function CatalogFilterContent({
           <CheckItem label={t('catalog.cluster_oversize')} checked={selectedClusters.has('oversize')} onToggle={() => toggleCluster('oversize')} />
         </FilterSection>
 
-        <FilterSection title={t('catalog.filter_collection')}>
+        <FilterSection title={t('catalog.filter_collection')} defaultOpen={true}>
           {allCollections.map(c => (
             <CheckItem key={c} label={c} checked={selectedCollections.has(c)} onToggle={() => toggleCollection(c)} />
           ))}
@@ -127,12 +134,6 @@ export function CatalogFilterContent({
         <FilterSection title={t('catalog.filter_country')}>
           {allCountries.map(c => (
             <CheckItem key={c} label={c} checked={selectedCountries.has(c)} onToggle={() => toggleCountry(c)} />
-          ))}
-        </FilterSection>
-
-        <FilterSection title={t('catalog.filter_warehouse')}>
-          {allWarehouses.map(w => (
-            <CheckItem key={w} label={w} checked={selectedWarehouses.has(w)} onToggle={() => toggleWarehouse(w)} />
           ))}
         </FilterSection>
       </div>

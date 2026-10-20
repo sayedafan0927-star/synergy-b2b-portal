@@ -273,6 +273,26 @@ export function useCatalogStatePersistence(options: UseCatalogStatePersistenceOp
   ]);
 
   useEffect(() => {
+    const prev = readCatalogState();
+    writeCatalogState({
+      searchQuery, sortBy, viewMode, selectedCategory, onlyInProduction,
+      selectedCollections: Array.from(selectedCollections),
+      selectedManufacturers: Array.from(selectedManufacturers),
+      selectedCountries: Array.from(selectedCountries),
+      selectedClusters: Array.from(selectedClusters),
+      selectedWarehouses: Array.from(selectedWarehouses),
+      selectedSizes: Array.from(selectedSizes),
+      visibleCount,
+      scrollY: prev?.scrollY || 0,
+      lastViewedProductId: prev?.lastViewedProductId || null,
+    });
+  }, [
+    searchQuery, sortBy, viewMode, selectedCategory, onlyInProduction,
+    selectedCollections, selectedManufacturers, selectedCountries,
+    selectedClusters, selectedWarehouses, selectedSizes, visibleCount,
+  ]);
+
+  useEffect(() => {
     let timer: any;
     const handleScroll = () => {
       clearTimeout(timer);

@@ -186,11 +186,12 @@ export function useSmartFacets({
     for (const p of matching) {
       for (const v of p.variants) {
         if (v.size) {
+          const whs = selectedWarehouses.size > 0
+            ? (v.warehouses || []).filter(w => matchesSet(selectedWarehouses, w.warehouse_name || w.city))
+            : (v.warehouses || []);
           const hasStock =
-            isEffectiveAdmin ||
-            (v.total_stock ?? v.stock ?? 0) > 0 ||
-            (v.in_production_qty ?? 0) > 0 ||
-            (v.warehouses && v.warehouses.some(w => (w.stock || 0) > 0 || (w.free_stock || 0) > 0));
+            whs.some(w => (w.stock || 0) > 0 || (w.free_stock || 0) > 0) ||
+            (selectedWarehouses.size === 0 && (v.in_production_qty ?? 0) > 0);
           if (hasStock) set.add(v.size);
         }
       }

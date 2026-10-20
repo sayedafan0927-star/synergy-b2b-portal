@@ -45,9 +45,14 @@ export function CatalogStockTable({
 
   const allSizes = useMemo(() => {
     const set = new Set<string>();
-    filteredProducts.forEach(p => p.variants.forEach(v => set.add(v.size)));
+    filteredProducts.forEach(p =>
+      p.variants.forEach(v => {
+        const wh = getAllowedWarehouses(v.warehouses).find(w => (w.warehouse_name || w.city) === selectedWarehouse);
+        if ((wh && wh.stock > 0) || Number(v.in_production_qty ?? 0) > 0) set.add(v.size);
+      }),
+    );
     return [...set].sort((a, b) => sizeArea(a) - sizeArea(b));
-  }, [filteredProducts]);
+  }, [filteredProducts, getAllowedWarehouses, selectedWarehouse]);
 
   const grouped = useMemo(() => {
     const map = new Map<string, Product[]>();

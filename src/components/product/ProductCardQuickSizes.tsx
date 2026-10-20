@@ -4,6 +4,7 @@ import { Check, ShoppingCart } from 'lucide-react';
 
 interface ProductCardQuickSizesProps {
   product: Product;
+  variants?: ProductVariant[];
   isEffectiveAdmin: boolean;
   quantities: Record<string, number>;
   addedSku: string | null;
@@ -14,6 +15,7 @@ interface ProductCardQuickSizesProps {
 
 export default function ProductCardQuickSizes({
   product,
+  variants,
   isEffectiveAdmin,
   quantities,
   addedSku,
@@ -23,8 +25,8 @@ export default function ProductCardQuickSizes({
 }: ProductCardQuickSizesProps) {
   const popoverRef = useRef<HTMLDivElement>(null);
   const [alignRight, setAlignRight] = useState(false);
-  const availableVariants = product.variants.filter(
-    v => getVariantStock(v) > 0 || Number(v.in_production_qty ?? 0) > 0
+  const availableVariants = variants ?? product.variants.filter(
+    v => getVariantStock(v) > 0
   );
 
   useEffect(() => {
