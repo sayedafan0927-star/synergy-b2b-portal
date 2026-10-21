@@ -430,13 +430,13 @@ export default function CatalogPage({
 
         <CatalogWarehouseModeBar
           allWarehouses={allWarehouses}
-          erpWarehouses={erpWarehouses}
           selectedWarehouses={selectedWarehouses}
           onSelectWarehouse={wh => setSelectedWarehouses(wh ? new Set([wh]) : new Set())}
           onlyInProduction={onlyInProduction}
           onSetOnlyInProduction={setOnlyInProduction}
           inProductionCount={inProductionCount}
           myShowroomName={myShowroomName}
+          hasOwnShowroom={Boolean(profile?.showroom_warehouse_id)}
         />
 
         {/* RugsUSA Size Clustering Bar (Pattern 3) activeClusterQuickFilter disabled per user request to prevent mobile layout overflow */}
