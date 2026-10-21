@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import {
+  loadedImageCache,
+  markImageLoaded,
+  getPrimaryStaticBase,
+  extractErpFileName,
+} from '@/lib/imagePreloader';
 
 interface ProductImageProps {
   src?: string | null;
@@ -31,14 +37,12 @@ export function CarpetPlaceholderIcon({ className = "w-full h-full", compact = f
   return (
     <div className={`overflow-hidden flex flex-col items-center justify-center bg-gradient-to-b from-slate-50 via-slate-100 to-slate-200 text-slate-400 select-none p-4 ${className}`}>
       <div className="relative flex flex-col items-center justify-center w-20 h-28 sm:w-24 sm:h-32 max-w-full max-h-full rounded border-2 border-dashed border-slate-300 bg-white/80 shadow-inner p-2">
-        {/* Top fringe */}
         <div className="flex justify-between w-full h-1 border-b border-slate-200 opacity-60 mb-1">
           {[...Array(8)].map((_, i) => (
             <span key={i} className="inline-block w-0.5 h-1.5 bg-slate-300 rounded-full" />
           ))}
         </div>
 
-        {/* Inner geometric pattern with company logo */}
         <div className="flex-1 w-full border border-slate-200/70 rounded flex flex-col items-center justify-center p-1.5 bg-slate-50/70">
           <img
             src="/Вектор_Синэнергия.png"
@@ -49,7 +53,6 @@ export function CarpetPlaceholderIcon({ className = "w-full h-full", compact = f
           <span className="text-[9px] uppercase tracking-wider font-semibold text-slate-400 mt-1">Ковер</span>
         </div>
 
-        {/* Bottom fringe */}
         <div className="flex justify-between w-full h-1 border-t border-slate-200 opacity-60 mt-1">
           {[...Array(8)].map((_, i) => (
             <span key={i} className="inline-block w-0.5 h-1.5 bg-slate-300 rounded-full" />
@@ -61,39 +64,8 @@ export function CarpetPlaceholderIcon({ className = "w-full h-full", compact = f
   );
 }
 
-function getPrimaryStaticBase(): string {
-  if (typeof window !== 'undefined' && window.location.hostname.includes('synergy-group.kz')) {
-    return '/uploads/nomenclature/';
-  }
-  return 'https://synergy-group.kz/uploads/nomenclature/';
-}
-
 const ERP_STATIC_FALLBACK_BASE = 'https://erp.synergy-tech.kz/uploads/nomenclature/';
 const ERP_PHP_FALLBACK_BASE = 'https://erp.synergy-tech.kz/image.php?f=';
-
-/**
- * Extracts raw filename from ERP image.php or /uploads/nomenclature/ URLs.
- */
-function extractErpFileName(rawUrl: string): string | null {
-  const clean = rawUrl.trim();
-  const phpMatch = clean.match(/\/image\.php\?(?:[^#]*&)?f=([^&#]+)/i);
-  if (phpMatch && phpMatch[1]) {
-    try {
-      return decodeURIComponent(phpMatch[1]).replace(/^\/+/, '');
-    } catch {
-      return phpMatch[1].replace(/^\/+/, '');
-    }
-  }
-  const staticMatch = clean.match(/\/uploads\/nomenclature\/([^?#]+)/i);
-  if (staticMatch && staticMatch[1]) {
-    try {
-      return decodeURIComponent(staticMatch[1]).replace(/^\/+/, '');
-    } catch {
-      return staticMatch[1].replace(/^\/+/, '');
-    }
-  }
-  return null;
-}
 
 /**
  * Converts ERP image URLs to same-origin Nginx static delivery (/uploads/nomenclature/)
@@ -138,16 +110,13 @@ function buildFallbackCandidates(src: string, width?: number): string[] {
   return Array.from(new Set(candidates));
 }
 
-// Fast memory set of already-loaded image URLs so remounting cards render in 0ms without skeleton flicker
-const loadedImageCache = new Set<string>();
-
 export default function ProductImage({
   src,
   alt = 'Ковер',
   className = '',
   imageClassName = '',
   fit = 'cover',
-  loading = 'lazy',
+  loading = 'eager',
   decoding = 'async',
   fetchPriority,
   width,
@@ -191,38 +160,43 @@ export default function ProductImage({
     };
   }, [primaryUrl]);
 
+  // Synchronously detect already-cached browser images on DOM mount (0ms, no waiting for synthetic onLoad)
+  const handleImgRef = useCallback((el: HTMLImageElement | null) => {
+    if (el && el.complete && el.naturalWidth > 0) {
+      if (el.currentSrc) markImageLoaded(el.currentSrc);
+      if (primaryUrl) markImageLoaded(primaryUrl);
+      setIsLoaded(true);
+    }
+  }, [primaryUrl]);
+
   // Если фото нет или произошла фатальная ошибка после всех кандидатов — показываем стандартную UI-заглушку ковра с логотипом
   if (!src || !src.trim() || candidates.length === 0 || hasError) {
     return <CarpetPlaceholderIcon className={className} compact={Boolean(width && width <= 80)} />;
   }
 
   const activeUrl = candidates[candidateIndex] || primaryUrl;
-  const isAlreadyCached = loadedImageCache.has(activeUrl);
   const fitClass = fit === 'contain' ? 'object-contain' : 'object-cover';
 
   return (
-    <div className={`relative overflow-hidden ${className.includes('bg-') ? '' : 'bg-slate-100'} ${className}`}>
-      {!isLoaded && (
-        cachedThumbBackdrop ? (
-          <img
-            src={cachedThumbBackdrop}
-            alt=""
-            aria-hidden="true"
-            className={`absolute inset-0 w-full h-full ${fitClass} ${imageClassName}`}
-          />
-        ) : (
-          <div className="absolute inset-0 bg-slate-200/70 animate-pulse" />
-        )
+    <div className={`relative overflow-hidden ${className.includes('bg-') ? '' : 'bg-[#f8f7f4]'} ${className}`}>
+      {!isLoaded && cachedThumbBackdrop && (
+        <img
+          src={cachedThumbBackdrop}
+          alt=""
+          aria-hidden="true"
+          className={`absolute inset-0 w-full h-full ${fitClass} ${imageClassName}`}
+        />
       )}
       <img
+        ref={handleImgRef}
         src={activeUrl}
         alt={alt}
-        loading={isAlreadyCached ? 'eager' : loading}
-        decoding={decoding}
+        loading={isLoaded || loadedImageCache.has(activeUrl) ? 'eager' : loading}
+        decoding={isLoaded || loadedImageCache.has(activeUrl) ? 'sync' : decoding}
         {...(fetchPriority ? { fetchPriority } : {})}
         onLoad={() => {
-          loadedImageCache.add(activeUrl);
-          if (primaryUrl) loadedImageCache.add(primaryUrl);
+          markImageLoaded(activeUrl);
+          if (primaryUrl) markImageLoaded(primaryUrl);
           setIsLoaded(true);
           onLoad?.();
         }}
@@ -230,7 +204,7 @@ export default function ProductImage({
           if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
           if (candidateIndex + 1 < candidates.length) {
             const nextIdx = candidateIndex + 1;
-            const delayMs = 280 * nextIdx;
+            const delayMs = 200 * nextIdx;
             retryTimerRef.current = setTimeout(() => {
               setCandidateIndex(nextIdx);
             }, delayMs);
@@ -239,10 +213,9 @@ export default function ProductImage({
             onError?.();
           }
         }}
-        className={`w-full h-full ${fitClass} transition-opacity duration-200 ${
-          isLoaded ? 'opacity-100' : 'opacity-0'
-        } ${imageClassName}`}
+        className={`w-full h-full ${fitClass} ${imageClassName}`}
       />
     </div>
   );
 }
+

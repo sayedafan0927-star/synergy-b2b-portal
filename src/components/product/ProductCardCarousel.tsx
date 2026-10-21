@@ -183,16 +183,16 @@ export function ProductCardCarousel({
                   <ProductImage
                     src={img}
                     alt={`${product.name} — фото ${idx + 1}`}
-                    loading={isFirstPriority ? 'eager' : 'lazy'}
+                    loading={idx === 0 ? 'eager' : 'lazy'}
                     fetchPriority={isFirstPriority ? 'high' : undefined}
-                    decoding="async"
+                    decoding={idx === 0 ? 'sync' : 'async'}
                     width={600}
                     fit="contain"
                     className="h-full w-full bg-transparent flex items-center justify-center pointer-events-none"
                     imageClassName="transition-transform duration-500 ease-apple sm:group-hover:scale-105"
                   />
                 ) : (
-                  <div className="h-full w-full bg-slate-100/60 rounded-lg" />
+                  <div className="h-full w-full bg-[#f8f7f4] rounded-lg" />
                 )}
               </div>
             );
@@ -203,9 +203,9 @@ export function ProductCardCarousel({
           <ProductImage
             src={activeImage}
             alt={product.name}
-            loading={priority ? 'eager' : 'lazy'}
+            loading="eager"
             fetchPriority={priority ? 'high' : undefined}
-            decoding="async"
+            decoding="sync"
             width={600}
             fit="contain"
             className="h-full w-full bg-transparent flex items-center justify-center pointer-events-none"

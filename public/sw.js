@@ -1,4 +1,5 @@
-const CACHE_NAME = 'synergy-b2b-v34';
+const CACHE_NAME = 'synergy-b2b-v35';
+const IMAGE_CACHE_NAME = 'synergy-carpet-images-v1';
 const STATIC_ASSETS = [
   '/favicon.svg',
   '/manifest.json',
@@ -24,22 +25,24 @@ self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
-// Activate: clean up all old caches immediately
+// Activate: clean up old app-shell caches while preserving persistent carpet image cache
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
-        keys.filter((key) => key !== CACHE_NAME).map((key) => {
-          console.log('[SW] Deleting stale cache:', key);
-          return caches.delete(key);
-        })
+        keys
+          .filter((key) => key !== CACHE_NAME && key !== IMAGE_CACHE_NAME)
+          .map((key) => {
+            console.log('[SW] Deleting stale cache:', key);
+            return caches.delete(key);
+          })
       );
     })
   );
   self.clients.claim();
 });
 
-// Fetch: Network-First for navigation & app shell, bypass all /api/ routes
+// Fetch: Network-First for navigation & app shell, Cache-First for nomenclature carpet images
 self.addEventListener('fetch', (event) => {
   const { request } = event;
 
@@ -77,7 +80,27 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // CRITICAL: Bypass all API routes and static /uploads/ (served with immutable Nginx Cache-Control)
+  // Persistent Cache-First strategy for carpet catalog photos (/uploads/nomenclature/)
+  if (url.pathname.startsWith('/uploads/nomenclature/')) {
+    event.respondWith(
+      (async () => {
+        const cache = await caches.open(IMAGE_CACHE_NAME);
+        const cached = await cache.match(request);
+        if (cached) {
+          return cached;
+        }
+        const response = await fetch(request);
+        const ct = response.headers.get('content-type') || '';
+        if (response && response.status === 200 && ct.startsWith('image/')) {
+          cache.put(request, response.clone()).catch(() => {});
+        }
+        return response;
+      })()
+    );
+    return;
+  }
+
+  // CRITICAL: Bypass all API routes and CMS uploads
   if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/uploads/') || url.pathname.endsWith('.php')) {
     return;
   }

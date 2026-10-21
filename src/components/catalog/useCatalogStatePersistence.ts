@@ -138,7 +138,7 @@ export function useCatalogStatePersistence(options: UseCatalogStatePersistenceOp
     if (savedState?.lastViewedProductId && savedState?.visibleCount) {
       return Math.max(savedState.visibleCount, 24);
     }
-    return savedState?.visibleCount || 12;
+    return savedState?.visibleCount || 24;
   });
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'Ковры' | 'Дорожки'>(
     () => savedState?.selectedCategory || 'all',
@@ -182,7 +182,7 @@ export function useCatalogStatePersistence(options: UseCatalogStatePersistenceOp
 
   const [adminStockFilter, setAdminStockFilter] = useState<'all' | 'in_stock' | 'out_of_stock'>('all');
 
-  // Track initial mount so visibleCount is not reset to 12 upon restoring previous scroll position
+  // Track initial mount so visibleCount is not reset to 24 upon restoring previous scroll position
   const isInitialMount = useRef(true);
   const hasRestoredScrollRef = useRef(false);
 
@@ -214,8 +214,8 @@ export function useCatalogStatePersistence(options: UseCatalogStatePersistenceOp
       isInitialMount.current = false;
       return;
     }
-    // Reset to 12 only on subsequent user-initiated filter changes
-    setVisibleCount(12);
+    // Reset to 24 only on subsequent user-initiated filter changes
+    setVisibleCount(24);
   }, [
     selectedCategory,
     onlyInProduction,

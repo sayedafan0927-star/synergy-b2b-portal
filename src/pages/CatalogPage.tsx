@@ -18,6 +18,7 @@ import {
   type SortOption, type ViewMode,
 } from '@/components/catalog';
 import { tokenizeSearchQuery, matchesSearchTokens } from '@/lib/searchNormalization';
+import { preloadCatalogImages } from '@/lib/imagePreloader';
 
 export default function CatalogPage({
   onNavigate, initialCollection, initialCountry, initialSearch,
@@ -330,15 +331,15 @@ export default function CatalogPage({
   }, [filteredProducts, savedState?.lastViewedProductId, visibleCount, setVisibleCount]);
 
   useEffect(() => {
-    if (!loading && products.length > 0) {
-      attemptScrollRestoration(true);
-    }
+    if (!loading && products.length > 0) attemptScrollRestoration(true);
   }, [loading, products.length, attemptScrollRestoration]);
 
+  useEffect(() => {
+    if (filteredProducts.length > 0) preloadCatalogImages(filteredProducts, 24);
+  }, [filteredProducts]);
+
   const handleProductNavigate = (targetPage: PageId, targetProductId?: string) => {
-    if (targetPage === 'product') {
-      saveCatalogSnapshot(targetProductId);
-    }
+    if (targetPage === 'product') saveCatalogSnapshot(targetProductId);
     onNavigate(targetPage, targetProductId);
   };
 
@@ -351,10 +352,8 @@ export default function CatalogPage({
     const el = sentinelRef.current;
     if (!el) return;
     const obs = new IntersectionObserver(
-      entries => {
-        if (entries[0].isIntersecting) setVisibleCount(c => c + 12);
-      },
-      { rootMargin: '300px' },
+      entries => { if (entries[0].isIntersecting) setVisibleCount(c => c + 24); },
+      { rootMargin: '1400px' },
     );
     obs.observe(el);
     return () => obs.disconnect();
@@ -600,7 +599,7 @@ export default function CatalogPage({
                           onNavigate={handleProductNavigate}
                           selectedWarehouses={selectedWarehouses}
                           onlyInProduction={onlyInProduction}
-                          priority={idx < 6}
+                          priority={idx < 18}
                         />
                       ))}
                     </div>
@@ -608,7 +607,7 @@ export default function CatalogPage({
                   {hasMore && (
                     <div className="mt-8 flex flex-col items-center gap-3">
                       <div ref={sentinelRef} className="h-1" />
-                      <button type="button" onClick={() => setVisibleCount(c => c + 12)} className="btn-secondary cursor-pointer">
+                      <button type="button" onClick={() => setVisibleCount(c => c + 24)} className="btn-secondary cursor-pointer">
                         {t('common.show_more')} ({filteredProducts.length - visibleCount})
                       </button>
                     </div>
