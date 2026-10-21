@@ -192,7 +192,7 @@ export function ProductGallery({
                     : 'border-slate-200/80 opacity-60 hover:opacity-100 hover:border-slate-400'
                 }`}
               >
-                <ProductImage src={img} alt="" fit="contain" className="h-full w-full object-contain p-1" />
+                <ProductImage src={img} alt="" fit="contain" width={160} className="h-full w-full object-contain p-1" />
               </button>
             ))}
           </div>
@@ -210,6 +210,7 @@ export function ProductGallery({
                 alt={`${cleanTitle} — фото ${selectedImage + 1}`}
                 fit="contain"
                 loading="eager"
+                fetchPriority="high"
                 className="h-full w-full bg-transparent"
                 imageClassName="p-4 transition-transform duration-300 group-hover:scale-105"
                 onError={() => setFailedImages(prev => ({ ...prev, [selectedImage]: true }))}

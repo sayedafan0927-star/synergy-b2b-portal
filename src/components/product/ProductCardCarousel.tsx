@@ -15,6 +15,7 @@ interface ProductCardCarouselProps {
   isEffectiveAdmin: boolean;
   isOutOfStock: boolean;
   isShowroomMode: boolean;
+  priority?: boolean;
 }
 
 export function ProductCardCarousel({
@@ -29,6 +30,7 @@ export function ProductCardCarousel({
   isEffectiveAdmin,
   isOutOfStock,
   isShowroomMode,
+  priority = false,
 }: ProductCardCarouselProps) {
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
@@ -50,6 +52,7 @@ export function ProductCardCarousel({
     isSwiping.current = false;
     setIsDragging(true);
     setDragOffset(0);
+    setVisitedIndices(prev => (prev[1] ? prev : { ...prev, 1: true, [allImages.length - 1]: true }));
   }, [allImages.length]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
@@ -130,12 +133,20 @@ export function ProductCardCarousel({
   }, [product.id]);
 
   useEffect(() => {
-    setVisitedIndices(prev => (prev[currentImgIndex] ? prev : { ...prev, [currentImgIndex]: true }));
-  }, [currentImgIndex]);
+    const nextIdx = currentImgIndex === allImages.length - 1 ? 0 : currentImgIndex + 1;
+    setVisitedIndices(prev => (prev[currentImgIndex] && prev[nextIdx] ? prev : { ...prev, [currentImgIndex]: true, [nextIdx]: true }));
+  }, [currentImgIndex, allImages.length]);
+
+  const handlePointerEnter = useCallback(() => {
+    if (allImages.length > 1) {
+      setVisitedIndices(prev => (prev[1] ? prev : { ...prev, 1: true }));
+    }
+  }, [allImages.length]);
 
   return (
     <div 
       onClick={handleImageAreaClick}
+      onPointerEnter={handlePointerEnter}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
@@ -162,6 +173,7 @@ export function ProductCardCarousel({
               idx === currentImgIndex ||
               visitedIndices[idx] ||
               (isDragging && Math.abs(idx - currentImgIndex) <= 1);
+            const isFirstPriority = idx === 0 && priority;
             return (
               <div
                 key={idx}
@@ -171,7 +183,8 @@ export function ProductCardCarousel({
                   <ProductImage
                     src={img}
                     alt={`${product.name} — фото ${idx + 1}`}
-                    loading="lazy"
+                    loading={isFirstPriority ? 'eager' : 'lazy'}
+                    fetchPriority={isFirstPriority ? 'high' : undefined}
                     decoding="async"
                     width={600}
                     fit="contain"
@@ -190,7 +203,8 @@ export function ProductCardCarousel({
           <ProductImage
             src={activeImage}
             alt={product.name}
-            loading="lazy"
+            loading={priority ? 'eager' : 'lazy'}
+            fetchPriority={priority ? 'high' : undefined}
             decoding="async"
             width={600}
             fit="contain"

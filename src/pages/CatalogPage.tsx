@@ -578,13 +578,14 @@ export default function CatalogPage({
                     <div className={`grid grid-cols-2 md:grid-cols-3 ${
                       drawerOpen ? 'lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5' : 'lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6'
                     } gap-4 lg:gap-6`}>
-                      {visibleProducts.map(p => (
+                      {visibleProducts.map((p, idx) => (
                         <ProductCard
                           key={p.id}
                           product={p}
                           onNavigate={handleProductNavigate}
                           selectedWarehouses={selectedWarehouses}
                           onlyInProduction={onlyInProduction}
+                          priority={idx < 6}
                         />
                       ))}
                     </div>

@@ -172,7 +172,7 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
         min_price: rawMinPrice,
         max_price: rawMaxPrice,
         images: photos,
-        image_thumb: photos[0] || rawThumb,
+        image_thumb: rawThumb || photos[0],
         characteristics: raw.characteristics,
         variants: [...itemVariants],
       });
@@ -183,9 +183,11 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
         const currentPhotos = (existing.images || []).filter(p => !p.startsWith('/carpets/'));
         const combined = Array.from(new Set([...currentPhotos, ...rawPhotos]));
         existing.images = combined;
-        existing.image_thumb = combined[0];
+        if (!existing.image_thumb) {
+          existing.image_thumb = combined[0];
+        }
       }
-      if (!existing.image_thumb && raw.image_thumb && !raw.image_thumb.includes('unsplash.com') && !raw.image_thumb.startsWith('/carpets/')) {
+      if ((!existing.image_thumb || !existing.image_thumb.includes('thumb_')) && raw.image_thumb && !raw.image_thumb.includes('unsplash.com') && !raw.image_thumb.startsWith('/carpets/')) {
         existing.image_thumb = raw.image_thumb.replace(/^https?:\/\/(?:crm\.)?kilem-khan\.kz\/api\/sin\/public\/image\.php/i, 'https://erp.synergy-tech.kz/image.php');
       }
       if ((!existing.characteristics || existing.characteristics.length === 0) && raw.characteristics && raw.characteristics.length > 0) {

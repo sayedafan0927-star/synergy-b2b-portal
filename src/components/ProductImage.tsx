@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 interface ProductImageProps {
   src?: string | null;
@@ -8,6 +8,7 @@ interface ProductImageProps {
   fit?: 'cover' | 'contain';
   loading?: 'lazy' | 'eager';
   decoding?: 'async' | 'sync' | 'auto';
+  fetchPriority?: 'high' | 'low' | 'auto';
   width?: number;
   quality?: number;
   onLoad?: () => void;
@@ -60,57 +61,75 @@ export function CarpetPlaceholderIcon({ className = "w-full h-full", compact = f
   );
 }
 
-const MAX_CONCURRENT_IMAGE_LOADS = 6;
-let activeImageLoads = 0;
-const pendingQueue: Array<() => void> = [];
+const ERP_STATIC_BASE = 'https://erp.synergy-tech.kz/uploads/nomenclature/';
+const ERP_PHP_BASE = 'https://erp.synergy-tech.kz/image.php?f=';
 
-function acquireImageSlot(onGrant: () => void): () => void {
-  let released = false;
-  let granted = false;
-
-  const grant = () => {
-    if (released) return;
-    granted = true;
-    activeImageLoads++;
-    onGrant();
-  };
-
-  if (activeImageLoads < MAX_CONCURRENT_IMAGE_LOADS) {
-    grant();
-  } else {
-    pendingQueue.push(grant);
-  }
-
-  return () => {
-    if (released) return;
-    released = true;
-    if (granted) {
-      granted = false;
-      activeImageLoads = Math.max(0, activeImageLoads - 1);
-      while (pendingQueue.length > 0 && activeImageLoads < MAX_CONCURRENT_IMAGE_LOADS) {
-        const next = pendingQueue.shift();
-        if (next) next();
-      }
-    } else {
-      const idx = pendingQueue.indexOf(grant);
-      if (idx !== -1) pendingQueue.splice(idx, 1);
+/**
+ * Extracts raw filename from ERP image.php or /uploads/nomenclature/ URLs.
+ */
+function extractErpFileName(rawUrl: string): string | null {
+  const clean = rawUrl.trim();
+  const phpMatch = clean.match(/\/image\.php\?(?:[^#]*&)?f=([^&#]+)/i);
+  if (phpMatch && phpMatch[1]) {
+    try {
+      return decodeURIComponent(phpMatch[1]).replace(/^\/+/, '');
+    } catch {
+      return phpMatch[1].replace(/^\/+/, '');
     }
-  };
+  }
+  const staticMatch = clean.match(/\/uploads\/nomenclature\/([^?#]+)/i);
+  if (staticMatch && staticMatch[1]) {
+    try {
+      return decodeURIComponent(staticMatch[1]).replace(/^\/+/, '');
+    } catch {
+      return staticMatch[1].replace(/^\/+/, '');
+    }
+  }
+  return null;
 }
 
+/**
+ * Converts ERP image URLs to direct Nginx static delivery (/uploads/nomenclature/)
+ * and selects 600x800 `thumb_` (~110 KB) when width <= 800, or 1200x1600 full-res otherwise.
+ */
 export function getOptimizedImageUrl(
   src?: string | null,
-  _options: { width?: number; quality?: number; format?: 'auto' | 'webp' } = {}
+  options: { width?: number; quality?: number; format?: 'auto' | 'webp' } = {}
 ): string {
   if (!src) return '';
-  return src;
+  const fileName = extractErpFileName(src);
+  if (!fileName) return src;
+
+  const baseName = fileName.replace(/^thumb_/i, '');
+  const useThumb = Boolean(options.width && options.width <= 800) || /^thumb_/i.test(fileName);
+  const targetFile = useThumb ? `thumb_${baseName}` : baseName;
+  return `${ERP_STATIC_BASE}${targetFile}`;
 }
 
-function appendRetryParam(url: string, attempt: number): string {
-  if (attempt <= 0) return url;
-  const separator = url.includes('?') ? '&' : '?';
-  return `${url}${separator}r=${attempt}`;
+function buildFallbackCandidates(src: string, width?: number): string[] {
+  const fileName = extractErpFileName(src);
+  if (!fileName) {
+    return [src];
+  }
+  const baseName = fileName.replace(/^thumb_/i, '');
+  const preferThumb = Boolean(width && width <= 800) || /^thumb_/i.test(fileName);
+
+  const candidates: string[] = [];
+  if (preferThumb) {
+    candidates.push(`${ERP_STATIC_BASE}thumb_${baseName}`);
+    candidates.push(`${ERP_STATIC_BASE}${baseName}`);
+    candidates.push(`${ERP_PHP_BASE}thumb_${baseName}`);
+    candidates.push(`${ERP_PHP_BASE}${baseName}`);
+  } else {
+    candidates.push(`${ERP_STATIC_BASE}${baseName}`);
+    candidates.push(`${ERP_STATIC_BASE}thumb_${baseName}`);
+    candidates.push(`${ERP_PHP_BASE}${baseName}`);
+  }
+  return Array.from(new Set(candidates));
 }
+
+// Keep a fast memory set of already-loaded image URLs so re-mounting cards render without pulse flicker
+const loadedImageCache = new Set<string>();
 
 export default function ProductImage({
   src,
@@ -120,144 +139,64 @@ export default function ProductImage({
   fit = 'cover',
   loading = 'lazy',
   decoding = 'async',
+  fetchPriority,
   width,
-  quality,
   onLoad,
   onError,
 }: ProductImageProps) {
+  const candidates = React.useMemo(
+    () => (src && src.trim() ? buildFallbackCandidates(src, width) : []),
+    [src, width]
+  );
+  const primaryUrl = candidates[0] || '';
+
+  const [candidateIndex, setCandidateIndex] = useState(0);
   const [hasError, setHasError] = useState(false);
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [retryAttempt, setRetryAttempt] = useState(0);
-  const [isSlotGranted, setIsSlotGranted] = useState(() => !src || !src.includes('image.php'));
-  const releaseSlotRef = React.useRef<(() => void) | null>(null);
-  const retryTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  const containerRef = React.useRef<HTMLDivElement | null>(null);
+  const [isLoaded, setIsLoaded] = useState(() => Boolean(primaryUrl && loadedImageCache.has(primaryUrl)));
 
-  React.useEffect(() => {
+  useEffect(() => {
+    setCandidateIndex(0);
     setHasError(false);
-    setIsLoaded(false);
-    setRetryAttempt(0);
-    if (retryTimerRef.current) {
-      clearTimeout(retryTimerRef.current);
-      retryTimerRef.current = null;
-    }
-    if (releaseSlotRef.current) {
-      releaseSlotRef.current();
-      releaseSlotRef.current = null;
-    }
+    setIsLoaded(Boolean(primaryUrl && loadedImageCache.has(primaryUrl)));
+  }, [primaryUrl]);
 
-    if (!src || !src.trim()) {
-      setIsSlotGranted(false);
-      return;
-    }
-
-    // Static assets (not served via PHP-FPM image.php) do not need concurrency throttling
-    if (!src.includes('image.php')) {
-      setIsSlotGranted(true);
-      return;
-    }
-
-    setIsSlotGranted(false);
-    let observer: IntersectionObserver | null = null;
-    let cancelled = false;
-
-    const requestSlot = () => {
-      if (cancelled || releaseSlotRef.current) return;
-      releaseSlotRef.current = acquireImageSlot(() => {
-        if (!cancelled) {
-          setIsSlotGranted(true);
-        }
-      });
-    };
-
-    if (loading === 'eager' || typeof IntersectionObserver === 'undefined' || !containerRef.current) {
-      requestSlot();
-    } else {
-      observer = new IntersectionObserver(
-        (entries) => {
-          if (entries.some((e) => e.isIntersecting)) {
-            observer?.disconnect();
-            observer = null;
-            requestSlot();
-          }
-        },
-        { rootMargin: '250px 0px' }
-      );
-      observer.observe(containerRef.current);
-    }
-
-    return () => {
-      cancelled = true;
-      if (observer) {
-        observer.disconnect();
-      }
-      if (retryTimerRef.current) {
-        clearTimeout(retryTimerRef.current);
-        retryTimerRef.current = null;
-      }
-      if (releaseSlotRef.current) {
-        releaseSlotRef.current();
-        releaseSlotRef.current = null;
-      }
-    };
-  }, [src, loading]);
-
-  // Если фото нет или произошла фатальная ошибка после повторов — показываем стандартную UI-заглушку ковра с логотипом
-  if (!src || !src.trim() || hasError) {
+  // Если фото нет или произошла фатальная ошибка после всех кандидатов — показываем стандартную UI-заглушку ковра с логотипом
+  if (!src || !src.trim() || candidates.length === 0 || hasError) {
     return <CarpetPlaceholderIcon className={className} compact={Boolean(width && width <= 80)} />;
   }
 
-  const baseOptimizedSrc = getOptimizedImageUrl(src, { width, quality });
-  const finalSrc = appendRetryParam(baseOptimizedSrc, retryAttempt);
+  const activeUrl = candidates[candidateIndex] || primaryUrl;
   const fitClass = fit === 'contain' ? 'object-contain' : 'object-cover';
 
   return (
-    <div
-      ref={containerRef}
-      className={`relative overflow-hidden ${className.includes('bg-') ? '' : 'bg-slate-100'} ${className}`}
-    >
+    <div className={`relative overflow-hidden ${className.includes('bg-') ? '' : 'bg-slate-100'} ${className}`}>
       {!isLoaded && (
-        <div className="absolute inset-0 bg-slate-200 animate-pulse" />
+        <div className="absolute inset-0 bg-slate-200/70 animate-pulse" />
       )}
-      {isSlotGranted && (
-        <img
-          src={finalSrc}
-          alt={alt}
-          loading={loading}
-          decoding={decoding}
-          onLoad={() => {
-            if (releaseSlotRef.current) {
-              releaseSlotRef.current();
-              releaseSlotRef.current = null;
-            }
-            setIsLoaded(true);
-            onLoad?.();
-          }}
-          onError={() => {
-            if (releaseSlotRef.current) {
-              releaseSlotRef.current();
-              releaseSlotRef.current = null;
-            }
-            if (retryAttempt < 3) {
-              const nextAttempt = retryAttempt + 1;
-              const delayMs = 300 * nextAttempt + Math.floor(Math.random() * 250);
-              setIsSlotGranted(false);
-              retryTimerRef.current = setTimeout(() => {
-                setRetryAttempt(nextAttempt);
-                releaseSlotRef.current = acquireImageSlot(() => {
-                  setIsSlotGranted(true);
-                });
-              }, delayMs);
-            } else {
-              setHasError(true);
-              onError?.();
-            }
-          }}
-          className={`w-full h-full ${fitClass} transition-opacity duration-300 ${
-            isLoaded ? 'opacity-100' : 'opacity-0'
-          } ${imageClassName}`}
-        />
-      )}
+      <img
+        src={activeUrl}
+        alt={alt}
+        loading={loading}
+        decoding={decoding}
+        {...(fetchPriority ? { fetchPriority } : {})}
+        onLoad={() => {
+          loadedImageCache.add(activeUrl);
+          if (primaryUrl) loadedImageCache.add(primaryUrl);
+          setIsLoaded(true);
+          onLoad?.();
+        }}
+        onError={() => {
+          if (candidateIndex + 1 < candidates.length) {
+            setCandidateIndex(candidateIndex + 1);
+          } else {
+            setHasError(true);
+            onError?.();
+          }
+        }}
+        className={`w-full h-full ${fitClass} transition-opacity duration-200 ${
+          isLoaded ? 'opacity-100' : 'opacity-0'
+        } ${imageClassName}`}
+      />
     </div>
   );
 }

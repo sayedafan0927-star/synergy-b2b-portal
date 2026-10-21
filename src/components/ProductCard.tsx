@@ -24,6 +24,7 @@ interface ProductCardProps {
   onNavigate: (page: PageId, productId?: string) => void;
   selectedWarehouses?: Set<string> | string[];
   onlyInProduction?: boolean;
+  priority?: boolean;
 }
 
 function getMainWarehouseStock(variant: ProductVariant) {
@@ -64,7 +65,7 @@ export function formatProductTitle(product: { name: string; article?: string; co
   return isRunner ? `${prefix} ${base}` : base;
 }
 
-function ProductCard({ product, onNavigate, selectedWarehouses, onlyInProduction = false }: ProductCardProps) {
+function ProductCard({ product, onNavigate, selectedWarehouses, onlyInProduction = false, priority = false }: ProductCardProps) {
   const { user, profile, isAdmin, isImpersonating } = useAuth();
   const isEffectiveAdmin = isAdmin && !isImpersonating;
   const clientContext = isEffectiveAdmin ? true : profile;
@@ -281,6 +282,7 @@ function ProductCard({ product, onNavigate, selectedWarehouses, onlyInProduction
         isEffectiveAdmin={isEffectiveAdmin}
         isOutOfStock={isOutOfStock}
         isShowroomMode={isShowroomMode}
+        priority={priority}
       />
 
       <div className="flex-1 flex flex-col p-3 sm:p-4">
