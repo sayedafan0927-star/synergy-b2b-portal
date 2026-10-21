@@ -389,29 +389,28 @@ export function CartCheckoutForm({
         </div>
       )}
 
-      {/* ─── 3.5. Селектор режима оформления (скрывается для товаров со склада комиссионера) ─── */}
-      {isConsignmentOrder ? (
+      {/* ─── 3.5. Индикатор склада комиссионера и селектор режима оформления ЛМ/Админа ─── */}
+      {isConsignmentOrder && (
         <div className="rounded-xl border border-indigo-200 bg-indigo-50/70 px-3.5 py-2.5 text-xs text-indigo-950 space-y-1 shadow-2xs">
           <div className="flex items-center gap-1.5 font-bold text-indigo-900">
             <Boxes className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
             <span>Товар со склада комиссионера</span>
           </div>
           <p className="text-[11px] text-indigo-800 leading-tight">
-            Оформление напрямую со склада <strong>«{consignmentWarehouseName || 'Склад комиссионера'}»</strong>
-            {selectedClient?.name ? ` (${selectedClient.name})` : ''}. Выбор резерва не требуется.
+            Склад отгрузки: <strong>«{consignmentWarehouseName || 'Склад комиссионера'}»</strong>
+            {selectedClient?.name ? ` • Контрагент: ${selectedClient.name}` : ''}.
           </p>
         </div>
-      ) : (
-        isStaff && setCheckoutMode && onSelectClient && (
-          <ManagerOrderSelector
-            checkoutMode={checkoutMode || 'manager_self'}
-            setCheckoutMode={setCheckoutMode}
-            selectedClient={selectedClient || null}
-            onSelectClient={onSelectClient}
-            managerName={managerName}
-            isAdmin={isAdmin}
-          />
-        )
+      )}
+      {isStaff && setCheckoutMode && onSelectClient && (
+        <ManagerOrderSelector
+          checkoutMode={checkoutMode || 'manager_self'}
+          setCheckoutMode={setCheckoutMode}
+          selectedClient={selectedClient || null}
+          onSelectClient={onSelectClient}
+          managerName={managerName}
+          isAdmin={isAdmin}
+        />
       )}
 
       {/* ─── 4. Реквизиты и адрес доставки ─── */}

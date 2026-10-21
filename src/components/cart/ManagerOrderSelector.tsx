@@ -305,6 +305,10 @@ export function ManagerOrderSelector({
                     <span className="font-mono text-slate-700">тел: {selectedClient.phone || selectedClient.portal_login}</span>
                   )}
                 </div>
+                <div className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-200/80 text-[10px] font-semibold text-emerald-800">
+                  <UserCheck className="h-3 w-3 text-emerald-600 shrink-0" />
+                  <span>Оформляется под учёткой: {managerName || 'ЛМ / Менеджер'}</span>
+                </div>
               </div>
               <button
                 type="button"

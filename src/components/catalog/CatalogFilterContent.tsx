@@ -1,9 +1,11 @@
-import { useMemo } from 'react';
-import { Search, X } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Search, X, UserCheck, Check } from 'lucide-react';
 import { parseSizeDimensions } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
+import { useCart } from '@/contexts/CartContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useCurrency } from '@/contexts/CurrencyContext';
+import { fetchCounterpartiesFromErp, searchCounterpartiesSmart, isCounterpartyActive, type Counterparty } from '@/lib/erpApi';
 import type { FilterDrawerProps } from './types';
 import { FilterSection, CheckItem } from './FilterDrawer';
 
@@ -45,7 +47,32 @@ export function CatalogFilterContent({
   const { t } = useLanguage();
   const { currencyUnitLabel } = useCurrency();
   const { isAdmin, isImpersonating, profile } = useAuth();
+  const { targetClient, setTargetClient } = useCart();
   const isAdminView = Boolean(!isImpersonating && (isAdmin || profile?.role === 'admin'));
+  const canViewAllWarehouses = Boolean(!isImpersonating && (isAdmin || profile?.role === 'admin' || profile?.role === 'manager_lm'));
+  const roleShortLabel = profile?.role === 'manager_lm' ? 'ЛМ' : 'Админ';
+
+  const [cpSearch, setCpSearch] = useState('');
+  const [counterparties, setCounterparties] = useState<Counterparty[]>([]);
+
+  useEffect(() => {
+    if (!canViewAllWarehouses) return;
+    let active = true;
+    fetchCounterpartiesFromErp({ includeArchived: false })
+      .then(res => {
+        if (active && res?.success && Array.isArray(res.counterparties)) {
+          setCounterparties(res.counterparties.filter((c: any) => isCounterpartyActive(c)));
+        }
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [canViewAllWarehouses]);
+
+  const filteredCounterparties = useMemo(
+    () => searchCounterpartiesSmart(counterparties, cpSearch, 25),
+    [counterparties, cpSearch]
+  );
+
   const rugSizes = useMemo(
     () =>
       allSizes.filter(s => {
@@ -168,12 +195,95 @@ export function CatalogFilterContent({
           )}
         </FilterSection>
 
-        {/* 3. СКЛАД */}
-        <FilterSection title={t('catalog.filter_warehouse')} defaultOpen={true}>
-          {allWarehouses.map(w => (
-            <CheckItem key={w} label={w} checked={selectedWarehouses.has(w)} onToggle={() => toggleWarehouse(w)} />
-          ))}
-        </FilterSection>
+        {/* 2.5. ВЫБОР ЗА КОГО КЛАСТЬ В КОРЗИНУ (ТОЛЬКО ДЛЯ ЛМ И АДМИНА) */}
+        {canViewAllWarehouses && (
+          <FilterSection title={`ЗА КОГО В КОРЗИНУ (УЧЕТКА ${roleShortLabel})`} defaultOpen={true}>
+            {targetClient ? (
+              <div className="rounded-xl bg-emerald-50/80 border border-emerald-200 p-2.5 space-y-1.5 text-xs">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-bold text-emerald-950 truncate">{targetClient.name}</p>
+                    {targetClient.city && (
+                      <p className="text-[11px] text-emerald-700">г. {targetClient.city}</p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setTargetClient(null)}
+                    className="p-1 rounded text-emerald-700 hover:bg-emerald-100 cursor-pointer shrink-0"
+                    title="Сбросить клиента"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <div className="flex items-center gap-1.5 pt-1 border-t border-emerald-200/70 text-[10.5px] font-semibold text-emerald-800">
+                  <UserCheck className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                  <span>Под учёткой {roleShortLabel}: {profile?.full_name || roleShortLabel}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="relative">
+                  <Search className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-2.5 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={cpSearch}
+                    onChange={e => setCpSearch(e.target.value)}
+                    placeholder="Найти клиента / комиссионера..."
+                    className="input-field text-xs h-8 pl-8 pr-6 py-1"
+                  />
+                  {cpSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setCpSearch('')}
+                      className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+                <div className="max-h-36 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50/60 divide-y divide-slate-100">
+                  {filteredCounterparties.map(cp => (
+                    <button
+                      key={cp.id}
+                      type="button"
+                      onClick={() => {
+                        setTargetClient({
+                          id: cp.id,
+                          name: cp.name,
+                          city: cp.city,
+                          phone: cp.phone,
+                          portal_login: cp.portal_login,
+                          price_type: cp.price_type,
+                        });
+                        setCpSearch('');
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 text-xs hover:bg-brand-50 transition-colors flex items-center justify-between gap-2 cursor-pointer"
+                    >
+                      <span className="truncate font-medium text-slate-800">{cp.name}</span>
+                      {cp.city && <span className="text-[10px] text-slate-500 shrink-0">{cp.city}</span>}
+                    </button>
+                  ))}
+                  {filteredCounterparties.length === 0 && (
+                    <p className="p-2 text-[11px] text-slate-400 text-center">Клиенты не найдены</p>
+                  )}
+                </div>
+                <p className="text-[10.5px] text-slate-500 leading-tight">
+                  Выберите контрагента, чтобы положить товары в корзину за него с отметкой вашей учётной записи ({roleShortLabel}).
+                </p>
+              </div>
+            )}
+          </FilterSection>
+        )}
+
+        {/* 3. СКЛАД (Все склады видят только Админ и ЛМ; дилер видит только при наличии своего шоурума) */}
+        {(canViewAllWarehouses || allWarehouses.length > 1) && (
+          <FilterSection title={t('catalog.filter_warehouse')} defaultOpen={true}>
+            {allWarehouses.map(w => (
+              <CheckItem key={w} label={w} checked={selectedWarehouses.has(w)} onToggle={() => toggleWarehouse(w)} />
+            ))}
+          </FilterSection>
+        )}
 
         {/* 4. КЛАСТЕРЫ РАЗМЕРОВ */}
         <FilterSection title={t('catalog.filter_clusters') || 'КЛАСТЕРЫ РАЗМЕРОВ'} defaultOpen={true}>

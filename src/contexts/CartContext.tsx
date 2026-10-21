@@ -4,8 +4,19 @@ import { calcSqm } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 
+export interface CartTargetClient {
+  id: number | string;
+  name: string;
+  city?: string;
+  phone?: string;
+  portal_login?: string;
+  price_type?: string;
+}
+
 interface CartContextValue {
   items: CartItem[];
+  targetClient: CartTargetClient | null;
+  setTargetClient: (client: CartTargetClient | null) => void;
   addItem: (item: Omit<CartItem, 'quantity'>, qty?: number) => void;
   removeItem: (productId: string, size: string, warehouse: string) => void;
   updateQuantity: (productId: string, size: string, warehouse: string, qty: number) => void;
@@ -45,6 +56,15 @@ function saveCart(storageKey: string, items: CartItem[]) {
   }
 }
 
+function loadTargetClient(key: string): CartTargetClient | null {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
 function itemKey(i: Pick<CartItem, 'productId' | 'size' | 'warehouse'>) {
   return `${i.productId}::${i.size}::${i.warehouse}`;
 }
@@ -58,13 +78,24 @@ export function CartProvider({ children }: { children: ReactNode }) {
     : String(profile?.partner_id || profile?.id || user?.id || 'guest');
 
   const storageKey = `synergy-cart:${effectiveUserId}`;
+  const targetClientKey = `synergy-cart-target-client:${effectiveUserId}`;
 
   const [items, setItems] = useState<CartItem[]>(() => loadCart(storageKey));
+  const [targetClient, setTargetClientState] = useState<CartTargetClient | null>(() => loadTargetClient(targetClientKey));
+
+  const setTargetClient = useCallback((client: CartTargetClient | null) => {
+    setTargetClientState(client);
+    try {
+      if (client) localStorage.setItem(targetClientKey, JSON.stringify(client));
+      else localStorage.removeItem(targetClientKey);
+    } catch {}
+  }, [targetClientKey]);
 
   // Подгрузка корзины при смене пользователя или переключении имперсонации
   useEffect(() => {
     setItems(loadCart(storageKey));
-  }, [storageKey]);
+    setTargetClientState(loadTargetClient(targetClientKey));
+  }, [storageKey, targetClientKey]);
 
   // Межвкладочная синхронизация корзины в реальном времени (Multi-Tab Sync)
   useEffect(() => {
@@ -233,7 +264,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const totalSqm = items.reduce((sum, i) => sum + calcSqm(i.size, i.quantity), 0);
 
   return (
-    <CartContext.Provider value={{ items, addItem, removeItem, updateQuantity, syncItemPrices, clearCart, totalItems, totalPrice, totalSqm }}>
+    <CartContext.Provider value={{ items, targetClient, setTargetClient, addItem, removeItem, updateQuantity, syncItemPrices, clearCart, totalItems, totalPrice, totalSqm }}>
       {children}
     </CartContext.Provider>
   );

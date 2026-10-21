@@ -70,9 +70,14 @@ export function isWarehouseVisibleForClient(
   warehouse: { warehouse_id?: number; warehouse_name?: string; city?: string; is_hub?: boolean },
   clientProfile?: Partial<Profile> | null
 ): boolean {
-  // Если профиль не передан или роль не 'client' — считаем доступным (для админа/менеджера)
-  if (!clientProfile || (clientProfile.role && clientProfile.role !== 'client')) {
+  // Только Админ и Логист-Менеджер (ЛМ) видят абсолютно все склады (включая всех комиссионеров)
+  if (clientProfile && (clientProfile.role === 'admin' || clientProfile.role === 'manager_lm')) {
     return true;
+  }
+
+  // Для гостя или РМ без привязки к шоуруму — виден только Основной Склад Астана
+  if (!clientProfile || (clientProfile.role && clientProfile.role !== 'client')) {
+    return isCentralWarehouse(warehouse);
   }
 
   const clientId = clientProfile.partner_id || clientProfile.id;
@@ -125,8 +130,8 @@ export function filterWarehousesForClient(
     return [];
   }
 
-  // Если это не клиент (например, админ без имперсонации) — возвращаем все склады с ненулевым остатком
-  if (clientProfile && clientProfile.role && clientProfile.role !== 'client') {
+  // Только Админ и ЛМ видят абсолютно все склады с ненулевым остатком
+  if (clientProfile && (clientProfile.role === 'admin' || clientProfile.role === 'manager_lm')) {
     return warehouses.filter(w => Number(w.stock) > 0);
   }
 

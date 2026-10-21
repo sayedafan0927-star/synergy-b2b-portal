@@ -25,6 +25,27 @@ const CYRILLIC_TO_LATIN_HOMOGLYPHS: Record<string, string> = {
   'ё': 'e',
 };
 
+const CYRILLIC_TO_LATIN_PHONETIC: Record<string, string> = {
+  'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'e',
+  'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm',
+  'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u',
+  'ф': 'f', 'х': 'kh', 'ц': 'ts', 'ч': 'ch', 'ш': 'sh', 'щ': 'shch',
+  'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya',
+};
+
+/**
+ * Transliterates Cyrillic text into phonetic Latin (e.g. 'шанти' -> 'shanti', 'флора' -> 'flora').
+ */
+export function transliterateCyrillicToLatin(str: string): string {
+  if (!str) return '';
+  let out = '';
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i].toLowerCase();
+    out += CYRILLIC_TO_LATIN_PHONETIC[ch] !== undefined ? CYRILLIC_TO_LATIN_PHONETIC[ch] : ch;
+  }
+  return out;
+}
+
 /**
  * Normalizes Cyrillic homoglyphs to Latin canonical characters.
  */
@@ -52,18 +73,19 @@ export function normalizeDimensions(str: string): string {
 }
 
 /**
- * Creates a canonical, searchable string where homoglyphs, dimensions, and symbols
- * are harmonized for maximum search recall.
+ * Creates a canonical, searchable string where homoglyphs, phonetic transliteration,
+ * dimensions, and symbols are harmonized for maximum search recall.
  */
 export function toCanonicalSearchString(str: string): string {
   if (!str) return '';
   const lower = str.toLowerCase();
   const withNormDims = normalizeDimensions(lower);
   const withNormHomoglyphs = normalizeHomoglyphs(withNormDims);
-  
+  const withPhonetic = transliterateCyrillicToLatin(withNormDims);
+
   // Also keep alphanumeric collapsed version for articles (e.g. 'a-102' -> 'a102')
   const collapsedPunctuation = withNormHomoglyphs.replace(/[-_/\s]+/g, ' ');
-  return `${withNormDims} ${withNormHomoglyphs} ${collapsedPunctuation}`.trim();
+  return `${withNormDims} ${withNormHomoglyphs} ${withPhonetic} ${collapsedPunctuation}`.trim();
 }
 
 /**
@@ -74,26 +96,39 @@ export function tokenizeSearchQuery(query: string): string[] {
   const clean = normalizeDimensions(query.trim().toLowerCase());
   return clean
     .split(/\s+/)
-    .map(tok => normalizeHomoglyphs(tok))
     .filter(Boolean);
 }
 
 /**
  * High-speed token matching: verifies that all tokens from the user query
- * match somewhere within the searchable canonical text.
+ * match somewhere within the searchable canonical text (via direct, homoglyph, or phonetic match).
  */
 export function matchesSearchTokens(searchableText: string, tokens: string[]): boolean {
   if (!tokens || tokens.length === 0) return true;
   if (!searchableText) return false;
 
   const canonicalTarget = toCanonicalSearchString(searchableText);
-  return tokens.every(token => {
-    // Direct match or homoglyph match
-    if (canonicalTarget.includes(token)) return true;
-    
-    // Alphanumeric collapsed match (e.g. search 'a102' against 'a-102')
-    const cleanToken = token.replace(/[-_\s]/g, '');
-    if (cleanToken.length > 2 && canonicalTarget.replace(/[-_\s]/g, '').includes(cleanToken)) {
+  const collapsedTarget = canonicalTarget.replace(/[-_\s]/g, '');
+
+  return tokens.every(rawToken => {
+    const token = rawToken.toLowerCase();
+    const homoglyphToken = normalizeHomoglyphs(token);
+    const phoneticToken = transliterateCyrillicToLatin(token);
+
+    if (
+      canonicalTarget.includes(token) ||
+      canonicalTarget.includes(homoglyphToken) ||
+      (phoneticToken.length >= 2 && canonicalTarget.includes(phoneticToken))
+    ) {
+      return true;
+    }
+
+    const cleanHomoglyph = homoglyphToken.replace(/[-_\s]/g, '');
+    if (cleanHomoglyph.length > 2 && collapsedTarget.includes(cleanHomoglyph)) {
+      return true;
+    }
+    const cleanPhonetic = phoneticToken.replace(/[-_\s]/g, '');
+    if (cleanPhonetic.length > 2 && collapsedTarget.includes(cleanPhonetic)) {
       return true;
     }
     return false;

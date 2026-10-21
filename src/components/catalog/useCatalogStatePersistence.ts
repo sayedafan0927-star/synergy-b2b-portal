@@ -186,6 +186,29 @@ export function useCatalogStatePersistence(options: UseCatalogStatePersistenceOp
   const isInitialMount = useRef(true);
   const hasRestoredScrollRef = useRef(false);
 
+  // Sync dynamic prop changes when user searches or navigates from Header/CommandPalette while already on CatalogPage
+  useEffect(() => {
+    if (initialSearch !== undefined) {
+      setSearchQuery(initialSearch);
+      setSelectedCollections(new Set());
+      setSelectedCountries(new Set());
+      clearCatalogState();
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    } else if (initialCollection !== undefined) {
+      setSelectedCollections(new Set([initialCollection]));
+      setSearchQuery('');
+      setSelectedCountries(new Set());
+      clearCatalogState();
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    } else if (initialCountry !== undefined) {
+      setSelectedCountries(new Set([initialCountry]));
+      setSearchQuery('');
+      setSelectedCollections(new Set());
+      clearCatalogState();
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    }
+  }, [initialSearch, initialCollection, initialCountry]);
+
   useEffect(() => {
     if (isInitialMount.current) {
       isInitialMount.current = false;
@@ -330,11 +353,16 @@ export function useCatalogStatePersistence(options: UseCatalogStatePersistenceOp
 
   const attemptScrollRestoration = useCallback((isReady: boolean) => {
     if (!isReady || hasRestoredScrollRef.current) return;
-    if (savedState?.lastViewedProductId || (savedState?.scrollY && savedState.scrollY > 0)) {
+    if (initialSearch || initialCollection || initialCountry) {
+      hasRestoredScrollRef.current = true;
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      return;
+    }
+    if (savedState?.lastViewedProductId) {
       hasRestoredScrollRef.current = true;
       restoreCatalogScroll(savedState.lastViewedProductId, savedState.scrollY);
     }
-  }, [savedState]);
+  }, [savedState, initialSearch, initialCollection, initialCountry]);
 
   return {
     viewMode,
@@ -374,7 +402,7 @@ export function useCatalogStatePersistence(options: UseCatalogStatePersistenceOp
     resetFilters,
     saveCatalogSnapshot,
     attemptScrollRestoration,
-    hasSavedState: Boolean(savedState),
+    hasSavedState: Boolean(savedState?.lastViewedProductId),
     savedState,
   };
 }

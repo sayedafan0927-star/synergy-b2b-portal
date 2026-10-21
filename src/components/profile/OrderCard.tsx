@@ -96,6 +96,14 @@ export function OrderCard({
         </div>
       )}
 
+      {/* Отметка об оформлении под учёткой ЛМ / менеджера */}
+      {order.notes && /\[(ОФОРМЛЕНО ПОД УЧЕТКОЙ|ОФОРМЛЕНО МЕНЕДЖЕРОМ|ВНУТРЕННИЙ ЗАКАЗ)[^\]]*\]/i.test(order.notes) && (
+        <div className="mb-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-50 border border-emerald-200 text-[11px] font-semibold text-emerald-900">
+          <User className="h-3 w-3 text-emerald-600 shrink-0" />
+          <span>{order.notes.match(/\[(ОФОРМЛЕНО ПОД УЧЕТКОЙ|ОФОРМЛЕНО МЕНЕДЖЕРОМ|ВНУТРЕННИЙ ЗАКАЗ)[^\]]*\]/i)?.[0]?.replace(/^\[|\]$/g, '')}</span>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
         <div>
           <p className="text-xs text-slate-400 mb-0.5">Кол-во</p>

@@ -44,7 +44,7 @@ function extractCounterpartyPhone(client: any): string {
 export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, productId?: string) => void }) {
   const { currency } = useCurrency();
   const { t } = useLanguage();
-  const { items, removeItem, updateQuantity, syncItemPrices, clearCart, totalItems, totalPrice, totalSqm } = useCart();
+  const { items, removeItem, updateQuantity, syncItemPrices, clearCart, totalItems, totalPrice, totalSqm, targetClient, setTargetClient } = useCart();
   const { user, profile, isImpersonating, impersonatedProfile, isAccountant } = useAuth();
   const { products } = useProducts();
   const { info: toastInfo } = useToast();
@@ -68,10 +68,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
   const [lastSubmittedOrder, setLastSubmittedOrder] = useState<{ docNumber: string; title: string } | null>(null);
 
   const orderStreams = useMemo(() => buildCartOrderStreams(items, isConsignmentWarehouseItem), [items]);
-  const activeStream = useMemo(
-    () => orderStreams.find(s => s.id === activeStreamId) || orderStreams[0] || null,
-    [orderStreams, activeStreamId]
-  );
+  const activeStream = useMemo(() => orderStreams.find(s => s.id === activeStreamId) || orderStreams[0] || null, [orderStreams, activeStreamId]);
   const activeItems = activeStream ? activeStream.items : items;
   const activeTotalItems = activeStream ? activeStream.totalQty : totalItems;
   const activeTotalSqm = activeStream ? activeStream.totalSqm : totalSqm;
@@ -79,20 +76,20 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
 
   const effectiveProfile = isImpersonating && impersonatedProfile ? impersonatedProfile : profile;
   const isStaff = !isImpersonating && (profile?.role === 'admin' || profile?.role === 'manager_rm' || profile?.role === 'manager_lm');
-  const [checkoutMode, setCheckoutMode] = useState<'manager_self' | 'dealer_client'>('manager_self');
-  const [selectedClient, setSelectedClient] = useState<any | null>(null);
+  const [checkoutMode, setCheckoutMode] = useState<'manager_self' | 'dealer_client'>(() => (targetClient ? 'dealer_client' : 'manager_self'));
+  const [selectedClient, setSelectedClient] = useState<any | null>(() => targetClient || null);
 
   const consignmentItem = useMemo(() => activeItems.find(it => isConsignmentWarehouseItem(it)), [activeItems]);
   const isConsignmentOrder = Boolean(consignmentItem);
   const consignmentWarehouseName = consignmentItem?.warehouse || '';
   const wasConsignmentRef = useRef(false);
 
-  const { getVariantPrice, getPricePerSqm } = useUserPricing(
-    selectedClient?.price_type || (debtReport as any)?.client?.price_type
-  );
+  const { getVariantPrice, getPricePerSqm } = useUserPricing(selectedClient?.price_type || (debtReport as any)?.client?.price_type);
 
-  const [clientName, setClientName] = useState(() => effectiveProfile?.full_name ?? '');
+  const [clientName, setClientName] = useState(() => targetClient?.name || effectiveProfile?.full_name || '');
   const [clientPhone, setClientPhone] = useState(() => {
+    const targetPhone = extractCounterpartyPhone(targetClient);
+    if (targetPhone) return targetPhone;
     if (effectiveProfile?.phone && isValidPhone(effectiveProfile.phone)) return formatPhone(effectiveProfile.phone);
     if (typeof window !== 'undefined' && !isStaff) {
       try {
@@ -103,16 +100,24 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
     return user?.phone && isValidPhone(user.phone) ? formatPhone(user.phone) : DEFAULT_CHECKOUT_PHONE;
   });
   const [clientCompany, setClientCompany] = useState(() =>
-    isStaff && checkoutMode === 'manager_self' ? 'Synergy Group (Внутренний заказ)' : (effectiveProfile?.company_name ?? '')
+    targetClient?.name ? targetClient.name : (isStaff && checkoutMode === 'manager_self' ? 'Synergy Group (Внутренний заказ)' : (effectiveProfile?.company_name ?? ''))
   );
-  const [selectedCity, setSelectedCity] = useState(CITIES[0]);
+  const [selectedCity, setSelectedCity] = useState(() => {
+    if (targetClient?.city) {
+      const matched = CITIES.find(c => c.toLowerCase() === targetClient.city!.toLowerCase());
+      if (matched) return matched;
+    }
+    return CITIES[0];
+  });
   const [orderComment, setOrderComment] = useState('');
 
   // Выбор клиента для менеджера: строго затягиваем телефон и реквизиты самого контрагента (не РМ/ЛМ!)
   const handleSelectClient = useCallback((client: any | null, modeOverride?: 'manager_self' | 'dealer_client') => {
-    const activeMode = modeOverride ?? checkoutMode;
+    const activeMode = modeOverride ?? (client ? 'dealer_client' : checkoutMode);
     setSelectedClient(client);
+    setTargetClient(client ? { id: client.id, name: client.name, phone: client.phone || client.portal_login, city: client.city, price_type: client.price_type } : null);
     if (client) {
+      setCheckoutMode('dealer_client');
       setClientName(client.name || '');
       setClientCompany(client.name || '');
       setClientPhone(extractCounterpartyPhone(client));
@@ -121,49 +126,52 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
         if (matchedCity) setSelectedCity(matchedCity);
       }
     } else if (activeMode === 'dealer_client') {
-      setClientName('');
-      setClientCompany('');
-      setClientPhone('');
-      setDebtReport(null);
+      setClientName(''); setClientCompany(''); setClientPhone(''); setDebtReport(null);
     } else {
       setClientName(effectiveProfile?.full_name || 'Менеджер Synergy');
       setClientCompany('Synergy Group (Внутренний заказ)');
       setClientPhone(effectiveProfile?.phone && isValidPhone(effectiveProfile.phone) ? formatPhone(effectiveProfile.phone) : DEFAULT_CHECKOUT_PHONE);
       setDebtReport(null);
     }
-  }, [effectiveProfile, checkoutMode]);
+  }, [effectiveProfile, checkoutMode, setTargetClient]);
+
+  useEffect(() => {
+    if (isStaff && targetClient && (!selectedClient || String(selectedClient.id) !== String(targetClient.id))) {
+      handleSelectClient(targetClient, 'dealer_client');
+    }
+  }, [isStaff, targetClient, selectedClient, handleSelectClient]);
 
   const handleSetCheckoutMode = useCallback((mode: 'manager_self' | 'dealer_client') => {
     setCheckoutMode(mode);
     if (mode === 'dealer_client' && !selectedClient) {
-      setClientName('');
-      setClientCompany('');
-      setClientPhone('');
-      setDebtReport(null);
+      setClientName(''); setClientCompany(''); setClientPhone(''); setDebtReport(null);
     } else if (mode === 'manager_self') {
       setSelectedClient(null);
+      setTargetClient(null);
       setClientName(effectiveProfile?.full_name || 'Менеджер Synergy');
       setClientCompany('Synergy Group (Внутренний заказ)');
       setClientPhone(effectiveProfile?.phone && isValidPhone(effectiveProfile.phone) ? formatPhone(effectiveProfile.phone) : DEFAULT_CHECKOUT_PHONE);
       setDebtReport(null);
     }
-  }, [selectedClient, effectiveProfile]);
+  }, [selectedClient, effectiveProfile, setTargetClient]);
 
-  // Если выбран поток склада комиссионера — автоматически подтягиваем контрагента этого склада; при переключении на хаб/предзаказ сбрасываем
+  // Если выбран поток склада комиссионера и клиент ещё не выбран вручную — автоматически подтягиваем владельца склада комиссионера
   useEffect(() => {
     if (!isConsignmentOrder || !consignmentItem) {
-      if (wasConsignmentRef.current) {
+      if (wasConsignmentRef.current && !targetClient) {
         wasConsignmentRef.current = false;
         handleSelectClient(null, checkoutMode);
       }
       return;
     }
     wasConsignmentRef.current = true;
+    if (targetClient) return;
     let active = true;
     resolveConsignmentWarehouseOwner((consignmentItem as any)?.warehouse_id, consignmentItem.warehouse).then(owner => {
       if (!active) return;
       if (owner) {
         setSelectedClient(owner);
+        setCheckoutMode('dealer_client');
         setClientName(owner.name || consignmentWarehouseName);
         setClientCompany(owner.name || consignmentWarehouseName);
         const ownerPhone = extractCounterpartyPhone(owner);
@@ -178,7 +186,7 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
       }
     });
     return () => { active = false; };
-  }, [isConsignmentOrder, consignmentItem?.warehouse, (consignmentItem as any)?.warehouse_id, consignmentWarehouseName, handleSelectClient, checkoutMode]);
+  }, [isConsignmentOrder, consignmentItem?.warehouse, (consignmentItem as any)?.warehouse_id, consignmentWarehouseName, handleSelectClient, checkoutMode, targetClient]);
 
   // Автоматическая подстановка данных профиля (строго только для самого клиента или режима "На себя", без перезаписи телефона контрагента!)
   useEffect(() => {
@@ -379,12 +387,13 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
       ? undefined
       : (selectedClient?.id || (effectiveProfile?.partner_id ? Number(effectiveProfile.partner_id) || effectiveProfile.partner_id : undefined));
 
+    const roleLabel = profile?.role === 'manager_lm' ? 'ЛМ' : profile?.role === 'admin' ? 'АДМИН' : 'РМ';
     const whSummaryTag = hasMultipleWarehouses
       ? ` [МУЛЬТИСКЛАД: ${Array.from(warehousesInCart.entries()).map(([w, d]) => `${w} (${d.count} шт, ${d.totalAmount.toFixed(0)} у.е.)`).join(', ')}]`
       : '';
     const managerTag = isManagerSelfOrder
-      ? ` [ВНУТРЕННИЙ ЗАКАЗ: ${profile?.full_name || 'Менеджер'} - Переброска на клиента в ERP]`
-      : (selectedClient ? ` [ОФОРМЛЕНО МЕНЕДЖЕРОМ: ${profile?.full_name || 'РМ'} ДЛЯ ${selectedClient.name} (ID: ${selectedClient.id})]` : '');
+      ? ` [ВНУТРЕННИЙ ЗАКАЗ ПОД УЧЕТКОЙ ${roleLabel}: ${profile?.full_name || 'Менеджер'} - Переброска на клиента в ERP]`
+      : (isStaff && selectedClient ? ` [ОФОРМЛЕНО ПОД УЧЕТКОЙ ${roleLabel}: ${profile?.full_name || roleLabel} ЗА КЛИЕНТА: ${selectedClient.name} (ID: ${selectedClient.id})]` : '');
     const fullComment = `${orderComment.trim()}${whSummaryTag}${managerTag}${
       requiresApproval ? ' [ТРЕБУЕТСЯ АППРУВ В WHATSAPP: ' + (isBlocked ? 'Стоп-лист' : exceedsLimit ? 'Превышение кредитного лимита' : 'Просроченная задолженность') + ']' : ''
     }`;
@@ -393,46 +402,28 @@ export default function CartPage({ onNavigate }: { onNavigate: (page: PageId, pr
     const hasPreorderItems = activeItems.some(it => Boolean(it.is_preorder || String(it.warehouse || '').includes('Предзаказ')));
 
     const orderPayload = {
-      user_id: effectiveProfile?.id,
-      client_id: clientId,
-      partner_id: clientId,
-      warehouse_id: effectiveWarehouseId,
-      currency: currency || 'USD',
+      user_id: effectiveProfile?.id, client_id: clientId, partner_id: clientId,
+      warehouse_id: effectiveWarehouseId, currency: currency || 'USD',
       is_preorder: hasPreorderItems ? true : undefined,
       buyer: { name: clientCompany.trim() || clientName.trim(), phone: clientPhone.trim() },
-      client_name: clientName.trim(),
-      client_phone: clientPhone.trim(),
-      client_company: clientCompany.trim(),
-      city: selectedCity,
-      comment: fullComment,
-      is_manager_order: isManagerSelfOrder,
-      requires_approval: requiresApproval,
-      is_held: requiresApproval,
-      hold_wms: requiresApproval,
+      client_name: clientName.trim(), client_phone: clientPhone.trim(), client_company: clientCompany.trim(),
+      city: selectedCity, comment: fullComment, is_manager_order: isManagerSelfOrder,
+      requires_approval: requiresApproval, is_held: requiresApproval, hold_wms: requiresApproval,
       status: requiresApproval ? 'waiting_approval' : 'pending',
       items: activeItems.map(item => {
         const itemIsPreorder = Boolean(item.is_preorder || String(item.warehouse || '').includes('Предзаказ'));
         return {
-          item_id: item.item_id,
-          productId: item.productId,
-          size: item.size,
-          sku: item.sku,
-          warehouse: item.warehouse || 'Основной Склад Астана',
-          warehouse_id: (item as any).warehouse_id || effectiveWarehouseId,
-          price: item.price,
-          price_per_sqm: item.price_per_sqm,
-          area_sqm: item.area_sqm,
-          quantity: item.quantity,
-          qty: item.quantity,
-          is_preorder: itemIsPreorder ? true : undefined,
+          item_id: item.item_id, productId: item.productId, size: item.size, sku: item.sku,
+          warehouse: item.warehouse || 'Основной Склад Астана', warehouse_id: (item as any).warehouse_id || effectiveWarehouseId,
+          price: item.price, price_per_sqm: item.price_per_sqm, area_sqm: item.area_sqm,
+          quantity: item.quantity, qty: item.quantity, is_preorder: itemIsPreorder ? true : undefined,
         };
       }),
     };
 
     if (hasDepletedItems) {
       setSubmitError('В корзине есть закончившиеся на складе позиции. Пожалуйста, удалите их для продолжения.');
-      setSubmitting(false);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      setSubmitting(false); window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
 

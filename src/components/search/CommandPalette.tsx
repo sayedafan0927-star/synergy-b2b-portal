@@ -1,11 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import {
-  Search,
-  X,
-  ArrowRight,
-  PackageOpen,
-  Sparkles,
-} from 'lucide-react';
+import { Search, X, ArrowRight, PackageOpen, Clock, Trash2 } from 'lucide-react';
 import { Portal } from '@/components/common/Portal';
 import { useProducts } from '@/hooks/useProductData';
 import { useShowroomMode } from '@/contexts/ShowroomModeContext';
@@ -14,7 +8,7 @@ import { useCurrency } from '@/contexts/CurrencyContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useCart } from '@/contexts/CartContext';
 import { useToast } from '@/contexts/ToastContext';
-import { tokenizeSearchQuery, matchesSearchTokens } from '@/lib/searchNormalization';
+import { tokenizeSearchQuery, matchesSearchTokens, transliterateCyrillicToLatin } from '@/lib/searchNormalization';
 import { fetchSingleProductFromErp } from '@/lib/erpApi';
 import { CommandPaletteItem } from './CommandPaletteItem';
 import type { PageId, Product, ProductVariant } from '@/types';
@@ -25,23 +19,31 @@ export interface CommandPaletteProps {
   onNavigate: (page: PageId, productId?: string) => void;
 }
 
-const POPULAR_SEARCH_SUGGESTIONS = [
-  'FLORA',
-  'SILK ROAD',
-  'VINTAGE',
-  'SHAGGY',
-  '2x3',
-  '1.6x2.3',
-];
+const SEARCH_HISTORY_KEY = 'synergy:search_history_v1';
+const MAX_SEARCH_HISTORY = 10;
+
+function readSearchHistory(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(SEARCH_HISTORY_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter(x => typeof x === 'string' && x.trim().length > 0).slice(0, MAX_SEARCH_HISTORY) : [];
+  } catch { return []; }
+}
+
+function writeSearchHistory(list: string[]): void {
+  if (typeof window === 'undefined') return;
+  try { localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(list.slice(0, MAX_SEARCH_HISTORY))); } catch {}
+}
 
 export function CommandPalette({ isOpen, onClose, onNavigate }: CommandPaletteProps) {
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [addedVariantSku, setAddedVariantSku] = useState<string | null>(null);
+  const [searchHistory, setSearchHistory] = useState<string[]>(() => readSearchHistory());
 
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  const isInternalInteractionRef = useRef(false);
 
   const { products } = useProducts();
   const { isShowroomMode } = useShowroomMode();
@@ -51,22 +53,41 @@ export function CommandPalette({ isOpen, onClose, onNavigate }: CommandPalettePr
   const { addItem } = useCart();
   const { success: toastSuccess } = useToast();
 
-  // Lock body scroll while modal is active to prevent mobile layout shifting
+  const recordSearchQuery = useCallback((rawTerm: string) => {
+    const term = rawTerm.trim();
+    if (!term) return;
+    setSearchHistory(prev => {
+      const next = [term, ...prev.filter(item => item.toLowerCase() !== term.toLowerCase())].slice(0, MAX_SEARCH_HISTORY);
+      writeSearchHistory(next);
+      return next;
+    });
+  }, []);
+
+  const removeHistoryItem = useCallback((termToRemove: string) => {
+    setSearchHistory(prev => {
+      const next = prev.filter(item => item !== termToRemove);
+      writeSearchHistory(next);
+      return next;
+    });
+  }, []);
+
+  const clearHistory = useCallback(() => {
+    setSearchHistory([]);
+    writeSearchHistory([]);
+  }, []);
+
   useEffect(() => {
     if (!isOpen) return;
-
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-
-    return () => {
-      document.body.style.overflow = originalOverflow;
-    };
+    return () => { document.body.style.overflow = originalOverflow; };
   }, [isOpen]);
 
   useEffect(() => {
     if (isOpen) {
       setQuery('');
       setSelectedIndex(0);
+      setSearchHistory(readSearchHistory());
       const timer = setTimeout(() => inputRef.current?.focus(), 50);
       return () => clearTimeout(timer);
     }
@@ -74,52 +95,53 @@ export function CommandPalette({ isOpen, onClose, onNavigate }: CommandPalettePr
 
   useEffect(() => {
     if (!isOpen) return;
-
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onClose();
-      }
+      if (e.key === 'Escape') { e.preventDefault(); onClose(); }
     };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
   const matchedProducts = useMemo(() => {
     if (!query.trim()) return [];
-
     const tokens = tokenizeSearchQuery(query);
     const results: Product[] = [];
-
     for (const p of products) {
       const searchable = `${p.name} ${p.collection} ${p.manufacturer || ''} ${p.country || ''} ${p.article || ''} ${p.color || ''} ${(p.variants || [])
         .map(v => `${v.size} ${v.article || ''} ${v.sku || ''} ${v.barcode || ''} ${v.code || ''}`)
         .join(' ')}`;
-
       if (matchesSearchTokens(searchable, tokens)) {
         results.push(p);
         if (results.length >= 10) break;
       }
     }
-
     return results;
   }, [query, products]);
 
-  useEffect(() => {
-    setSelectedIndex(0);
-  }, [query]);
+  useEffect(() => { setSelectedIndex(0); }, [query]);
+
+  const navigateAndScrollTop = useCallback((page: PageId, param?: string) => {
+    onClose();
+    onNavigate(page, param);
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+      requestAnimationFrame(() => window.scrollTo({ top: 0, left: 0, behavior: 'instant' }));
+    }
+  }, [onClose, onNavigate]);
 
   const handleSelectProduct = useCallback((product: Product) => {
-    onClose();
-    onNavigate('product', product.id);
-  }, [onClose, onNavigate]);
+    if (query.trim()) recordSearchQuery(query.trim());
+    else if (product.collection || product.article) recordSearchQuery(product.article || product.collection);
+    navigateAndScrollTop('product', product.id);
+  }, [query, recordSearchQuery, navigateAndScrollTop]);
 
   const executeSearch = useCallback((rawQuery: string) => {
     const clean = rawQuery.trim();
     if (!clean) return;
 
+    recordSearchQuery(clean);
     const lowerQuery = clean.toLowerCase();
+    const phoneticQuery = transliterateCyrillicToLatin(lowerQuery);
 
     // 1. Direct match by exact article, variant SKU, or code across all products
     const productByArticle = products.find(p => {
@@ -136,29 +158,36 @@ export function CommandPalette({ isOpen, onClose, onNavigate }: CommandPalettePr
     if (productByArticle) {
       onClose();
       onNavigate('product', productByArticle.id);
+      if (typeof window !== 'undefined') window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
       return;
     }
 
-    // 2. Collection match: check if query matches a known collection name
+    // 2. Collection match: check if query matches a known collection name (including Cyrillic phonetic, e.g. 'шанти' -> 'SHANTI')
     const uniqueCollections = Array.from(
       new Set(products.map(p => p.collection).filter(Boolean))
     );
     const stripped = lowerQuery.replace(/^(коллекция|ковер|ковры)\s+/i, '').trim();
+    const phoneticStripped = transliterateCyrillicToLatin(stripped);
     const matchedCol = uniqueCollections.find(c => {
       const colLower = c.toLowerCase();
-      return colLower === lowerQuery || colLower === stripped;
+      const colPhonetic = transliterateCyrillicToLatin(colLower);
+      return (
+        colLower === lowerQuery ||
+        colLower === stripped ||
+        (phoneticStripped.length >= 2 && (colLower === phoneticStripped || colPhonetic === phoneticStripped || colLower === phoneticQuery))
+      );
     });
 
     if (matchedCol) {
       onClose();
       onNavigate('catalog', matchedCol);
+      if (typeof window !== 'undefined') window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
       return;
     }
 
     // 3. If there is exactly one product matching in the current filtered list
     if (matchedProducts.length === 1) {
-      onClose();
-      onNavigate('product', matchedProducts[0].id);
+      navigateAndScrollTop('product', matchedProducts[0].id);
       return;
     }
 
@@ -166,8 +195,7 @@ export function CommandPalette({ isOpen, onClose, onNavigate }: CommandPalettePr
     if (matchedProducts.length > 0) {
       const distinctCols = Array.from(new Set(matchedProducts.map(p => p.collection).filter(Boolean)));
       if (distinctCols.length === 1 && distinctCols[0]) {
-        onClose();
-        onNavigate('catalog', distinctCols[0]);
+        navigateAndScrollTop('catalog', distinctCols[0]);
         return;
       }
     }
@@ -178,24 +206,20 @@ export function CommandPalette({ isOpen, onClose, onNavigate }: CommandPalettePr
       fetchSingleProductFromErp(clean)
         .then(serverProd => {
           if (serverProd && serverProd.id) {
-            onClose();
-            onNavigate('product', serverProd.id);
+            navigateAndScrollTop('product', serverProd.id);
           } else {
-            onClose();
-            onNavigate('catalog', `search:${clean}`);
+            navigateAndScrollTop('catalog', `search:${clean}`);
           }
         })
         .catch(() => {
-          onClose();
-          onNavigate('catalog', `search:${clean}`);
+          navigateAndScrollTop('catalog', `search:${clean}`);
         });
       return;
     }
 
     // 6. Otherwise: general search -> open catalog with search query
-    onClose();
-    onNavigate('catalog', `search:${clean}`);
-  }, [products, matchedProducts, onClose, onNavigate]);
+    navigateAndScrollTop('catalog', `search:${clean}`);
+  }, [products, matchedProducts, recordSearchQuery, onClose, onNavigate, navigateAndScrollTop]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -219,20 +243,6 @@ export function CommandPalette({ isOpen, onClose, onNavigate }: CommandPalettePr
       e.preventDefault();
       handleSubmit(e);
     }
-  };
-
-  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-    // If focus moved to another element inside the form, don't execute
-    if (e.relatedTarget && e.currentTarget.form?.contains(e.relatedTarget as Node)) {
-      return;
-    }
-    // Handle iOS keyboard accessory checkmark "✓" (Done) button
-    setTimeout(() => {
-      if (!isInternalInteractionRef.current && query.trim()) {
-        executeSearch(query);
-      }
-      isInternalInteractionRef.current = false;
-    }, 180);
   };
 
   const scrollActiveIntoView = (index: number) => {
@@ -288,11 +298,6 @@ export function CommandPalette({ isOpen, onClose, onNavigate }: CommandPalettePr
     <Portal>
       <div
         className="fixed inset-0 z-50 flex items-start justify-center p-3 sm:p-6 md:pt-20 overscroll-contain overflow-y-auto"
-        onPointerDown={e => {
-          if (e.target === e.currentTarget) {
-            isInternalInteractionRef.current = true;
-          }
-        }}
         onClick={onClose}
       >
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm animate-modal-backdrop modal-gpu-backdrop pointer-events-none" aria-hidden="true" />
@@ -317,7 +322,6 @@ export function CommandPalette({ isOpen, onClose, onNavigate }: CommandPalettePr
               value={query}
               onChange={e => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
-              onBlur={handleBlur}
               placeholder={t('search.placeholder')}
               className="flex-1 bg-transparent text-base sm:text-sm md:text-base text-slate-900 placeholder:text-slate-400 focus:outline-hidden min-w-0"
               autoComplete="off"
@@ -326,9 +330,6 @@ export function CommandPalette({ isOpen, onClose, onNavigate }: CommandPalettePr
             {query && (
               <button
                 type="button"
-                onPointerDown={() => {
-                  isInternalInteractionRef.current = true;
-                }}
                 onClick={() => {
                   setQuery('');
                   inputRef.current?.focus();
@@ -343,9 +344,6 @@ export function CommandPalette({ isOpen, onClose, onNavigate }: CommandPalettePr
             {query.trim() && (
               <button
                 type="submit"
-                onPointerDown={() => {
-                  isInternalInteractionRef.current = true;
-                }}
                 className="flex items-center justify-center h-8 px-2.5 sm:px-3 rounded-lg bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white text-xs font-semibold shrink-0 transition-colors shadow-2xs cursor-pointer gap-1"
                 title={t('search.find_btn')}
               >
@@ -358,31 +356,55 @@ export function CommandPalette({ isOpen, onClose, onNavigate }: CommandPalettePr
             </kbd>
           </form>
 
-          {/* Quick Suggestions when input is empty */}
+          {/* Saved Search History when input is empty */}
           {!query.trim() && (
             <div className="p-4 sm:p-5 space-y-3">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-                <span>{t('search.popular_queries')}</span>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {POPULAR_SEARCH_SUGGESTIONS.map(term => (
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                  <Clock className="h-3.5 w-3.5 text-brand-600" />
+                  <span>История запросов</span>
+                </div>
+                {searchHistory.length > 0 && (
                   <button
-                    key={term}
                     type="button"
-                    onPointerDown={() => {
-                      isInternalInteractionRef.current = true;
-                    }}
-                    onClick={() => {
-                      setQuery(term);
-                      inputRef.current?.focus();
-                    }}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-700 hover:bg-brand-50 hover:text-brand-700 hover:border-brand-200 border border-slate-200/80 transition-all cursor-pointer"
+                    onClick={clearHistory}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
                   >
-                    {term}
+                    <Trash2 className="h-3 w-3" />
+                    <span>Очистить</span>
                   </button>
-                ))}
+                )}
               </div>
+              {searchHistory.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {searchHistory.map(term => (
+                    <div
+                      key={term}
+                      className="inline-flex items-center rounded-lg bg-slate-100 border border-slate-200/80 hover:border-brand-200 hover:bg-brand-50/70 transition-all"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => executeSearch(term)}
+                        className="pl-2.5 pr-1.5 py-1.5 text-xs font-medium text-slate-700 hover:text-brand-700 cursor-pointer"
+                      >
+                        {term}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeHistoryItem(term)}
+                        className="pr-2 pl-0.5 py-1.5 text-slate-400 hover:text-slate-700 cursor-pointer"
+                        aria-label={`Удалить запрос ${term}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-slate-400 py-1">
+                  Здесь автоматически сохраняются ваши последние поисковые запросы.
+                </p>
+              )}
             </div>
           )}
 
@@ -390,9 +412,6 @@ export function CommandPalette({ isOpen, onClose, onNavigate }: CommandPalettePr
           {query.trim() && matchedProducts.length > 0 && (
             <div
               ref={listRef}
-              onPointerDown={() => {
-                isInternalInteractionRef.current = true;
-              }}
               className="flex-1 overflow-y-auto divide-y divide-slate-100 p-2 overscroll-contain"
             >
               {matchedProducts.map((product, idx) => {
@@ -443,13 +462,7 @@ export function CommandPalette({ isOpen, onClose, onNavigate }: CommandPalettePr
             </div>
             <button
               type="button"
-              onPointerDown={() => {
-                isInternalInteractionRef.current = true;
-              }}
-              onClick={() => {
-                onClose();
-                onNavigate('catalog');
-              }}
+              onClick={() => navigateAndScrollTop('catalog')}
               className="text-brand-600 hover:text-brand-700 font-semibold flex items-center gap-1 cursor-pointer"
             >
               <span>{t('search.all_in_catalog')}</span>

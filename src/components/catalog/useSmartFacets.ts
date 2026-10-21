@@ -334,7 +334,9 @@ export function useSmartFacets({
       })
     );
 
-    if (isEffectiveAdmin || !hasAnyCatalogStock || !profile || profile.role !== 'client') {
+    const canViewAllWarehouses = isEffectiveAdmin || profile?.role === 'manager_lm';
+
+    if (canViewAllWarehouses) {
       const set = new Set<string>();
       for (const w of erpWarehouses) {
         const name = w.warehouse_name || w.city;
@@ -353,6 +355,14 @@ export function useSmartFacets({
       return list.length > 0 ? list : ['Основной Склад Астана'];
     }
 
+    // Для гостей и РМ — только Основной Склад Астана
+    if (!profile || profile.role !== 'client') {
+      const set = new Set<string>(['Основной Склад Астана']);
+      for (const w of selectedWarehouses) set.add(w);
+      return sortHubFirst(Array.from(set));
+    }
+
+    // Для дилера (client) — только Основной Склад Астана и собственный склад шоурума (если назначен)
     const uniqueRawWarehouses: Warehouse[] = [];
     const seenKeys = new Set<string>();
     for (const w of erpWarehouses) {
@@ -373,7 +383,13 @@ export function useSmartFacets({
         }
       }
     }
-    const visible = filterWarehousesForClient(uniqueRawWarehouses, profile, myShowroomName);
+    const visible = hasAnyCatalogStock
+      ? filterWarehousesForClient(uniqueRawWarehouses, profile, myShowroomName)
+      : uniqueRawWarehouses.filter(w =>
+          w.warehouse_id === 81 ||
+          w.is_hub ||
+          (profile.showroom_warehouse_id && w.warehouse_id === profile.showroom_warehouse_id)
+        );
     const set = new Set<string>(visible.map(w => w.warehouse_name || w.city).filter(Boolean));
     for (const w of selectedWarehouses) set.add(w);
     const names = sortHubFirst(Array.from(set));
