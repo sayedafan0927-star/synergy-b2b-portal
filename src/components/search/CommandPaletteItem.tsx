@@ -1,6 +1,7 @@
 import React from 'react';
 import { Layers, Warehouse, ShoppingCart, Check, ArrowRight } from 'lucide-react';
 import type { Product, ProductVariant } from '@/types';
+import ProductImage from '@/components/ProductImage';
 
 export interface CommandPaletteItemProps {
   product: Product;
@@ -39,11 +40,12 @@ export const CommandPaletteItem: React.FC<CommandPaletteItemProps> = ({
       {/* Rug Thumbnail with Object-Contain (RugsUSA standard) */}
       <div className="w-12 h-15 sm:w-14 sm:h-18 rounded-lg bg-slate-100 border border-slate-200/70 overflow-hidden shrink-0 flex items-center justify-center p-1">
         {product.images?.[0] ? (
-          <img
+          <ProductImage
             src={product.images[0]}
             alt={product.name}
-            className="w-full h-full object-contain"
-            loading="lazy"
+            fit="contain"
+            width={60}
+            className="w-full h-full bg-transparent"
           />
         ) : (
           <Layers className="h-5 w-5 text-slate-400" />

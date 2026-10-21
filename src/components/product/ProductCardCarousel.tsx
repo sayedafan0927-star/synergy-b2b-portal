@@ -123,6 +123,16 @@ export function ProductCardCarousel({
     onOpenProduct();
   }, [onOpenProduct]);
 
+  const [visitedIndices, setVisitedIndices] = useState<Record<number, boolean>>({ 0: true });
+
+  useEffect(() => {
+    setVisitedIndices({ 0: true });
+  }, [product.id]);
+
+  useEffect(() => {
+    setVisitedIndices(prev => (prev[currentImgIndex] ? prev : { ...prev, [currentImgIndex]: true }));
+  }, [currentImgIndex]);
+
   return (
     <div 
       onClick={handleImageAreaClick}
@@ -147,23 +157,33 @@ export function ProductCardCarousel({
             willChange: 'transform',
           }}
         >
-          {allImages.map((img, idx) => (
-            <div
-              key={idx}
-              className="w-full h-full shrink-0 flex items-center justify-center p-2 sm:p-2.5"
-            >
-              <ProductImage
-                src={img}
-                alt={`${product.name} — фото ${idx + 1}`}
-                loading={idx === 0 ? 'lazy' : 'lazy'}
-                decoding="async"
-                width={600}
-                fit="contain"
-                className="h-full w-full bg-transparent flex items-center justify-center pointer-events-none"
-                imageClassName="transition-transform duration-500 ease-apple sm:group-hover:scale-105"
-              />
-            </div>
-          ))}
+          {allImages.map((img, idx) => {
+            const isActiveOrVisited =
+              idx === currentImgIndex ||
+              visitedIndices[idx] ||
+              (isDragging && Math.abs(idx - currentImgIndex) <= 1);
+            return (
+              <div
+                key={idx}
+                className="w-full h-full shrink-0 flex items-center justify-center p-2 sm:p-2.5"
+              >
+                {isActiveOrVisited ? (
+                  <ProductImage
+                    src={img}
+                    alt={`${product.name} — фото ${idx + 1}`}
+                    loading="lazy"
+                    decoding="async"
+                    width={600}
+                    fit="contain"
+                    className="h-full w-full bg-transparent flex items-center justify-center pointer-events-none"
+                    imageClassName="transition-transform duration-500 ease-apple sm:group-hover:scale-105"
+                  />
+                ) : (
+                  <div className="h-full w-full bg-slate-100/60 rounded-lg" />
+                )}
+              </div>
+            );
+          })}
         </div>
       ) : (
         <div className="w-full h-full flex items-center justify-center p-2 sm:p-2.5">

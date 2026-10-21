@@ -60,12 +60,56 @@ export function CarpetPlaceholderIcon({ className = "w-full h-full", compact = f
   );
 }
 
+const MAX_CONCURRENT_IMAGE_LOADS = 6;
+let activeImageLoads = 0;
+const pendingQueue: Array<() => void> = [];
+
+function acquireImageSlot(onGrant: () => void): () => void {
+  let released = false;
+  let granted = false;
+
+  const grant = () => {
+    if (released) return;
+    granted = true;
+    activeImageLoads++;
+    onGrant();
+  };
+
+  if (activeImageLoads < MAX_CONCURRENT_IMAGE_LOADS) {
+    grant();
+  } else {
+    pendingQueue.push(grant);
+  }
+
+  return () => {
+    if (released) return;
+    released = true;
+    if (granted) {
+      granted = false;
+      activeImageLoads = Math.max(0, activeImageLoads - 1);
+      while (pendingQueue.length > 0 && activeImageLoads < MAX_CONCURRENT_IMAGE_LOADS) {
+        const next = pendingQueue.shift();
+        if (next) next();
+      }
+    } else {
+      const idx = pendingQueue.indexOf(grant);
+      if (idx !== -1) pendingQueue.splice(idx, 1);
+    }
+  };
+}
+
 export function getOptimizedImageUrl(
   src?: string | null,
   _options: { width?: number; quality?: number; format?: 'auto' | 'webp' } = {}
 ): string {
   if (!src) return '';
   return src;
+}
+
+function appendRetryParam(url: string, attempt: number): string {
+  if (attempt <= 0) return url;
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}r=${attempt}`;
 }
 
 export default function ProductImage({
@@ -83,37 +127,137 @@ export default function ProductImage({
 }: ProductImageProps) {
   const [hasError, setHasError] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [retryAttempt, setRetryAttempt] = useState(0);
+  const [isSlotGranted, setIsSlotGranted] = useState(() => !src || !src.includes('image.php'));
+  const releaseSlotRef = React.useRef<(() => void) | null>(null);
+  const retryTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const containerRef = React.useRef<HTMLDivElement | null>(null);
 
-  // Если фото нет или произошла ошибка загрузки — показываем стандартную UI-заглушку ковра с логотипом
+  React.useEffect(() => {
+    setHasError(false);
+    setIsLoaded(false);
+    setRetryAttempt(0);
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+    if (releaseSlotRef.current) {
+      releaseSlotRef.current();
+      releaseSlotRef.current = null;
+    }
+
+    if (!src || !src.trim()) {
+      setIsSlotGranted(false);
+      return;
+    }
+
+    // Static assets (not served via PHP-FPM image.php) do not need concurrency throttling
+    if (!src.includes('image.php')) {
+      setIsSlotGranted(true);
+      return;
+    }
+
+    setIsSlotGranted(false);
+    let observer: IntersectionObserver | null = null;
+    let cancelled = false;
+
+    const requestSlot = () => {
+      if (cancelled || releaseSlotRef.current) return;
+      releaseSlotRef.current = acquireImageSlot(() => {
+        if (!cancelled) {
+          setIsSlotGranted(true);
+        }
+      });
+    };
+
+    if (loading === 'eager' || typeof IntersectionObserver === 'undefined' || !containerRef.current) {
+      requestSlot();
+    } else {
+      observer = new IntersectionObserver(
+        (entries) => {
+          if (entries.some((e) => e.isIntersecting)) {
+            observer?.disconnect();
+            observer = null;
+            requestSlot();
+          }
+        },
+        { rootMargin: '250px 0px' }
+      );
+      observer.observe(containerRef.current);
+    }
+
+    return () => {
+      cancelled = true;
+      if (observer) {
+        observer.disconnect();
+      }
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+      if (releaseSlotRef.current) {
+        releaseSlotRef.current();
+        releaseSlotRef.current = null;
+      }
+    };
+  }, [src, loading]);
+
+  // Если фото нет или произошла фатальная ошибка после повторов — показываем стандартную UI-заглушку ковра с логотипом
   if (!src || !src.trim() || hasError) {
     return <CarpetPlaceholderIcon className={className} compact={Boolean(width && width <= 80)} />;
   }
 
-  const optimizedSrc = getOptimizedImageUrl(src, { width, quality });
+  const baseOptimizedSrc = getOptimizedImageUrl(src, { width, quality });
+  const finalSrc = appendRetryParam(baseOptimizedSrc, retryAttempt);
   const fitClass = fit === 'contain' ? 'object-contain' : 'object-cover';
 
   return (
-    <div className={`relative overflow-hidden ${className.includes('bg-') ? '' : 'bg-slate-100'} ${className}`}>
+    <div
+      ref={containerRef}
+      className={`relative overflow-hidden ${className.includes('bg-') ? '' : 'bg-slate-100'} ${className}`}
+    >
       {!isLoaded && (
         <div className="absolute inset-0 bg-slate-200 animate-pulse" />
       )}
-      <img
-        src={optimizedSrc}
-        alt={alt}
-        loading={loading}
-        decoding={decoding}
-        onLoad={() => {
-          setIsLoaded(true);
-          onLoad?.();
-        }}
-        onError={() => {
-          setHasError(true);
-          onError?.();
-        }}
-        className={`w-full h-full ${fitClass} transition-opacity duration-300 ${
-          isLoaded ? 'opacity-100' : 'opacity-0'
-        } ${imageClassName}`}
-      />
+      {isSlotGranted && (
+        <img
+          src={finalSrc}
+          alt={alt}
+          loading={loading}
+          decoding={decoding}
+          onLoad={() => {
+            if (releaseSlotRef.current) {
+              releaseSlotRef.current();
+              releaseSlotRef.current = null;
+            }
+            setIsLoaded(true);
+            onLoad?.();
+          }}
+          onError={() => {
+            if (releaseSlotRef.current) {
+              releaseSlotRef.current();
+              releaseSlotRef.current = null;
+            }
+            if (retryAttempt < 3) {
+              const nextAttempt = retryAttempt + 1;
+              const delayMs = 300 * nextAttempt + Math.floor(Math.random() * 250);
+              setIsSlotGranted(false);
+              retryTimerRef.current = setTimeout(() => {
+                setRetryAttempt(nextAttempt);
+                releaseSlotRef.current = acquireImageSlot(() => {
+                  setIsSlotGranted(true);
+                });
+              }, delayMs);
+            } else {
+              setHasError(true);
+              onError?.();
+            }
+          }}
+          className={`w-full h-full ${fitClass} transition-opacity duration-300 ${
+            isLoaded ? 'opacity-100' : 'opacity-0'
+          } ${imageClassName}`}
+        />
+      )}
     </div>
   );
 }

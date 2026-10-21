@@ -205,12 +205,14 @@ export function ProductGallery({
         >
           {imageCount > 0 && validImages[selectedImage] && !failedImages[selectedImage] ? (
             <>
-              <img
+              <ProductImage
                 src={validImages[selectedImage]}
                 alt={`${cleanTitle} — фото ${selectedImage + 1}`}
-                className="h-full w-full object-contain p-4 transition-transform duration-300 group-hover:scale-105"
+                fit="contain"
+                loading="eager"
+                className="h-full w-full bg-transparent"
+                imageClassName="p-4 transition-transform duration-300 group-hover:scale-105"
                 onError={() => setFailedImages(prev => ({ ...prev, [selectedImage]: true }))}
-                draggable={false}
               />
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors flex items-center justify-center pointer-events-none">
                 <ZoomIn className="h-8 w-8 text-white opacity-0 group-hover:opacity-75 transition-opacity drop-shadow-lg" />
@@ -278,14 +280,19 @@ export function ProductGallery({
                   className="w-full h-full shrink-0 p-3 flex items-center justify-center relative select-none"
                 >
                   {!failedImages[idx] ? (
-                    <img
-                      src={img}
-                      alt={`${cleanTitle} — фото ${idx + 1}`}
-                      className="h-full w-full object-contain pointer-events-none drop-shadow-sm select-none"
-                      draggable={false}
-                      loading={idx === 0 ? 'eager' : 'lazy'}
-                      onError={() => setFailedImages(prev => ({ ...prev, [idx]: true }))}
-                    />
+                    Math.abs(idx - selectedImage) <= 1 ? (
+                      <ProductImage
+                        src={img}
+                        alt={`${cleanTitle} — фото ${idx + 1}`}
+                        fit="contain"
+                        loading={idx === 0 ? 'eager' : 'lazy'}
+                        className="h-full w-full bg-transparent pointer-events-none select-none"
+                        imageClassName="drop-shadow-sm select-none"
+                        onError={() => setFailedImages(prev => ({ ...prev, [idx]: true }))}
+                      />
+                    ) : (
+                      <div className="h-full w-full bg-slate-100/60 rounded-lg" />
+                    )
                   ) : (
                     <CarpetPlaceholderIcon className="h-full w-full" />
                   )}
@@ -302,10 +309,7 @@ export function ProductGallery({
           {imageCount > 0 && (
             <button
               type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setLightboxOpen(true);
-              }}
+              onClick={e => { e.stopPropagation(); setLightboxOpen(true); }}
               className="absolute top-2.5 right-2.5 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white/90 backdrop-blur-sm text-slate-700 shadow-md border border-slate-200/80 hover:bg-white active:scale-95 cursor-pointer"
               aria-label="Увеличить фото на весь экран"
               title="На весь экран"
@@ -319,10 +323,7 @@ export function ProductGallery({
             <>
               <button
                 type="button"
-                onClick={e => {
-                  e.stopPropagation();
-                  prevImage();
-                }}
+                onClick={e => { e.stopPropagation(); prevImage(); }}
                 className="absolute left-2.5 top-1/2 -translate-y-1/2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white/90 backdrop-blur-sm text-slate-700 shadow-md border border-slate-200/80 hover:bg-white transition-all active:scale-95 cursor-pointer"
                 aria-label="Предыдущее фото"
               >
@@ -330,10 +331,7 @@ export function ProductGallery({
               </button>
               <button
                 type="button"
-                onClick={e => {
-                  e.stopPropagation();
-                  nextImage();
-                }}
+                onClick={e => { e.stopPropagation(); nextImage(); }}
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white/90 backdrop-blur-sm text-slate-700 shadow-md border border-slate-200/80 hover:bg-white transition-all active:scale-95 cursor-pointer"
                 aria-label="Следующее фото"
               >
@@ -365,10 +363,7 @@ export function ProductGallery({
             </div>
 
             {/* Горизонтальная лента миниатюр */}
-            <div
-              ref={mobileThumbsRef}
-              className="flex gap-2 overflow-x-auto no-scrollbar py-1 px-1"
-            >
+            <div ref={mobileThumbsRef} className="flex gap-2 overflow-x-auto no-scrollbar py-1 px-1">
               {validImages.map((img, idx) => (
                 <button
                   key={idx}
@@ -382,7 +377,7 @@ export function ProductGallery({
                   }`}
                   aria-label={`Миниатюра ${idx + 1}`}
                 >
-                  <img src={img} alt="" className="h-full w-full object-contain p-0.5 pointer-events-none" />
+                  <ProductImage src={img} alt="" fit="contain" width={60} className="h-full w-full bg-transparent pointer-events-none" imageClassName="p-0.5" />
                 </button>
               ))}
             </div>
@@ -398,7 +393,7 @@ export function ProductGallery({
           aria-label={`Просмотр изображения ${selectedImage + 1} из ${imageCount}`}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm select-none"
           data-backdrop="true"
-          onClick={(e) => {
+          onClick={e => {
             if (e.target === e.currentTarget || (e.target as HTMLElement).dataset.backdrop === 'true') {
               setLightboxOpen(false);
             }
@@ -408,10 +403,7 @@ export function ProductGallery({
         >
           <button
             type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setLightboxOpen(false);
-            }}
+            onClick={e => { e.stopPropagation(); setLightboxOpen(false); }}
             aria-label="Закрыть"
             autoFocus
             className="absolute top-4 right-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors z-20 cursor-pointer"
@@ -439,12 +431,14 @@ export function ProductGallery({
             </>
           )}
           {imageCount > 0 && validImages[selectedImage] && (
-            <div className="relative max-h-[85vh] max-w-[90vw] flex items-center justify-center p-2 z-10 pointer-events-none">
-              <img
+            <div className="relative max-h-[85vh] max-w-[90vw] flex items-center justify-center p-2 z-10" onClick={e => e.stopPropagation()}>
+              <ProductImage
                 src={validImages[selectedImage]}
                 alt={`${cleanTitle} — фото ${selectedImage + 1}`}
-                onClick={e => e.stopPropagation()}
-                className="max-h-[85vh] max-w-[90vw] object-contain rounded-lg shadow-2xl pointer-events-auto select-none"
+                fit="contain"
+                loading="eager"
+                className="max-h-[85vh] max-w-[90vw] bg-transparent rounded-lg shadow-2xl select-none"
+                imageClassName="max-h-[85vh] max-w-[90vw] object-contain"
               />
             </div>
           )}
