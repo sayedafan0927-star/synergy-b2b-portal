@@ -5,45 +5,9 @@ import { filterWarehousesForClient } from '@/lib/warehouseVisibility';
 import { calculateArea, parse1CNomenclature, getValidImages } from '@/lib/nomenclatureParser';
 
 /**
- * Resolves authentic carpet photography with ancient steppe petroglyphs,
- * stallions, and solar tamgas matching the thematic reference design.
+ * Placeholder carpet images are disabled — only authentic studio ERP photos are used.
  */
-export function getThematicCarpetImage(collection?: string, article?: string, color?: string): string | undefined {
-  const coll = (collection || '').toUpperCase();
-  const art = (article || '').toUpperCase();
-  const col = (color || '').toUpperCase();
-
-  // 1. FLORA 9568B — L.VIZON / L.VIZON (horses, deer, and suns)
-  if (coll.includes('FLORA') && (art.includes('9568B') || art.includes('9568-B'))) {
-    return '/carpets/flora-9568b.png';
-  }
-  // 2. AFGAN 123D / 123Д CREAM (steppe warriors and diamond medallions)
-  if (coll.includes('AFGAN') && (art.includes('123') || col.includes('CREAM'))) {
-    return '/carpets/afgan-123d.png';
-  }
-  // 3. HYPNOSE DOTLU P1010 MULTI / MULTI (solar tamgas and fine geometric weave)
-  if (coll.includes('HYPNOSE') && (art.includes('P1010') || art.includes('1010'))) {
-    return '/carpets/hypnose-p1010.png';
-  }
-  // 4. OCTAVIA 75488 071 BEIGE (ancient solar wheel petroglyphs)
-  if (coll.includes('OCTAVIA') && (art.includes('75488') || col.includes('071'))) {
-    return '/carpets/octavia-75488.png';
-  }
-  // 5. FLORA 9568G — GREY / GREY (golden running steppe stallions and golden suns)
-  if (coll.includes('FLORA') && (art.includes('9568G') || (art.includes('9114G') && col.includes('GREY')))) {
-    return '/carpets/flora-9568g.png';
-  }
-
-  // Graceful thematic fallbacks when ERP image is missing
-  if (coll.includes('FLORA')) return '/carpets/flora-9568b.png';
-  if (coll.includes('AFGAN')) return '/carpets/afgan-123d.png';
-  if (coll.includes('HYPNOSE')) return '/carpets/hypnose-p1010.png';
-  if (coll.includes('OCTAVIA')) return '/carpets/octavia-75488.png';
-  if (coll.includes('BOBO')) return '/carpets/flora-9568g.png';
-  if (coll.includes('OSLO')) return '/carpets/octavia-75488.png';
-  if (coll.includes('SALOON')) return '/carpets/flora-9568b.png';
-  if (coll.includes('CELESTE')) return '/carpets/afgan-123d.png';
-
+export function getThematicCarpetImage(_collection?: string, _article?: string, _color?: string): string | undefined {
   return undefined;
 }
 
@@ -184,20 +148,12 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
 
     const existing = map.get(groupKey);
     if (!existing) {
-      let photos = getValidImages(raw.images);
-      const thematic = getThematicCarpetImage(collection, article, color);
-      if (thematic) {
-        if (photos.length === 0) {
-          photos = [thematic];
-        } else if (!photos.includes(thematic)) {
-          photos.push(thematic);
-        }
-      }
+      const photos = getValidImages(raw.images);
       const rawPrice = Number(raw.price) > 0 ? Number(raw.price) : (itemVariants[0]?.base_price || 0);
       const rawMinPrice = itemVariants.length > 0 ? Math.min(...itemVariants.map(v => v.base_price)) : rawPrice;
       const rawMaxPrice = itemVariants.length > 0 ? Math.max(...itemVariants.map(v => v.base_price)) : rawPrice;
 
-      const rawThumb = raw.image_thumb && !raw.image_thumb.includes('unsplash.com')
+      const rawThumb = raw.image_thumb && !raw.image_thumb.includes('unsplash.com') && !raw.image_thumb.startsWith('/carpets/')
         ? raw.image_thumb.replace(/^https?:\/\/(?:crm\.)?kilem-khan\.kz\/api\/sin\/public\/image\.php/i, 'https://erp.synergy-tech.kz/image.php')
         : undefined;
 
@@ -216,29 +172,20 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
         min_price: rawMinPrice,
         max_price: rawMaxPrice,
         images: photos,
-        image_thumb: photos[0] || rawThumb || thematic,
+        image_thumb: photos[0] || rawThumb,
         characteristics: raw.characteristics,
         variants: [...itemVariants],
       });
     } else {
       // Обогащаем медиа и характеристики, если они появились у следующего элемента того же дизайна
-      const thematic = getThematicCarpetImage(collection, article, color);
       const rawPhotos = getValidImages(raw.images);
       if (rawPhotos.length > 0) {
         const currentPhotos = (existing.images || []).filter(p => !p.startsWith('/carpets/'));
         const combined = Array.from(new Set([...currentPhotos, ...rawPhotos]));
-        if (thematic && !combined.includes(thematic)) {
-          combined.push(thematic);
-        }
         existing.images = combined;
         existing.image_thumb = combined[0];
-      } else if (!existing.images || existing.images.length === 0) {
-        if (thematic) {
-          existing.images = [thematic];
-          existing.image_thumb = thematic;
-        }
       }
-      if (!existing.image_thumb && raw.image_thumb && !raw.image_thumb.includes('unsplash.com')) {
+      if (!existing.image_thumb && raw.image_thumb && !raw.image_thumb.includes('unsplash.com') && !raw.image_thumb.startsWith('/carpets/')) {
         existing.image_thumb = raw.image_thumb.replace(/^https?:\/\/(?:crm\.)?kilem-khan\.kz\/api\/sin\/public\/image\.php/i, 'https://erp.synergy-tech.kz/image.php');
       }
       if ((!existing.characteristics || existing.characteristics.length === 0) && raw.characteristics && raw.characteristics.length > 0) {

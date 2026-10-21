@@ -29,7 +29,7 @@ export function ProductGallery({
   const lightboxTouchStartX = useRef<number | null>(null);
   const lightboxTouchStartY = useRef<number | null>(null);
 
-  const validImages = images.filter(img => typeof img === 'string' && img.trim().length > 0);
+  const validImages = images.filter(img => typeof img === 'string' && img.trim().length > 0 && !img.startsWith('/carpets/') && !img.includes('/carpets/'));
   const imageCount = validImages.length;
 
   useEffect(() => {

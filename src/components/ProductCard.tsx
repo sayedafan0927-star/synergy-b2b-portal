@@ -89,10 +89,11 @@ function ProductCard({ product, onNavigate, selectedWarehouses, onlyInProduction
   );
 
   // Изображения для карусели
-  const validImages = (product.images || []).filter(img => typeof img === 'string' && img.trim().length > 0 && !img.includes('unsplash.com'));
-  const allImages = validImages.length > 0 ? validImages : (product.image_thumb ? [product.image_thumb] : []);
+  const validImages = (product.images || []).filter(img => typeof img === 'string' && img.trim().length > 0 && !img.includes('unsplash.com') && !img.startsWith('/carpets/') && !img.includes('/carpets/'));
+  const cleanThumb = product.image_thumb && !product.image_thumb.startsWith('/carpets/') && !product.image_thumb.includes('/carpets/') ? product.image_thumb : '';
+  const allImages = validImages.length > 0 ? validImages : (cleanThumb ? [cleanThumb] : []);
   const [currentImgIndex, setCurrentImgIndex] = useState(0);
-  const activeImage = allImages[currentImgIndex] || allImages[0] || product.image_thumb || '';
+  const activeImage = allImages[currentImgIndex] || allImages[0] || cleanThumb || '';
 
   const setQuantity = (sku: string, value: number) => {
     setQuantities(previous => ({ ...previous, [sku]: Math.max(1, value || 1) }));
