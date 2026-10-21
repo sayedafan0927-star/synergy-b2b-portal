@@ -490,34 +490,42 @@ export default function CatalogPage({
           onResetAll={resetFilters}
         />
 
-        {/* Toolbar: Search & Filter moved lower, directly adjacent to cards, with Sort neatly placed */}
+        {/* Toolbar: Unified Search (opens CommandPalette) & Filter directly adjacent to cards */}
         <div className="mb-5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
-          <div className="flex items-center gap-2.5 flex-1 max-w-md">
-            <div className="relative flex-1">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                placeholder={t('catalog.search_ph')}
-                className="input-field pl-10 text-sm bg-white"
-              />
+          <div className="flex items-center gap-2 sm:gap-2.5 flex-1 max-w-full sm:max-w-md min-w-0">
+            <div className="relative flex-1 min-w-0">
+              <button
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent('synergy:open-command-palette', { detail: { initialQuery: searchQuery } }))}
+                className="w-full flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white pl-3.5 pr-8 py-2.5 text-sm text-left transition-colors hover:border-brand-400 hover:bg-slate-50/60 focus:border-brand-500 shadow-2xs cursor-pointer min-w-0"
+              >
+                <Search className="h-4 w-4 text-brand-600 shrink-0" />
+                <span className={`truncate ${searchQuery ? 'text-slate-900 font-medium' : 'text-slate-400'}`}>
+                  {searchQuery || t('catalog.search_ph')}
+                </span>
+              </button>
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={e => { e.stopPropagation(); setSearchQuery(''); }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+                  aria-label={t('common.reset')}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
             <button
               type="button"
               onClick={() => setDrawerOpen(!drawerOpen)}
-              className={`relative flex items-center gap-2 rounded-lg border px-3.5 py-2.5 text-sm font-medium transition-colors shrink-0 cursor-pointer shadow-2xs ${
-                drawerOpen
-                  ? 'border-brand-600 bg-brand-50 text-brand-700 font-semibold'
-                  : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300'
+              className={`relative flex items-center gap-1.5 sm:gap-2 rounded-lg border px-3 sm:px-3.5 py-2.5 text-sm font-medium transition-colors shrink-0 cursor-pointer shadow-2xs ${
+                drawerOpen ? 'border-brand-600 bg-brand-50 text-brand-700 font-semibold' : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300'
               }`}
             >
-              <SlidersHorizontal className="h-4 w-4 text-slate-600" />
+              <SlidersHorizontal className="h-4 w-4 text-slate-600 shrink-0" />
               <span>{drawerOpen ? t('catalog.collapse_filters') : t('catalog.filters')}</span>
               {activeFilterCount > 0 && (
-                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-700 px-1 text-[10px] font-bold text-white">
-                  {activeFilterCount}
-                </span>
+                <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-700 px-1 text-[10px] font-bold text-white">{activeFilterCount}</span>
               )}
             </button>
           </div>
@@ -589,18 +597,9 @@ export default function CatalogPage({
               viewMode === 'grid' ? (
                 <>
                   <div className="relative">
-                    <div className={`grid grid-cols-2 md:grid-cols-3 ${
-                      drawerOpen ? 'lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5' : 'lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6'
-                    } gap-4 lg:gap-6`}>
+                    <div className={`grid grid-cols-2 md:grid-cols-3 ${drawerOpen ? 'lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5' : 'lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6'} gap-4 lg:gap-6`}>
                       {visibleProducts.map((p, idx) => (
-                        <ProductCard
-                          key={p.id}
-                          product={p}
-                          onNavigate={handleProductNavigate}
-                          selectedWarehouses={selectedWarehouses}
-                          onlyInProduction={onlyInProduction}
-                          priority={idx < 18}
-                        />
+                        <ProductCard key={p.id} product={p} onNavigate={handleProductNavigate} selectedWarehouses={selectedWarehouses} onlyInProduction={onlyInProduction} priority={idx < 18} />
                       ))}
                     </div>
                   </div>
@@ -634,13 +633,7 @@ export default function CatalogPage({
         <FilterDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)} {...filterProps} />
 
       {canViewStockDetails && (
-        <StockReservationsModal
-          isOpen={reservationsModalOpen}
-          onClose={() => setReservationsModalOpen(false)}
-          catalogSkus={catalogReservedSkus}
-          initialTab={reservationsTab}
-          onNavigate={onNavigate}
-        />
+        <StockReservationsModal isOpen={reservationsModalOpen} onClose={() => setReservationsModalOpen(false)} catalogSkus={catalogReservedSkus} initialTab={reservationsTab} onNavigate={onNavigate} />
       )}
     </DecklePaperWrapper>
   );

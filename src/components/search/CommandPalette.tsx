@@ -17,6 +17,7 @@ export interface CommandPaletteProps {
   isOpen: boolean;
   onClose: () => void;
   onNavigate: (page: PageId, productId?: string) => void;
+  initialQuery?: string;
 }
 
 const SEARCH_HISTORY_KEY = 'synergy:search_history_v1';
@@ -36,7 +37,7 @@ function writeSearchHistory(list: string[]): void {
   try { localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(list.slice(0, MAX_SEARCH_HISTORY))); } catch {}
 }
 
-export function CommandPalette({ isOpen, onClose, onNavigate }: CommandPaletteProps) {
+export function CommandPalette({ isOpen, onClose, onNavigate, initialQuery = '' }: CommandPaletteProps) {
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [addedVariantSku, setAddedVariantSku] = useState<string | null>(null);
@@ -85,13 +86,13 @@ export function CommandPalette({ isOpen, onClose, onNavigate }: CommandPalettePr
 
   useEffect(() => {
     if (isOpen) {
-      setQuery('');
+      setQuery(initialQuery || '');
       setSelectedIndex(0);
       setSearchHistory(readSearchHistory());
-      const timer = setTimeout(() => inputRef.current?.focus(), 50);
+      const timer = setTimeout(() => inputRef.current?.focus(), 40);
       return () => clearTimeout(timer);
     }
-  }, [isOpen]);
+  }, [isOpen, initialQuery]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -297,12 +298,12 @@ export function CommandPalette({ isOpen, onClose, onNavigate }: CommandPalettePr
   return (
     <Portal>
       <div
-        className="fixed inset-0 z-50 flex items-start justify-center p-3 sm:p-6 md:pt-20 overscroll-contain overflow-y-auto"
+        className="fixed inset-0 z-[110] flex items-start justify-center p-2.5 sm:p-6 md:pt-20 overscroll-contain overflow-y-auto"
         onClick={onClose}
       >
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm animate-modal-backdrop modal-gpu-backdrop pointer-events-none" aria-hidden="true" />
         <div
-          className="relative bg-white rounded-2xl max-w-2xl w-full mx-auto shadow-2xl border border-slate-200/80 overflow-hidden flex flex-col max-h-[85vh] max-h-[85dvh] animate-modal-card modal-gpu-card z-10"
+          className="relative bg-white rounded-2xl max-w-2xl w-full mx-auto shadow-2xl border border-slate-200/80 overflow-hidden flex flex-col max-h-[82vh] max-h-[82dvh] animate-modal-card modal-gpu-card z-10"
           onClick={e => e.stopPropagation()}
         >
           {/* Top Search Input Bar */}

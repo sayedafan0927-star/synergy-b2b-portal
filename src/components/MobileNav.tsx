@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Home, LayoutGrid, ShoppingCart, User } from 'lucide-react';
 import { useCart } from '@/contexts/CartContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -13,6 +14,29 @@ export default function MobileNav({ currentPage, onNavigate }: MobileNavProps) {
   const { totalItems } = useCart();
   const { user } = useAuth();
   const { t } = useLanguage();
+  const [isInputFocused, setIsInputFocused] = useState(false);
+
+  useEffect(() => {
+    const isEditable = (el: EventTarget | null) => {
+      if (!el || !(el instanceof HTMLElement)) return false;
+      const tag = el.tagName;
+      return tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable;
+    };
+    const onFocusIn = (e: FocusEvent) => {
+      if (isEditable(e.target)) setIsInputFocused(true);
+    };
+    const onFocusOut = () => {
+      setTimeout(() => {
+        if (!isEditable(document.activeElement)) setIsInputFocused(false);
+      }, 60);
+    };
+    window.addEventListener('focusin', onFocusIn);
+    window.addEventListener('focusout', onFocusOut);
+    return () => {
+      window.removeEventListener('focusin', onFocusIn);
+      window.removeEventListener('focusout', onFocusOut);
+    };
+  }, []);
 
   const tabs: { icon: typeof Home; label: string; page: PageId }[] = [
     { icon: Home, label: t('nav.home'), page: 'home' },
@@ -22,7 +46,11 @@ export default function MobileNav({ currentPage, onNavigate }: MobileNavProps) {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-200 bg-white shadow-sm lg:hidden">
+    <nav
+      className={`fixed bottom-0 left-0 right-0 z-50 border-t border-slate-200 bg-white shadow-sm lg:hidden transition-transform duration-200 ${
+        isInputFocused ? 'translate-y-full pointer-events-none opacity-0' : 'translate-y-0 opacity-100'
+      }`}
+    >
       <div className="flex h-16 items-stretch">
         {tabs.map(({ icon: Icon, label, page }) => {
           const active = currentPage === page || (page === 'profile' && currentPage === 'login');

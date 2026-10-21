@@ -91,10 +91,10 @@ export function FilterDrawer(props: FilterDrawerProps) {
       <div className="lg:hidden">
         <div
           onClick={onClose}
-          className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-xs transition-opacity duration-300 cursor-pointer animate-in fade-in"
+          className="fixed inset-0 z-[85] bg-black/50 backdrop-blur-xs transition-opacity duration-300 cursor-pointer animate-in fade-in"
         />
         <div
-          className="fixed top-0 left-0 z-[80] flex h-full w-[320px] max-w-[85vw] flex-col bg-white shadow-2xl transition-transform duration-300 ease-apple animate-in slide-in-from-left"
+          className="fixed top-0 left-0 z-[90] flex h-full h-[100dvh] w-[320px] max-w-[88vw] flex-col bg-white shadow-2xl transition-transform duration-300 ease-apple animate-in slide-in-from-left overscroll-contain"
         >
           <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 shrink-0 bg-white">
             <div className="flex items-center gap-2">

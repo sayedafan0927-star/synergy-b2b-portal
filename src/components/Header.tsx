@@ -28,17 +28,28 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
   const { language, setLanguage, t } = useLanguage();
   const { isShowroomMode, toggleShowroomMode } = useShowroomMode();
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [initialPaletteQuery, setInitialPaletteQuery] = useState('');
 
-  // Global ⌘K / Ctrl+K keyboard shortcut to open Command Palette from anywhere
+  // Global ⌘K / Ctrl+K keyboard shortcut and custom event to open Command Palette from anywhere
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
+        setInitialPaletteQuery('');
         setCommandPaletteOpen(prev => !prev);
       }
     };
+    const handleOpenPalette = (e: Event) => {
+      const detail = (e as CustomEvent)?.detail;
+      setInitialPaletteQuery(typeof detail?.initialQuery === 'string' ? detail.initialQuery : '');
+      setCommandPaletteOpen(true);
+    };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('synergy:open-command-palette', handleOpenPalette as EventListener);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('synergy:open-command-palette', handleOpenPalette as EventListener);
+    };
   }, []);
 
   useEffect(() => {
@@ -355,6 +366,7 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
         isOpen={commandPaletteOpen}
         onClose={() => setCommandPaletteOpen(false)}
         onNavigate={onNavigate}
+        initialQuery={initialPaletteQuery}
       />
     </header>
   );

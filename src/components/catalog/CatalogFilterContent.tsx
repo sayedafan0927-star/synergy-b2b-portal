@@ -101,14 +101,31 @@ export function CatalogFilterContent({
       <div className="min-h-0 flex-1 overflow-y-auto px-5 thin-scrollbar">
         <div className="py-4 border-b border-slate-100">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              placeholder={t('catalog.search_ph')}
-              className="input-field pl-9 text-sm"
-            />
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof window !== 'undefined' && window.innerWidth < 1024 && onClose) {
+                  onClose();
+                }
+                window.dispatchEvent(new CustomEvent('synergy:open-command-palette', { detail: { initialQuery: searchQuery } }));
+              }}
+              className="w-full flex items-center gap-2.5 rounded-lg border border-slate-200 bg-white pl-3 pr-8 py-2.5 text-sm text-left transition-colors hover:border-brand-400 hover:bg-slate-50/60 cursor-pointer min-w-0"
+            >
+              <Search className="h-4 w-4 text-brand-600 shrink-0" />
+              <span className={`truncate ${searchQuery ? 'text-slate-900 font-medium' : 'text-slate-400'}`}>
+                {searchQuery || t('catalog.search_ph')}
+              </span>
+            </button>
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={e => { e.stopPropagation(); setSearchQuery(''); }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+                aria-label={t('common.reset')}
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
           {setOnlyInProduction && (
             <div className="mt-3">
@@ -137,7 +154,7 @@ export function CatalogFilterContent({
                   value={priceMin}
                   onChange={e => setPriceMin(e.target.value)}
                   placeholder="0"
-                  className="input-field pl-8 pr-6 py-2 text-sm font-medium"
+                  className="input-field pl-8 pr-6 py-2 text-base sm:text-sm font-medium"
                 />
                 {priceMin && (
                   <button
@@ -162,7 +179,7 @@ export function CatalogFilterContent({
                   value={priceMax}
                   onChange={e => setPriceMax(e.target.value)}
                   placeholder="14"
-                  className="input-field pl-8 pr-6 py-2 text-sm font-medium"
+                  className="input-field pl-8 pr-6 py-2 text-base sm:text-sm font-medium"
                 />
                 {priceMax && (
                   <button

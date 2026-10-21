@@ -47,6 +47,15 @@
     @apply outline-none ring-2 ring-brand-500 ring-offset-2 ring-offset-white;
   }
 
+  /* Prevent iOS Safari from auto-zooming and skewing the viewport when tapping any input/select */
+  @media (max-width: 639px) {
+    input,
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
+  }
+
   /* Respect reduced motion preferences */
   @media (prefers-reduced-motion: reduce) {
     html {
