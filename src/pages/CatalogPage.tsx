@@ -27,7 +27,7 @@ export default function CatalogPage({
 }) {
   const { t } = useLanguage();
   const { currency, exchangeRate } = useCurrency();
-  const { products, summary: serverSummary, loading, error: loadError } = useProducts();
+  const { products, summary: serverSummary, warehouses: erpWarehouses, loading, error: loadError } = useProducts();
   const pricing = useUserPricing();
   const { profile, isAdmin, isImpersonating } = useAuth();
   const isEffectiveAdmin = isAdmin && !isImpersonating;
@@ -76,18 +76,23 @@ export default function CatalogPage({
     return Boolean(key && getClientWarehouseSettings(key)?.showStockSummary);
   }, [profile, isEffectiveAdmin]);
   const hideOutOfStockSetting = displaySettings.hide_out_of_stock_products !== false;
+  const hasAnyGlobalStock = useMemo(
+    () => products.some(p => p.variants.some(v => (v.stock || v.free_stock || v.total_stock || v.in_production_qty || 0) > 0)),
+    [products],
+  );
 
   const baseProducts = useMemo(() => {
+    if (!hasAnyGlobalStock) return products;
     if (isEffectiveAdmin) {
       if (adminStockFilter === 'in_stock') return products.filter(p => isProductInStockForUser(p, profile, false, true));
       if (adminStockFilter === 'out_of_stock') return products.filter(p => !isProductInStockForUser(p, profile, false, true));
       return products;
     }
     return products.filter(p => isProductInStockForUser(p, profile, false, hideOutOfStockSetting));
-  }, [products, isEffectiveAdmin, adminStockFilter, profile, hideOutOfStockSetting]);
+  }, [products, hasAnyGlobalStock, isEffectiveAdmin, adminStockFilter, profile, hideOutOfStockSetting]);
 
   const { allCollections, allCountries, allSizes, allManufacturers, allWarehouses } = useSmartFacets({
-    baseProducts, selectedCategory, activeClusterQuickFilter, selectedClusters,
+    baseProducts, erpWarehouses, selectedCategory, activeClusterQuickFilter, selectedClusters,
     selectedCollections, selectedManufacturers, selectedCountries, selectedWarehouses,
     selectedSizes, priceMin: parsedPriceMin, priceMax: parsedPriceMax,
     getProductPriceSqm, isEffectiveAdmin, profile, myShowroomName,
@@ -112,6 +117,7 @@ export default function CatalogPage({
   );
 
   const hasVariantStock = (v: Product['variants'][number]) => {
+    if (!hasAnyGlobalStock) return true;
     const whs = filterClientWarehouses(
       v.warehouses, profile?.showroom_warehouse_id, myShowroomName, isEffectiveAdmin ? true : profile, displaySettings,
     ).filter(w =>
@@ -161,7 +167,7 @@ export default function CatalogPage({
     if (selectedCollections.size > 0) result = result.filter(p => selectedCollections.has(p.collection));
     if (selectedManufacturers.size > 0) result = result.filter(p => selectedManufacturers.has(p.manufacturer));
     if (selectedCountries.size > 0) result = result.filter(p => selectedCountries.has(p.country));
-    if (selectedWarehouses.size > 0) {
+    if (selectedWarehouses.size > 0 && hasAnyGlobalStock) {
       result = result.filter(p =>
         p.variants.some(v =>
           filterClientWarehouses(
@@ -169,7 +175,7 @@ export default function CatalogPage({
           ).some(w => matchesSelectedWarehouses(w, selectedWarehouses, profile?.showroom_warehouse_id, myShowroomName) && w.stock > 0),
         ),
       );
-    } else if (!onlyInProduction && (!isEffectiveAdmin || adminStockFilter === 'in_stock') && hideOutOfStockSetting) {
+    } else if (!onlyInProduction && hasAnyGlobalStock && (!isEffectiveAdmin || adminStockFilter === 'in_stock') && hideOutOfStockSetting) {
       result = result.filter(p => p.variants.some(v => hasVariantStock(v)));
     }
     if (selectedSizes.size > 0) result = result.filter(p => p.variants.some(v => selectedSizes.has(v.size) && hasVariantStock(v)));
@@ -424,6 +430,7 @@ export default function CatalogPage({
 
         <CatalogWarehouseModeBar
           allWarehouses={allWarehouses}
+          erpWarehouses={erpWarehouses}
           selectedWarehouses={selectedWarehouses}
           onSelectWarehouse={wh => setSelectedWarehouses(wh ? new Set([wh]) : new Set())}
           onlyInProduction={onlyInProduction}

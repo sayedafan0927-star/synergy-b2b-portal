@@ -12,10 +12,11 @@ export * from './warehouseRulesStore';
 
 export function isCentralWarehouse(w: { warehouse_id?: number; warehouse_name?: string; city?: string; is_hub?: boolean }): boolean {
   if (w.warehouse_id === CENTRAL_WAREHOUSE_ID) return true;
+  if (w.warehouse_id !== undefined && w.warehouse_id !== CENTRAL_WAREHOUSE_ID && w.is_hub === false) return false;
   if (w.is_hub) return true;
   const name = (w.warehouse_name || '').toLowerCase();
   const city = (w.city || '').toLowerCase();
-  return name.includes('астана') || name.includes('основной') || city.includes('астана');
+  return name.includes('астана') || name.includes('основной склад') || city.includes('астана');
 }
 
 export function matchesSelectedWarehouses(

@@ -51,6 +51,9 @@ export function CatalogStockTable({
         if ((wh && wh.stock > 0) || Number(v.in_production_qty ?? 0) > 0) set.add(v.size);
       }),
     );
+    if (set.size === 0) {
+      filteredProducts.forEach(p => p.variants.forEach(v => { if (v.size) set.add(v.size); }));
+    }
     return [...set].sort((a, b) => sizeArea(a) - sizeArea(b));
   }, [filteredProducts, getAllowedWarehouses, selectedWarehouse]);
 

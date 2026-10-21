@@ -8,7 +8,7 @@ import {
 } from '@/lib/erpApi';
 import { AuthContext, type Profile } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import type { Product, StockSummary } from '@/types';
+import type { Product, StockSummary, Warehouse } from '@/types';
 import { calculateArea } from '@/lib/nomenclatureParser';
 import { mergeProducts } from '@/lib/catalogMerge';
 import { cacheProduct, cacheProducts, getCachedProduct, clearProductCache } from '@/lib/productCache';
@@ -37,6 +37,7 @@ export {
 // Global in-memory cache for instant zero-skeleton remounting, scoped by active dealer
 let globalProductsCache: Product[] = [];
 let globalSummaryCache: StockSummary | null = null;
+let globalWarehousesCache: Warehouse[] = [];
 let globalCacheDealerKey = '';
 
 export function useProducts(customDealerId?: string | number) {
@@ -55,11 +56,13 @@ export function useProducts(customDealerId?: string | number) {
     globalCacheDealerKey = dealerKey;
     globalProductsCache = [];
     globalSummaryCache = null;
+    globalWarehousesCache = [];
     clearProductCache();
   }
 
   const [products, setProducts] = useState<Product[]>(() => globalProductsCache);
   const [summary, setSummary] = useState<StockSummary | null>(() => globalSummaryCache);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>(() => globalWarehousesCache);
   const [loading, setLoading] = useState<boolean>(() => globalProductsCache.length === 0);
   const [error, setError] = useState<string | null>(null);
   const [reloadCounter, setReloadCounter] = useState(0);
@@ -259,6 +262,10 @@ export function useProducts(customDealerId?: string | number) {
             globalSummaryCache = erpData.summary;
             setSummary(erpData.summary);
           }
+          if (Array.isArray(erpData.warehouses)) {
+            globalWarehousesCache = erpData.warehouses;
+            setWarehouses(erpData.warehouses);
+          }
           setLoading(false);
           return;
         }
@@ -266,6 +273,10 @@ export function useProducts(customDealerId?: string | number) {
           if (erpData?.summary) {
             globalSummaryCache = erpData.summary;
             setSummary(erpData.summary);
+          }
+          if (Array.isArray(erpData?.warehouses)) {
+            globalWarehousesCache = erpData.warehouses;
+            setWarehouses(erpData.warehouses);
           }
           setLoading(false);
         }
@@ -283,7 +294,7 @@ export function useProducts(customDealerId?: string | number) {
     };
   }, [reloadCounter, effectiveDealerId, effectivePriceType]);
 
-  return { products, summary, loading, error };
+  return { products, summary, warehouses, loading, error };
 }
 
 /**

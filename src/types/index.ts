@@ -1,3 +1,11 @@
+export interface WarehouseTopology {
+  rows_count: number;
+  racks_count: number;
+  storage_cells_count: number;
+  special_zones_count: number;
+  total_locations: number;
+}
+
 export interface Warehouse {
   city: string;
   stock: number;
@@ -9,6 +17,11 @@ export interface Warehouse {
   warehouse_name?: string;
   warehouse_id?: number;
   is_hub?: boolean;
+  type?: string;
+  cooperation_type?: string;
+  counterparty_id?: number | null;
+  address?: string | null;
+  topology?: WarehouseTopology | null;
 }
 
 export interface StockSummary {
