@@ -14,8 +14,8 @@ import {
   FilterDrawer, CatalogFilterSidebar, CatalogStockTable,
   CatalogLoadingSkeleton, CatalogLoadError, StockReservationsModal,
   ActiveFilterChips, useCatalogStatePersistence, useSmartFacets, DecklePaperWrapper,
-  CatalogPetroglyphHero, CatalogWarehouseModeBar, getTotalStock, sizeArea,
-  type SortOption, type ViewMode,
+  CatalogPetroglyphHero, CatalogWarehouseModeBar, MobileFloatingFilterButton,
+  getTotalStock, sizeArea, type SortOption, type ViewMode,
 } from '@/components/catalog';
 import { tokenizeSearchQuery, matchesSearchTokens } from '@/lib/searchNormalization';
 import { preloadCatalogImages } from '@/lib/imagePreloader';
@@ -60,10 +60,10 @@ export default function CatalogPage({
     return currency === 'KZT' ? Math.round(usd * exchangeRate) : usd;
   };
 
+  const toolbarRef = useRef<HTMLDivElement>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [reservationsModalOpen, setReservationsModalOpen] = useState(false);
+  const [stockWarehouse, setStockWarehouse] = useState(''); const [reservationsModalOpen, setReservationsModalOpen] = useState(false);
   const [reservationsTab, setReservationsTab] = useState<'all' | 'processing' | 'pending' | 'expired'>('all');
-  const [stockWarehouse, setStockWarehouse] = useState('');
   const canViewStockSummary = useMemo(() => {
     if (isEffectiveAdmin || displaySettings.show_reserve) return true;
     const key = profile?.partner_id || profile?.id;
@@ -490,8 +490,15 @@ export default function CatalogPage({
           onResetAll={resetFilters}
         />
 
+        {/* Mobile Floating Sticky Filter (Glides smoothly from right to left under fixed header when scrolling down) */}
+        <MobileFloatingFilterButton
+          toolbarRef={toolbarRef}
+          activeFilterCount={activeFilterCount}
+          onClick={() => setDrawerOpen(true)}
+        />
+
         {/* Toolbar: Unified Search (opens CommandPalette) & Filter directly adjacent to cards */}
-        <div className="mb-5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
+        <div ref={toolbarRef} className="mb-5 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
           <div className="flex items-center gap-2 sm:gap-2.5 flex-1 max-w-full sm:max-w-md min-w-0">
             <div className="relative flex-1 min-w-0">
               <button

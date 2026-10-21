@@ -19,4 +19,5 @@ export { default as CatalogGridPetroglyphs } from './CatalogGridPetroglyphs';
 export { useSmartFacets } from './useSmartFacets';
 export { PriceListExportModal } from './PriceListExportModal';
 export { CatalogWarehouseModeBar } from './CatalogWarehouseModeBar';
+export { MobileFloatingFilterButton } from './MobileFloatingFilterButton';
 export * from './types';
