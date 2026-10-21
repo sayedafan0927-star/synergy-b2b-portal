@@ -26,6 +26,10 @@ export interface FilterDrawerProps {
   onClose: () => void;
   searchQuery: string;
   setSearchQuery: (v: string) => void;
+  priceMin?: string;
+  setPriceMin?: (v: string) => void;
+  priceMax?: string;
+  setPriceMax?: (v: string) => void;
   selectedCollections: Set<string>;
   toggleCollection: (v: string) => void;
   selectedManufacturers: Set<string>;

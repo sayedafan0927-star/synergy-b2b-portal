@@ -13,6 +13,9 @@ export interface UseSmartFacetsParams {
   selectedCountries: Set<string>;
   selectedWarehouses: Set<string>;
   selectedSizes: Set<string>;
+  priceMin?: number | null;
+  priceMax?: number | null;
+  getProductPriceSqm?: (p: Product) => number;
   isEffectiveAdmin: boolean;
   profile: any;
   myShowroomName: string;
@@ -42,6 +45,9 @@ function productMatches(
     countries?: Set<string>;
     warehouses?: Set<string>;
     sizes?: Set<string>;
+    priceMin?: number | null;
+    priceMax?: number | null;
+    getProductPriceSqm?: (p: Product) => number;
   }
 ): boolean {
   if (opts.category && opts.category !== 'all') {
@@ -49,6 +55,12 @@ function productMatches(
       (p.category && p.category.toLowerCase() === opts.category.toLowerCase()) ||
       (opts.category === 'Дорожки' ? p.name.toLowerCase().includes('дорожк') : !p.name.toLowerCase().includes('дорожк'));
     if (!isCat) return false;
+  }
+
+  if ((opts.priceMin != null || opts.priceMax != null) && opts.getProductPriceSqm) {
+    const pPrice = opts.getProductPriceSqm(p);
+    if (opts.priceMin != null && pPrice < opts.priceMin) return false;
+    if (opts.priceMax != null && pPrice > opts.priceMax) return false;
   }
 
   if (opts.clusterQuick && opts.clusterQuick !== 'all') {
@@ -99,11 +111,14 @@ export function useSmartFacets({
   selectedCountries,
   selectedWarehouses,
   selectedSizes,
+  priceMin,
+  priceMax,
+  getProductPriceSqm,
   isEffectiveAdmin,
   profile,
   myShowroomName,
 }: UseSmartFacetsParams) {
-  // 1. Available Collections (filtered by all other active facets)
+  // 1. Available Collections (filtered by all other active facets, including priceMin/priceMax!)
   const allCollections = useMemo(() => {
     const matching = baseProducts.filter(p =>
       productMatches(p, {
@@ -114,6 +129,9 @@ export function useSmartFacets({
         countries: selectedCountries,
         warehouses: selectedWarehouses,
         sizes: selectedSizes,
+        priceMin,
+        priceMax,
+        getProductPriceSqm,
       })
     );
     const set = new Set<string>();
@@ -134,6 +152,9 @@ export function useSmartFacets({
     selectedWarehouses,
     selectedSizes,
     selectedCollections,
+    priceMin,
+    priceMax,
+    getProductPriceSqm,
   ]);
 
   // 2. Available Countries (filtered by all other active facets, e.g. collection or size)
@@ -147,6 +168,9 @@ export function useSmartFacets({
         manufacturers: selectedManufacturers,
         warehouses: selectedWarehouses,
         sizes: selectedSizes,
+        priceMin,
+        priceMax,
+        getProductPriceSqm,
       })
     );
     const set = new Set<string>();
@@ -167,6 +191,9 @@ export function useSmartFacets({
     selectedWarehouses,
     selectedSizes,
     selectedCountries,
+    priceMin,
+    priceMax,
+    getProductPriceSqm,
   ]);
 
   // 3. Available Sizes (filtered by collection, country, category, etc.)
@@ -180,6 +207,9 @@ export function useSmartFacets({
         manufacturers: selectedManufacturers,
         countries: selectedCountries,
         warehouses: selectedWarehouses,
+        priceMin,
+        priceMax,
+        getProductPriceSqm,
       })
     );
     const set = new Set<string>();
@@ -210,6 +240,9 @@ export function useSmartFacets({
     selectedCountries,
     selectedWarehouses,
     selectedSizes,
+    priceMin,
+    priceMax,
+    getProductPriceSqm,
   ]);
 
   // 4. Available Manufacturers
@@ -223,6 +256,9 @@ export function useSmartFacets({
         countries: selectedCountries,
         warehouses: selectedWarehouses,
         sizes: selectedSizes,
+        priceMin,
+        priceMax,
+        getProductPriceSqm,
       })
     );
     const set = new Set<string>();
@@ -243,6 +279,9 @@ export function useSmartFacets({
     selectedWarehouses,
     selectedSizes,
     selectedManufacturers,
+    priceMin,
+    priceMax,
+    getProductPriceSqm,
   ]);
 
   // 5. Available Warehouses (Основной Склад Астана всегда первым)
@@ -265,6 +304,9 @@ export function useSmartFacets({
         manufacturers: selectedManufacturers,
         countries: selectedCountries,
         sizes: selectedSizes,
+        priceMin,
+        priceMax,
+        getProductPriceSqm,
       })
     );
 
@@ -310,6 +352,9 @@ export function useSmartFacets({
     selectedCountries,
     selectedSizes,
     selectedWarehouses,
+    priceMin,
+    priceMax,
+    getProductPriceSqm,
     isEffectiveAdmin,
     profile,
     myShowroomName,

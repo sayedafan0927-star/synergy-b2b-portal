@@ -1,4 +1,4 @@
-const CACHE_NAME = 'synergy-b2b-v33';
+const CACHE_NAME = 'synergy-b2b-v34';
 const STATIC_ASSETS = [
   '/favicon.svg',
   '/manifest.json',
@@ -77,8 +77,8 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // CRITICAL: Bypass all API routes completely - never intercept /api/erp or cms_api.php in Service Worker
-  if (url.pathname.startsWith('/api/') || url.pathname.endsWith('.php')) {
+  // CRITICAL: Bypass all API routes and static /uploads/ (served with immutable Nginx Cache-Control)
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/uploads/') || url.pathname.endsWith('.php')) {
     return;
   }
 

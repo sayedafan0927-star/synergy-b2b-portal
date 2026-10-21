@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 interface ProductImageProps {
   src?: string | null;
@@ -61,8 +61,15 @@ export function CarpetPlaceholderIcon({ className = "w-full h-full", compact = f
   );
 }
 
-const ERP_STATIC_BASE = 'https://erp.synergy-tech.kz/uploads/nomenclature/';
-const ERP_PHP_BASE = 'https://erp.synergy-tech.kz/image.php?f=';
+function getPrimaryStaticBase(): string {
+  if (typeof window !== 'undefined' && window.location.hostname.includes('synergy-group.kz')) {
+    return '/uploads/nomenclature/';
+  }
+  return 'https://synergy-group.kz/uploads/nomenclature/';
+}
+
+const ERP_STATIC_FALLBACK_BASE = 'https://erp.synergy-tech.kz/uploads/nomenclature/';
+const ERP_PHP_FALLBACK_BASE = 'https://erp.synergy-tech.kz/image.php?f=';
 
 /**
  * Extracts raw filename from ERP image.php or /uploads/nomenclature/ URLs.
@@ -89,8 +96,9 @@ function extractErpFileName(rawUrl: string): string | null {
 }
 
 /**
- * Converts ERP image URLs to direct Nginx static delivery (/uploads/nomenclature/)
- * and selects 600x800 `thumb_` (~110 KB) when width <= 800, or 1200x1600 full-res otherwise.
+ * Converts ERP image URLs to same-origin Nginx static delivery (/uploads/nomenclature/)
+ * with `Cache-Control: public, max-age=2592000, immutable` and selects 600x800 `thumb_` (~110 KB)
+ * when width <= 800, or 1200x1600 full-res otherwise.
  */
 export function getOptimizedImageUrl(
   src?: string | null,
@@ -103,7 +111,7 @@ export function getOptimizedImageUrl(
   const baseName = fileName.replace(/^thumb_/i, '');
   const useThumb = Boolean(options.width && options.width <= 800) || /^thumb_/i.test(fileName);
   const targetFile = useThumb ? `thumb_${baseName}` : baseName;
-  return `${ERP_STATIC_BASE}${targetFile}`;
+  return `${getPrimaryStaticBase()}${targetFile}`;
 }
 
 function buildFallbackCandidates(src: string, width?: number): string[] {
@@ -113,22 +121,24 @@ function buildFallbackCandidates(src: string, width?: number): string[] {
   }
   const baseName = fileName.replace(/^thumb_/i, '');
   const preferThumb = Boolean(width && width <= 800) || /^thumb_/i.test(fileName);
+  const primaryBase = getPrimaryStaticBase();
 
   const candidates: string[] = [];
   if (preferThumb) {
-    candidates.push(`${ERP_STATIC_BASE}thumb_${baseName}`);
-    candidates.push(`${ERP_STATIC_BASE}${baseName}`);
-    candidates.push(`${ERP_PHP_BASE}thumb_${baseName}`);
-    candidates.push(`${ERP_PHP_BASE}${baseName}`);
+    candidates.push(`${primaryBase}thumb_${baseName}`);
+    candidates.push(`${primaryBase}${baseName}`);
+    candidates.push(`${ERP_STATIC_FALLBACK_BASE}thumb_${baseName}`);
+    candidates.push(`${ERP_PHP_FALLBACK_BASE}thumb_${baseName}`);
   } else {
-    candidates.push(`${ERP_STATIC_BASE}${baseName}`);
-    candidates.push(`${ERP_STATIC_BASE}thumb_${baseName}`);
-    candidates.push(`${ERP_PHP_BASE}${baseName}`);
+    candidates.push(`${primaryBase}${baseName}`);
+    candidates.push(`${primaryBase}thumb_${baseName}`);
+    candidates.push(`${ERP_STATIC_FALLBACK_BASE}${baseName}`);
+    candidates.push(`${ERP_PHP_FALLBACK_BASE}${baseName}`);
   }
   return Array.from(new Set(candidates));
 }
 
-// Keep a fast memory set of already-loaded image URLs so re-mounting cards render without pulse flicker
+// Fast memory set of already-loaded image URLs so remounting cards render in 0ms without skeleton flicker
 const loadedImageCache = new Set<string>();
 
 export default function ProductImage({
@@ -150,14 +160,35 @@ export default function ProductImage({
   );
   const primaryUrl = candidates[0] || '';
 
+  // Check if a 600x800 thumb_ of this carpet is already in browser memory cache (for instant Progressive HD view in ProductGallery)
+  const cachedThumbBackdrop = React.useMemo(() => {
+    if (!src || (width && width <= 800)) return '';
+    const fileName = extractErpFileName(src);
+    if (!fileName) return '';
+    const baseName = fileName.replace(/^thumb_/i, '');
+    const thumbUrl = `${getPrimaryStaticBase()}thumb_${baseName}`;
+    return loadedImageCache.has(thumbUrl) ? thumbUrl : '';
+  }, [src, width]);
+
   const [candidateIndex, setCandidateIndex] = useState(0);
   const [hasError, setHasError] = useState(false);
   const [isLoaded, setIsLoaded] = useState(() => Boolean(primaryUrl && loadedImageCache.has(primaryUrl)));
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    if (retryTimerRef.current) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
     setCandidateIndex(0);
     setHasError(false);
     setIsLoaded(Boolean(primaryUrl && loadedImageCache.has(primaryUrl)));
+    return () => {
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+    };
   }, [primaryUrl]);
 
   // Если фото нет или произошла фатальная ошибка после всех кандидатов — показываем стандартную UI-заглушку ковра с логотипом
@@ -166,17 +197,27 @@ export default function ProductImage({
   }
 
   const activeUrl = candidates[candidateIndex] || primaryUrl;
+  const isAlreadyCached = loadedImageCache.has(activeUrl);
   const fitClass = fit === 'contain' ? 'object-contain' : 'object-cover';
 
   return (
     <div className={`relative overflow-hidden ${className.includes('bg-') ? '' : 'bg-slate-100'} ${className}`}>
       {!isLoaded && (
-        <div className="absolute inset-0 bg-slate-200/70 animate-pulse" />
+        cachedThumbBackdrop ? (
+          <img
+            src={cachedThumbBackdrop}
+            alt=""
+            aria-hidden="true"
+            className={`absolute inset-0 w-full h-full ${fitClass} ${imageClassName}`}
+          />
+        ) : (
+          <div className="absolute inset-0 bg-slate-200/70 animate-pulse" />
+        )
       )}
       <img
         src={activeUrl}
         alt={alt}
-        loading={loading}
+        loading={isAlreadyCached ? 'eager' : loading}
         decoding={decoding}
         {...(fetchPriority ? { fetchPriority } : {})}
         onLoad={() => {
@@ -186,8 +227,13 @@ export default function ProductImage({
           onLoad?.();
         }}
         onError={() => {
+          if (retryTimerRef.current) clearTimeout(retryTimerRef.current);
           if (candidateIndex + 1 < candidates.length) {
-            setCandidateIndex(candidateIndex + 1);
+            const nextIdx = candidateIndex + 1;
+            const delayMs = 280 * nextIdx;
+            retryTimerRef.current = setTimeout(() => {
+              setCandidateIndex(nextIdx);
+            }, delayMs);
           } else {
             setHasError(true);
             onError?.();

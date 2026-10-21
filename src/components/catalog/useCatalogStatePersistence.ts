@@ -6,6 +6,8 @@ const TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
 
 export interface CatalogPersistedState {
   searchQuery: string;
+  priceMin?: string;
+  priceMax?: string;
   sortBy: SortOption;
   viewMode: ViewMode;
   selectedCategory: 'all' | 'Ковры' | 'Дорожки';
@@ -129,6 +131,8 @@ export function useCatalogStatePersistence(options: UseCatalogStatePersistenceOp
 
   const [viewMode, setViewMode] = useState<ViewMode>(() => savedState?.viewMode || 'grid');
   const [searchQuery, setSearchQuery] = useState<string>(() => initialSearch || savedState?.searchQuery || '');
+  const [priceMin, setPriceMin] = useState<string>(() => savedState?.priceMin || '');
+  const [priceMax, setPriceMax] = useState<string>(() => savedState?.priceMax || '');
   const [sortBy, setSortBy] = useState<SortOption>(() => savedState?.sortBy || 'popular');
   const [visibleCount, setVisibleCount] = useState<number>(() => {
     if (savedState?.lastViewedProductId && savedState?.visibleCount) {
@@ -200,6 +204,8 @@ export function useCatalogStatePersistence(options: UseCatalogStatePersistenceOp
     selectedWarehouses,
     selectedSizes,
     searchQuery,
+    priceMin,
+    priceMax,
     sortBy,
     viewMode,
   ]);
@@ -211,9 +217,12 @@ export function useCatalogStatePersistence(options: UseCatalogStatePersistenceOp
     return next;
   }, []);
 
+  const hasPriceFilter = Boolean(priceMin.trim() || priceMax.trim());
+
   const activeFilterCount =
     (selectedCategory !== 'all' ? 1 : 0) +
     (onlyInProduction ? 1 : 0) +
+    (hasPriceFilter ? 1 : 0) +
     (activeClusterQuickFilter !== 'all' ? 1 : 0) +
     selectedCollections.size +
     selectedManufacturers.size +
@@ -224,6 +233,8 @@ export function useCatalogStatePersistence(options: UseCatalogStatePersistenceOp
 
   const resetFilters = useCallback(() => {
     setSearchQuery('');
+    setPriceMin('');
+    setPriceMax('');
     setSelectedCategory('all');
     setOnlyInProduction(false);
     setSelectedClusters(new Set());
@@ -243,6 +254,8 @@ export function useCatalogStatePersistence(options: UseCatalogStatePersistenceOp
 
     writeCatalogState({
       searchQuery,
+      priceMin,
+      priceMax,
       sortBy,
       viewMode,
       selectedCategory,
@@ -259,6 +272,8 @@ export function useCatalogStatePersistence(options: UseCatalogStatePersistenceOp
     });
   }, [
     searchQuery,
+    priceMin,
+    priceMax,
     sortBy,
     viewMode,
     selectedCategory,
@@ -275,7 +290,7 @@ export function useCatalogStatePersistence(options: UseCatalogStatePersistenceOp
   useEffect(() => {
     const prev = readCatalogState();
     writeCatalogState({
-      searchQuery, sortBy, viewMode, selectedCategory, onlyInProduction,
+      searchQuery, priceMin, priceMax, sortBy, viewMode, selectedCategory, onlyInProduction,
       selectedCollections: Array.from(selectedCollections),
       selectedManufacturers: Array.from(selectedManufacturers),
       selectedCountries: Array.from(selectedCountries),
@@ -287,7 +302,7 @@ export function useCatalogStatePersistence(options: UseCatalogStatePersistenceOp
       lastViewedProductId: prev?.lastViewedProductId || null,
     });
   }, [
-    searchQuery, sortBy, viewMode, selectedCategory, onlyInProduction,
+    searchQuery, priceMin, priceMax, sortBy, viewMode, selectedCategory, onlyInProduction,
     selectedCollections, selectedManufacturers, selectedCountries,
     selectedClusters, selectedWarehouses, selectedSizes, visibleCount,
   ]);
@@ -326,6 +341,10 @@ export function useCatalogStatePersistence(options: UseCatalogStatePersistenceOp
     setViewMode,
     searchQuery,
     setSearchQuery,
+    priceMin,
+    setPriceMin,
+    priceMax,
+    setPriceMax,
     sortBy,
     setSortBy,
     visibleCount,

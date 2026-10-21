@@ -1,8 +1,9 @@
 import { useMemo } from 'react';
-import { Search } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import { parseSizeDimensions } from '@/types';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useCurrency } from '@/contexts/CurrencyContext';
 import type { FilterDrawerProps } from './types';
 import { FilterSection, CheckItem } from './FilterDrawer';
 
@@ -15,6 +16,10 @@ export function CatalogFilterContent({
   onApply,
   searchQuery,
   setSearchQuery,
+  priceMin = '',
+  setPriceMin,
+  priceMax = '',
+  setPriceMax,
   selectedCollections,
   toggleCollection,
   selectedManufacturers,
@@ -38,6 +43,7 @@ export function CatalogFilterContent({
   allSizes,
 }: CatalogFilterContentProps) {
   const { t } = useLanguage();
+  const { currencyUnitLabel } = useCurrency();
   const { isAdmin, isImpersonating, profile } = useAuth();
   const isAdminView = Boolean(!isImpersonating && (isAdmin || profile?.role === 'admin'));
   const rugSizes = useMemo(
@@ -88,25 +94,93 @@ export function CatalogFilterContent({
           )}
         </div>
 
-        {/* СКЛАДЫ — на первом месте для мгновенного доступа без сворачивания других секций */}
+        {/* 1. ЦЕНА ЗА 1 М² (ОТ / ДО) — в самом верху бокового фильтра */}
+        {setPriceMin && setPriceMax && (
+          <FilterSection title={`ЦЕНА ЗА 1 М² (${currencyUnitLabel})`} defaultOpen={true}>
+            <div className="grid grid-cols-2 gap-2.5">
+              <div className="relative">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] font-medium text-slate-400 pointer-events-none">
+                  От
+                </span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.5"
+                  value={priceMin}
+                  onChange={e => setPriceMin(e.target.value)}
+                  placeholder="0"
+                  className="input-field pl-8 pr-6 py-2 text-sm font-medium"
+                />
+                {priceMin && (
+                  <button
+                    type="button"
+                    onClick={() => setPriceMin('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    aria-label="Очистить цену от"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+              <div className="relative">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[11px] font-medium text-slate-400 pointer-events-none">
+                  До
+                </span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.5"
+                  value={priceMax}
+                  onChange={e => setPriceMax(e.target.value)}
+                  placeholder="14"
+                  className="input-field pl-8 pr-6 py-2 text-sm font-medium"
+                />
+                {priceMax && (
+                  <button
+                    type="button"
+                    onClick={() => setPriceMax('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                    aria-label="Очистить цену до"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+            {(priceMin || priceMax) && (
+              <p className="mt-2 text-[11px] text-brand-700 font-medium">
+                Найдено коллекций: {allCollections.length}
+              </p>
+            )}
+          </FilterSection>
+        )}
+
+        {/* 2. КОЛЛЕКЦИЯ — сразу под ценой, чтобы при вводе цены клиент мгновенно видел подходящие коллекции */}
+        <FilterSection title={t('catalog.filter_collection')} defaultOpen={true}>
+          {allCollections.length > 0 ? (
+            allCollections.map(c => (
+              <CheckItem key={c} label={c} checked={selectedCollections.has(c)} onToggle={() => toggleCollection(c)} />
+            ))
+          ) : (
+            <p className="text-xs text-slate-400 py-1">Нет коллекций по выбранным параметрам</p>
+          )}
+        </FilterSection>
+
+        {/* 3. СКЛАД */}
         <FilterSection title={t('catalog.filter_warehouse')} defaultOpen={true}>
           {allWarehouses.map(w => (
             <CheckItem key={w} label={w} checked={selectedWarehouses.has(w)} onToggle={() => toggleWarehouse(w)} />
           ))}
         </FilterSection>
 
-        {/* КЛАСТЕРЫ РАЗМЕРОВ */}
+        {/* 4. КЛАСТЕРЫ РАЗМЕРОВ */}
         <FilterSection title={t('catalog.filter_clusters') || 'КЛАСТЕРЫ РАЗМЕРОВ'} defaultOpen={true}>
           <CheckItem label={t('catalog.cluster_small')} checked={selectedClusters.has('small')} onToggle={() => toggleCluster('small')} />
           <CheckItem label={t('catalog.cluster_medium')} checked={selectedClusters.has('medium')} onToggle={() => toggleCluster('medium')} />
           <CheckItem label={t('catalog.cluster_large')} checked={selectedClusters.has('large')} onToggle={() => toggleCluster('large')} />
           <CheckItem label={t('catalog.cluster_oversize')} checked={selectedClusters.has('oversize')} onToggle={() => toggleCluster('oversize')} />
-        </FilterSection>
-
-        <FilterSection title={t('catalog.filter_collection')} defaultOpen={true}>
-          {allCollections.map(c => (
-            <CheckItem key={c} label={c} checked={selectedCollections.has(c)} onToggle={() => toggleCollection(c)} />
-          ))}
         </FilterSection>
 
         <FilterSection title={t('catalog.filter_size')} defaultOpen={false}>

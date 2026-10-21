@@ -7,6 +7,7 @@ import ProductCard from '@/components/ProductCard';
 import StockSummaryBar from '@/components/StockSummaryBar';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useCurrency } from '@/contexts/CurrencyContext';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
 import { isProductInStockForUser, getClientWarehouseSettings, matchesSelectedWarehouses } from '@/lib/warehouseVisibility';
 import {
@@ -25,6 +26,7 @@ export default function CatalogPage({
   initialCollection?: string; initialCountry?: string; initialSearch?: string;
 }) {
   const { t } = useLanguage();
+  const { currency, exchangeRate } = useCurrency();
   const { products, summary: serverSummary, loading, error: loadError } = useProducts();
   const pricing = useUserPricing();
   const { profile, isAdmin, isImpersonating } = useAuth();
@@ -38,27 +40,38 @@ export default function CatalogPage({
     onlyInProduction, setOnlyInProduction, selectedCollections, setSelectedCollections,
     selectedManufacturers, setSelectedManufacturers, selectedCountries, setSelectedCountries,
     selectedClusters, setSelectedClusters, selectedWarehouses, setSelectedWarehouses,
-    selectedSizes, setSelectedSizes, activeClusterQuickFilter, adminStockFilter,
-    setAdminStockFilter, toggle, activeFilterCount, resetFilters, saveCatalogSnapshot,
-    attemptScrollRestoration, hasSavedState, savedState,
+    selectedSizes, setSelectedSizes, priceMin, setPriceMin, priceMax, setPriceMax,
+    activeClusterQuickFilter, adminStockFilter, setAdminStockFilter, toggle,
+    activeFilterCount, resetFilters, saveCatalogSnapshot, attemptScrollRestoration,
+    hasSavedState, savedState,
   } = useCatalogStatePersistence({ initialCollection, initialCountry, initialSearch });
+
+  const parsedPriceMin = useMemo(() => {
+    const v = parseFloat(priceMin.replace(',', '.').trim());
+    return Number.isFinite(v) && v > 0 ? v : null;
+  }, [priceMin]);
+  const parsedPriceMax = useMemo(() => {
+    const v = parseFloat(priceMax.replace(',', '.').trim());
+    return Number.isFinite(v) && v > 0 ? v : null;
+  }, [priceMax]);
+  const getProductPriceSqm = (p: Product) => {
+    const usd = pricing.getMinPricePerSqm(p);
+    return currency === 'KZT' ? Math.round(usd * exchangeRate) : usd;
+  };
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [reservationsModalOpen, setReservationsModalOpen] = useState(false);
   const [reservationsTab, setReservationsTab] = useState<'all' | 'processing' | 'pending' | 'expired'>('all');
   const [stockWarehouse, setStockWarehouse] = useState('');
   const canViewStockSummary = useMemo(() => {
-    if (isEffectiveAdmin) return true;
-    if (displaySettings.show_reserve) return true;
+    if (isEffectiveAdmin || displaySettings.show_reserve) return true;
     const key = profile?.partner_id || profile?.id;
     return Boolean(key && getClientWarehouseSettings(key)?.showStockSummary);
   }, [isEffectiveAdmin, displaySettings.show_reserve, profile?.partner_id, profile?.id]);
 
   const canViewStockDetails = useMemo(() => {
     if (!profile) return false;
-    if (isEffectiveAdmin) return true;
-    const role = profile.role;
-    if (role === 'admin' || role === 'manager_rm' || role === 'manager_lm') return true;
+    if (isEffectiveAdmin || profile.role === 'admin' || profile.role === 'manager_rm' || profile.role === 'manager_lm') return true;
     const key = profile.partner_id || profile.id;
     return Boolean(key && getClientWarehouseSettings(key)?.showStockSummary);
   }, [profile, isEffectiveAdmin]);
@@ -76,7 +89,8 @@ export default function CatalogPage({
   const { allCollections, allCountries, allSizes, allManufacturers, allWarehouses } = useSmartFacets({
     baseProducts, selectedCategory, activeClusterQuickFilter, selectedClusters,
     selectedCollections, selectedManufacturers, selectedCountries, selectedWarehouses,
-    selectedSizes, isEffectiveAdmin, profile, myShowroomName,
+    selectedSizes, priceMin: parsedPriceMin, priceMax: parsedPriceMax,
+    getProductPriceSqm, isEffectiveAdmin, profile, myShowroomName,
   });
 
   useEffect(() => {
@@ -132,6 +146,16 @@ export default function CatalogPage({
     }
     if (selectedClusters.size > 0) {
       result = result.filter(p => p.variants.some(v => v.size_cluster && selectedClusters.has(v.size_cluster) && hasVariantStock(v)));
+    }
+
+    if (parsedPriceMin !== null || parsedPriceMax !== null) {
+      result = result.filter(p => {
+        const priceSqm = getProductPriceSqm(p);
+        if (priceSqm <= 0) return false;
+        if (parsedPriceMin !== null && priceSqm < parsedPriceMin) return false;
+        if (parsedPriceMax !== null && priceSqm > parsedPriceMax) return false;
+        return true;
+      });
     }
 
     if (selectedCollections.size > 0) result = result.filter(p => selectedCollections.has(p.collection));
@@ -203,7 +227,8 @@ export default function CatalogPage({
     return result;
   }, [
     baseProducts, onlyInProduction, selectedCategory, activeClusterQuickFilter,
-    selectedClusters, selectedCollections, selectedManufacturers, selectedCountries,
+    selectedClusters, parsedPriceMin, parsedPriceMax, currency, exchangeRate,
+    selectedCollections, selectedManufacturers, selectedCountries,
     selectedWarehouses, selectedSizes, searchQuery, sortBy, pricing,
   ]);
 
@@ -333,29 +358,17 @@ export default function CatalogPage({
   if (loadError) return <CatalogLoadError />;
 
   const filterProps = {
-    searchQuery,
-    setSearchQuery,
-    selectedCollections,
-    toggleCollection: (v: string) => setSelectedCollections(s => toggle(s, v)),
-    selectedManufacturers,
-    toggleManufacturer: (v: string) => setSelectedManufacturers(s => toggle(s, v)),
-    selectedCountries,
-    toggleCountry: (v: string) => setSelectedCountries(s => toggle(s, v)),
-    selectedWarehouses,
-    toggleWarehouse: (v: string) => setSelectedWarehouses(s => toggle(s, v)),
-    selectedSizes,
-    toggleSize: (v: string) => setSelectedSizes(s => toggle(s, v)),
-    selectedClusters,
-    toggleCluster: (v: string) => setSelectedClusters(s => toggle(s, v)),
-    onlyInProduction,
-    setOnlyInProduction,
-    activeFilterCount,
-    resetFilters,
-    allCollections,
-    allManufacturers,
-    allCountries,
-    allWarehouses,
-    allSizes,
+    searchQuery, setSearchQuery,
+    selectedCollections, toggleCollection: (v: string) => setSelectedCollections(s => toggle(s, v)),
+    selectedManufacturers, toggleManufacturer: (v: string) => setSelectedManufacturers(s => toggle(s, v)),
+    selectedCountries, toggleCountry: (v: string) => setSelectedCountries(s => toggle(s, v)),
+    selectedWarehouses, toggleWarehouse: (v: string) => setSelectedWarehouses(s => toggle(s, v)),
+    selectedSizes, toggleSize: (v: string) => setSelectedSizes(s => toggle(s, v)),
+    selectedClusters, toggleCluster: (v: string) => setSelectedClusters(s => toggle(s, v)),
+    priceMin, setPriceMin, priceMax, setPriceMax,
+    onlyInProduction, setOnlyInProduction,
+    activeFilterCount, resetFilters,
+    allCollections, allManufacturers, allCountries, allWarehouses, allSizes,
   };
 
   return (
@@ -420,7 +433,6 @@ export default function CatalogPage({
         />
 
         {/* RugsUSA Size Clustering Bar (Pattern 3) activeClusterQuickFilter disabled per user request to prevent mobile layout overflow */}
-
         {/* Country filter pills */}
         {allCountries.length > 1 && (
           <div className="mb-4 flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
@@ -455,18 +467,14 @@ export default function CatalogPage({
 
         {/* Active Filter Chips */}
         <ActiveFilterChips
-          searchQuery={searchQuery}
-          selectedCategory={selectedCategory}
-          onlyInProduction={onlyInProduction}
-          selectedCollections={selectedCollections}
-          selectedCountries={selectedCountries}
-          selectedManufacturers={selectedManufacturers}
-          selectedWarehouses={selectedWarehouses}
-          selectedSizes={selectedSizes}
-          selectedClusters={selectedClusters}
-          onClearSearch={() => setSearchQuery('')}
-          onClearCategory={() => setSelectedCategory('all')}
+          searchQuery={searchQuery} selectedCategory={selectedCategory} onlyInProduction={onlyInProduction}
+          selectedCollections={selectedCollections} selectedCountries={selectedCountries}
+          selectedManufacturers={selectedManufacturers} selectedWarehouses={selectedWarehouses}
+          selectedSizes={selectedSizes} selectedClusters={selectedClusters}
+          priceMin={priceMin} priceMax={priceMax}
+          onClearSearch={() => setSearchQuery('')} onClearCategory={() => setSelectedCategory('all')}
           onClearInProduction={() => setOnlyInProduction(false)}
+          onClearPrice={() => { setPriceMin(''); setPriceMax(''); }}
           onRemoveCollection={val => setSelectedCollections(s => toggle(s, val))}
           onRemoveCountry={val => setSelectedCountries(s => toggle(s, val))}
           onRemoveManufacturer={val => setSelectedManufacturers(s => toggle(s, val))}

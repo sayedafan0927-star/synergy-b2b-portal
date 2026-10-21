@@ -94,13 +94,21 @@ export async function fetchCatalogFromErp(dealerId?: string | number, priceType?
       refresh: bypassCache ? '1' : undefined,
     };
 
-    const [response, normVariantMap] = await Promise.all([
-      erpFetch('catalog', {
-        method: 'GET',
-        params: queryParams,
-      }),
-      getNormalizedVariantMap(queryParams, bypassCache),
-    ]);
+    const hasWarmNormalizedCache = Boolean(
+      !bypassCache && normalizedVariantCache && Date.now() - normalizedVariantCache.timestamp < NORMALIZED_TTL_MS
+    );
+
+    const response = await erpFetch('catalog', {
+      method: 'GET',
+      params: queryParams,
+    });
+
+    const normVariantMap = hasWarmNormalizedCache
+      ? normalizedVariantCache!.map
+      : await Promise.race([
+          getNormalizedVariantMap(queryParams, bypassCache),
+          new Promise<Map<string, any>>(resolve => setTimeout(() => resolve(normalizedVariantCache?.map || new Map()), 250)),
+        ]);
 
     const xCache = response.headers.get('x-cache') || response.headers.get('x-erp-cache');
     const xAge = response.headers.get('x-cache-age-ms');
