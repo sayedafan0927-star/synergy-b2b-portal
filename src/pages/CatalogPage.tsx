@@ -258,7 +258,7 @@ export default function CatalogPage({
       return serverSummary;
     }
 
-    let freeQty = 0, freeSqm = 0, reservedQty = 0, reservedSqm = 0, toShipQty = 0, toShipSqm = 0, totalQty = 0, totalSqm = 0;
+    let freeQty = 0, freeSqm = 0, reservedQty = 0, reservedSqm = 0, holdQty = 0, holdSqm = 0, toShipQty = 0, toShipSqm = 0, totalQty = 0, totalSqm = 0;
 
     for (const p of filteredProducts) {
       for (const v of p.variants) {
@@ -271,9 +271,9 @@ export default function CatalogPage({
             const free = w.free_stock ?? w.stock ?? 0;
             const res = w.reserved_stock ?? 0;
             const toShip = w.to_ship_stock ?? 0;
-            const total = w.total_stock ?? (free + res + toShip);
+            const hold = w.receiving_hold_stock ?? 0, total = w.total_stock ?? (free + res + toShip + hold);
             freeQty += free; freeSqm += free * area;
-            reservedQty += res; reservedSqm += res * area;
+            reservedQty += res; reservedSqm += res * area; holdQty += hold; holdSqm += hold * area;
             toShipQty += toShip; toShipSqm += w.to_ship_sqm || toShip * area;
             totalQty += total; totalSqm += total * area;
           }
@@ -281,9 +281,9 @@ export default function CatalogPage({
           const free = v.free_stock || 0;
           const res = v.reserved_stock || 0;
           const toShip = v.to_ship_stock || 0;
-          const total = v.total_stock || free + res + toShip;
+          const hold = v.receiving_hold_stock ?? 0, total = v.total_stock || free + res + toShip + hold;
           freeQty += free; freeSqm += free * area;
-          reservedQty += res; reservedSqm += res * area;
+          reservedQty += res; reservedSqm += res * area; holdQty += hold; holdSqm += hold * area;
           toShipQty += toShip; toShipSqm += v.to_ship_sqm || toShip * area;
           totalQty += total; totalSqm += total * area;
         }
@@ -296,6 +296,8 @@ export default function CatalogPage({
       free_stock_sqm: Math.round(freeSqm * 100) / 100,
       reserved_stock_qty: reservedQty,
       reserved_stock_sqm: Math.round(reservedSqm * 100) / 100,
+      receiving_hold_qty: holdQty,
+      receiving_hold_sqm: Math.round(holdSqm * 100) / 100,
       to_ship_qty: toShipQty,
       to_ship_sqm: Math.round(toShipSqm * 100) / 100,
       total_stock_qty: totalQty,

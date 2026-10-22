@@ -485,6 +485,7 @@ export default function ProductPage({
 
         {/* DESKTOP VARIANT TABLE */}
         <ProductWarehouseStockTable
+          showReceivingHold={isEffectiveAdmin}
           product={product}
           variants={variantsForShape}
           quantities={quantities}
@@ -604,6 +605,7 @@ export default function ProductPage({
 
           {/* MOBILE VARIANT CARDS */}
           <ProductWarehouseStockTable
+          showReceivingHold={isEffectiveAdmin}
             product={product}
             variants={variantsForShape}
             quantities={quantities}

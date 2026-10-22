@@ -238,6 +238,9 @@ function ProductCard({ product, onNavigate, selectedWarehouses, onlyInProduction
   const totalInProductionQty = user ? product.variants.reduce((sum, v) => sum + Number(v.in_production_qty ?? 0), 0) : 0;
   const cardProductionEta = formatProductionEta(product.production_eta || product.variants.find(v => v.production_eta)?.production_eta);
   const isOutOfStock = totalStockForCard <= 0 && totalInProductionQty <= 0;
+  const receivingHoldQty = isEffectiveAdmin
+    ? product.variants.reduce((sum, v) => sum + Number(v.receiving_hold_stock ?? 0), 0)
+    : 0;
 
   const handleCardPrefetch = () => {
     cacheProduct(product);
@@ -281,6 +284,7 @@ function ProductCard({ product, onNavigate, selectedWarehouses, onlyInProduction
         totalShowroomQty={totalShowroomQty}
         isEffectiveAdmin={isEffectiveAdmin}
         isOutOfStock={isOutOfStock}
+        receivingHoldQty={receivingHoldQty}
         isShowroomMode={isShowroomMode}
         priority={priority}
       />

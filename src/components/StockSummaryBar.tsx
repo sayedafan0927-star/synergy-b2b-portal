@@ -31,12 +31,18 @@ export const StockSummaryBar: React.FC<StockSummaryBarProps> = ({
     free: t('catalog.stock_free', 'Остаток'),
     reserve: t('catalog.stock_reserve', 'Резерв'),
     toShip: t('catalog.stock_to_ship', 'К отгрузке'),
+    hold: t('catalog.stock_receiving_hold', 'На сверке приёмки'),
+    holdHint: t('catalog.receiving_hold_hint', 'Товар принят на склад и ожидает сверки с упаковочным листом. Клиентам недоступен до завершения сверки'),
     total: t('catalog.stock_total', 'Всего'),
     pcs: t('common.pcs', 'шт.'),
     sqm: t('common.sqm', 'м²'),
     clients: t('catalog.clients_link', 'клиенты ↗'),
     reserveHint: t('catalog.reserve_hint', 'Нажмите, чтобы посмотреть клиентов и объём резерва'),
   };
+
+  const holdQty = summary.receiving_hold_qty ?? 0;
+  const holdSqm = summary.receiving_hold_sqm ?? 0;
+  const showHold = holdQty > 0 || holdSqm > 0;
 
   return (
     <div
@@ -123,6 +129,26 @@ export const StockSummaryBar: React.FC<StockSummaryBarProps> = ({
             </span>
           )}
         </div>
+
+        {showHold && (
+          <>
+            <div className="h-3.5 w-px bg-slate-200/80 hidden md:block" />
+
+            {/* 3.5 На сверке приёмки (нейтральный серый, без ссылки) */}
+            <div className="flex items-center gap-2" title={labels.holdHint}>
+              <div className="flex items-center gap-1.5">
+                <span className="h-2 w-2 rounded-full bg-slate-400 shrink-0" />
+                <span className="font-medium text-slate-600">{labels.hold}:</span>
+              </div>
+              <span className="font-bold text-slate-900 font-mono">
+                {fmtNum(holdQty)} {labels.pcs}
+              </span>
+              <span className="font-semibold text-slate-500 font-mono">
+                {fmtNum(holdSqm, 2)} {labels.sqm}
+              </span>
+            </div>
+          </>
+        )}
 
         <div className="h-3.5 w-px bg-slate-200/80 hidden lg:block" />
 
@@ -216,6 +242,22 @@ export const StockSummaryBar: React.FC<StockSummaryBarProps> = ({
               {fmtNum(summary.to_ship_sqm, 2)} {labels.sqm}
             </div>
           </div>
+
+          {/* На сверке приёмки */}
+          {showHold && (
+            <div className="rounded-lg bg-slate-50 border border-slate-200 p-2" title={labels.holdHint}>
+              <div className="flex items-center gap-1.5 text-slate-600 font-semibold text-[11px] mb-0.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                <span>{labels.hold}</span>
+              </div>
+              <div className="font-bold text-slate-900 text-xs font-mono">
+                {fmtNum(holdQty)} {labels.pcs}
+              </div>
+              <div className="text-[11px] font-medium text-slate-500 font-mono">
+                {fmtNum(holdSqm, 2)} {labels.sqm}
+              </div>
+            </div>
+          )}
 
           {/* Всего */}
           <div className="rounded-lg bg-slate-100/70 border border-slate-200 p-2">

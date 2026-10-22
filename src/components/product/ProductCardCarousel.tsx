@@ -14,6 +14,8 @@ interface ProductCardCarouselProps {
   totalShowroomQty: number;
   isEffectiveAdmin: boolean;
   isOutOfStock: boolean;
+  /** Объём «На сверке приёмки» по всем вариантам (только для сотрудников) */
+  receivingHoldQty?: number;
   isShowroomMode: boolean;
   priority?: boolean;
 }
@@ -29,6 +31,7 @@ export function ProductCardCarousel({
   totalShowroomQty,
   isEffectiveAdmin,
   isOutOfStock,
+  receivingHoldQty = 0,
   isShowroomMode,
   priority = false,
 }: ProductCardCarouselProps) {
@@ -224,7 +227,14 @@ export function ProductCardCarousel({
       )}
 
       {/* Бейдж для админа: если у товара 0 остаток и он скрыт от клиентов */}
-      {isEffectiveAdmin && isOutOfStock && !isShowroomMode && (
+      {isEffectiveAdmin && isOutOfStock && receivingHoldQty > 0 && !isShowroomMode && (
+        <div className="absolute top-2.5 right-2.5 z-10 pointer-events-none max-w-[calc(100%-1.25rem)]">
+          <span className="inline-flex items-center gap-1 rounded-md bg-slate-600 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm truncate" title="Товар принят на склад и ожидает сверки с упаковочным листом. Клиентам недоступен до завершения сверки">
+            На сверке: {receivingHoldQty} шт
+          </span>
+        </div>
+      )}
+      {isEffectiveAdmin && isOutOfStock && receivingHoldQty <= 0 && !isShowroomMode && (
         <div className="absolute top-2.5 right-2.5 z-10 pointer-events-none max-w-[calc(100%-1.25rem)]">
           <span className="inline-flex items-center gap-1 rounded-md bg-amber-600 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm truncate" title="Товар с нулевым остатком скрыт от клиентов">
             ⚠️ 0 шт · Скрыт от клиентов

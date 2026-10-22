@@ -11,6 +11,8 @@ export interface Warehouse {
   stock: number;
   free_stock?: number;
   reserved_stock?: number;
+  /** Карантин приёмки (ожидает сверки с упаковочным листом), шт */
+  receiving_hold_stock?: number;
   to_ship_stock?: number;
   to_ship_sqm?: number;
   total_stock?: number;
@@ -30,6 +32,9 @@ export interface StockSummary {
   free_stock_sqm: number;
   reserved_stock_qty: number;
   reserved_stock_sqm: number;
+  /** На сверке приёмки (опционально — старый кэш может не содержать) */
+  receiving_hold_qty?: number;
+  receiving_hold_sqm?: number;
   to_ship_qty: number;
   to_ship_sqm: number;
   total_stock_qty: number;
@@ -77,6 +82,8 @@ export interface ProductVariant {
   sale_discount_percent?: number;
   free_stock?: number;
   reserved_stock?: number;
+  receiving_hold_stock?: number;
+  receiving_hold_sqm?: number;
   to_ship_stock?: number;
   to_ship_sqm?: number;
   total_stock?: number;

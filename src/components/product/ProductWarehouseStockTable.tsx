@@ -27,6 +27,8 @@ interface ProductWarehouseStockTableProps {
   hasDealerStock: boolean;
   t: (key: string) => string;
   isMobile?: boolean;
+  /** Показывать «На сверке» (только сотрудники/дилеры с доступом к внутренним остаткам) */
+  showReceivingHold?: boolean;
 }
 
 export function ProductWarehouseStockTable({
@@ -52,6 +54,7 @@ export function ProductWarehouseStockTable({
   hasDealerStock,
   t,
   isMobile = false,
+  showReceivingHold = false,
 }: ProductWarehouseStockTableProps) {
   const { currencyUnitLabel } = useCurrency();
 
@@ -87,6 +90,17 @@ export function ProductWarehouseStockTable({
       </button>
     );
   }
+
+  const HOLD_HINT = 'Товар принят на склад и ожидает сверки с упаковочным листом. Клиентам недоступен до завершения сверки';
+  const renderHold = (wh: Warehouse) => {
+    const hold = wh.receiving_hold_stock ?? 0;
+    if (!showReceivingHold || hold <= 0) return null;
+    return (
+      <span className="ml-1.5 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200" title={HOLD_HINT}>
+        На сверке: {hold} шт.
+      </span>
+    );
+  };
 
   if (isMobile) {
     return (
@@ -194,6 +208,7 @@ export function ProductWarehouseStockTable({
                             <span className={`inline-block h-1.5 w-1.5 rounded-full ${wh.stock > 0 ? 'bg-emerald-500' : 'bg-slate-300'}`} />
                             {wh.stock > 0 ? `${wh.stock} шт.` : '0 шт.'}
                           </span>
+                          {renderHold(wh)}
                         </div>
                         <div className="flex items-center gap-3">
                           <div className="inline-flex items-center">
@@ -400,6 +415,7 @@ export function ProductWarehouseStockTable({
                           <span className={`inline-block h-1.5 w-1.5 rounded-full ${wh.stock > 0 ? 'bg-emerald-500' : 'bg-slate-300'}`} />
                           {wh.stock > 0 ? `${wh.stock} шт.` : '0 шт.'}
                         </span>
+                        {renderHold(wh)}
                       </td>
                       {user && (
                         <td className="py-3 pr-3 text-sm whitespace-nowrap">

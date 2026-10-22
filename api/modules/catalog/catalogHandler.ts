@@ -56,6 +56,8 @@ export function compactCatalogPayload(data: any): any {
       area_sqm: Number(v.area_sqm || 0),
       free_stock: Number(v.free_stock ?? v.stock_free ?? v.stock ?? 0),
       reserved_stock: Number(v.reserved_stock ?? 0),
+      receiving_hold_stock: Number(v.receiving_hold_stock ?? 0),
+      receiving_hold_sqm: Number(v.receiving_hold_sqm ?? 0),
       total_stock: Number(v.total_stock ?? (v.free_stock ?? v.stock_free ?? 0)),
       stock_status: v.stock_status,
       in_production_qty: Number(v.in_production_qty ?? 0),
