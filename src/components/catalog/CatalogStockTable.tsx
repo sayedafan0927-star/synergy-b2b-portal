@@ -48,7 +48,7 @@ export function CatalogStockTable({
     filteredProducts.forEach(p =>
       p.variants.forEach(v => {
         const wh = getAllowedWarehouses(v.warehouses).find(w => (w.warehouse_name || w.city) === selectedWarehouse);
-        if ((wh && wh.stock > 0) || Number(v.in_production_qty ?? 0) > 0) set.add(v.size);
+        if ((wh && wh.stock > 0) || (Boolean(user) && Number(v.in_production_qty ?? 0) > 0)) set.add(v.size);
       }),
     );
     if (set.size === 0) {
@@ -282,8 +282,8 @@ export function CatalogStockTable({
                           }
                           const allowedWhs = getAllowedWarehouses(variant.warehouses);
                           const wh = allowedWhs.find(w => (w.warehouse_name || w.city) === selectedWarehouse);
-                          const inProdQty = Number(variant.in_production_qty ?? 0);
-                          const isPreorderCell = (!wh || wh.stock === 0) && inProdQty > 0;
+                          const inProdQty = user ? Number(variant.in_production_qty ?? 0) : 0;
+                          const isPreorderCell = Boolean(user) && (!wh || wh.stock === 0) && inProdQty > 0;
                           const effectiveWh: Warehouse | undefined = wh && wh.stock > 0
                             ? wh
                             : isPreorderCell

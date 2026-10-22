@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import type { Product, Warehouse } from '@/types';
 import { sizeArea } from './types';
 import { filterWarehousesForClient } from '@/lib/warehouseVisibility';
+import { toCanonicalNominalSize, matchesCanonicalSize } from '@/lib/carpetSizeNormalizer';
 
 export interface UseSmartFacetsParams {
   baseProducts: Product[];
@@ -97,7 +98,7 @@ function productMatches(
   }
 
   if (opts.sizes && opts.sizes.size > 0) {
-    if (!p.variants.some(v => v.size && matchesSet(opts.sizes, v.size))) return false;
+    if (!p.variants.some(v => v.size && matchesCanonicalSize(v.size, opts.sizes))) return false;
   }
 
   return true;
@@ -232,8 +233,9 @@ export function useSmartFacets({
     for (const p of matching) {
       for (const v of p.variants) {
         if (v.size) {
+          const canonical = toCanonicalNominalSize(v.size);
           if (!hasAnyCatalogStock) {
-            set.add(v.size);
+            set.add(canonical);
             continue;
           }
           const whs = selectedWarehouses.size > 0
@@ -242,12 +244,12 @@ export function useSmartFacets({
           const hasStock =
             whs.some(w => (w.stock || 0) > 0 || (w.free_stock || 0) > 0) ||
             (selectedWarehouses.size === 0 && (v.in_production_qty ?? 0) > 0);
-          if (hasStock) set.add(v.size);
+          if (hasStock) set.add(canonical);
         }
       }
     }
     for (const s of selectedSizes) {
-      set.add(s);
+      set.add(toCanonicalNominalSize(s));
     }
     return Array.from(set).sort((a, b) => sizeArea(a) - sizeArea(b));
   }, [

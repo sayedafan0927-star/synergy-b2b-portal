@@ -46,7 +46,7 @@ export function CatalogFilterContent({
 }: CatalogFilterContentProps) {
   const { t } = useLanguage();
   const { currencyUnitLabel } = useCurrency();
-  const { isAdmin, isImpersonating, profile } = useAuth();
+  const { user, isAdmin, isImpersonating, profile } = useAuth();
   const { targetClient, setTargetClient } = useCart();
   const isAdminView = Boolean(!isImpersonating && (isAdmin || profile?.role === 'admin'));
   const canViewAllWarehouses = Boolean(!isImpersonating && (isAdmin || profile?.role === 'admin' || profile?.role === 'manager_lm'));
@@ -127,7 +127,7 @@ export function CatalogFilterContent({
               </button>
             )}
           </div>
-          {setOnlyInProduction && (
+          {Boolean(user) && setOnlyInProduction && (
             <div className="mt-3">
               <CheckItem
                 label="🏭 В производстве (Доступно к предзаказу)"

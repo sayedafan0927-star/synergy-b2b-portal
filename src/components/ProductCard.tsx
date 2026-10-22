@@ -118,7 +118,7 @@ function ProductCard({ product, onNavigate, selectedWarehouses, onlyInProduction
   };
 
   const inStockVariants = product.variants.filter(v => getVariantClientStock(v) > 0);
-  const inProdVariants = product.variants.filter(v => Number(v.in_production_qty ?? 0) > 0);
+  const inProdVariants = user ? product.variants.filter(v => Number(v.in_production_qty ?? 0) > 0) : [];
   const availableVariantsForCard = onlyInProduction
     ? inProdVariants
     : (inStockVariants.length > 0 ? inStockVariants : (!hasSelectedWarehouses ? inProdVariants : []));
@@ -134,7 +134,7 @@ function ProductCard({ product, onNavigate, selectedWarehouses, onlyInProduction
   const handleAdd = (variant: ProductVariant) => {
     const clientWarehouses = getVariantClientWarehouses(variant).filter(w => w.stock > 0);
     const stock = clientWarehouses.reduce((sum, w) => sum + w.stock, 0);
-    const inProdQty = Number(variant.in_production_qty ?? 0);
+    const inProdQty = user ? Number(variant.in_production_qty ?? 0) : 0;
     const isPreorder = stock <= 0 && inProdQty > 0;
     const availableQty = isPreorder ? inProdQty : stock;
 
@@ -235,7 +235,7 @@ function ProductCard({ product, onNavigate, selectedWarehouses, onlyInProduction
   const totalHubQty = showHub ? product.variants.reduce((sum, v) => sum + getMainWarehouseStock(v), 0) : 0;
 
   const totalStockForCard = product.variants.reduce((sum, v) => sum + getVariantClientStock(v), 0);
-  const totalInProductionQty = product.variants.reduce((sum, v) => sum + Number(v.in_production_qty ?? 0), 0);
+  const totalInProductionQty = user ? product.variants.reduce((sum, v) => sum + Number(v.in_production_qty ?? 0), 0) : 0;
   const cardProductionEta = formatProductionEta(product.production_eta || product.variants.find(v => v.production_eta)?.production_eta);
   const isOutOfStock = totalStockForCard <= 0 && totalInProductionQty <= 0;
 
@@ -312,7 +312,7 @@ function ProductCard({ product, onNavigate, selectedWarehouses, onlyInProduction
         </div>
 
         {/* Склады: выбранный склад (при активном фильтре) или свой склад + центральный склад Астана */}
-        {totalStockForCard === 0 && totalInProductionQty > 0 ? (
+        {Boolean(user) && totalStockForCard === 0 && totalInProductionQty > 0 ? (
           <div className="mt-2 flex flex-col gap-0.5 border-t border-slate-100 pt-2 min-h-[38px] justify-center text-xs">
             <div className="flex items-center justify-between gap-1">
               <span className="inline-flex items-center gap-1 font-semibold text-amber-800 truncate">

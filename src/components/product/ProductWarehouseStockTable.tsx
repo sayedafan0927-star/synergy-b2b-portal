@@ -95,7 +95,7 @@ export function ProductWarehouseStockTable({
           const variantPrice = pricing.getVariantPrice(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
           const pricePerSqm = pricing.getPricePerSqm(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
           const rows = filterClientWarehouses(variant.warehouses, myShowroomId, myShowroomName, clientContext, displaySettings);
-          const inProdQty = Number(variant.in_production_qty ?? 0);
+          const inProdQty = user ? Number(variant.in_production_qty ?? 0) : 0;
 
           const showroomQty = isShowroomVisible
             ? (myShowroomId ? (variant.warehouses.find(w => w.warehouse_id === myShowroomId)?.stock || 0) : (variant.dealer_stock?.in_showroom_qty || 0))
@@ -243,7 +243,7 @@ export function ProductWarehouseStockTable({
               {variants.map(variant => {
                 const variantPrice = pricing.getVariantPrice(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
                 const pricePerSqm = pricing.getPricePerSqm(product.collection, variant.size, variant.base_price, variant.price_per_sqm);
-                const inProdQty = Number(variant.in_production_qty ?? 0);
+                const inProdQty = user ? Number(variant.in_production_qty ?? 0) : 0;
 
                 const rows = filterClientWarehouses(variant.warehouses, myShowroomId, myShowroomName, clientContext, displaySettings);
                 const showroomQty = isShowroomVisible

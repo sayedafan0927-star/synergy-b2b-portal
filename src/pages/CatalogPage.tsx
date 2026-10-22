@@ -19,6 +19,7 @@ import {
 } from '@/components/catalog';
 import { tokenizeSearchQuery, matchesSearchTokens } from '@/lib/searchNormalization';
 import { preloadCatalogImages } from '@/lib/imagePreloader';
+import { matchesCanonicalSize } from '@/lib/carpetSizeNormalizer';
 
 export default function CatalogPage({
   onNavigate, initialCollection, initialCountry, initialSearch,
@@ -30,7 +31,7 @@ export default function CatalogPage({
   const { currency, exchangeRate } = useCurrency();
   const { products, summary: serverSummary, warehouses: erpWarehouses, loading, error: loadError } = useProducts();
   const pricing = useUserPricing();
-  const { profile, isAdmin, isImpersonating } = useAuth();
+  const { user, profile, isAdmin, isImpersonating } = useAuth();
   const isEffectiveAdmin = isAdmin && !isImpersonating;
   const { settings: displaySettings } = useDisplaySettings();
   const myShowroomName = profile?.showroom_warehouse_name || 'В моем магазине';
@@ -120,8 +121,8 @@ export default function CatalogPage({
   }, [allWarehouses, stockWarehouse, selectedWarehouses]);
 
   const inProductionCount = useMemo(
-    () => baseProducts.filter(p => p.variants.some(v => (v.in_production_qty ?? 0) > 0)).length,
-    [baseProducts],
+    () => (user ? baseProducts.filter(p => p.variants.some(v => (v.in_production_qty ?? 0) > 0)).length : 0),
+    [baseProducts, user],
   );
 
   const hasVariantStock = (v: Product['variants'][number]) => {
@@ -133,14 +134,14 @@ export default function CatalogPage({
         ? matchesSelectedWarehouses(w, selectedWarehouses, profile?.showroom_warehouse_id, myShowroomName)
         : (w.warehouse_id === 81 || w.is_hub || (w.warehouse_name || '').includes('Астана'))
     );
-    return whs.some(w => w.stock > 0) || (!selectedWarehouses.size && Number(v.in_production_qty ?? 0) > 0);
+    return whs.some(w => w.stock > 0) || (Boolean(user) && !selectedWarehouses.size && Number(v.in_production_qty ?? 0) > 0);
   };
 
   const filteredProducts = useMemo(() => {
     let result = [...baseProducts];
 
     if (onlyInProduction) {
-      result = result.filter(p => p.variants.some(v => (v.in_production_qty ?? 0) > 0));
+      result = user ? result.filter(p => p.variants.some(v => (v.in_production_qty ?? 0) > 0)) : [];
     }
 
     if (selectedCategory !== 'all') {
@@ -186,7 +187,7 @@ export default function CatalogPage({
     } else if (!onlyInProduction && hasAnyGlobalStock && (!isEffectiveAdmin || adminStockFilter === 'in_stock') && hideOutOfStockSetting) {
       result = result.filter(p => p.variants.some(v => hasVariantStock(v)));
     }
-    if (selectedSizes.size > 0) result = result.filter(p => p.variants.some(v => selectedSizes.has(v.size) && hasVariantStock(v)));
+    if (selectedSizes.size > 0) result = result.filter(p => p.variants.some(v => matchesCanonicalSize(v.size, selectedSizes) && hasVariantStock(v)));
 
     // Sub-10ms Homoglyph, Dimension & Layout Normalized Search
     if (searchQuery.trim()) {
@@ -406,17 +407,19 @@ export default function CatalogPage({
             </button>
           );
         })}
-        <button
-          type="button"
-          onClick={() => setOnlyInProduction(prev => !prev)}
-          className={`shrink-0 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-            onlyInProduction
-              ? 'bg-amber-600 text-white shadow-xs font-bold ring-2 ring-amber-400/40'
-              : 'bg-amber-50/90 border border-amber-200 text-amber-900 hover:border-amber-300 hover:bg-amber-100/80'
-          }`}
-        >
-          🏭 В производстве{inProductionCount > 0 ? ` (${inProductionCount})` : ''}
-        </button>
+        {Boolean(user) && (
+          <button
+            type="button"
+            onClick={() => setOnlyInProduction(prev => !prev)}
+            className={`shrink-0 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+              onlyInProduction
+                ? 'bg-amber-600 text-white shadow-xs font-bold ring-2 ring-amber-400/40'
+                : 'bg-amber-50/90 border border-amber-200 text-amber-900 hover:border-amber-300 hover:bg-amber-100/80'
+            }`}
+          >
+            🏭 В производстве{inProductionCount > 0 ? ` (${inProductionCount})` : ''}
+          </button>
+        )}
       </CatalogPetroglyphHero>
 
       {canViewWarehouses && (

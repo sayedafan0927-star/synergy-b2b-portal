@@ -219,7 +219,7 @@ export function ProductVariantSelector({
           {variantsForShape.map(v => {
             const isSelected = v.size === activeVariant?.size;
             const vStock = filterClientWarehouses(v.warehouses, myShowroomId, myShowroomName, clientContext, displaySettings).reduce((sum, w) => sum + w.stock, 0);
-            const vInProd = Number(v.in_production_qty ?? 0);
+            const vInProd = user ? Number(v.in_production_qty ?? 0) : 0;
 
             return (
               <button
@@ -264,7 +264,7 @@ export function ProductVariantSelector({
               )}
               {(() => {
                 const activeFreeStock = filterClientWarehouses(activeVariant.warehouses, myShowroomId, myShowroomName, clientContext, displaySettings).reduce((sum, w) => sum + w.stock, 0);
-                const activeInProdQty = Number(activeVariant.in_production_qty ?? 0);
+                const activeInProdQty = user ? Number(activeVariant.in_production_qty ?? 0) : 0;
                 const etaFormatted = formatProductionEta(activeVariant.production_eta || product.production_eta);
                 if (activeFreeStock === 0 && activeInProdQty > 0 && etaFormatted) {
                   return (

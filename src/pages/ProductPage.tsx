@@ -86,7 +86,7 @@ export default function ProductPage({
         const whLabel = wh.warehouse_name || wh.city;
         init[rowKey(v.sku, whLabel)] = 0;
       });
-      if (Number(v.in_production_qty ?? 0) > 0) {
+      if (user && Number(v.in_production_qty ?? 0) > 0) {
         init[rowKey(v.sku, 'Предзаказ (Фабрика)')] = 0;
       }
     });
@@ -254,15 +254,15 @@ export default function ProductPage({
         warehouses: whs,
         stock,
         free_stock: stock,
-        in_production_qty: hasSelectedWarehouses ? 0 : v.in_production_qty,
+        in_production_qty: (hasSelectedWarehouses || !user) ? 0 : v.in_production_qty,
       };
     });
     const inStock = mapped.filter(v => v.stock > 0);
     if (inStock.length > 0) return inStock;
-    const inProd = mapped.filter(v => Number(v.in_production_qty ?? 0) > 0);
+    const inProd = user ? mapped.filter(v => Number(v.in_production_qty ?? 0) > 0) : [];
     if (!hasSelectedWarehouses && inProd.length > 0) return inProd;
     return mapped;
-  }, [product, myShowroomId, myShowroomName, clientContext, displaySettings, hasSelectedWarehouses, selectedWarehouses]);
+  }, [product, myShowroomId, myShowroomName, clientContext, displaySettings, hasSelectedWarehouses, selectedWarehouses, user]);
 
   const availableShapes = useMemo(() => {
     if (!scopedVariants.length || !product) return ['Прямоугольный'];
