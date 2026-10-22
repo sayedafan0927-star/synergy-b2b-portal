@@ -493,6 +493,7 @@ export default function CatalogPage({
         <MobileFloatingFilterButton
           toolbarRef={toolbarRef}
           activeFilterCount={activeFilterCount}
+          suppressed={drawerOpen}
           onClick={() => setDrawerOpen(true)}
         />
 

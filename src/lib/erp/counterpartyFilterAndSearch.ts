@@ -226,6 +226,13 @@ export function deduplicateAndEnrichCounterparties(rawList: any[]): {
     }
   }
 
+  // 3. Делаем склады (в т.ч. привязанные через карточки-заглушки) доступными для поиска по владельцу
+  for (const [nameKey, owner] of warehouseNameOwnerMap) {
+    const o = owner as any;
+    if (!Array.isArray(o.linked_warehouse_names)) o.linked_warehouse_names = [];
+    if (nameKey && !o.linked_warehouse_names.includes(nameKey)) o.linked_warehouse_names.push(nameKey);
+  }
+
   return { all, warehouseOwnerMap, warehouseNameOwnerMap };
 }
 
@@ -292,9 +299,18 @@ export function searchCounterpartiesSmart<T extends Record<string, any>>(
     const phoneNorm = normalizePhoneForSearch(phone);
     const bin = String(item.bin || '');
     const idStr = String(item.partner_id ?? item.id ?? '');
+    // Названия складов комиссионера (шоурумов) — чтобы можно было искать по складу, а не только по контрагенту
+    const warehouseText = [
+      item.showroom_warehouse_name,
+      item.warehouse_name,
+      ...(Array.isArray(item.showroom_warehouse_names) ? item.showroom_warehouse_names : []),
+      ...(Array.isArray(item.linked_warehouse_names) ? item.linked_warehouse_names : []),
+    ].filter(Boolean).join(' ');
+    const warehouseLower = warehouseText.toLowerCase();
+    const warehouseCanonical = toCanonicalSearchString(warehouseText);
 
-    const combinedRaw = `${nameLower} ${cityLower} ${phoneDigits} ${phoneNorm} ${bin.toLowerCase()} ${idStr.toLowerCase()}`;
-    const combinedCanonical = `${nameCanonical} ${cityCanonical} ${phoneDigits} ${phoneNorm} ${bin.toLowerCase()} ${idStr.toLowerCase()}`;
+    const combinedRaw = `${nameLower} ${warehouseLower} ${cityLower} ${phoneDigits} ${phoneNorm} ${bin.toLowerCase()} ${idStr.toLowerCase()}`;
+    const combinedCanonical = `${nameCanonical} ${warehouseCanonical} ${cityCanonical} ${phoneDigits} ${phoneNorm} ${bin.toLowerCase()} ${idStr.toLowerCase()}`;
 
     // Проверяем, что все токены запроса присутствуют (в обычном, каноническом или цифровом виде)
     const matchesAllTokens = qRawTokens.every((rawTok, idx) => {
@@ -325,6 +341,10 @@ export function searchCounterpartiesSmart<T extends Record<string, any>>(
       else if (phoneDigits.includes(qDigits)) score += 45;
       else if (bin.includes(qDigits)) score += 40;
       else if (idStr.startsWith(qDigits)) score += 30;
+    }
+
+    if (warehouseLower && (warehouseLower.includes(qLower) || (qCanonical && warehouseCanonical.includes(qCanonical)))) {
+      score += 30;
     }
 
     if (cityLower.startsWith(qLower) || (qCanonical && cityCanonical.startsWith(qCanonical))) {

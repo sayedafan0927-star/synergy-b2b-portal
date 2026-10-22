@@ -6,15 +6,18 @@ interface MobileFloatingFilterButtonProps {
   toolbarRef: RefObject<HTMLElement | null>;
   activeFilterCount: number;
   onClick: () => void;
+  /** Скрыть кнопку (например, когда боковая панель фильтров на десктопе уже открыта и закреплена) */
+  suppressed?: boolean;
 }
 
 export function MobileFloatingFilterButton({
   toolbarRef,
   activeFilterCount,
   onClick,
+  suppressed = false,
 }: MobileFloatingFilterButtonProps) {
   const { t } = useLanguage();
-  const [visible, setVisible] = useState(false);
+  const [pastToolbar, setVisible] = useState(false);
 
   useEffect(() => {
     let ticking = false;
@@ -51,12 +54,14 @@ export function MobileFloatingFilterButton({
     };
   }, [toolbarRef]);
 
+  const visible = pastToolbar && !suppressed;
+
   return (
     <div
-      className={`lg:hidden fixed top-[60px] left-3 z-40 transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-[transform,opacity] ${
+      className={`fixed top-[60px] lg:top-[68px] left-3 lg:left-6 z-40 transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] will-change-[transform,opacity] ${
         visible
           ? 'opacity-100 translate-x-0 pointer-events-auto scale-100'
-          : 'opacity-0 translate-x-[calc(100vw-110px)] pointer-events-none scale-95'
+          : 'opacity-0 translate-x-[calc(100vw-110px)] lg:translate-x-0 lg:-translate-y-2 pointer-events-none scale-95'
       }`}
       aria-hidden={!visible}
     >
