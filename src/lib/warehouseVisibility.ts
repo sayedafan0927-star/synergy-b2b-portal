@@ -57,8 +57,20 @@ export function matchesSelectedWarehouses(
  * - Все остальные (клиент, РМ, поставщик) — «Основной Склад Астана» (ID 81).
  * - Клиент дополнительно — собственный склад/шоурум, если он назначен.
  * - РМ — только основной склад Астана.
+ * - Поставщик — основной склад Астана + все склады, где у него есть доступ
+ *   (counterparty_id склада = его ID) или лежит его товар (product_supplier_id = его ID).
  * Админ может переопределить для любого пользователя (mode: 'custom').
  */
+export function isSupplierOwnWarehouse(
+  w: { counterparty_id?: number | null; product_supplier_id?: number | null },
+  clientProfile?: Partial<Profile> | null
+): boolean {
+  if (clientProfile?.role !== 'supplier') return false;
+  const sid = Number(clientProfile.partner_id);
+  if (!sid || isNaN(sid)) return false;
+  return Number(w.counterparty_id) === sid || Number(w.product_supplier_id) === sid;
+}
+
 export function resolveWarehouseAccess(clientProfile: Partial<Profile>, settings: ClientWarehouseSettings) {
   const showroomEligible = clientProfile.role !== 'manager_rm' && clientProfile.role !== 'supplier';
   if (settings.mode === 'custom') {
@@ -106,6 +118,7 @@ export function isWarehouseVisibleForClient(
 
   if (isHub) return access.central;
   if (isOwnShowroom) return access.showroom;
+  if (isSupplierOwnWarehouse(warehouse as any, clientProfile)) return true;
 
   // Прочие склады — только если явно разрешены админом в custom-режиме
   if (settings.mode === 'custom' && warehouse.warehouse_id) {
@@ -176,6 +189,20 @@ export function filterWarehousesForClient(
     }
   }
 
+  // 2.1 Поставщик: склады с его доступом и склады, где лежит его товар
+  if (clientProfile.role === 'supplier') {
+    for (const w of warehouses) {
+      if (
+        Number(w.stock) > 0 &&
+        w.warehouse_id !== CENTRAL_WAREHOUSE_ID &&
+        !result.some(r => r.warehouse_id === w.warehouse_id) &&
+        isSupplierOwnWarehouse(w, clientProfile)
+      ) {
+        result.push({ ...w, stock: Number(w.stock) });
+      }
+    }
+  }
+
   // 3. Дополнительные склады, если они были явно включены администратором в кастомном режиме
   if (settings.mode === 'custom' && settings.allowedWarehouseIds && settings.allowedWarehouseIds.length > 0) {
     for (const w of warehouses) {
@@ -184,6 +211,7 @@ export function filterWarehousesForClient(
         settings.allowedWarehouseIds.includes(w.warehouse_id) &&
         w.warehouse_id !== CENTRAL_WAREHOUSE_ID &&
         w.warehouse_id !== showroomId &&
+        !result.some(r => r.warehouse_id === w.warehouse_id) &&
         Number(w.stock) > 0
       ) {
         result.push({

@@ -292,6 +292,7 @@ export function mergeProducts(rawProducts: Product[]): Product[] {
           return {
             ...w,
             stock: Number(w.stock),
+            product_supplier_id: w.product_supplier_id ?? prod.supplier_id ?? null,
           };
         });
     }

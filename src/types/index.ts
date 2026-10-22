@@ -21,7 +21,7 @@ export interface Warehouse {
   is_hub?: boolean;
   type?: string;
   cooperation_type?: string;
-  counterparty_id?: number | null;
+  counterparty_id?: number | null; product_supplier_id?: number | null; // ID поставщика товара — видимость склада поставщику
   address?: string | null;
   topology?: WarehouseTopology | null;
 }
