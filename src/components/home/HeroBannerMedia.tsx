@@ -8,6 +8,8 @@ import { useSiteContent } from '@/lib/siteContentStore';
 const VIDEO_MP4 = '/assets/hero-video-desktop-v4.mp4';
 const VIDEO_WEBM = '/assets/hero-video-desktop-v4.webm';
 const POSTER = '/assets/hero-poster-desktop-v2.webp';
+const POSTER_MOBILE = '/assets/hero-poster-mobile-v1.webp';
+const isMobileViewport = () => typeof window !== 'undefined' && window.innerWidth < 768;
 
 interface HeroBannerMediaProps {
   onNavigate?: (page: PageId) => void;
@@ -20,12 +22,28 @@ export default function HeroBannerMedia({ onNavigate, isReady = true, isActive =
   const { content, resolvedUrls } = useSiteContent();
   const activeMp4 = resolvedUrls.heroVideoMp4 || content.hero.videoMp4 || VIDEO_MP4;
   const activeWebm = resolvedUrls.heroVideoWebm || content.hero.videoWebm || VIDEO_WEBM;
-  const activePoster = resolvedUrls.heroPoster || content.hero.posterUrl || POSTER;
+  const customPoster = resolvedUrls.heroPoster || content.hero.posterUrl;
+  // Mobile gets the smaller poster unless the admin set a custom one (keeps LCP light on 4G)
+  const activePoster = isMobileViewport() && (!customPoster || customPoster === POSTER) ? POSTER_MOBILE : (customPoster || POSTER);
   const activeEndCard = resolvedUrls.heroEndCard || content.hero.endCardUrl || '/images/techno_hero_card.webp';
   const showEndCard = content.hero.showEndCard !== false;
   const freezeDurationMs = Number(content.hero.freezeDurationMs) > 0 ? Number(content.hero.freezeDurationMs) : 1500;
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isEnded, setIsEnded] = useState(false);
+  // On mobile, hold the video download until the page has loaded so the poster (LCP) gets the full bandwidth
+  const [allowVideoLoad, setAllowVideoLoad] = useState(() => !isMobileViewport());
+
+  useEffect(() => {
+    if (allowVideoLoad) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const release = () => { timer = setTimeout(() => setAllowVideoLoad(true), 1500); };
+    if (document.readyState === 'complete') release();
+    else window.addEventListener('load', release, { once: true });
+    return () => {
+      window.removeEventListener('load', release);
+      if (timer) clearTimeout(timer);
+    };
+  }, [allowVideoLoad]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -258,7 +276,7 @@ export default function HeroBannerMedia({ onNavigate, isReady = true, isActive =
           {...({ 'webkit-playsinline': 'true' } as any)}
           disablePictureInPicture
           disableRemotePlayback
-          preload={typeof window !== 'undefined' && window.innerWidth < 768 ? 'metadata' : 'auto'}
+          preload={isMobileViewport() ? 'none' : 'auto'}
           poster={activePoster}
           onEnded={handleEnded}
           onTimeUpdate={handleTimeUpdate}
@@ -269,12 +287,16 @@ export default function HeroBannerMedia({ onNavigate, isReady = true, isActive =
           }}
           className="w-full h-full object-cover object-[center_28%] sm:object-[center_24%] transform-gpu pointer-events-none"
         >
+          {allowVideoLoad && (
+            <>
           <source
             src={activeMp4}
             type={activeMp4.endsWith('.webm') ? 'video/webm' : activeMp4.startsWith('blob:') ? undefined : 'video/mp4'}
           />
           {activeWebm && (activeMp4 === VIDEO_MP4 || activeWebm !== VIDEO_WEBM) && (
             <source src={activeWebm} type="video/webm" />
+          )}
+            </>
           )}
         </video>
 

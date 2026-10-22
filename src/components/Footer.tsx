@@ -31,7 +31,7 @@ export default function Footer({ onNavigate }: FooterProps) {
                 href={`https://wa.me/${c.whatsappIntl}?text=${encodeURIComponent(defaultWaMsg)}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 rounded-lg bg-[#25D366] px-3.5 py-1.5 text-xs font-bold text-white hover:bg-[#20bd5a] transition-all"
+                className="inline-flex items-center gap-2 rounded-lg bg-[#128C4A] px-3.5 py-1.5 text-xs font-bold text-white hover:bg-[#0f7a40] transition-all"
               >
                 <MessageCircle className="h-3.5 w-3.5" />
                 <span>WhatsApp</span>
@@ -41,7 +41,7 @@ export default function Footer({ onNavigate }: FooterProps) {
 
           {/* Navigation */}
           <div>
-            <h4 className="text-sm font-semibold text-white mb-4">{t('footer.nav_title')}</h4>
+            <h3 className="text-sm font-semibold text-white mb-4">{t('footer.nav_title')}</h3>
             <ul className="space-y-2.5">
               {[
                 { label: t('nav.catalog'), page: 'catalog' as PageId },
@@ -62,7 +62,7 @@ export default function Footer({ onNavigate }: FooterProps) {
 
           {/* Contacts */}
           <div>
-            <h4 className="text-sm font-semibold text-white mb-4">{t('footer.contacts_title')}</h4>
+            <h3 className="text-sm font-semibold text-white mb-4">{t('footer.contacts_title')}</h3>
             <ul className="space-y-3">
               <li className="flex items-start gap-2.5">
                 <Phone className="mt-0.5 h-4 w-4 text-brand-500 shrink-0" />
@@ -87,7 +87,7 @@ export default function Footer({ onNavigate }: FooterProps) {
 
           {/* Working hours & Languages */}
           <div>
-            <h4 className="text-sm font-semibold text-white mb-4">{t('footer.hours_title')}</h4>
+            <h3 className="text-sm font-semibold text-white mb-4">{t('footer.hours_title')}</h3>
             <ul className="space-y-2 text-sm">
               <li className="flex justify-between">
                 <span className="text-slate-400">{t('footer.weekdays')}</span>
@@ -95,7 +95,7 @@ export default function Footer({ onNavigate }: FooterProps) {
               </li>
               <li className="flex justify-between">
                 <span className="text-slate-400">Сб, Вс</span>
-                <span className="text-slate-500">{c.weekendHours || t('footer.sunday')}</span>
+                <span className="text-slate-400">{c.weekendHours || t('footer.sunday')}</span>
               </li>
             </ul>
 
@@ -133,7 +133,7 @@ export default function Footer({ onNavigate }: FooterProps) {
         </div>
 
         <div className="mt-8 flex flex-col items-center justify-between gap-4 border-t border-slate-800/60 pt-6 lg:flex-row">
-          <p className="text-xs text-slate-500 text-center lg:text-left">
+          <p className="text-xs text-slate-400 text-center lg:text-left">
             &copy; 2025 {c.companyLegalName} (БИН {c.bin}). {t('footer.rights')}
           </p>
           <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2">

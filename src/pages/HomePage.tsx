@@ -207,13 +207,12 @@ export default function HomePage({
                       <video
                         key={catVideo}
                         ref={registerVideoRef(idx)}
-                        autoPlay
                         muted
                         playsInline
                         {...({ 'webkit-playsinline': 'true' } as any)}
                         disablePictureInPicture
                         disableRemotePlayback
-                        preload={typeof window !== 'undefined' && window.innerWidth < 768 ? 'metadata' : 'auto'}
+                        preload="none"
                         poster={catPoster}
                         style={{ willChange: 'transform' }}
                         className={`h-full w-full object-contain mix-blend-screen transition-transform duration-500 ${mediaScale}`}
@@ -266,7 +265,7 @@ export default function HomePage({
         <div className="container-w relative z-10">
           <div className="flex items-end justify-between mb-10 lg:mb-14">
             <div>
-              <span className="font-mono text-xs text-brand-700/80 uppercase tracking-widest block mb-1">
+              <span className="font-mono text-xs text-brand-700 uppercase tracking-widest block mb-1">
                 {t('home.popular_pre')}
               </span>
               <h2 className="section-heading text-slate-900">{t('home.popular_title')}</h2>
