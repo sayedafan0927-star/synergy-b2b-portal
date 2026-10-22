@@ -63,7 +63,7 @@ export default function CatalogPetroglyphHero({
 
       {/* Mobile Categories Row: Clean non-breaking horizontal row */}
       {children && (
-        <div className="sm:hidden relative z-10 flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 mb-2">
+        <div className="sm:hidden relative z-10 flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 mb-2 px-0.5">
           {children}
         </div>
       )}

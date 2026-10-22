@@ -2,72 +2,99 @@ import { useState, useEffect, useMemo } from 'react';
 import {
   Users,
   Search,
-  User,
-  Building2,
-  Power,
-  FileText,
-  UserCog,
-  ChevronDown,
+  Shield,
+  UserCheck,
 } from 'lucide-react';
 import type { PageId } from '@/types';
 import { useAuth, type UserRole } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import {
   fetchCounterpartiesFromErp,
+  fetchRegionalManagersFromErp,
   updateClientAccessInErp,
   broadcastClientDeactivated,
   isCounterpartyArchivedOrMailing,
   searchCounterpartiesSmart,
+  erpFetch,
 } from '@/lib/erpApi';
-import { getClientWarehouseSettings } from '@/lib/warehouseVisibility';
-import { formatPriceType, resolveContractPriceType } from '@/lib/pricingEngine';
+import { getClientWarehouseSettings, saveClientWarehouseSettings } from '@/lib/warehouseVisibility';
+import { resolveContractPriceType } from '@/lib/pricingEngine';
 import { ClientWarehouseModal } from './ClientWarehouseModal';
-import { ClientDemoPanel } from './ClientDemoPanel';
+import { AdminClientUserCard, type ClientUserItem } from './AdminClientUserCard';
 
 export interface AdminUsersTabProps {
   onNavigate: (page: PageId) => void;
+}
+
+interface StaffMemberItem {
+  id: number | string;
+  name: string;
+  username: string;
+  phone: string;
+  role: 'admin' | 'manager_rm' | 'manager_lm';
+  city?: string;
+  clients_count?: number;
 }
 
 export function AdminUsersTab({ onNavigate }: AdminUsersTabProps) {
   const { impersonateUser, user: currentUser, profile, realIsAdmin } = useAuth();
   const managerId = currentUser?.id;
   const isAdminView = realIsAdmin;
-  const [users, setUsers] = useState<Array<{
-    id: string;
-    full_name: string;
-    company_name: string;
-    phone: string;
-    city?: string;
-    bin?: string;
-    role: UserRole;
-    partner_id: string | null;
-    price_type: string;
-    manager_id: string | null;
-    impersonation_enabled: boolean;
-    portal_access_enabled?: boolean;
-    is_archived_or_mailing?: boolean;
-    showroom_warehouse_id?: number | null;
-    showroom_warehouse_name?: string | null;
-    credit_limit_usd?: number;
-    debt_usd?: number;
-  }>>([]);
+
+  const [users, setUsers] = useState<ClientUserItem[]>([]);
+  const [staffMembers, setStaffMembers] = useState<StaffMemberItem[]>([]);
+  const [userTab, setUserTab] = useState<'all' | 'clients' | 'staff'>('all');
   const [userSearch, setUserSearch] = useState('');
   const [showArchived, setShowArchived] = useState(false);
   const [onlyMyAssigned, setOnlyMyAssigned] = useState(false);
   const [loading, setLoading] = useState(true);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [warehouseModalUser, setWarehouseModalUser] = useState<typeof users[0] | null>(null);
+  const [warehouseModalUser, setWarehouseModalUser] = useState<ClientUserItem | null>(null);
+  const [warehouseVersion, setWarehouseVersion] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
-    async function loadUsers() {
+    async function loadData() {
       setLoading(true);
+
+      // 1. Загрузка сотрудников и региональных менеджеров
       try {
-        const cpData = await fetchCounterpartiesFromErp({ limit: 1000, includeArchived: true });
-        if (!cancelled && cpData && cpData.success && Array.isArray(cpData.counterparties) && cpData.counterparties.length > 0) {
-          const mappedUsers = cpData.counterparties.map((cp: any) => {
-            const isAccessOn = cp.portal_access_enabled !== false && cp.portal_access_enabled !== 0 && cp.is_active !== 0 && cp.status !== 'inactive' && cp.access !== 'disabled';
+        const rmData = await fetchRegionalManagersFromErp();
+        if (!cancelled && rmData?.success && Array.isArray(rmData.managers)) {
+          setStaffMembers(rmData.managers.map((m: any) => ({
+            id: m.id,
+            name: m.name || m.username || 'Менеджер',
+            username: m.username || '',
+            phone: m.phone || '',
+            role: (m.role === 'admin' ? 'admin' : (m.role === 'manager_lm' || m.role === 'lm' ? 'manager_lm' : 'manager_rm')) as any,
+            city: m.city || 'Астана / РК',
+            clients_count: m.clients_count || 0,
+          })));
+        }
+      } catch (rmErr) {
+        console.warn('[AdminUsersTab] Regional managers load error:', rmErr);
+      }
+
+      // 2. Загрузка контрагентов/дилеров
+      try {
+        let cpList: any[] = [];
+        try {
+          const cpData = await fetchCounterpartiesFromErp({ limit: 1000, includeArchived: true });
+          if (cpData && cpData.success && Array.isArray(cpData.counterparties) && cpData.counterparties.length > 0) {
+            cpList = cpData.counterparties;
+          }
+        } catch {
+          const direct = await erpFetch('counterparties', { method: 'GET', params: { limit: 1000 } });
+          if (direct.ok) {
+            const dj = await direct.json();
+            if (Array.isArray(dj?.counterparties)) cpList = dj.counterparties;
+          }
+        }
+
+        if (!cancelled && cpList.length > 0) {
+          const mappedUsers: ClientUserItem[] = cpList.map((cp: any) => {
+            const isAccessOn = cp.portal_access_enabled !== false && cp.portal_access_enabled !== 0 && cp.status !== 'inactive' && cp.access !== 'disabled';
             const isArchived = isCounterpartyArchivedOrMailing(cp);
             const contractPriceType = resolveContractPriceType(cp, cp.contracts, 'price_deferred');
             return {
@@ -95,9 +122,10 @@ export function AdminUsersTab({ onNavigate }: AdminUsersTabProps) {
           return;
         }
       } catch (cpErr) {
-        console.warn('[AdminUsersTab] ERP counterparties fallback:', cpErr);
+        console.warn('[AdminUsersTab] ERP counterparties error:', cpErr);
       }
 
+      // 3. Fallback: Supabase profiles if ERP unavailable
       try {
         const { data } = await supabase
           .from('profiles')
@@ -107,15 +135,16 @@ export function AdminUsersTab({ onNavigate }: AdminUsersTabProps) {
           setUsers(data.map((u: any) => ({
             ...u,
             portal_access_enabled: true,
+            impersonation_enabled: true,
           })));
         }
       } catch (err) {
-        console.warn('[AdminUsersTab] Supabase error:', err);
+        console.warn('[AdminUsersTab] Supabase fallback error:', err);
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
-    loadUsers();
+    loadData();
     return () => { cancelled = true; };
   }, []);
 
@@ -124,26 +153,13 @@ export function AdminUsersTab({ onNavigate }: AdminUsersTabProps) {
     const newStatus = !currentEnabled;
     try {
       await updateClientAccessInErp(userId, newStatus ? 1 : 0);
-      if (!newStatus) {
-        broadcastClientDeactivated(userId);
-      }
+      if (!newStatus) broadcastClientDeactivated(userId);
 
       setUsers(prev => prev.map(u => u.id === userId ? {
         ...u,
         portal_access_enabled: newStatus,
         impersonation_enabled: newStatus,
       } : u));
-
-      if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId)) {
-        try {
-          await supabase
-            .from('profiles')
-            .update({ impersonation_enabled: newStatus })
-            .eq('id', userId);
-        } catch {
-          // safe fallback
-        }
-      }
     } catch (err: any) {
       alert(`Ошибка обновления доступа в ERP: ${err.message}`);
     } finally {
@@ -151,199 +167,215 @@ export function AdminUsersTab({ onNavigate }: AdminUsersTabProps) {
     }
   };
 
-  const filteredUsers = useMemo(() => {
-    let clients = users.filter(user => user.role === 'client');
+  const handleToggleWarehouseVisibility = (clientId: string) => {
+    const s = getClientWarehouseSettings(clientId);
+    const currentlyOn = s.mode === 'custom'
+      ? Boolean(s.showCentralWarehouse || s.showShowroomWarehouse || s.showWarehousesToClient)
+      : Boolean(s.showWarehousesToClient);
+    const nextOn = !currentlyOn;
+
+    saveClientWarehouseSettings(clientId, {
+      ...s,
+      mode: 'custom',
+      showWarehousesToClient: nextOn,
+      showCentralWarehouse: nextOn,
+      showShowroomWarehouse: nextOn,
+    });
+    setWarehouseVersion(v => v + 1);
+  };
+
+  const filteredClients = useMemo(() => {
+    let clients = users;
     if (!isAdminView && onlyMyAssigned && managerId) {
       const candidateIds = new Set<string>([
         String(managerId),
         String(profile?.partner_id || ''),
         String(profile?.manager_id || ''),
       ].filter(Boolean));
-      const uuidNumMatch = String(managerId).match(/^00000000-0000-0000-0000-0*(\d+)$/);
-      if (uuidNumMatch?.[1]) candidateIds.add(uuidNumMatch[1]);
       clients = clients.filter(user => user.manager_id && candidateIds.has(String(user.manager_id)));
     }
     if (!showArchived) {
-      clients = clients.filter(user => !user.is_archived_or_mailing && user.portal_access_enabled !== false);
+      clients = clients.filter(user => !user.is_archived_or_mailing);
     }
     if (!userSearch.trim()) return clients;
     return searchCounterpartiesSmart(clients, userSearch);
   }, [users, userSearch, isAdminView, onlyMyAssigned, managerId, profile?.partner_id, profile?.manager_id, showArchived]);
 
+  const filteredStaff = useMemo(() => {
+    if (!userSearch.trim()) return staffMembers;
+    const q = userSearch.toLowerCase().trim();
+    return staffMembers.filter(m =>
+      m.name.toLowerCase().includes(q) ||
+      m.username.toLowerCase().includes(q) ||
+      m.phone.includes(q) ||
+      (m.city && m.city.toLowerCase().includes(q))
+    );
+  }, [staffMembers, userSearch]);
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+      {/* Header & Stats */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <Users className="h-5 w-5 text-slate-500" />
           <div>
-            <h2 className="text-lg font-bold text-slate-900">Активные контрагенты ({filteredUsers.length})</h2>
-            <p className="text-sm text-slate-500">
-              Единый справочник действующих клиентов портала и корзины.
-            </p>
+            <h2 className="text-lg font-bold text-slate-900">Пользователи и роли ({users.length + staffMembers.length})</h2>
+            <p className="text-xs text-slate-500">Управление сотрудниками, клиентами-дилерами, доступом и видимостью складов.</p>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+
+        {/* Tab switch: All / Clients / Staff */}
+        <div className="flex rounded-xl bg-slate-100 p-1 text-xs font-semibold">
+          <button
+            type="button"
+            onClick={() => setUserTab('all')}
+            className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${userTab === 'all' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-600 hover:text-slate-900'}`}
+          >
+            Все ({users.length + staffMembers.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setUserTab('clients')}
+            className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${userTab === 'clients' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-600 hover:text-slate-900'}`}
+          >
+            Клиенты ({users.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setUserTab('staff')}
+            className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${userTab === 'staff' ? 'bg-white text-slate-900 shadow-2xs font-bold' : 'text-slate-600 hover:text-slate-900'}`}
+          >
+            Сотрудники ({staffMembers.length})
+          </button>
+        </div>
+      </div>
+
+      {/* Search & Filters Toolbar */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="relative w-full sm:w-80">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+          <input
+            type="text"
+            value={userSearch}
+            onChange={e => setUserSearch(e.target.value)}
+            placeholder="Поиск по имени, компании, БИН, тел, городу..."
+            className="input-field pl-9 py-1.5 text-xs"
+          />
+        </div>
+
+        <div className="flex items-center gap-2">
           {!isAdminView && profile?.role === 'manager_rm' && (
             <button
               type="button"
               onClick={() => setOnlyMyAssigned(!onlyMyAssigned)}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors cursor-pointer ${
-                onlyMyAssigned
-                  ? 'bg-brand-50 text-brand-800 border-brand-300'
-                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-              }`}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors cursor-pointer ${onlyMyAssigned ? 'bg-brand-50 text-brand-800 border-brand-300' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
             >
-              {onlyMyAssigned ? 'Показать всех активных' : 'Только закрепленные за мной'}
+              {onlyMyAssigned ? 'Все активные' : 'Только мои дилеры'}
             </button>
           )}
-          {isAdminView && (
+          {isAdminView && userTab !== 'staff' && (
             <button
               type="button"
               onClick={() => setShowArchived(!showArchived)}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors cursor-pointer ${
-                showArchived
-                  ? 'bg-amber-50 text-amber-800 border-amber-300'
-                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-              }`}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors cursor-pointer ${showArchived ? 'bg-amber-50 text-amber-800 border-amber-300' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
             >
               {showArchived ? 'Скрыть архив/рассылку' : 'Показать архив/рассылку'}
             </button>
           )}
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-            <input
-              type="text"
-              value={userSearch}
-              onChange={e => setUserSearch(e.target.value)}
-              placeholder="Поиск по названию, городу, тел, ID..."
-              className="input-field pl-9 py-1 text-xs"
-            />
-          </div>
         </div>
       </div>
 
-      <div className="space-y-2">
-        {filteredUsers.map(u => (
-          <div key={u.id} className="space-y-0">
-            <div className="card px-4 py-3 flex flex-wrap items-center gap-3 hover:border-slate-300 transition-colors">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 shrink-0">
-                <User className="h-5 w-5 text-slate-500" />
-              </div>
-              <div className="flex-1 min-w-[180px]">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-semibold text-slate-900 truncate">{u.full_name || 'Без имени'}</p>
-                  {u.id === currentUser?.id && (
-                    <span className="badge bg-slate-100 text-slate-600 text-[10px]">Вы</span>
-                  )}
-                </div>
-                <p className="text-xs text-slate-500 truncate">{u.company_name || 'Компания не указана'}</p>
-                <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400 mt-0.5">
-                  {u.phone && <span className="font-mono">{u.phone}</span>}
-                  {u.price_type && (
-                    <span className="text-brand-600 font-medium" title={`Системный код ERP: ${u.price_type}`}>
-                      Прайс: {formatPriceType(u.price_type)}
+      {/* Staff Members Section (When 'all' or 'staff') */}
+      {(userTab === 'all' || userTab === 'staff') && filteredStaff.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500 pt-1">
+            <Shield className="h-3.5 w-3.5 text-brand-700" />
+            <span>Сотрудники компании ({filteredStaff.length})</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {filteredStaff.map(m => {
+              const roleBadge = m.role === 'admin'
+                ? { label: 'Администратор', cls: 'bg-brand-50 text-brand-700 border-brand-200' }
+                : m.role === 'manager_lm'
+                ? { label: 'Логист (ЛМ)', cls: 'bg-sky-50 text-sky-700 border-sky-200' }
+                : { label: 'Региональный менеджер (РМ)', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+              return (
+                <div key={m.id} className="card p-3.5 flex items-center justify-between gap-3 border-slate-200 bg-white hover:border-slate-300 transition-colors">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-50 text-brand-700 shrink-0">
+                      {m.role === 'admin' ? <Shield className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-xs font-bold text-slate-900 truncate">{m.name}</p>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${roleBadge.cls}`}>
+                          {roleBadge.label}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5">
+                        {m.phone && <span className="font-mono">{m.phone}</span>}
+                        {m.city && <span>• {m.city}</span>}
+                      </div>
+                    </div>
+                  </div>
+                  {m.clients_count !== undefined && m.clients_count > 0 && (
+                    <span className="badge bg-slate-100 text-slate-600 text-[10px] shrink-0" title="Закреплено дилеров в ERP">
+                      {m.clients_count} дилеров
                     </span>
                   )}
-                  {u.partner_id && <span className="font-mono">ID: {u.partner_id}</span>}
-                  {(() => {
-                    const s = getClientWarehouseSettings(u.partner_id || u.id);
-                    if (s.mode === 'custom') {
-                      const count = (s.showCentralWarehouse ? 1 : 0) + (s.showShowroomWarehouse && u.showroom_warehouse_id ? 1 : 0);
-                      return (
-                        <span className="badge bg-amber-50 text-amber-700 border border-amber-200 text-[10px]" title="Настроено индивидуально администратором">
-                          ⚙️ Склады: индив. ({count})
-                        </span>
-                      );
-                    }
-                    if (u.showroom_warehouse_id) {
-                      return (
-                        <span className="badge bg-emerald-50 text-emerald-700 text-[10px]" title="Автоматический режим: склад Астана + собственный склад">
-                          🏢 Склады: Астана + Шоурум
-                        </span>
-                      );
-                    }
-                    return (
-                      <span className="badge bg-slate-100 text-slate-600 text-[10px]" title="Автоматический режим: только склад Астана">
-                        🏢 Склады: Только Астана
-                      </span>
-                    );
-                  })()}
-                  {(() => {
-                    const s = getClientWarehouseSettings(u.partner_id || u.id);
-                    if (s.showStockSummary) {
-                      return (
-                        <span className="badge bg-indigo-50 text-indigo-700 border border-indigo-200 text-[10px]" title="Клиент имеет персональный доступ к виджету остатков и резервам">
-                          📊 Сводка остатков вкл.
-                        </span>
-                      );
-                    }
-                    return null;
-                  })()}
                 </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setWarehouseModalUser(u)}
-                  className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-colors shadow-xs cursor-pointer"
-                  title="Настроить видимость складов для этого клиента"
-                >
-                  <Building2 className="h-3.5 w-3.5 text-slate-500" />
-                  Склады
-                </button>
-
-                <button
-                  onClick={() => handleToggleAccess(u.id, u.portal_access_enabled ?? u.impersonation_enabled)}
-                  disabled={togglingId === u.id}
-                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
-                    (u.portal_access_enabled ?? u.impersonation_enabled)
-                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
-                      : 'bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100'
-                  }`}
-                  title={(u.portal_access_enabled ?? u.impersonation_enabled) ? 'Доступ к сайту открыт. Нажмите, чтобы заблокировать.' : 'Доступ заблокирован в ERP (CLIENT_DEACTIVATED). Нажмите, чтобы открыть доступ.'}
-                >
-                  <Power className="h-3.5 w-3.5" />
-                  {togglingId === u.id ? 'Синхронизация...' : ((u.portal_access_enabled ?? u.impersonation_enabled) ? 'Доступ вкл.' : 'Доступ выкл.')}
-                </button>
-
-                <button
-                  onClick={() => setExpandedId(expandedId === u.id ? null : u.id)}
-                  className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer"
-                >
-                  <FileText className="h-3.5 w-3.5" />
-                  Демо
-                  <ChevronDown className={`h-3 w-3 transition-transform ${expandedId === u.id ? 'rotate-180' : ''}`} />
-                </button>
-
-                <button
-                  onClick={() => {
-                    impersonateUser(u as any);
-                    onNavigate('catalog');
-                  }}
-                  disabled={!u.impersonation_enabled || u.id === currentUser?.id}
-                  title={!u.impersonation_enabled ? 'Сначала включите доступ для этого клиента' : `Войти как ${u.full_name || u.company_name || 'клиент'}`}
-                  className="flex items-center gap-1.5 rounded-lg border border-brand-200 bg-brand-50 px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-brand-100 hover:border-brand-300 transition-colors disabled:opacity-40 disabled:pointer-events-none shadow-sm cursor-pointer"
-                >
-                  <UserCog className="h-3.5 w-3.5" />
-                  Войти под клиентом
-                </button>
-              </div>
-            </div>
-
-            {expandedId === u.id && (
-              <ClientDemoPanel client={u} />
-            )}
+              );
+            })}
           </div>
-        ))}
-        {!loading && filteredUsers.length === 0 && (
-          <p className="py-8 text-center text-sm text-slate-400">Клиенты не найдены</p>
-        )}
-      </div>
+        </div>
+      )}
 
+      {/* Clients Section (When 'all' or 'clients') */}
+      {(userTab === 'all' || userTab === 'clients') && (
+        <div className="space-y-2">
+          {userTab === 'all' && (
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500 pt-2">
+              <Users className="h-3.5 w-3.5 text-slate-500" />
+              <span>Клиенты и дилеры ({filteredClients.length})</span>
+            </div>
+          )}
+
+          <div className="space-y-2" key={`wh-v-${warehouseVersion}`}>
+            {filteredClients.map(u => (
+              <AdminClientUserCard
+                key={u.id}
+                user={u}
+                currentUserId={currentUser?.id}
+                togglingId={togglingId}
+                expandedId={expandedId}
+                onToggleWarehouse={handleToggleWarehouseVisibility}
+                onOpenWarehouseModal={setWarehouseModalUser}
+                onToggleAccess={handleToggleAccess}
+                onToggleExpand={id => setExpandedId(expandedId === id ? null : id)}
+                onImpersonate={client => {
+                  impersonateUser(client as any);
+                  onNavigate('catalog');
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!loading && filteredClients.length === 0 && filteredStaff.length === 0 && (
+        <div className="card py-12 text-center text-sm text-slate-400">
+          Пользователи не найдены. Попробуйте изменить поисковый запрос.
+        </div>
+      )}
+
+      {/* Modal for detailed warehouse configuration */}
       {warehouseModalUser && (
         <ClientWarehouseModal
           client={warehouseModalUser}
-          onClose={() => setWarehouseModalUser(null)}
+          onClose={() => {
+            setWarehouseModalUser(null);
+            setWarehouseVersion(v => v + 1);
+          }}
         />
       )}
     </div>

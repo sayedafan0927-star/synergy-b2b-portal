@@ -5,6 +5,7 @@ export interface ClientWarehouseSettings {
   showCentralWarehouse: boolean; // default true
   showShowroomWarehouse: boolean; // default true
   showStockSummary?: boolean; // default false for clients, true for admin: gives visibility to stock summary & reservations
+  showWarehousesToClient?: boolean; // permission flag: allow client to see warehouse breakdown (default false, admin/LM only)
   allowedWarehouseIds?: number[]; // explicit list of other allowed warehouse IDs
   hiddenWarehouseIds?: number[];  // explicit list of hidden warehouse IDs
   customName?: string;
@@ -78,6 +79,7 @@ export function getClientWarehouseSettings(clientIdOrPartnerId?: string | number
     showCentralWarehouse: true,
     showShowroomWarehouse: true,
     showStockSummary: false,
+    showWarehousesToClient: false,
   };
 
   if (!clientIdOrPartnerId) return defaultAuto;

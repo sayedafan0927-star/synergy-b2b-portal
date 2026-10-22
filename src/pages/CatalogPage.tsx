@@ -65,17 +65,24 @@ export default function CatalogPage({
   const [stockWarehouse, setStockWarehouse] = useState(''); const [reservationsModalOpen, setReservationsModalOpen] = useState(false);
   const [reservationsTab, setReservationsTab] = useState<'all' | 'processing' | 'pending' | 'expired'>('all');
   const canViewStockSummary = useMemo(() => {
-    if (isEffectiveAdmin || displaySettings.show_reserve) return true;
-    const key = profile?.partner_id || profile?.id;
-    return Boolean(key && getClientWarehouseSettings(key)?.showStockSummary);
-  }, [isEffectiveAdmin, displaySettings.show_reserve, profile?.partner_id, profile?.id]);
-
-  const canViewStockDetails = useMemo(() => {
     if (!profile) return false;
-    if (isEffectiveAdmin || profile.role === 'admin' || profile.role === 'manager_rm' || profile.role === 'manager_lm') return true;
-    const key = profile.partner_id || profile.id;
-    return Boolean(key && getClientWarehouseSettings(key)?.showStockSummary);
-  }, [profile, isEffectiveAdmin]);
+    const isStaffAuthorized = Boolean(isEffectiveAdmin || profile.role === 'admin' || profile.role === 'manager_lm');
+    if (!isStaffAuthorized) return false;
+    return Boolean(displaySettings.show_reserve !== false);
+  }, [isEffectiveAdmin, profile, displaySettings.show_reserve]);
+
+  const canViewStockDetails = canViewStockSummary;
+
+  const canViewWarehouses = useMemo(() => {
+    if (!profile) return false;
+    if (isEffectiveAdmin || profile.role === 'admin' || profile.role === 'manager_lm') return true;
+    if (profile.role === 'client') {
+      const key = profile.partner_id || profile.id;
+      const s = getClientWarehouseSettings(key);
+      return Boolean(s.mode === 'custom' ? (s.showCentralWarehouse || s.showShowroomWarehouse || s.showWarehousesToClient) : s.showWarehousesToClient);
+    }
+    return false;
+  }, [isEffectiveAdmin, profile]);
   const hideOutOfStockSetting = displaySettings.hide_out_of_stock_products !== false;
   const hasAnyGlobalStock = useMemo(
     () => products.some(p => p.variants.some(v => (v.stock || v.free_stock || v.total_stock || v.in_production_qty || 0) > 0)),
@@ -379,54 +386,40 @@ export default function CatalogPage({
   return (
     <DecklePaperWrapper>
       <CatalogPetroglyphHero title={t('catalog.title')}>
-        {selectedCollections.size === 1 && (
-          <div className="mb-3 inline-flex items-center gap-2 rounded-lg bg-[#003365]/10 border border-[#003365]/20 px-3 py-1.5">
-            <span className="text-sm font-medium text-[#003365]">{t('product.collection')}: {[...selectedCollections][0]}</span>
+        {(['all', 'Ковры', 'Дорожки'] as const).map((cat) => {
+          const count = cat === 'all'
+            ? baseProducts.length
+            : baseProducts.filter(p => cat === 'Ковры' ? (p.category === 'Ковры' || !p.name.toLowerCase().includes('дорожк')) : (p.category === 'Дорожки' || p.name.toLowerCase().includes('дорожк'))).length;
+          const label = cat === 'all' ? t('catalog.all') : cat === 'Ковры' ? t('catalog.category_rugs') : t('catalog.category_runners');
+          return (
             <button
+              key={cat}
               type="button"
-              onClick={() => setSelectedCollections(new Set())}
-              className="text-slate-400 hover:text-slate-600 cursor-pointer"
+              onClick={() => setSelectedCategory(cat)}
+              className={`shrink-0 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                selectedCategory === cat && !onlyInProduction
+                  ? 'bg-brand-700 text-white shadow-xs font-bold'
+                  : 'bg-white border border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+              }`}
             >
-              <X className="h-4 w-4" />
+              {label} ({count})
             </button>
-          </div>
-        )}
-
-        <div className="flex flex-wrap items-center gap-2">
-          {(['all', 'Ковры', 'Дорожки'] as const).map((cat) => {
-            const count = cat === 'all'
-              ? baseProducts.length
-              : baseProducts.filter(p => cat === 'Ковры' ? (p.category === 'Ковры' || !p.name.toLowerCase().includes('дорожк')) : (p.category === 'Дорожки' || p.name.toLowerCase().includes('дорожк'))).length;
-            const label = cat === 'all' ? t('catalog.all') : cat === 'Ковры' ? t('catalog.category_rugs') : t('catalog.category_runners');
-            return (
-              <button
-                key={cat}
-                type="button"
-                onClick={() => setSelectedCategory(cat)}
-                className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                  selectedCategory === cat && !onlyInProduction
-                    ? 'bg-brand-700 text-white shadow-xs font-bold'
-                    : 'bg-white border border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50'
-                }`}
-              >
-                {label} ({count})
-              </button>
-            );
-          })}
-          <button
-            type="button"
-            onClick={() => setOnlyInProduction(prev => !prev)}
-            className={`px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-              onlyInProduction
-                ? 'bg-amber-600 text-white shadow-xs font-bold ring-2 ring-amber-400/40'
-                : 'bg-amber-50/90 border border-amber-200 text-amber-900 hover:border-amber-300 hover:bg-amber-100/80'
-            }`}
-          >
-            🏭 В производстве (Доступно к предзаказу){inProductionCount > 0 ? ` (${inProductionCount})` : ''}
-          </button>
-        </div>
+          );
+        })}
+        <button
+          type="button"
+          onClick={() => setOnlyInProduction(prev => !prev)}
+          className={`shrink-0 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+            onlyInProduction
+              ? 'bg-amber-600 text-white shadow-xs font-bold ring-2 ring-amber-400/40'
+              : 'bg-amber-50/90 border border-amber-200 text-amber-900 hover:border-amber-300 hover:bg-amber-100/80'
+          }`}
+        >
+          🏭 В производстве{inProductionCount > 0 ? ` (${inProductionCount})` : ''}
+        </button>
       </CatalogPetroglyphHero>
 
+      {canViewWarehouses && (
         <CatalogWarehouseModeBar
           allWarehouses={allWarehouses}
           selectedWarehouses={selectedWarehouses}
@@ -437,6 +430,7 @@ export default function CatalogPage({
           myShowroomName={myShowroomName}
           hasOwnShowroom={Boolean(profile?.showroom_warehouse_id)}
         />
+      )}
 
         {/* RugsUSA Size Clustering Bar (Pattern 3) activeClusterQuickFilter disabled per user request to prevent mobile layout overflow */}
         {/* Country filter pills */}
@@ -554,7 +548,7 @@ export default function CatalogPage({
               </div>
             )}
 
-            {viewMode === 'stock' && (
+            {canViewWarehouses && viewMode === 'stock' && (
               <div className="relative">
                 <select
                   value={stockWarehouse}
@@ -571,28 +565,30 @@ export default function CatalogPage({
               </div>
             )}
 
-            <div className="flex rounded-lg border border-slate-200 bg-white p-0.5 shadow-2xs">
-              <button
-                type="button"
-                onClick={() => setViewMode('grid')}
-                className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
-                  viewMode === 'grid' ? 'bg-[#003365] text-white shadow-xs' : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                <LayoutGrid className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">{t('catalog.view_grid')}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('stock')}
-                className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
-                  viewMode === 'stock' ? 'bg-[#003365] text-white shadow-xs' : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                <Table2 className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">{t('catalog.view_table')}</span>
-              </button>
-            </div>
+            {canViewWarehouses && (
+              <div className="flex rounded-lg border border-slate-200 bg-white p-0.5 shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('grid')}
+                  className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+                    viewMode === 'grid' ? 'bg-[#003365] text-white shadow-xs' : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">{t('catalog.view_grid')}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('stock')}
+                  className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
+                    viewMode === 'stock' ? 'bg-[#003365] text-white shadow-xs' : 'text-slate-500 hover:text-slate-700'
+                  }`}
+                >
+                  <Table2 className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">{t('catalog.view_table')}</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
 

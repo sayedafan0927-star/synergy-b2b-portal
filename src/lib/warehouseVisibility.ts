@@ -75,13 +75,23 @@ export function isWarehouseVisibleForClient(
     return true;
   }
 
-  // Для гостя или РМ без привязки к шоуруму — виден только Основной Склад Астана
-  if (!clientProfile || (clientProfile.role && clientProfile.role !== 'client')) {
-    return isCentralWarehouse(warehouse);
+  // Для неавторизованного гостя — склады полностью скрыты
+  if (!clientProfile || !clientProfile.role) {
+    return false;
   }
 
   const clientId = clientProfile.partner_id || clientProfile.id;
   const settings = getClientWarehouseSettings(clientId);
+
+  // Склады видны клиенту только если включена явная галка видимости складов
+  const isWarehousesAllowed = settings.mode === 'custom'
+    ? Boolean(settings.showCentralWarehouse || settings.showShowroomWarehouse || settings.showWarehousesToClient)
+    : Boolean(settings.showWarehousesToClient);
+
+  if (!isWarehousesAllowed) {
+    return false;
+  }
+
   const isHub = isCentralWarehouse(warehouse);
   const showroomId = clientProfile.showroom_warehouse_id;
   const isOwnShowroom = Boolean(showroomId && warehouse.warehouse_id && warehouse.warehouse_id === showroomId);
@@ -104,7 +114,7 @@ export function isWarehouseVisibleForClient(
   }
 
   // Режим 'auto':
-  // 1. Центральный склад Астана виден всегда (если есть)
+  // 1. Центральный склад Астана виден (если складов разрешены)
   if (isHub) {
     return true;
   }
@@ -135,8 +145,19 @@ export function filterWarehousesForClient(
     return warehouses.filter(w => Number(w.stock) > 0);
   }
 
+  if (!clientProfile) {
+    return [];
+  }
+
   const clientId = clientProfile?.partner_id || clientProfile?.id;
   const settings = getClientWarehouseSettings(clientId);
+  const isWarehousesAllowed = settings.mode === 'custom'
+    ? Boolean(settings.showCentralWarehouse || settings.showShowroomWarehouse || settings.showWarehousesToClient)
+    : Boolean(settings.showWarehousesToClient);
+
+  if (!isWarehousesAllowed) {
+    return [];
+  }
   const showroomId = clientProfile?.showroom_warehouse_id;
   const showroomName = fallbackShowroomName || clientProfile?.showroom_warehouse_name || 'В моем магазине';
 

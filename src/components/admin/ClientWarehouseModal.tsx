@@ -25,6 +25,7 @@ export function ClientWarehouseModal({ client, onClose }: ClientWarehouseModalPr
   const initialSettings = useMemo(() => getClientWarehouseSettings(clientId), [clientId]);
 
   const [mode, setMode] = useState<'auto' | 'custom'>(initialSettings.mode || 'auto');
+  const [showWarehouses, setShowWarehouses] = useState<boolean>(initialSettings.showWarehousesToClient === true || initialSettings.mode === 'custom');
   const [showCentral, setShowCentral] = useState<boolean>(initialSettings.showCentralWarehouse !== false);
   const [showShowroom, setShowShowroom] = useState<boolean>(initialSettings.showShowroomWarehouse !== false);
   const [showStockSummary, setShowStockSummary] = useState<boolean>(initialSettings.showStockSummary === true);
@@ -36,6 +37,7 @@ export function ClientWarehouseModal({ client, onClose }: ClientWarehouseModalPr
   const handleSave = () => {
     saveClientWarehouseSettings(clientId, {
       mode,
+      showWarehousesToClient: showWarehouses,
       showCentralWarehouse: showCentral,
       showShowroomWarehouse: showShowroom,
       showStockSummary,
@@ -83,6 +85,34 @@ export function ClientWarehouseModal({ client, onClose }: ClientWarehouseModalPr
             className="rounded-lg p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
           >
             <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Master toggle: Show warehouses to client */}
+        <div className="card p-3.5 flex items-center justify-between gap-3 border-brand-200 bg-brand-50/50">
+          <div className="flex items-center gap-3">
+            <div className={`flex h-9 w-9 items-center justify-center rounded-lg shrink-0 ${showWarehouses ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-500'}`}>
+              <Building2 className="h-4 w-4" />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-slate-900">Видимость складов для клиента</p>
+              <p className="text-[11px] text-slate-500">
+                {showWarehouses ? 'Клиент видит складскую разбивку и доступные склады' : 'Склады скрыты от клиента (видит только общее наличие)'}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowWarehouses(v => !v)}
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+              showWarehouses ? 'bg-brand-600' : 'bg-slate-300'
+            }`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                showWarehouses ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
           </button>
         </div>
 
