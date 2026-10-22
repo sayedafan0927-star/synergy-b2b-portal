@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useCart } from '@/contexts/CartContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useCurrency } from '@/contexts/CurrencyContext';
+import { isCentralWarehouse } from '@/lib/warehouseVisibility';
 import { fetchCounterpartiesFromErp, searchCounterpartiesSmart, isCounterpartyActive, type Counterparty } from '@/lib/erpApi';
 import type { FilterDrawerProps } from './types';
 import { FilterSection, CheckItem } from './FilterDrawer';
@@ -68,9 +69,28 @@ export function CatalogFilterContent({
     return () => { active = false; };
   }, [canViewAllWarehouses]);
 
-  const filteredCounterparties = useMemo(
-    () => searchCounterpartiesSmart(counterparties, cpSearch, 25),
-    [counterparties, cpSearch]
+  // Список «за кого в корзину» — склады комиссионеров; выбор склада назначает его владельца-контрагента
+  const warehouseEntries = useMemo(() => {
+    const seen = new Set<string>();
+    const out: Array<{ id: string; key: string; warehouse: string; owner: Counterparty; name: string; city?: string; phone?: string; bin?: string; showroom_warehouse_names: string[] }> = [];
+    for (const cp of counterparties as any[]) {
+      const names: string[] = [
+        ...(Array.isArray(cp.showroom_warehouse_names) ? cp.showroom_warehouse_names : []),
+        ...(Array.isArray(cp.linked_warehouse_names) ? cp.linked_warehouse_names : []),
+      ];
+      for (const w of names) {
+        const key = String(w).toLowerCase().trim();
+        if (!key || seen.has(key) || isCentralWarehouse({ warehouse_name: w })) continue;
+        seen.add(key);
+        out.push({ id: key, key, warehouse: w, owner: cp, name: w, city: cp.city, phone: cp.phone, bin: cp.bin, showroom_warehouse_names: [w] });
+      }
+    }
+    return out.sort((x, y) => x.warehouse.localeCompare(y.warehouse, 'ru'));
+  }, [counterparties]);
+
+  const filteredWarehouseEntries = useMemo(
+    () => searchCounterpartiesSmart(warehouseEntries, cpSearch, 40),
+    [warehouseEntries, cpSearch]
   );
 
   const rugSizes = useMemo(
@@ -246,7 +266,7 @@ export function CatalogFilterContent({
                     type="text"
                     value={cpSearch}
                     onChange={e => setCpSearch(e.target.value)}
-                    placeholder="Найти клиента / комиссионера..."
+                    placeholder="Найти склад комиссионера..."
                     className="input-field text-xs h-8 pl-8 pr-6 py-1"
                   />
                   {cpSearch && (
@@ -260,11 +280,12 @@ export function CatalogFilterContent({
                   )}
                 </div>
                 <div className="max-h-36 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50/60 divide-y divide-slate-100">
-                  {filteredCounterparties.map(cp => (
+                  {filteredWarehouseEntries.map(entry => (
                     <button
-                      key={cp.id}
+                      key={entry.key}
                       type="button"
                       onClick={() => {
+                        const cp = entry.owner;
                         setTargetClient({
                           id: cp.id,
                           name: cp.name,
@@ -277,16 +298,19 @@ export function CatalogFilterContent({
                       }}
                       className="w-full text-left px-2.5 py-1.5 text-xs hover:bg-brand-50 transition-colors flex items-center justify-between gap-2 cursor-pointer"
                     >
-                      <span className="truncate font-medium text-slate-800">{cp.name}</span>
-                      {cp.city && <span className="text-[10px] text-slate-500 shrink-0">{cp.city}</span>}
+                      <span className="min-w-0 truncate font-medium text-slate-800">
+                        {entry.warehouse}
+                        <span className="block truncate text-[10px] font-normal text-slate-500">{entry.owner.name}</span>
+                      </span>
+                      {entry.city && <span className="text-[10px] text-slate-500 shrink-0">{entry.city}</span>}
                     </button>
                   ))}
-                  {filteredCounterparties.length === 0 && (
-                    <p className="p-2 text-[11px] text-slate-400 text-center">Клиенты не найдены</p>
+                  {filteredWarehouseEntries.length === 0 && (
+                    <p className="p-2 text-[11px] text-slate-400 text-center">Склады не найдены</p>
                   )}
                 </div>
                 <p className="text-[10.5px] text-slate-500 leading-tight">
-                  Выберите контрагента, чтобы положить товары в корзину за него с отметкой вашей учётной записи ({roleShortLabel}).
+                  Выберите склад комиссионера, чтобы положить товары в корзину за него с отметкой вашей учётной записи ({roleShortLabel}).
                 </p>
               </div>
             )}

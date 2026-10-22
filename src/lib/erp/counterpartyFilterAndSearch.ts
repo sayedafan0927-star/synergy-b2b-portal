@@ -223,14 +223,11 @@ export function deduplicateAndEnrichCounterparties(rawList: any[]): {
       if (wname && !warehouseNameOwnerMap.has(wname.toLowerCase())) {
         warehouseNameOwnerMap.set(wname.toLowerCase(), matchedOwner);
       }
+      // Склад из заглушки доступен для поиска/выбора через владельца (оригинальное название)
+      const mo = matchedOwner as any;
+      if (!Array.isArray(mo.linked_warehouse_names)) mo.linked_warehouse_names = [];
+      if (wname && !mo.linked_warehouse_names.includes(wname)) mo.linked_warehouse_names.push(wname);
     }
-  }
-
-  // 3. Делаем склады (в т.ч. привязанные через карточки-заглушки) доступными для поиска по владельцу
-  for (const [nameKey, owner] of warehouseNameOwnerMap) {
-    const o = owner as any;
-    if (!Array.isArray(o.linked_warehouse_names)) o.linked_warehouse_names = [];
-    if (nameKey && !o.linked_warehouse_names.includes(nameKey)) o.linked_warehouse_names.push(nameKey);
   }
 
   return { all, warehouseOwnerMap, warehouseNameOwnerMap };
