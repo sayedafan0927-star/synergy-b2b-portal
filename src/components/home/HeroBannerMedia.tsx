@@ -329,6 +329,8 @@ export default function HeroBannerMedia({ onNavigate, isReady = true, isActive =
               <img 
                 src={activeEndCard} 
                 alt="Прямые оптовые поставки ковровых коллекций" 
+                width={964}
+                height={714}
                 className="w-full h-auto block select-none pointer-events-none drop-shadow-[0_10px_30px_rgba(0,0,0,0.8)]"
               />
 

@@ -21,7 +21,7 @@ export default function Footer({ onNavigate }: FooterProps) {
           {/* Brand */}
           <div className="lg:col-span-1">
             <div className="mb-4">
-              <img src="/Вектор_Синэнергия.png" alt="Synergiya Group" className="h-10 w-auto brightness-0 invert" />
+              <img src="/Вектор_Синэнергия.png" alt="Synergiya Group" width={512} height={512} className="h-10 w-auto brightness-0 invert" />
             </div>
             <p className="text-sm leading-relaxed text-slate-400">
               {t('footer.tagline')}

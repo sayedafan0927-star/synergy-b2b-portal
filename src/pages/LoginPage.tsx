@@ -105,7 +105,7 @@ export default function LoginPage({ onNavigate }: { onNavigate: (page: PageId) =
 
         <div className="card p-6 sm:p-8">
           <div className="mb-6">
-            <img src="/Вектор_Синэнергия.png" alt="Synergiya Group" className="h-12 w-auto" />
+            <img src="/Вектор_Синэнергия.png" alt="Synergiya Group" width={512} height={512} className="h-12 w-auto" />
           </div>
 
           <h1 className="text-xl font-bold text-slate-900 mb-1">

@@ -243,6 +243,8 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
               <img
                 src="/logo-emblem.png"
                 alt="Synergiya Crest"
+                width={512}
+                height={205}
                 className="h-6 sm:h-7.5 lg:h-8.5 w-auto object-contain transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
               />
             </div>
@@ -252,6 +254,8 @@ export default function Header({ currentPage, onNavigate }: HeaderProps) {
               <img
                 src="/logo-text.png"
                 alt="Synergiya Group"
+                width={512}
+                height={135}
                 className="h-3.5 sm:h-4.5 lg:h-5 w-auto object-contain transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
               />
             </div>

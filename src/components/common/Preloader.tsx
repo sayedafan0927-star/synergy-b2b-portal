@@ -49,6 +49,8 @@ export function Preloader({ onFinished }: { onFinished: () => void }) {
         <img
           src="/Вектор_Синэнергия.png"
           alt="Synergiya Group"
+          width={512}
+          height={512}
           onLoad={() => setImageReady(true)}
           className={`h-28 sm:h-36 w-auto drop-shadow-2xl brightness-0 invert transition-opacity duration-300 ${
             imageReady ? 'opacity-100 animate-preloader-logo' : 'opacity-0'

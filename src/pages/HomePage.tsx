@@ -142,6 +142,8 @@ export default function HomePage({
                     <img
                       src={imgSrc}
                       alt={t(item.titleKey)}
+                      width={165}
+                      height={145}
                       loading="lazy"
                       decoding="async"
                       className="max-h-full max-w-full object-contain filter drop-shadow-xs group-hover:scale-105 transition-transform duration-500"
