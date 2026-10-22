@@ -9,7 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useCurrency } from '@/contexts/CurrencyContext';
 import { useDisplaySettings } from '@/hooks/useDisplaySettings';
-import { isProductInStockForUser, getClientWarehouseSettings, matchesSelectedWarehouses } from '@/lib/warehouseVisibility';
+import { isProductInStockForUser, matchesSelectedWarehouses } from '@/lib/warehouseVisibility';
 import {
   FilterDrawer, CatalogFilterSidebar, CatalogStockTable,
   CatalogLoadingSkeleton, CatalogLoadError, StockReservationsModal,
@@ -77,12 +77,8 @@ export default function CatalogPage({
   const canViewWarehouses = useMemo(() => {
     if (!profile) return false;
     if (isEffectiveAdmin || profile.role === 'admin' || profile.role === 'manager_lm') return true;
-    if (profile.role === 'client') {
-      const key = profile.partner_id || profile.id;
-      const s = getClientWarehouseSettings(key);
-      return Boolean(s.mode === 'custom' ? (s.showCentralWarehouse || s.showShowroomWarehouse || s.showWarehousesToClient) : s.showWarehousesToClient);
-    }
-    return false;
+    // Основной склад Астана виден всем авторизованным пользователям
+    return true;
   }, [isEffectiveAdmin, profile]);
   const hideOutOfStockSetting = displaySettings.hide_out_of_stock_products !== false;
   const hasAnyGlobalStock = useMemo(

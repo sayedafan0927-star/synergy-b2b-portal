@@ -52,6 +52,22 @@ export function matchesSelectedWarehouses(
 }
 
 /**
+ * Стандарт видимости складов (если админ не задал custom-правила):
+ * - Админ и ЛМ — все склады.
+ * - Все остальные (клиент, РМ, поставщик) — «Основной Склад Астана» (ID 81).
+ * - Клиент дополнительно — собственный склад/шоурум, если он назначен.
+ * - РМ — только основной склад Астана.
+ * Админ может переопределить для любого пользователя (mode: 'custom').
+ */
+export function resolveWarehouseAccess(clientProfile: Partial<Profile>, settings: ClientWarehouseSettings) {
+  const showroomEligible = clientProfile.role !== 'manager_rm' && clientProfile.role !== 'supplier';
+  if (settings.mode === 'custom') {
+    return { central: settings.showCentralWarehouse !== false, showroom: settings.showShowroomWarehouse !== false };
+  }
+  return { central: true, showroom: showroomEligible };
+}
+
+/**
  * Проверка: виден ли конкретный склад для указанного профиля клиента.
  * 
  * Логика:
@@ -82,49 +98,20 @@ export function isWarehouseVisibleForClient(
 
   const clientId = clientProfile.partner_id || clientProfile.id;
   const settings = getClientWarehouseSettings(clientId);
-
-  // Склады видны клиенту только если включена явная галка видимости складов
-  const isWarehousesAllowed = settings.mode === 'custom'
-    ? Boolean(settings.showCentralWarehouse || settings.showShowroomWarehouse || settings.showWarehousesToClient)
-    : Boolean(settings.showWarehousesToClient);
-
-  if (!isWarehousesAllowed) {
-    return false;
-  }
+  const access = resolveWarehouseAccess(clientProfile, settings);
 
   const isHub = isCentralWarehouse(warehouse);
   const showroomId = clientProfile.showroom_warehouse_id;
   const isOwnShowroom = Boolean(showroomId && warehouse.warehouse_id && warehouse.warehouse_id === showroomId);
 
-  if (settings.mode === 'custom') {
-    if (isHub) {
-      return settings.showCentralWarehouse;
-    }
-    if (isOwnShowroom) {
-      return settings.showShowroomWarehouse;
-    }
-    // Если это другой склад:
-    if (warehouse.warehouse_id && settings.hiddenWarehouseIds?.includes(warehouse.warehouse_id)) {
-      return false;
-    }
-    if (warehouse.warehouse_id && settings.allowedWarehouseIds?.includes(warehouse.warehouse_id)) {
-      return true;
-    }
-    return false;
-  }
+  if (isHub) return access.central;
+  if (isOwnShowroom) return access.showroom;
 
-  // Режим 'auto':
-  // 1. Центральный склад Астана виден (если складов разрешены)
-  if (isHub) {
-    return true;
+  // Прочие склады — только если явно разрешены админом в custom-режиме
+  if (settings.mode === 'custom' && warehouse.warehouse_id) {
+    if (settings.hiddenWarehouseIds?.includes(warehouse.warehouse_id)) return false;
+    return Boolean(settings.allowedWarehouseIds?.includes(warehouse.warehouse_id));
   }
-
-  // 2. Персональный склад шоурума виден только если он назначен клиенту
-  if (isOwnShowroom) {
-    return true;
-  }
-
-  // Все остальные склады для обычного клиента скрыты
   return false;
 }
 
@@ -151,20 +138,14 @@ export function filterWarehousesForClient(
 
   const clientId = clientProfile?.partner_id || clientProfile?.id;
   const settings = getClientWarehouseSettings(clientId);
-  const isWarehousesAllowed = settings.mode === 'custom'
-    ? Boolean(settings.showCentralWarehouse || settings.showShowroomWarehouse || settings.showWarehousesToClient)
-    : Boolean(settings.showWarehousesToClient);
-
-  if (!isWarehousesAllowed) {
-    return [];
-  }
+  const access = resolveWarehouseAccess(clientProfile, settings);
   const showroomId = clientProfile?.showroom_warehouse_id;
   const showroomName = fallbackShowroomName || clientProfile?.showroom_warehouse_name || 'В моем магазине';
 
   const result: Warehouse[] = [];
 
   // 1. Центральный склад компании — ID 81 («Основной Склад Астана»)
-  const allowHub = settings.mode === 'custom' ? settings.showCentralWarehouse : true;
+  const allowHub = access.central;
   if (allowHub) {
     const mainHub = warehouses.find(w => w.warehouse_id === CENTRAL_WAREHOUSE_ID)
       || warehouses.find(w => isCentralWarehouse(w) && Number(w.stock) > 0);
@@ -181,7 +162,7 @@ export function filterWarehousesForClient(
   }
 
   // 2. Персональный склад шоурума клиента
-  const allowShowroom = settings.mode === 'custom' ? settings.showShowroomWarehouse : true;
+  const allowShowroom = access.showroom;
   if (allowShowroom && showroomId && showroomId !== CENTRAL_WAREHOUSE_ID) {
     const showroom = warehouses.find(w => w.warehouse_id === showroomId);
     if (showroom && Number(showroom.stock) > 0) {
@@ -240,7 +221,7 @@ export function getVariantStockForUser(
   let total = clientWarehouses.reduce((sum, w) => sum + (Number(w.stock) || Number(w.free_stock) || 0), 0);
 
   // Если у клиента есть шоурум, но его склад не попал в clientWarehouses, учитываем showroom_qty / dealer_stock
-  if (clientProfile?.showroom_warehouse_id) {
+  if (clientProfile?.showroom_warehouse_id && clientProfile.role && resolveWarehouseAccess(clientProfile, getClientWarehouseSettings(clientProfile.partner_id || clientProfile.id)).showroom) {
     const hasShowroomInList = clientWarehouses.some(w => w.warehouse_id === clientProfile.showroom_warehouse_id);
     if (!hasShowroomInList) {
       const showroomQty = Number(variant.dealer_stock?.in_showroom_qty ?? variant.showroom_qty ?? 0);

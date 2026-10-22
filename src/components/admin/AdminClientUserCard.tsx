@@ -58,7 +58,7 @@ export function AdminClientUserCard({
   const s = getClientWarehouseSettings(u.partner_id || u.id);
   const isWhOn = s.mode === 'custom'
     ? Boolean(s.showCentralWarehouse || s.showShowroomWarehouse || s.showWarehousesToClient)
-    : Boolean(s.showWarehousesToClient);
+    : true;
 
   return (
     <div className="card px-4 py-3 hover:border-slate-300 transition-colors">

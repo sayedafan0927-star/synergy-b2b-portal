@@ -171,7 +171,7 @@ export function AdminUsersTab({ onNavigate }: AdminUsersTabProps) {
     const s = getClientWarehouseSettings(clientId);
     const currentlyOn = s.mode === 'custom'
       ? Boolean(s.showCentralWarehouse || s.showShowroomWarehouse || s.showWarehousesToClient)
-      : Boolean(s.showWarehousesToClient);
+      : true;
     const nextOn = !currentlyOn;
 
     saveClientWarehouseSettings(clientId, {
